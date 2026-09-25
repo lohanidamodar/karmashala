@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../git/application/changes_providers.dart';
@@ -67,11 +66,10 @@ final importedTranscriptProvider = StreamProvider.autoDispose
         yield const [];
         return;
       }
-      // Antigravity's session file is a database we cannot read; a plain JSONL
-      // transcript sits elsewhere on some installs, so it is resolved once.
-      final path = session.cli == AgentIds.antigravity
-          ? antigravityTranscriptPathFor(session.filePath)
-          : session.filePath;
+      // A store record may not be the transcript itself (an agent whose store
+      // is a database keeps a plain JSONL elsewhere on some installs), so the
+      // agent's adapter resolves it once.
+      final path = transcriptFileFor(session.filePath, session.cli);
       if (path == null) {
         yield const [];
         return;

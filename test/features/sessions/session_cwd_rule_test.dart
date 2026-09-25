@@ -110,7 +110,7 @@ void main() {
         expect(
           await const ConversationStoreIndex().presenceOf(
             storeHome: home,
-            format: AgentStoreFormat.claudeJsonl,
+            store: const ClaudeCodeStore(),
             conversationId: id,
           ),
           ConversationPresence.present,
@@ -152,7 +152,7 @@ void main() {
         expect(
           await const ConversationStoreIndex().presenceOf(
             storeHome: home,
-            format: AgentStoreFormat.codexRollout,
+            store: const CodexStore(),
             conversationId: id,
           ),
           ConversationPresence.present,
@@ -181,7 +181,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: home,
-          format: AgentStoreFormat.antigravityStore,
+          store: const AntigravityStore(),
           conversationId: id,
         ),
         ConversationPresence.present,
@@ -261,7 +261,10 @@ void main() {
       binaries: AgentBinaries(windows: ['unchecked'], posix: ['unchecked']),
       launch: AgentLaunchSpec(interactiveResume: AgentResume.flag('--resume')),
     );
-    const registry = AgentRegistry([verified, unchecked]);
+    const registry = AgentRegistry([
+      DataOnlyAgentAdapter(verified),
+      DataOnlyAgentAdapter(unchecked),
+    ]);
 
     String? caveat(
       String cli, {
@@ -405,7 +408,9 @@ void main() {
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-          agentRegistryProvider.overrideWithValue(AgentRegistry([agent])),
+          agentRegistryProvider.overrideWithValue(
+            AgentRegistry([DataOnlyAgentAdapter(agent)]),
+          ),
           settingsControllerProvider.overrideWith(
             () => _StaticSettings(const Settings()),
           ),

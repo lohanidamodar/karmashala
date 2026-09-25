@@ -1,6 +1,5 @@
 import '../../environments/environment_kind.dart';
 import '../../permissions/permission_risk.dart';
-import './agent_kind.dart';
 import './agent_mcp_config.dart';
 import './agent_plan.dart';
 import './agent_question.dart';
@@ -15,42 +14,16 @@ part 'agent_descriptor/agent_model_support.dart';
 part 'agent_descriptor/agent_prompt_support.dart';
 part 'agent_descriptor/agent_resume_support.dart';
 
-/// The on-disk layout of an agent's session store.
-enum AgentStoreFormat {
-  /// `<home>/projects/<dir>/<id>.jsonl`, read by `ClaudeStoreReader`.
-  claudeJsonl,
-
-  /// `<home>/sessions/**/rollout-*.jsonl`, read by `CodexStoreReader`.
-  codexRollout,
-
-  /// `<home>/conversations/<uuid>.db` plus the JSON, protobuf-text and SQLite
-  /// side files beside it, read by `AntigravityStoreReader`.
-  ///
-  /// The odd one out, and the reason this is a value rather than a reuse of
-  /// [none]. The other two name a **transcript** format: the file the reader
-  /// opens holds the messages. This one names a store that yields *identity*
-  /// without content — conversation id, working directory, title, step count,
-  /// mtime — because `steps.step_payload` is protobuf in an unpublished schema
-  ///.
-  ///
-  /// So detection, adoption and the presence probe all work for this store,
-  /// and `agentSupportsChatView` still says no. That split is the whole point
-  /// of the value: with [none] the sessions were invisible everywhere, which
-  /// is what §6.1 was raised to fix.
-  antigravityStore,
-
-  /// A store we cannot read yet.
-  none,
-}
-
 /// Where an agent keeps its per-user config and sessions.
+///
+/// Where, not how: how the store is laid out, and whether it can be read at
+/// all, is the agent adapter's `AgentStore`. A home with no store capability
+/// behind it is located and listed, and read as nothing.
 class AgentStoreSpec {
-  const AgentStoreSpec({required this.homeDirectoryName, required this.format});
+  const AgentStoreSpec({required this.homeDirectoryName});
 
   /// Directory name under the environment's home, e.g. `.claude`.
   final String homeDirectoryName;
-
-  final AgentStoreFormat format;
 }
 
 /// The best status source an agent supports. The status service falls back down
@@ -60,18 +33,15 @@ enum AgentStatusStrategy { hooks, stateFile, terminalGrid, none }
 
 /// Everything Karmashala needs to find, launch and observe one agent CLI.
 ///
-/// This is data, not code: adding an agent means adding a descriptor. [id] is
-/// the agent's identity everywhere — discovery, persistence, settings, sessions
-/// and the MCP control server all key on it.
-///
-/// [kind] is non-null only for the agents that additionally have a hand-written
-/// protocol adapter, and is read only when choosing that adapter. A descriptor
-/// without one is a complete, usable agent.
+/// This is data, not code — one part of the agent's `AgentAdapter`, the part
+/// that says what the agent *is*. [id] is the agent's identity everywhere —
+/// discovery, persistence, settings, sessions and the MCP control server all
+/// key on it. A descriptor with no code beside it (`DataOnlyAgentAdapter`) is
+/// a complete, usable agent.
 class AgentDescriptor {
   const AgentDescriptor({
     required this.id,
     required this.displayName,
-    this.kind,
     required this.binaries,
     this.discovery = const AgentDiscoveryRules(),
     this.launch = const AgentLaunchSpec(),
@@ -91,7 +61,6 @@ class AgentDescriptor {
 
   final String id;
   final String displayName;
-  final AgentKind? kind;
   final AgentBinaries binaries;
   final AgentDiscoveryRules discovery;
   final AgentLaunchSpec launch;

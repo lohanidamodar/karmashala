@@ -285,7 +285,7 @@ void main() {
       expect(restored, s);
     });
 
-    test('permissions for an agent with no AgentKind survive a round-trip', () {
+    test('permissions for a data-only agent survive a round-trip', () {
       final s = const Settings().withPermissions(
         'roverCli',
         const AgentPermissions(newSessions: bypassStored),
@@ -299,7 +299,7 @@ void main() {
       );
     });
 
-    test('an agent id with no AgentKind can be the default agent', () {
+    test('a data-only agent id can be the default agent', () {
       const s = Settings(defaultAgent: 'roverCli');
       expect(Settings.fromJson(s.toJson()).defaultAgent, 'roverCli');
     });

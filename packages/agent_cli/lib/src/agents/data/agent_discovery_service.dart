@@ -335,7 +335,7 @@ class AgentDiscoveryService {
   /// Discovered agents as persistable installations.
   ///
   /// Every descriptor that was found becomes an installation, keyed by its
-  /// `AgentDescriptor.id`. An agent needs no `AgentKind` member to be stored —
+  /// `AgentDescriptor.id`. An agent needs no code of its own to be stored —
   /// only a registry entry.
   Future<List<AgentInstallation>> discover({Set<String>? agentIds}) async {
     final found = await probeAll(agentIds: agentIds);

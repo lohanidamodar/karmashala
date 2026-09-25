@@ -351,6 +351,9 @@ class _SlotCost {
 class _CountingDetection extends CliDetectionService {
   int scans = 0;
 
+  ClaudeStoreReader get claudeReader =>
+      readerFor(AgentIds.claudeCode)! as ClaudeStoreReader;
+
   @override
   List<StoreScanJob> jobsFor(List<CliStore> stores) {
     scans++;

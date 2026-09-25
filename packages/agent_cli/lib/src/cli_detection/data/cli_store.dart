@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../environments/environment_kind.dart';
@@ -11,31 +10,35 @@ import '../../environments/execution_environment.dart';
 import '../../process/command_runner.dart';
 import '../../process/command_runner_factory.dart';
 import '../../process/path_translator.dart';
-import 'codex_app_server_launch.dart';
+import '../../agents/adapter/store_server_launch.dart';
 
 /// The CLI store homes to scan for one environment, keyed by agent registry id.
 class CliStore {
   const CliStore({
     required this.environmentId,
     required this.homesByAgentId,
-    this.codexAppServer,
+    this.storeServersByAgentId = const {},
   });
 
   final String environmentId;
 
-  /// How to reach this environment's `codex app-server`, when a Codex is
-  /// installed there. Plain data, because it crosses to the worker isolate
-  /// where the spawn has to happen — see [CodexAppServerLaunch].
-  final CodexAppServerLaunch? codexAppServer;
+  /// `AgentDescriptor.id` → how to reach that agent's store server in this
+  /// environment, for an agent whose adapter declares one and that is
+  /// installed here. Plain data, because it crosses to the worker isolate
+  /// where the spawn has to happen — see [StoreServerLaunch].
+  final Map<String, StoreServerLaunch> storeServersByAgentId;
 
   /// `AgentDescriptor.id` → the agent's store home in this environment, in a
   /// form the app can read directly (Windows-native or a `\\wsl.localhost\…`
   /// UNC path).
   final Map<String, String> homesByAgentId;
 
-  String? get claudeHome => homesByAgentId['claudeCode'];
-  String? get codexHome => homesByAgentId['codex'];
-  String? get antigravityHome => homesByAgentId['antigravity'];
+  /// [agentId]'s store home here, or null when it declares none.
+  String? homeFor(String agentId) => homesByAgentId[agentId];
+
+  /// How to reach [agentId]'s store server here, or null.
+  StoreServerLaunch? storeServerFor(String agentId) =>
+      storeServersByAgentId[agentId];
 }
 
 /// Resolves the on-disk CLI store homes for each environment. Which stores
@@ -62,9 +65,9 @@ class CliStoreLocator {
   final PathTranslator translator;
   final AgentRegistry registry;
 
-  /// Where each environment's Codex executable is, so a store can be read
-  /// through `thread/list` rather than by walking its rollouts. Leave it empty
-  /// and every Codex store is walked, which is what it did before.
+  /// Where each environment's agents are installed, so a store whose agent
+  /// offers a store server can be read through it rather than by walking its
+  /// files. Leave it empty and every store is walked.
   ///
   /// A list of values, not a DAO. The caller already holds the installations —
   /// asking it to pass them keeps a database out of the one class that has to
@@ -103,7 +106,7 @@ class CliStoreLocator {
             home,
             usesWindowsPaths(local.kind) ? p.windows : p.posix,
           ),
-          codexAppServer: _codexAppServer(local),
+          storeServersByAgentId: _storeServers(local),
         ),
       );
     }
@@ -126,7 +129,7 @@ class CliStoreLocator {
           CliStore(
             environmentId: env.id,
             homesByAgentId: _homesUnder(unc, p.windows),
-            codexAppServer: _codexAppServer(env),
+            storeServersByAgentId: _storeServers(env),
           ),
         );
       }
@@ -150,18 +153,25 @@ class CliStoreLocator {
     return value == null || value.isEmpty ? null : value;
   }
 
-  /// The Codex install in [environment], as something the worker can spawn.
-  CodexAppServerLaunch? _codexAppServer(ExecutionEnvironment environment) {
+  /// The store servers installed in [environment], one per agent whose
+  /// adapter declares one, as something the worker can spawn.
+  Map<String, StoreServerLaunch> _storeServers(
+    ExecutionEnvironment environment,
+  ) {
+    final launches = <String, StoreServerLaunch>{};
     for (final installation in installations) {
-      if (installation.environmentId == environment.id &&
-          installation.agentId == AgentIds.codex) {
-        return CodexAppServerLaunch(
+      if (installation.environmentId != environment.id) continue;
+      final agentId = installation.agentId;
+      if (registry.adapterFor(agentId)?.storeServer == null) continue;
+      launches.putIfAbsent(
+        agentId,
+        () => StoreServerLaunch(
           environment: environment,
           executable: installation.executable.path,
-        );
-      }
+        ),
+      );
     }
-    return null;
+    return launches;
   }
 
   /// One home per registry agent that declares a store, under [homeDirectory].

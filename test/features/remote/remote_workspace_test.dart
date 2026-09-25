@@ -62,7 +62,9 @@ void main() {
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-        agentRegistryProvider.overrideWithValue(const AgentRegistry([_rover])),
+        agentRegistryProvider.overrideWithValue(
+          const AgentRegistry([DataOnlyAgentAdapter(_rover)]),
+        ),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
         // The folder probe touches disk in production; this test is about the
         // listing, not about what exists on the machine running it.

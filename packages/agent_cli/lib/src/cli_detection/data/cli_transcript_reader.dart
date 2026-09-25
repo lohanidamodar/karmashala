@@ -7,11 +7,12 @@ import 'package:path/path.dart' as p;
 
 import '../../util/bounded_lines.dart';
 import '../../util/bounded_text.dart';
-import '../../agents/domain/agent_ids.dart';
+import '../../agents/adapter/agent_transcripts.dart';
+import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/session_event_types.dart';
 import '../../sessions/tool_activity.dart';
-import './antigravity_transcript.dart';
+import './transcript_dialect.dart';
 import './subagent_transcript.dart';
 
 part 'cli_transcript_tail.dart';
@@ -153,10 +154,22 @@ class TranscriptMessage {
 /// Exposed rather than inlined because `SessionChatView` asks the same question
 /// without reading the file: one rule, so the reading and the read cannot
 /// disagree about which file a session's conversation is in.
-String? transcriptFileFor(String filePath, String cli) =>
-    cli == AgentIds.antigravity
-    ? antigravityTranscriptPathFor(filePath)
-    : filePath;
+String? transcriptFileFor(String filePath, String cli) {
+  final transcripts = _transcriptsFor(cli);
+  return transcripts == null
+      ? filePath
+      : transcripts.transcriptFileFor(filePath);
+}
+
+/// The line format [cli]'s transcripts are parsed with. Claude Code's is the
+/// least-wrong guess for an agent that declares none.
+TranscriptDialect transcriptDialectFor(String cli) =>
+    _transcriptsFor(cli)?.dialect ?? TranscriptDialect.claudeJsonl;
+
+/// What [cli]'s adapter says about its transcripts, from the shipped registry
+/// — these readers run on worker isolates, where nothing else is reachable.
+AgentTranscripts? _transcriptsFor(String cli) =>
+    AgentRegistry.builtIn.adapterFor(cli)?.transcripts;
 
 /// [readCliTranscript] on a worker isolate, for a caller that must not stall
 /// the one it is on. Measured 2026-09-11: a 136 MB Claude transcript — this
@@ -178,11 +191,24 @@ Future<List<TranscriptMessage>> readCliTranscript(
 }) async {
   final path = transcriptFileFor(filePath, cli);
   if (path == null) return const [];
+  return _readTranscriptFile(
+    path,
+    filePath,
+    transcriptDialectFor(cli),
+    subagentsDirectory,
+  );
+}
 
+Future<List<TranscriptMessage>> _readTranscriptFile(
+  String path,
+  String filePath,
+  TranscriptDialect dialect,
+  String? subagentsDirectory,
+) async {
   final file = File(path);
   if (!await file.exists()) return const [];
 
-  final parse = _TranscriptParse(cli);
+  final parse = _TranscriptParse(dialect);
   try {
     // Bounded rather than `LineSplitter`: a record is materialised whole and
     // `jsonDecode` has no streaming form, so the largest record — not the
@@ -203,9 +229,9 @@ Future<List<TranscriptMessage>> readCliTranscript(
 /// parse can be stopped at a record boundary and resumed when more is appended
 /// — see [CliTranscriptTail].
 class _TranscriptParse {
-  _TranscriptParse(this.cli);
+  _TranscriptParse(this.dialect);
 
-  final String cli;
+  final TranscriptDialect dialect;
   final List<TranscriptMessage> messages = [];
   // Correlates a result back to the call it answers: Claude Code echoes the
   // `tool_use.id` as `tool_use_id`, Codex echoes `call_id`. Kept for the whole
@@ -231,7 +257,7 @@ class _TranscriptParse {
   CompactionBoundary? pendingCompaction;
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
-  _TranscriptParse copy() => _TranscriptParse(cli)
+  _TranscriptParse copy() => _TranscriptParse(dialect)
     ..messages.addAll(messages)
     ..pending.addAll(pending)
     ..tasks.addAll(tasks)
@@ -253,9 +279,9 @@ class _TranscriptParse {
     final at = _lineTimestamp(decoded);
     // Claude's shape is the default: it is the least-wrong guess for an
     // agent we have no reader for.
-    if (cli == AgentIds.codex) {
+    if (dialect == TranscriptDialect.codexRollout) {
       _parseCodexLine(decoded, messages, pending, at);
-    } else if (cli == AgentIds.antigravity) {
+    } else if (dialect == TranscriptDialect.antigravityJsonl) {
       _parseAntigravityLine(decoded, messages, at);
     } else {
       pendingCompaction = _compactionBoundaryOf(decoded) ?? pendingCompaction;
@@ -579,10 +605,11 @@ DateTime? _lineTimestamp(Map<String, dynamic> json) {
 /// Read only when a row is expanded. The directory it sits in is also the
 /// index for anything *it* delegated, so a depth-2 agent joins the same way.
 Future<List<TranscriptMessage>> readSubagentTranscript(String filePath) =>
-    readCliTranscript(
+    _readTranscriptFile(
       filePath,
-      AgentIds.claudeCode,
-      subagentsDirectory: p.dirname(filePath),
+      filePath,
+      TranscriptDialect.claudeJsonl,
+      p.dirname(filePath),
     );
 
 void _parseClaudeLine(

@@ -1,4 +1,3 @@
-import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
@@ -144,11 +143,10 @@ ResumeUsageAccess resumeUsageAccess(Ref ref, Session session) {
     );
   }
   final key = usageAccountKey(installation);
-  final name = ref
-      .read(agentRegistryProvider)
-      .displayNameFor(installation.agentId);
-  if (installation.agentId != AgentIds.claudeCode &&
-      installation.agentId != AgentIds.codex) {
+  final registry = ref.read(agentRegistryProvider);
+  final name = registry.displayNameFor(installation.agentId);
+  final usage = registry.adapterFor(installation.agentId)?.usage;
+  if (usage == null || !usage.reportsResetTime) {
     return ResumeUsageAccess(
       installation: installation,
       accountKey: key,

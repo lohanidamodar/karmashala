@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:agent_cli/src/cli_detection/data/agent_lifetime_reader.dart';
-import 'package:agent_cli/src/cli_detection/domain/session_stats.dart';
+import 'package:agent_cli/usage.dart';
 import 'package:path/path.dart' as p;
 import '../support/fake_sqlite.dart';
 

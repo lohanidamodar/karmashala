@@ -14,19 +14,19 @@ import '../data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/events.dart';
 
-/// Resolves the [AgentAdapter] for an `AgentDescriptor.id`. Agents with a
+/// Resolves the [AgentChatProtocol] for an `AgentDescriptor.id`. Agents with a
 /// protocol adapter get theirs; anything else gets the generic one.
-typedef AdapterResolver = AgentAdapter Function(String agentId);
+typedef ChatProtocolResolver = AgentChatProtocol Function(String agentId);
 
 /// Runs agent sessions: the normalized, append-only event log and the session
-/// status. Protocol-agnostic — it speaks only [AgentAdapter]/[AgentSession].
+/// status. Protocol-agnostic — it speaks only [AgentChatProtocol]/[AgentSession].
 class SessionEngine {
   SessionEngine({
     required this.sessionDao,
     required this.eventDao,
     required this.sessionRepositoryDao,
     required this.worktreeService,
-    required this.resolveAdapter,
+    required this.resolveProtocol,
     required this.clock,
     required this.ids,
   });
@@ -35,7 +35,7 @@ class SessionEngine {
   final SessionEventDao eventDao;
   final SessionRepositoryDao sessionRepositoryDao;
   final WorktreeService worktreeService;
-  final AdapterResolver resolveAdapter;
+  final ChatProtocolResolver resolveProtocol;
   final Clock clock;
   final IdGenerator ids;
 
@@ -149,7 +149,7 @@ class SessionEngine {
     // every later message as sent and deliver none of them.
     final AgentSession agent;
     try {
-      agent = resolveAdapter(installation.agentId).start(
+      agent = resolveProtocol(installation.agentId).start(
         AgentLaunch(
           workingDirectory: workingDirectory,
           installation: installation,

@@ -4,8 +4,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:agent_cli/src/process/process_handle.dart';
-import 'package:agent_cli/src/cli_detection/data/codex_app_server_client.dart';
-import 'package:agent_cli/src/cli_detection/data/codex_thread.dart';
+import 'package:agent_cli/src/agents/codex/codex_app_server_client.dart';
+import 'package:agent_cli/src/agents/codex/codex_thread.dart';
 
 import '../support/fake_codex_app_server.dart';
 

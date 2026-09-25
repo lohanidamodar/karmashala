@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_changed_files_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_changed_files_dialog.dart';
-import 'package:karmashala_git/git.dart';
+import 'package:agent_cli/read.dart' show FileEditKind;
 import 'package:karmashala_session/delivery.dart';
 
 import '../../support/fakes.dart';

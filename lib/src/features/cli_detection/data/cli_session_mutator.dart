@@ -1,13 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
-
-import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'codex_app_servers.dart';
+import '../../../core/database/sqlite_writer.dart';
+import 'agent_store_servers.dart';
 
 /// What a batched delete could not remove. [label] is the session's own title,
 /// or the store index, so the report reads as a list rather than a stack trace.
@@ -36,37 +33,59 @@ class CliDeleteReport {
   bool get isComplete => failures.isEmpty;
 }
 
-/// Renames and deletes detected CLI sessions the way each CLI does it — see
-/// [_renameCodex] for why Codex is asked rather than written to.
+/// Renames and deletes detected CLI sessions the way each CLI does it — asked
+/// of the agent's adapter (`AgentStore.editor`), never decided by its name. A
+/// store with no editor is left alone.
 class CliSessionMutator {
-  CliSessionMutator();
+  CliSessionMutator({
+    this.registry = AgentRegistry.builtIn,
+    this.writeSqlite = writeSqliteStatements,
+  });
 
   static final _log = AppLogger.named('cli.sessionMutator');
 
+  final AgentRegistry registry;
+  final SqliteWriter writeSqlite;
+
   /// What a delete actually costs the store, counted rather than timed: index
   /// walks, records decoded, index files rewritten, transcripts removed.
-  int storeScans = 0;
-  int indexEntriesRead = 0;
-  int indexWrites = 0;
+  final StoreEditCounters _counters = StoreEditCounters();
+  int get storeScans => _counters.storeScans;
+  int get indexEntriesRead => _counters.indexEntriesRead;
+  int get indexWrites => _counters.indexWrites;
   int transcriptsDeleted = 0;
 
-  /// Renames one session in its CLI's own store. Without [codex] a Codex rename
-  /// is skipped, never faked by writing a file Codex ignores.
+  StoreEditContext _context(AgentStoreServers? servers, String agentId) =>
+      StoreEditContext(
+        counters: _counters,
+        writeSqlite: writeSqlite,
+        serverFor: servers == null
+            ? null
+            : (environmentId, storeHome) => servers.forEnvironment(
+                environmentId,
+                agentId,
+                storeHome: storeHome,
+              ),
+      );
+
+  /// Renames one session in its CLI's own store. Without [servers] a store
+  /// that must be asked to rename is skipped, never faked by writing a file
+  /// the CLI ignores.
   Future<void> rename(
     DetectedSession session,
     String newTitle, {
-    CodexAppServers? codex,
-  }) {
+    AgentStoreServers? servers,
+  }) async {
     final title = newTitle.trim();
     if (title.isEmpty) {
       throw ArgumentError('Title cannot be empty');
     }
-    if (session.cli == AgentIds.antigravity) {
-      return _renameAntigravity(session, title);
+    final editor = registry.adapterFor(session.cli)?.store?.editor;
+    if (editor == null) {
+      _log.warning('No way to rename a ${session.cli} conversation in place');
+      return;
     }
-    return session.cli == AgentIds.codex
-        ? _renameCodex(session, title, codex)
-        : _renameClaude(session, title);
+    await editor.rename(session, title, _context(servers, session.cli));
   }
 
   /// Deletes one session, throwing if it could not be removed. Implemented as
@@ -108,14 +127,10 @@ class CliSessionMutator {
         }
       }
       if (removed.isEmpty) continue;
+      final editor = registry.adapterFor(cli)?.store?.editor;
+      if (editor == null) continue;
       try {
-        if (cli == AgentIds.antigravity) {
-          await _pruneAntigravityIndex(storeHome, removed);
-        } else if (cli == AgentIds.codex) {
-          await _pruneCodexIndex(storeHome, removed);
-        } else {
-          await _pruneClaudeIndex(storeHome, removed);
-        }
+        await editor.prune(storeHome, removed, _context(null, cli));
       } catch (error) {
         // The transcripts are gone either way; a stale index entry is a lesser
         // problem than a silent one, so it is still reported.
@@ -125,240 +140,5 @@ class CliSessionMutator {
       }
     }
     return CliDeleteReport(deleted: deleted, failures: failures);
-  }
-
-  // --- Claude ---------------------------------------------------------------
-
-  Future<void> _renameClaude(DetectedSession session, String title) async {
-    final file = File(session.filePath);
-    if (!await file.exists()) {
-      throw FileSystemException('Session file missing', session.filePath);
-    }
-    final entry = {
-      'type': 'custom-title',
-      'sessionId': session.sessionId,
-      'customTitle': title,
-    };
-    final endsWithNewline = await _endsWithNewline(file);
-    final sink = file.openWrite(mode: FileMode.append);
-    try {
-      if (!endsWithNewline) sink.writeln();
-      sink.writeln(jsonEncode(entry));
-      await sink.flush();
-    } finally {
-      await sink.close();
-    }
-  }
-
-  /// Drops the resume-index entries naming any of [sessionIds], in one listing.
-  Future<void> _pruneClaudeIndex(String claudeHome, Set<String> sessionIds) =>
-      _removeClaudeIndexEntries(
-        claudeHome,
-        (entry) => sessionIds.contains(entry['sessionId']),
-      );
-
-  Future<void> _removeClaudeIndexEntries(
-    String claudeHome,
-    bool Function(Map<String, dynamic>) match,
-  ) async {
-    final indexDir = Directory(p.join(claudeHome, 'sessions'));
-    if (!await indexDir.exists()) return;
-    storeScans++;
-    await for (final entity in indexDir.list()) {
-      if (entity is! File || !entity.path.endsWith('.json')) continue;
-      indexEntriesRead++;
-      final Object? decoded;
-      try {
-        decoded = jsonDecode(await entity.readAsString());
-      } on Object {
-        continue; // Not an entry this app can judge; a delete that fails is reported.
-      }
-      if (decoded is Map<String, dynamic> && match(decoded)) {
-        await entity.delete();
-        indexWrites++;
-      }
-    }
-  }
-
-  Future<bool> _endsWithNewline(File f) async {
-    final len = await f.length();
-    if (len == 0) return true;
-    final raf = await f.open();
-    try {
-      await raf.setPosition(len - 1);
-      return await raf.readByte() == 0x0a;
-    } finally {
-      await raf.close();
-    }
-  }
-
-  // --- Codex ----------------------------------------------------------------
-
-  /// Asks Codex itself to name the thread. `session_index.jsonl` is a mirror
-  /// Codex writes and never reads, so writing it there would be overwritten.
-  Future<void> _renameCodex(
-    DetectedSession session,
-    String title,
-    CodexAppServers? servers,
-  ) async {
-    final client = servers?.forEnvironment(
-      session.environmentId,
-      storeHome: session.storeHome,
-    );
-    if (client == null) {
-      _log.warning('No Codex to rename ${session.sessionId} in');
-      return;
-    }
-    try {
-      final result = await client.setThreadName(session.sessionId, title);
-      if (!result.ok) {
-        _log.warning(
-          'Codex would not rename ${session.sessionId}: ${result.failure}',
-        );
-      }
-    } catch (error) {
-      _log.warning(
-        'Could not reach Codex to rename ${session.sessionId}',
-        error,
-      );
-    }
-  }
-
-  /// Drops the index entries naming any of [sessionIds] — one read, one write.
-  Future<void> _pruneCodexIndex(
-    String codexHome,
-    Set<String> sessionIds,
-  ) async {
-    final index = File(p.join(codexHome, 'session_index.jsonl'));
-    if (!await index.exists()) return;
-    storeScans++;
-    final lines = await _readIndexLines(index);
-    indexEntriesRead += lines.length;
-    final out = [
-      for (final line in lines)
-        if (!sessionIds.contains(_tryDecode(line)?['id'])) line,
-    ];
-    await index.writeAsString(out.isEmpty ? '' : '${out.join('\n')}\n');
-    indexWrites++;
-  }
-
-  Future<List<String>> _readIndexLines(File index) async {
-    if (!await index.exists()) return const [];
-    return (await index.readAsString())
-        .split('\n')
-        .where((l) => l.trim().isNotEmpty)
-        .toList();
-  }
-
-  Map<String, dynamic>? _tryDecode(String line) {
-    try {
-      final decoded = jsonDecode(line);
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } on FormatException {
-      return null;
-    }
-  }
-
-  // --- Antigravity ----------------------------------------------------------
-
-  Future<void> _renameAntigravity(DetectedSession session, String title) async {
-    final annotationsDir = Directory(p.join(session.storeHome, 'annotations'));
-    if (!await annotationsDir.exists()) {
-      await annotationsDir.create(recursive: true);
-    }
-    final file = File(
-      p.join(annotationsDir.path, '${session.sessionId}.pbtxt'),
-    );
-    final escaped = _escapeProtobufString(title);
-    await file.writeAsString('title:"$escaped"\n');
-    indexWrites++;
-
-    final summariesPath = p.join(
-      session.storeHome,
-      'conversation_summaries.db',
-    );
-    if (await File(summariesPath).exists()) {
-      Database? db;
-      try {
-        db = sqlite3.open(summariesPath);
-        db.execute(
-          'UPDATE conversation_summaries SET title = ? WHERE conversation_id = ?',
-          [title, session.sessionId],
-        );
-        indexWrites++;
-      } finally {
-        db?.close();
-      }
-    }
-  }
-
-  static String _escapeProtobufString(String s) {
-    return s
-        .replaceAll(r'\', r'\\')
-        .replaceAll('"', r'\"')
-        .replaceAll('\n', r'\n')
-        .replaceAll('\r', r'\r')
-        .replaceAll('\t', r'\t');
-  }
-
-  Future<void> _pruneAntigravityIndex(
-    String storeHome,
-    Set<String> sessionIds,
-  ) async {
-    storeScans++;
-    for (final id in sessionIds) {
-      for (final path in [
-        p.join(storeHome, 'annotations', '$id.pbtxt'),
-        p.join(storeHome, 'presence', '$id.lock'),
-      ]) {
-        final file = File(path);
-        if (await file.exists()) {
-          await file.delete();
-          indexWrites++;
-        }
-      }
-    }
-
-    final summariesPath = p.join(storeHome, 'conversation_summaries.db');
-    if (await File(summariesPath).exists()) {
-      Database? db;
-      try {
-        db = sqlite3.open(summariesPath);
-        for (final id in sessionIds) {
-          db.execute(
-            'DELETE FROM conversation_summaries WHERE conversation_id = ?',
-            [id],
-          );
-        }
-        indexWrites++;
-      } finally {
-        db?.close();
-      }
-    }
-
-    final lastConvPath = p.join(storeHome, 'cache', 'last_conversations.json');
-    final lastConvFile = File(lastConvPath);
-    if (await lastConvFile.exists()) {
-      final Object? map;
-      try {
-        map = jsonDecode(await lastConvFile.readAsString());
-      } on Object {
-        return; // Antigravity's own cache; unreadable is theirs to rebuild.
-      }
-      if (map is Map<String, dynamic>) {
-        var modified = false;
-        final updated = Map<String, dynamic>.from(map);
-        for (final entry in map.entries) {
-          if (sessionIds.contains(entry.value.toString())) {
-            updated.remove(entry.key);
-            modified = true;
-          }
-        }
-        if (modified) {
-          await lastConvFile.writeAsString(jsonEncode(updated));
-          indexWrites++;
-        }
-      }
-    }
   }
 }

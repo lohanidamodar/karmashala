@@ -70,15 +70,13 @@ final conversationPresenceSweepProvider =
       return () async {
         final now = ref.read(clockProvider).nowUtc();
         final registry = ref.read(agentRegistryProvider);
-        // Only agents with a store format we can read; anything else adds no
-        // key, so every question about it answers `unknown`.
-        final formats = <String, AgentStoreFormat>{
-          for (final descriptor in registry.descriptors)
-            if (descriptor.store case final spec?)
-              if (spec.format != AgentStoreFormat.none)
-                descriptor.id: spec.format,
+        // Only agents whose adapter can read their store; anything else adds
+        // no key, so every question about it answers `unknown`.
+        final readable = <String, AgentStore>{
+          for (final adapter in registry.adapters)
+            if (adapter.descriptor.store != null) adapter.id: ?adapter.store,
         };
-        if (formats.isEmpty) return ConversationPresenceSweep.empty(now);
+        if (readable.isEmpty) return ConversationPresenceSweep.empty(now);
 
         final List<CliStore> stores;
         try {
@@ -95,12 +93,12 @@ final conversationPresenceSweepProvider =
         final index = ref.read(conversationStoreIndexProvider);
         final ids = <String, Set<String>?>{};
         for (final store in stores) {
-          for (final entry in formats.entries) {
-            final home = store.homesByAgentId[entry.key];
+          for (final entry in readable.entries) {
+            final home = store.homeFor(entry.key);
             if (home == null) continue;
             ids['${store.environmentId}/${entry.key}'] = await index.idsIn(
               storeHome: home,
-              format: entry.value,
+              store: entry.value,
             );
           }
         }

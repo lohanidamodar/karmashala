@@ -3,7 +3,7 @@ import 'dart:collection';
 
 import '../../process/process_handle.dart';
 import '../../sessions/session_event_types.dart';
-import '../domain/agent_adapter.dart';
+import '../adapter/agent_chat_protocol.dart';
 
 /// Shared transport for stdio agent sessions that exchange newline-delimited
 /// messages over a [ProcessHandle].

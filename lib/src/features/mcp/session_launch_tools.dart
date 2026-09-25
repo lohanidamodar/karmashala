@@ -614,7 +614,17 @@ class SessionLaunchTools {
   };
 
   Future<Object?> _getUsage({String? cli, String? environmentId}) async {
-    final agentId = parseCli(_container, cli) ?? AgentIds.claudeCode;
+    // Unnamed, the first agent in registry order whose adapter has a usage
+    // endpoint answers.
+    final agentId =
+        parseCli(_container, cli) ??
+        _container
+            .read(agentRegistryProvider)
+            .adapters
+            .where((adapter) => adapter.usage != null)
+            .firstOrNull
+            ?.id;
+    if (agentId == null) throw StateError('No agent here reports usage.');
     final install = installFor(_container, agentId, environmentId);
     if (install == null) {
       throw StateError('No $agentId installation found.');

@@ -120,7 +120,10 @@ void main() {
         // conversation — the case `open_session` has to refuse rather than
         // silently start something new.
         agentRegistryProvider.overrideWithValue(
-          const AgentRegistry([...builtInAgentDescriptors, _silent]),
+          const AgentRegistry([
+            ...builtInAgentAdapters,
+            DataOnlyAgentAdapter(_silent),
+          ]),
         ),
       ],
     );
@@ -1080,7 +1083,10 @@ void main() {
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           agentRegistryProvider.overrideWithValue(
-            const AgentRegistry([...builtInAgentDescriptors, _silent]),
+            const AgentRegistry([
+              ...builtInAgentAdapters,
+              DataOnlyAgentAdapter(_silent),
+            ]),
           ),
           systemTerminalServiceProvider.overrideWithValue(terminals),
           defaultSystemTerminalProvider.overrideWith(

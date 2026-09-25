@@ -1,5 +1,6 @@
 import 'package:agent_cli/src/agents/domain/agent_descriptor.dart';
 import 'package:agent_cli/src/agents/domain/agent_ids.dart';
+import 'package:agent_cli/src/agents/adapter/data_only_agent_adapter.dart';
 import 'package:agent_cli/src/agents/domain/agent_model_options.dart';
 import 'package:agent_cli/src/agents/domain/agent_registry.dart';
 import 'package:test/test.dart';
@@ -21,7 +22,7 @@ void main() {
   /// in here: nobody has read which model ids its flag accepts, and CLAUDE.md
   /// §19's rule is that an unknown is reported as unknown.
   final established = registry.descriptors
-      .where((d) => d.kind != null)
+      .where((d) => registry.adapterFor(d.id) is! DataOnlyAgentAdapter)
       .map((d) => d.id);
 
   test('every established agent takes a model on its command line', () {

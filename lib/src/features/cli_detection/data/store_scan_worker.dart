@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:karmashala_core/logging.dart';
-import 'package:agent_cli/descriptors.dart';
 import '../application/cli_detection_service.dart';
 import 'package:agent_cli/read.dart';
 
@@ -10,15 +9,16 @@ import 'package:agent_cli/read.dart';
 class StoreScanRequest {
   const StoreScanRequest({
     required this.stores,
-    this.claudeDirectories,
+    this.workingDirectories,
     this.concurrency = kStoreScanConcurrency,
   });
 
   final List<CliStore> stores;
 
-  /// Narrows the Claude jobs — see `ClaudeStoreReader.read`. Null reads
+  /// The working directories to narrow each store to, where the store is
+  /// addressable from one (`AgentStore.directoryNameFor`). Null reads
   /// everything, which is what "Detect CLI sessions" needs.
-  final Set<String>? claudeDirectories;
+  final Set<String>? workingDirectories;
 
   final int concurrency;
 }
@@ -220,17 +220,14 @@ Stream<StoreScanChunk> runStoreScanJobs(
   StoreScanRequest request,
   CliDetectionService detection,
 ) async* {
-  // Resolved on the main isolate and carried in `CliStore`: a live `Process`
-  // cannot cross an isolate boundary, and `CreateProcessW` costs ~1 s.
-  final appServers = CliDetectionService.codexAppServersIn(request.stores);
+  // Each job carries its store server, resolved on the main isolate and
+  // carried in `CliStore`: a live `Process` cannot cross an isolate boundary,
+  // and `CreateProcessW` costs ~1 s.
   for (final job in detection.jobsFor(request.stores)) {
     final sessions = await detection.runJob(
       job,
-      directories: job.format == AgentStoreFormat.claudeJsonl
-          ? request.claudeDirectories
-          : null,
+      workingDirectories: request.workingDirectories,
       slots: StoreScanSlots(concurrency: request.concurrency),
-      appServer: appServers[job.environmentId],
     );
     yield StoreScanChunk(
       agentId: job.agentId,

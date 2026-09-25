@@ -26,7 +26,7 @@ class _AgentGolden {
   const _AgentGolden({
     required this.id,
     required this.displayName,
-    required this.kind,
+    required this.adapter,
     required this.executable,
     required this.baseArguments,
     required this.defaultSelection,
@@ -38,8 +38,8 @@ class _AgentGolden {
   final String id;
   final String displayName;
 
-  /// Null for an agent with no protocol adapter of its own.
-  final AgentKind? kind;
+  /// The adapter class that carries the agent's behaviour.
+  final Type adapter;
 
   /// The executable base name probed on both Windows and WSL.
   final String executable;
@@ -84,7 +84,7 @@ const List<_AgentGolden> _goldens = [
   _AgentGolden(
     id: 'claudeCode',
     displayName: 'Claude Code',
-    kind: AgentKind.claudeCode,
+    adapter: ClaudeCodeAdapter,
     executable: 'claude',
     baseArguments: [
       '--input-format',
@@ -114,7 +114,7 @@ const List<_AgentGolden> _goldens = [
   _AgentGolden(
     id: 'codex',
     displayName: 'Codex CLI',
-    kind: AgentKind.codex,
+    adapter: CodexAdapter,
     executable: 'codex',
     baseArguments: ['app-server'],
     defaultSelection: 'approval=on-request;sandbox=workspace-write',
@@ -177,7 +177,7 @@ const List<_AgentGolden> _goldens = [
   _AgentGolden(
     id: 'antigravity',
     displayName: 'Antigravity',
-    kind: AgentKind.antigravity,
+    adapter: AntigravityAdapter,
     // `agy`, not `antigravity` — the name the CLI installs itself under, and
     // the reason discovery never found it before.
     executable: 'agy',
@@ -214,20 +214,12 @@ void main() {
       registry.descriptors.map((d) => d.displayName),
       _goldens.map((g) => g.displayName),
     );
+    // Each shipped agent is its own adapter, and the registry is nothing but
+    // those adapters.
     expect(
-      registry.descriptors.map((d) => d.kind),
-      _goldens.map((g) => g.kind),
+      registry.adapters.map((a) => a.runtimeType),
+      _goldens.map((g) => g.adapter),
     );
-    // Every agent with a protocol adapter is shipped: the enum has no orphans.
-    // A null kind would be an agent driven by the generic adapter, which is
-    // what `AgentKind` means now — "this one has an adapter" — rather than
-    // "this one is shipped".
-    expect(_goldens.map((g) => g.kind).nonNulls, AgentKind.values);
-    // Rows written before the id migration hold `AgentKind.name`, so the id and
-    // the kind must still agree for the built-ins that have one to load.
-    for (final golden in _goldens) {
-      if (golden.kind != null) expect(golden.id, golden.kind!.name);
-    }
     expect(registry.byId('nope'), isNull);
   });
 
@@ -382,7 +374,7 @@ void main() {
             expected,
             reason: 'adapter: $reason',
           );
-          // ...and the descriptor, composed the way GenericAgentAdapter does.
+          // ...and the descriptor, composed the way GenericChatProtocol does.
           expect(
             fromRegistry(golden.id, stored, resume),
             expected,
@@ -397,25 +389,19 @@ void main() {
     'store specs describe only the agents with an on-disk session store',
     () {
       expect(registry.byId('claudeCode')!.store!.homeDirectoryName, '.claude');
-      expect(
-        registry.byId('claudeCode')!.store!.format,
-        AgentStoreFormat.claudeJsonl,
-      );
+      expect(registry.adapterFor('claudeCode')!.store, isA<ClaudeCodeStore>());
       expect(registry.byId('codex')!.store!.homeDirectoryName, '.codex');
-      expect(
-        registry.byId('codex')!.store!.format,
-        AgentStoreFormat.codexRollout,
-      );
+      expect(registry.adapterFor('codex')!.store, isA<CodexStore>());
       // Antigravity's store yields identity without content: conversation id,
       // directory, title and size are readable, message payloads are protobuf
-      // in an unpublished schema. `antigravityStore` is that shape.
+      // in an unpublished schema. `AntigravityStore` is that shape.
       expect(
         registry.byId('antigravity')!.store!.homeDirectoryName,
         '.gemini/antigravity-cli',
       );
       expect(
-        registry.byId('antigravity')!.store!.format,
-        AgentStoreFormat.antigravityStore,
+        registry.adapterFor('antigravity')!.store,
+        isA<AntigravityStore>(),
       );
     },
   );

@@ -127,10 +127,7 @@ const _forker = AgentDescriptor(
       evidence: 'forker --help',
     ),
   ),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.forker',
-    format: AgentStoreFormat.claudeJsonl,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.forker'),
 );
 
 /// Takes a file of extra system prompt — the shape Claude Code has, and the
@@ -148,10 +145,7 @@ const _briefed = AgentDescriptor(
       evidence: 'test fixture — not a real CLI',
     ),
   ),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.briefed',
-    format: AgentStoreFormat.claudeJsonl,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.briefed'),
 );
 
 const _mute = AgentDescriptor(
@@ -291,7 +285,11 @@ Harness harness({
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
-        const AgentRegistry([_forker, _mute, _briefed]),
+        const AgentRegistry([
+          ClaudeCodeAdapter(descriptor: _forker),
+          DataOnlyAgentAdapter(_mute),
+          ClaudeCodeAdapter(descriptor: _briefed),
+        ]),
       ),
       if (packetDirectory != null)
         handoffPacketFilesProvider.overrideWith(

@@ -4,7 +4,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_core/logging.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/process/command_runner_providers.dart';
 import 'agent_providers.dart';
@@ -16,21 +15,11 @@ final _log = AppLogger.named('agents.models');
 /// empty account: the curated list stands in for it.
 final discoveredModelsProvider =
     FutureProvider.family<List<AgentModel>?, String>((ref, agentId) async {
-      final support = ref
-          .read(agentRegistryProvider)
-          .byId(agentId)
-          ?.launch
-          .model;
-      if (support == null) return null;
+      final adapter = ref.read(agentRegistryProvider).adapterFor(agentId);
+      final lister = adapter?.modelLister;
+      if (lister == null) return null;
       try {
-        final found = switch (support.discovery) {
-          AgentModelDiscovery.none => null,
-          AgentModelDiscovery.codexModelsCache => await _codexModels(ref),
-          AgentModelDiscovery.claudeListModels => await _claudeModels(
-            ref,
-            agentId,
-          ),
-        };
+        final found = await lister.list(_contextFor(ref, agentId));
         if (found != null) {
           _log.info('$agentId lists ${found.length} model(s) for this account');
         }
@@ -55,39 +44,36 @@ final agentModelSupportProvider = Provider.family<AgentModelSupport, String>((
   return found == null ? base : base.withModels(found);
 });
 
-Future<List<AgentModel>?> _codexModels(Ref ref) async {
-  final env = ref.read(hostEnvironmentProvider);
-  final home =
-      env['CODEX_HOME'] ??
-      p.join(
-        (Platform.isWindows ? env['USERPROFILE'] : env['HOME']) ?? '.',
-        '.codex',
-      );
-  final cache = File(p.join(home, 'models_cache.json'));
-  if (!await cache.exists()) return null;
-  return parseCodexModelsCache(await cache.readAsString());
-}
-
-Future<List<AgentModel>?> _claudeModels(Ref ref, String agentId) async {
-  final installation = ref
-      .read(agentInstallationDaoProvider)
-      .getAll()
-      .where(
-        (i) =>
-            i.agentId == agentId &&
-            i.executable.environmentId == localHostEnvironmentId,
-      )
-      .firstOrNull;
-  if (installation == null) return null;
-  final result = await ref
-      .read(hostCommandRunnerProvider)
-      .run(
-        CommandRequest(
-          executable: installation.executable.path,
-          arguments: kClaudeListModelsArguments,
-          stdinText: kClaudeListModelsRequest,
-          timeout: const Duration(seconds: 30),
-        ),
-      );
-  return result.ok ? parseClaudeModelList(result.stdout) : null;
+/// What a listing may need from this host: its environment, and a way to run
+/// [agentId]'s installation on this machine. The installation is looked up only
+/// when a lister runs it, so one that reads a file never touches the table.
+ModelListContext _contextFor(Ref ref, String agentId) {
+  return ModelListContext(
+    hostEnvironment: ref.read(hostEnvironmentProvider),
+    hostIsWindows: Platform.isWindows,
+    runLocalCli:
+        (arguments, {stdinText, timeout = const Duration(seconds: 30)}) async {
+          final installation = ref
+              .read(agentInstallationDaoProvider)
+              .getAll()
+              .where(
+                (i) =>
+                    i.agentId == agentId &&
+                    i.executable.environmentId == localHostEnvironmentId,
+              )
+              .firstOrNull;
+          if (installation == null) return null;
+          final result = await ref
+              .read(hostCommandRunnerProvider)
+              .run(
+                CommandRequest(
+                  executable: installation.executable.path,
+                  arguments: arguments,
+                  stdinText: stdinText,
+                  timeout: timeout,
+                ),
+              );
+          return result.ok ? result.stdout : null;
+        },
+  );
 }

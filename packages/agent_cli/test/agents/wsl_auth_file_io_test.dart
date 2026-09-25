@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:agent_cli/src/agents/data/claude_auth_service.dart';
-import 'package:agent_cli/src/agents/data/codex_auth_service.dart';
+import 'package:agent_cli/src/agents/claude_code/claude_auth_service.dart';
+import 'package:agent_cli/src/agents/codex/codex_auth_service.dart';
 import 'package:agent_cli/src/agents/domain/agent_ids.dart';
 import 'package:agent_cli/src/agents/domain/agent_installation.dart';
-import 'package:agent_cli/src/agents/domain/claude_account.dart';
-import 'package:agent_cli/src/agents/domain/codex_account.dart';
+import 'package:agent_cli/src/agents/claude_code/claude_account.dart';
+import 'package:agent_cli/src/agents/codex/codex_account.dart';
 import 'package:agent_cli/src/cli_detection/data/cli_store.dart';
 import 'package:agent_cli/src/environments/environment_kind.dart';
 import 'package:agent_cli/src/environments/environment_path.dart';

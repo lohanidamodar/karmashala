@@ -97,13 +97,13 @@ void main() {
     });
   });
 
-  group('ClaudeCodeAdapter', () {
+  group('ClaudeCodeChatProtocol', () {
     test('starts claude with stream-json in/out', () async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final runner = FakeCommandRunner();
-      final adapter = ClaudeCodeAdapter(runnerFor: (_) => runner);
+      final adapter = ClaudeCodeChatProtocol(runnerFor: (_) => runner);
 
       adapter.start(
         AgentLaunch(

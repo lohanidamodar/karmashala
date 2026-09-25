@@ -13,8 +13,6 @@ import '../../git/presentation/diff_line_tile.dart';
 import 'package:karmashala_git/git.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
-import '../../agents/application/agent_providers.dart';
-import '../../sessions/application/session_providers.dart';
 import '../application/agent_rewind_points.dart';
 import '../application/checkpoint_providers.dart';
 import '../application/checkpoint_service.dart';
@@ -432,26 +430,13 @@ String checkpointsEmptyMessage(String? skipReason) {
 }
 
 /// What the agent's own undo offers beside these, or `null` when there is
-/// nothing to say about [agentId].
-String? agentRewindNote(String? agentId, AgentRewindPoints? points) {
-  switch (agentId) {
-    case AgentIds.claudeCode:
-      final count = points?.checkpoints;
-      final counted = count == null
-          ? 'Claude Code also keeps its own rewind points for this '
-                'conversation'
-          : 'Claude Code also keeps $count rewind point'
-                '${count == 1 ? '' : 's'} for this conversation'
-                '${points!.withFileEdits == count ? '' : ', ${points.withFileEdits} with file edits'}';
-      return '$counted. In its pane, press Esc twice or run /rewind to '
-          'restore code and conversation together. It tracks only its own '
-          'Edit and Write tools, not shell commands.';
-    case AgentIds.codex:
-      return 'Codex has no undo of its own: it removed its snapshots in '
-          'April 2026. These checkpoints are the way back.';
-  }
-  return null;
-}
+/// nothing to say about it.
+String? agentRewindNote(AgentRewind rewind, AgentRewindPoints? points) =>
+    switch (rewind) {
+      OwnRewindPoints(:final note) => note(points),
+      NoOwnUndo(:final note) => note,
+      UnknownRewind() => null,
+    };
 
 /// The agent-native half of undo, said under the list. Read-only.
 class _AgentRewindNote extends ConsumerWidget {
@@ -461,14 +446,11 @@ class _AgentRewindNote extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final agentId = ref.watch(_sessionAgentIdProvider(sessionId));
-    if (agentId != AgentIds.claudeCode && agentId != AgentIds.codex) {
-      return const SizedBox.shrink();
-    }
-    final points = agentId == AgentIds.claudeCode
+    final rewind = ref.watch(sessionAgentRewindProvider(sessionId));
+    final points = rewind is OwnRewindPoints
         ? ref.watch(agentRewindPointsProvider(sessionId)).value
         : null;
-    final note = agentRewindNote(agentId, points);
+    final note = agentRewindNote(rewind, points);
     if (note == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
     return Container(
@@ -478,15 +460,3 @@ class _AgentRewindNote extends ConsumerWidget {
     );
   }
 }
-
-final _sessionAgentIdProvider = Provider.autoDispose.family<String?, String>((
-  ref,
-  sessionId,
-) {
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
-  if (session == null) return null;
-  return ref
-      .read(agentInstallationDaoProvider)
-      .getById(session.agentInstallationId)
-      ?.agentId;
-});

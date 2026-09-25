@@ -1,8 +1,6 @@
 import 'dart:io';
 
-import 'package:agent_cli/src/agents/domain/agent_descriptor.dart';
-import 'package:agent_cli/src/cli_detection/data/conversation_store_index.dart';
-import 'package:agent_cli/src/cli_detection/domain/conversation_presence.dart';
+import 'package:agent_cli/read.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -28,7 +26,7 @@ void main() {
 
       final presence = await index.presenceOf(
         storeHome: tmp.path,
-        format: AgentStoreFormat.antigravityStore,
+        store: const AntigravityStore(),
         conversationId: 'conv-1',
       );
 
@@ -42,7 +40,7 @@ void main() {
 
       final presence = await index.presenceOf(
         storeHome: tmp.path,
-        format: AgentStoreFormat.antigravityStore,
+        store: const AntigravityStore(),
         conversationId: 'conv-2',
       );
 
@@ -56,7 +54,7 @@ void main() {
 
       final presence = await index.presenceOf(
         storeHome: tmp.path,
-        format: AgentStoreFormat.antigravityStore,
+        store: const AntigravityStore(),
         conversationId: 'non-existent',
       );
 
@@ -76,7 +74,7 @@ void main() {
 
       final ids = await index.idsIn(
         storeHome: tmp.path,
-        format: AgentStoreFormat.antigravityStore,
+        store: const AntigravityStore(),
       );
 
       expect(ids, containsAll(['conv-db', 'conv-pb']));
@@ -88,14 +86,14 @@ void main() {
       () async {
         final presence = await index.presenceOf(
           storeHome: tmp.path,
-          format: AgentStoreFormat.antigravityStore,
+          store: const AntigravityStore(),
           conversationId: 'some-id',
         );
         expect(presence, ConversationPresence.unknown);
 
         final ids = await index.idsIn(
           storeHome: tmp.path,
-          format: AgentStoreFormat.antigravityStore,
+          store: const AntigravityStore(),
         );
         expect(ids, isNull);
       },

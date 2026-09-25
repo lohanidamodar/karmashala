@@ -5,12 +5,12 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/application/antigravity_resume_providers.dart';
+import '../../agents/application/directory_resume_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/application/codex_app_server_providers.dart';
+import '../../cli_detection/application/agent_store_server_providers.dart';
 import '../../cli_detection/application/detected_project_merger.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
 import '../../environments/application/environment_providers.dart';
@@ -57,8 +57,9 @@ class SessionActions {
     _log.info('Renamed $id: byUser=true store=$store');
   }
 
-  /// Carries a native row's new title out to the CLI store. Codex needs only
-  /// the thread id; every other costs one pass over the stores. Never throws.
+  /// Carries a native row's new title out to the CLI store. An agent with a
+  /// store server needs only the conversation id; every other costs one pass
+  /// over the stores. Never throws.
   Future<String> _propagateNativeRename(String id, String title) async {
     final session = _ref.read(sessionDaoProvider).getById(id);
     final externalId = session?.externalSessionId;
@@ -69,21 +70,24 @@ class SessionActions {
     if (installation == null) return 'no-installation';
     final mutator = _ref.read(cliSessionMutatorProvider);
     try {
-      if (installation.agentId == AgentIds.codex) {
+      final adapter = _ref
+          .read(agentRegistryProvider)
+          .adapterFor(installation.agentId);
+      if (adapter?.storeServer != null) {
         await mutator.rename(
           DetectedSession(
-            cli: AgentIds.codex,
+            cli: installation.agentId,
             sessionId: externalId,
             cwd: EnvironmentPath(
               environmentId: installation.environmentId,
               path: '',
             ),
-            // No store file is read or written on this path; the app-server is.
+            // No store file is read or written on this path; the server is.
             filePath: '',
             storeHome: '',
           ),
           title,
-          codex: _ref.read(codexAppServersProvider),
+          servers: _ref.read(agentStoreServersProvider),
         );
         return 'app-server';
       }
@@ -219,7 +223,7 @@ class SessionActions {
           .rename(
             _toDetected(session),
             title,
-            codex: _ref.read(codexAppServersProvider),
+            servers: _ref.read(agentStoreServersProvider),
           );
     } catch (_) {
       // CLI store unavailable — the workspace title is still updated.
@@ -798,9 +802,9 @@ class SessionActions {
   /// The conversation the agent's own store says this directory last used —
   /// the last resort for `agy`, which mints an id and never tells us.
   Future<String?> _continuableConversationFor(Session session) async {
-    final plan = await _ref.read(antigravityResumePlannerProvider)(session);
+    final plan = await _ref.read(directoryResumePlannerProvider)(session);
     if (plan == null) return null;
-    if (plan is AntigravityResumeRefused) throw StateError(plan.reason);
+    if (plan is DirectoryResumeRefused) throw StateError(plan.reason);
     final conversationId = conversationIn(plan);
     if (conversationId == null) return null;
     // Recorded now, so the row names the conversation before anything else

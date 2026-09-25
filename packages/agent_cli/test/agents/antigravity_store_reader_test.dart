@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:agent_cli/src/agents/data/antigravity_store_reader.dart';
+import 'package:agent_cli/src/agents/antigravity/antigravity_store_reader.dart';
 import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 import '../support/fake_sqlite.dart';

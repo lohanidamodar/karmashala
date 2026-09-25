@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:agent_cli/src/agents/data/codex_auth_service.dart';
+import 'package:agent_cli/src/agents/codex/codex_auth_service.dart';
 import 'package:test/test.dart';
 
 import '../support/fakes.dart';

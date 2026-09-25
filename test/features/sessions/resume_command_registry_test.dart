@@ -122,7 +122,9 @@ Harness harness(AgentDescriptor agent) {
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(AgentRegistry([agent])),
+      agentRegistryProvider.overrideWithValue(
+        AgentRegistry([DataOnlyAgentAdapter(agent)]),
+      ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
       systemTerminalServiceProvider.overrideWithValue(terminals),
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),

@@ -135,7 +135,7 @@ void main() {
       statusStrategy: AgentStatusStrategy.terminalGrid,
     );
     final gridService = AgentStatusService(
-      registry: const AgentRegistry([cursor]),
+      registry: const AgentRegistry([DataOnlyAgentAdapter(cursor)]),
       hookReports: reports,
       clock: FixedClock(now),
     );

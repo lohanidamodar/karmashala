@@ -8,60 +8,20 @@ import '../../agents/application/agent_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 
-/// What an agent's own undo holds for a session, read from its transcript.
-/// Read-only: restoring through it belongs to the agent, in its pane.
-class AgentRewindPoints {
-  const AgentRewindPoints({
-    required this.agentId,
-    required this.checkpoints,
-    required this.withFileEdits,
-    this.latest,
-  });
-
-  final String agentId;
-
-  /// Prompts the agent can rewind to.
-  final int checkpoints;
-
-  /// Of those, the ones whose files it backed up — its "Restore code" rows.
-  final int withFileEdits;
-
-  final DateTime? latest;
-}
-
-/// Claude Code's rewind points, from the `file-history-snapshot` records in a
-/// session transcript: one per prompt that started a turn, keyed by
-/// `messageId`, its `snapshot.trackedFileBackups` naming the files backed up
-/// under `~/.claude/file-history/<session>/`. Only keys are read, never the
-/// backed-up contents; records that are not snapshots are skipped unparsed.
-AgentRewindPoints parseClaudeRewindPoints(Iterable<String> lines) {
-  final tracked = <String, bool>{};
-  DateTime? latest;
-  for (final line in lines) {
-    if (!line.contains('"file-history-snapshot"')) continue;
-    final Object? record;
-    try {
-      record = jsonDecode(line);
-    } on FormatException {
-      continue;
-    }
-    if (record is! Map || record['type'] != 'file-history-snapshot') continue;
-    final id = record['messageId'];
-    final snapshot = record['snapshot'];
-    if (id is! String || snapshot is! Map) continue;
-    final backups = snapshot['trackedFileBackups'];
-    final hasFiles = backups is Map && backups.isNotEmpty;
-    tracked[id] = (tracked[id] ?? false) || hasFiles;
-    final at = DateTime.tryParse('${snapshot['timestamp']}');
-    if (at != null && (latest == null || at.isAfter(latest))) latest = at;
-  }
-  return AgentRewindPoints(
-    agentId: AgentIds.claudeCode,
-    checkpoints: tracked.length,
-    withFileEdits: tracked.values.where((v) => v).length,
-    latest: latest,
-  );
-}
+/// What the agent's own undo offers for [sessionId]'s agent — asked of its
+/// adapter, so an agent nobody has read the undo of says nothing.
+final sessionAgentRewindProvider = Provider.autoDispose
+    .family<AgentRewind, String>((ref, sessionId) {
+      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      if (session == null) return const AgentRewind.unknown();
+      final agentId = ref
+          .read(agentInstallationDaoProvider)
+          .getById(session.agentInstallationId)
+          ?.agentId;
+      if (agentId == null) return const AgentRewind.unknown();
+      return ref.read(agentRegistryProvider).adapterFor(agentId)?.rewind ??
+          const AgentRewind.unknown();
+    });
 
 /// The agent's own rewind points for [sessionId], or `null` when its agent
 /// keeps none this app can read. Read once per open panel: it scans the store.
@@ -76,19 +36,24 @@ final agentRewindPointsProvider = FutureProvider.autoDispose
           .read(agentInstallationDaoProvider)
           .getById(session.agentInstallationId)
           ?.agentId;
-      if (agentId != AgentIds.claudeCode) return null;
+      if (agentId == null) return null;
+      final rewind = ref
+          .read(agentRegistryProvider)
+          .adapterFor(agentId)
+          ?.rewind;
+      if (rewind is! OwnRewindPoints) return null;
       final path = await ref
           .read(sessionTranscriptLocatorProvider)
-          .locate(agentId: agentId!, externalSessionId: externalId);
+          .locate(agentId: agentId, externalSessionId: externalId);
       if (path == null) return null;
       try {
         final lines = await File(path)
             .openRead()
             .transform(utf8.decoder)
             .transform(const LineSplitter())
-            .where((line) => line.contains('"file-history-snapshot"'))
+            .where((line) => line.contains(rewind.lineMarker))
             .toList();
-        return parseClaudeRewindPoints(lines);
+        return rewind.parse(lines);
       } on FileSystemException {
         return null;
       }

@@ -30,9 +30,9 @@ void main() {
 
       final local = stores.single;
       expect(local.environmentId, posixEnv().id);
-      expect(local.claudeHome, '/Users/me/.claude');
-      expect(local.codexHome, '/Users/me/.codex');
-      expect(local.claudeHome, isNot(contains(r'\')));
+      expect(local.homeFor(AgentIds.claudeCode), '/Users/me/.claude');
+      expect(local.homeFor(AgentIds.codex), '/Users/me/.codex');
+      expect(local.homeFor(AgentIds.claudeCode), isNot(contains(r'\')));
     });
 
     test(
@@ -44,8 +44,8 @@ void main() {
         ).locate([windowsEnv()]);
 
         final local = stores.single;
-        expect(local.claudeHome, r'C:\Users\me\.claude');
-        expect(local.codexHome, r'C:\Users\me\.codex');
+        expect(local.homeFor(AgentIds.claudeCode), r'C:\Users\me\.claude');
+        expect(local.homeFor(AgentIds.codex), r'C:\Users\me\.codex');
       },
     );
 
@@ -98,8 +98,14 @@ void main() {
 
     final wsl = stores.firstWhere((s) => s.environmentId == 'wsl:Ubuntu');
     expect(wsl.homesByAgentId.keys, ['claudeCode', 'codex', 'antigravity']);
-    expect(wsl.claudeHome, r'\\wsl.localhost\Ubuntu\home\me\.claude');
-    expect(wsl.codexHome, r'\\wsl.localhost\Ubuntu\home\me\.codex');
+    expect(
+      wsl.homeFor(AgentIds.claudeCode),
+      r'\\wsl.localhost\Ubuntu\home\me\.claude',
+    );
+    expect(
+      wsl.homeFor(AgentIds.codex),
+      r'\\wsl.localhost\Ubuntu\home\me\.codex',
+    );
     // A home is located for an agent whose store we cannot *read*, which is the
     // point of keeping location and format separate. The nested directory is
     // also the first one in the registry, so this is where that is exercised.
@@ -121,12 +127,12 @@ void main() {
 
     final stores = await CliStoreLocator(
       runnerFor: _homeIs('/home/me'),
-      registry: const AgentRegistry([storeless]),
+      registry: const AgentRegistry([DataOnlyAgentAdapter(storeless)]),
     ).locate([windowsEnv(), wslEnv()]);
 
     expect(stores, isNotEmpty);
     expect(stores.every((s) => s.homesByAgentId.isEmpty), isTrue);
-    expect(stores.every((s) => s.claudeHome == null), isTrue);
+    expect(stores.every((s) => s.homeFor(AgentIds.claudeCode) == null), isTrue);
   });
 
   test(
@@ -136,15 +142,12 @@ void main() {
         id: 'cursorAgent',
         displayName: 'Cursor Agent',
         binaries: AgentBinaries(windows: ['cursor'], posix: ['cursor']),
-        store: AgentStoreSpec(
-          homeDirectoryName: '.cursor',
-          format: AgentStoreFormat.none,
-        ),
+        store: AgentStoreSpec(homeDirectoryName: '.cursor'),
       );
 
       final stores = await CliStoreLocator(
         runnerFor: _homeIs('/home/me'),
-        registry: const AgentRegistry([newAgent]),
+        registry: const AgentRegistry([DataOnlyAgentAdapter(newAgent)]),
       ).locate([windowsEnv(), wslEnv()]);
 
       final wsl = stores.firstWhere((s) => s.environmentId == 'wsl:Ubuntu');

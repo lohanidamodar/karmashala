@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 
 import '../../util/json_object_splice.dart';
-import '../domain/claude_account.dart';
-import '../domain/codex_account.dart';
+import '../claude_code/claude_account.dart';
+import '../codex/codex_account.dart';
 
 /// A home directory on a machine this host cannot open as a filesystem.
 ///

@@ -85,6 +85,6 @@ void main() {
     expect(found.switchesLive, claude.switchesLive);
     expect(found.commandFor('opus[1m]'), '/model opus[1m]');
     expect(found.argumentsFor('opus[1m]'), ['--model', 'opus[1m]']);
-    expect(found.discovery, AgentModelDiscovery.claudeListModels);
+    expect(const ClaudeCodeAdapter().modelLister, isA<ClaudeModelLister>());
   });
 }

@@ -70,7 +70,7 @@ enum AgentForkStyle {
 /// does not means handing a CLI arguments it will reject, which surfaces to the
 /// user as the agent refusing to launch — twice now the exact shape of the
 /// worst bug in this area (see the Codex approval flags in
-/// `built_in_agents.dart`).
+/// descriptor).
 class AgentForkSupport {
   /// The CLI forks by itself. [resume] is how it is told *which* conversation —
   /// a flag for Claude Code, a subcommand for Codex — and [extraArguments] is
@@ -142,7 +142,7 @@ class AgentForkSupport {
 /// directory looks in the wrong namespace and fails with 'No conversation
 /// found'."* **That consequence was checked against the CLIs on this machine
 /// and does not hold for any of the three we ship against** — see each
-/// descriptor's [evidence] in `built_in_agents.dart`. What survives the check is
+/// descriptor's [evidence]. What survives the check is
 /// cmux's *default*, which is kept here for the same reason it keeps it: an
 /// agent whose store nobody has read is assumed to be cwd-keyed, because
 /// refusing a resume that would have worked costs a click and a resume that
@@ -261,7 +261,7 @@ enum AgentContinueScope {
 ///
 /// This is the honest fallback for an agent whose id we failed to learn, and it
 /// exists because the alternative is a refusal. It is deliberately **not** the
-/// same thing as Codex's `--last` picker, which `built_in_agents.dart` declines
+/// same thing as Codex's `--last` picker, which Codex's descriptor declines
 /// to use: that would replace an id the app already has with a recency guess.
 /// This is only ever reached when there is no id at all, and — for Antigravity,
 /// the one agent that declares it — the app can read exactly which conversation

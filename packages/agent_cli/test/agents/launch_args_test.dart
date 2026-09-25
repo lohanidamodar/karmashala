@@ -1,7 +1,7 @@
-import 'package:agent_cli/src/agents/data/antigravity_adapter.dart';
-import 'package:agent_cli/src/agents/data/claude_code_adapter.dart';
-import 'package:agent_cli/src/agents/data/codex_adapter.dart';
-import 'package:agent_cli/src/agents/domain/agent_adapter.dart';
+import 'package:agent_cli/src/agents/antigravity/antigravity_chat_protocol.dart';
+import 'package:agent_cli/src/agents/claude_code/claude_code_chat_protocol.dart';
+import 'package:agent_cli/src/agents/codex/codex_chat_protocol.dart';
+import 'package:agent_cli/src/agents/adapter/agent_chat_protocol.dart';
 import 'package:agent_cli/src/agents/domain/agent_ids.dart';
 import 'package:agent_cli/src/agents/domain/agent_permission_support.dart';
 import 'package:agent_cli/src/agents/domain/agent_registry.dart';

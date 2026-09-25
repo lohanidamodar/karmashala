@@ -95,7 +95,10 @@ Harness harness({bool installAgent = true, String agentId = 'sharing'}) {
       ),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
-        const AgentRegistry([_sharing, _exclusive]),
+        const AgentRegistry([
+          DataOnlyAgentAdapter(_sharing),
+          DataOnlyAgentAdapter(_exclusive),
+        ]),
       ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
       // The whereabouts provider watches this stream for a "last seen" time;

@@ -115,7 +115,7 @@ void main() {
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final runner = FakeCommandRunner();
-    final adapter = GenericAgentAdapter(
+    final adapter = GenericChatProtocol(
       agentId: 'roverCli',
       launch: _spec,
       runnerFor: (_) => runner,

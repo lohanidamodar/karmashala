@@ -63,10 +63,7 @@ const _claudeish = AgentDescriptor(
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
     allowsConcurrentResume: true,
   ),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.claude',
-    format: AgentStoreFormat.claudeJsonl,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.claude'),
 );
 
 class _StaticSettings extends SettingsController {
@@ -117,7 +114,7 @@ void main() {
       ),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
       agentRegistryProvider.overrideWithValue(
-        const AgentRegistry([_claudeish]),
+        const AgentRegistry([ClaudeCodeAdapter(descriptor: _claudeish)]),
       ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
       agentSessionStatusProvider.overrideWith(

@@ -21,7 +21,7 @@ class SessionAutoImportService {
     required this.ids,
     required this.clock,
     this.translator = const PathTranslator(),
-    this.narrowClaudeStore = true,
+    this.narrowByDirectory = true,
   });
 
   final CliStoreLocator locator;
@@ -37,9 +37,10 @@ class SessionAutoImportService {
   final Clock clock;
   final PathTranslator translator;
 
-  /// Whether to read only the Claude store directories these repositories encode
-  /// to. Off reads every directory, for a build that encodes paths differently.
-  final bool narrowClaudeStore;
+  /// Whether to read only the store directories these repositories encode to,
+  /// in a store addressable from a working directory. Off reads every
+  /// directory, for a build that encodes paths differently.
+  final bool narrowByDirectory;
 
   Future<ImportSummary> importForRepositories(List<Repository> repos) async {
     if (repos.isEmpty) return const ImportSummary();
@@ -56,7 +57,7 @@ class SessionAutoImportService {
       final (key, _) = canonicalProjectPath(repo.path, env, translator);
       byKey[key] = repo;
       for (final cwd in _spellings(repo.path, env)) {
-        directories.add(claudeStoreDirectoryName(cwd).toLowerCase());
+        directories.add(cwd);
       }
     }
 
@@ -64,7 +65,7 @@ class SessionAutoImportService {
     final chunks = scan(
       StoreScanRequest(
         stores: stores,
-        claudeDirectories: narrowClaudeStore ? directories : null,
+        workingDirectories: narrowByDirectory ? directories : null,
       ),
     );
     await for (final chunk in chunks) {

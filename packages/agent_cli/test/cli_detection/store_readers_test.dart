@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:agent_cli/src/agents/domain/agent_ids.dart';
-import 'package:agent_cli/src/cli_detection/data/claude_store_reader.dart';
-import 'package:agent_cli/src/cli_detection/data/codex_store_reader.dart';
+import 'package:agent_cli/src/agents/claude_code/claude_store_reader.dart';
+import 'package:agent_cli/src/agents/codex/codex_store_reader.dart';
 import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 

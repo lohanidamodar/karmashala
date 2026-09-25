@@ -6,7 +6,7 @@ import '../agents/domain/agent_registry.dart';
 import '../environments/environment_path.dart';
 import '../process/command_runner.dart';
 import '../process/process_handle.dart';
-import 'one_shot.dart';
+import '../agents/adapter/generic_one_shot.dart';
 
 /// Asks a coding CLI one question and streams back what it says.
 ///
@@ -53,13 +53,13 @@ class CliSession {
     EnvironmentPath? workingDirectory,
     Duration timeout = const Duration(minutes: 3),
   }) async* {
-    final invocation = oneShotInvocation(
-      installation.agentId,
-      prompt,
-      systemPrompt: systemPrompt,
-      model: model,
-      descriptor: descriptor,
-    );
+    // An installation whose agent left the registry is still asked, the way
+    // an agent with no protocol is.
+    final invocation =
+        registry
+            .adapterFor(installation.agentId)
+            ?.oneShot(prompt, systemPrompt: systemPrompt, model: model) ??
+        genericOneShot(null, prompt, systemPrompt: systemPrompt, model: model);
 
     final handle = await _runner.start(
       CommandRequest(

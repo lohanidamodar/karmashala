@@ -84,7 +84,7 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
-          const AgentRegistry([_resumable]),
+          const AgentRegistry([DataOnlyAgentAdapter(_resumable)]),
         ),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),

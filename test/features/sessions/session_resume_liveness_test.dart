@@ -70,7 +70,9 @@ const _shareable = AgentDescriptor(
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(AgentRegistry([descriptor])),
+      agentRegistryProvider.overrideWithValue(
+        AgentRegistry([DataOnlyAgentAdapter(descriptor)]),
+      ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );

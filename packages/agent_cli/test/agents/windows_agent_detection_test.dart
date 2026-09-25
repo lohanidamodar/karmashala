@@ -3,6 +3,7 @@ import 'package:agent_cli/src/agents/data/agent_discovery_service.dart';
 import 'package:agent_cli/src/agents/domain/agent_descriptor.dart';
 import 'package:agent_cli/src/agents/domain/agent_ids.dart';
 import 'package:agent_cli/src/agents/domain/agent_registry.dart';
+import 'package:agent_cli/src/agents/adapter/data_only_agent_adapter.dart';
 import '../support/fake_path_probe.dart';
 import 'package:test/test.dart';
 
@@ -24,13 +25,15 @@ CommandResult _ok(String stdout) =>
 
 /// A registry of one agent that declares a Windows install location.
 const _declaring = AgentRegistry([
-  AgentDescriptor(
-    id: AgentIds.claudeCode,
-    displayName: 'Claude Code',
-    binaries: AgentBinaries(
-      windows: ['claude'],
-      posix: ['claude'],
-      windowsInstallPaths: [r'%USERPROFILE%\.local\bin\claude.exe'],
+  DataOnlyAgentAdapter(
+    AgentDescriptor(
+      id: AgentIds.claudeCode,
+      displayName: 'Claude Code',
+      binaries: AgentBinaries(
+        windows: ['claude'],
+        posix: ['claude'],
+        windowsInstallPaths: [r'%USERPROFILE%\.local\bin\claude.exe'],
+      ),
     ),
   ),
 ]);

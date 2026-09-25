@@ -7,7 +7,6 @@
 library;
 
 export 'src/git/data/file_edit_diff.dart';
-export 'src/git/data/file_edit_reader.dart';
 export 'src/git/data/git_diff_parsing.dart';
 export 'src/git/data/git_dir.dart';
 export 'src/git/data/git_files.dart';
@@ -23,7 +22,6 @@ export 'src/git/data/worktree_copier.dart';
 export 'src/git/domain/diff_line.dart';
 export 'src/git/domain/diff_stat.dart';
 export 'src/git/domain/file_change.dart';
-export 'src/git/domain/file_edit.dart';
 export 'src/git/domain/git_commit.dart';
 export 'src/git/domain/git_presence.dart';
 export 'src/git/domain/git_worktree.dart';

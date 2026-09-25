@@ -67,7 +67,7 @@ void main() {
 
     test('Claude Code starts its process through the resolved runner', () {
       final f = fake();
-      ClaudeCodeAdapter(runnerFor: f.resolve).start(
+      ClaudeCodeChatProtocol(runnerFor: f.resolve).start(
         AgentLaunch(
           workingDirectory: workingDirectory(),
           installation: agentInstallation(),
@@ -96,10 +96,10 @@ void main() {
         workingDirectory: workingDirectory(environmentId: 'wsl:Ubuntu'),
         installation: agentInstallation(environmentId: 'wsl:Ubuntu'),
       );
-      ClaudeCodeAdapter(runnerFor: resolve).start(launch);
-      CodexAdapter(runnerFor: resolve).start(launch);
-      AntigravityAdapter(runnerFor: resolve).start(launch);
-      GenericAgentAdapter(
+      ClaudeCodeChatProtocol(runnerFor: resolve).start(launch);
+      CodexChatProtocol(runnerFor: resolve).start(launch);
+      AntigravityChatProtocol(runnerFor: resolve).start(launch);
+      GenericChatProtocol(
         agentId: 'roverCli',
         runnerFor: resolve,
       ).start(launch);
@@ -119,10 +119,13 @@ void main() {
       final stores = await locator.locate([windowsEnv()]);
 
       expect(stores, hasLength(1));
-      expect(stores.single.claudeHome, r'C:\Users\me\.claude');
-      expect(stores.single.codexHome, r'C:\Users\me\.codex');
       expect(
-        stores.single.codexAppServer,
+        stores.single.homeFor(AgentIds.claudeCode),
+        r'C:\Users\me\.claude',
+      );
+      expect(stores.single.homeFor(AgentIds.codex), r'C:\Users\me\.codex');
+      expect(
+        stores.single.storeServerFor(AgentIds.codex),
         isNull,
         reason: 'no installations were passed, so no app-server to spawn',
       );
@@ -151,9 +154,9 @@ void main() {
       );
 
       return locator.locate([windowsEnv()]).then((stores) {
-        expect(stores.single.codexAppServer, isNotNull);
+        expect(stores.single.storeServerFor(AgentIds.codex), isNotNull);
         expect(
-          stores.single.codexAppServer!.executable,
+          stores.single.storeServerFor(AgentIds.codex)!.executable,
           r'C:\bin\codex.exe',
           reason: 'the WSL row belongs to the WSL store, not this one',
         );
@@ -174,7 +177,10 @@ void main() {
       final stores = await locator.locate([windowsEnv(), wslEnv()]);
 
       expect(wsl.requests.single.arguments.last, r'printf %s "$HOME"');
-      expect(stores.last.claudeHome, r'\\wsl.localhost\Ubuntu\home\me\.claude');
+      expect(
+        stores.last.homeFor(AgentIds.claudeCode),
+        r'\\wsl.localhost\Ubuntu\home\me\.claude',
+      );
     });
   });
 

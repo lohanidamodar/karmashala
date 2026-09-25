@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
@@ -26,10 +27,7 @@ const _claudeish = AgentDescriptor(
   id: 'claudeish',
   displayName: 'Claudeish',
   binaries: AgentBinaries(windows: ['claudeish'], posix: ['claudeish']),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.claude',
-    format: AgentStoreFormat.claudeJsonl,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.claude'),
 );
 
 const _storeless = AgentDescriptor(
@@ -61,7 +59,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: home('.claude'),
-          format: AgentStoreFormat.claudeJsonl,
+          store: const ClaudeCodeStore(),
           conversationId: 'abc',
         ),
         ConversationPresence.present,
@@ -74,7 +72,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: home('.claude'),
-          format: AgentStoreFormat.claudeJsonl,
+          store: const ClaudeCodeStore(),
           conversationId: 'never-written',
         ),
         ConversationPresence.absent,
@@ -89,7 +87,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: home('.claude'),
-          format: AgentStoreFormat.claudeJsonl,
+          store: const ClaudeCodeStore(),
           conversationId: 'abc',
         ),
         ConversationPresence.unknown,
@@ -100,7 +98,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: home('.nowhere'),
-          format: AgentStoreFormat.claudeJsonl,
+          store: const ClaudeCodeStore(),
           conversationId: 'abc',
         ),
         ConversationPresence.unknown,
@@ -125,7 +123,7 @@ void main() {
       expect(
         await index.presenceOf(
           storeHome: home('.codex'),
-          format: AgentStoreFormat.codexRollout,
+          store: const CodexStore(),
           conversationId: 'thread-9',
         ),
         ConversationPresence.present,
@@ -133,7 +131,7 @@ void main() {
       expect(
         await index.presenceOf(
           storeHome: home('.codex'),
-          format: AgentStoreFormat.codexRollout,
+          store: const CodexStore(),
           conversationId: 'thread-8',
         ),
         ConversationPresence.absent,
@@ -144,7 +142,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: home('.gemini'),
-          format: AgentStoreFormat.none,
+          store: null,
           conversationId: 'abc',
         ),
         ConversationPresence.unknown,
@@ -168,6 +166,12 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(db),
           cliStoreLocatorProvider.overrideWithValue(FixedLocator(stores)),
+          agentRegistryProvider.overrideWithValue(
+            const AgentRegistry([
+              ClaudeCodeAdapter(descriptor: _claudeish),
+              DataOnlyAgentAdapter(_storeless),
+            ]),
+          ),
         ],
       );
       addTearDown(container.dispose);

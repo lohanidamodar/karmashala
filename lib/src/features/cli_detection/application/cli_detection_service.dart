@@ -5,112 +5,109 @@ import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
 
 /// Reads CLI stores and merges their sessions into projects.
+///
+/// Whose store is whose is the registry's business: each agent's adapter hands
+/// out the reader for its own store (`AgentStore.sessionReader`), so a new
+/// agent is read without a line here.
 class CliDetectionService {
   CliDetectionService({
-    ClaudeStoreReader? claudeReader,
-    CodexStoreReader? codexReader,
-    CodexAppServerReader? codexAppServerReader,
-    this.antigravityReader = const AntigravityStoreSessions(
-      // The app's SQLite binding, handed to the package's reader: it turns
-      // Antigravity's store from "not recorded" into step counts and titles.
-      reader: AntigravityStoreReader(
-        countSteps: false,
-        readRows: readSqliteRows,
-      ),
-    ),
     this.translator = const PathTranslator(),
     this.registry = AgentRegistry.builtIn,
-    // Not const any more: both store readers carry the cache that keeps a scan
-    // proportional to what changed rather than to the whole store.
-  }) : claudeReader = claudeReader ?? ClaudeStoreReader(),
-       codexReader = codexReader ?? CodexStoreReader() {
-    this.codexAppServerReader =
-        codexAppServerReader ??
-        CodexAppServerReader(fallback: this.codexReader);
-  }
+    Map<String, StoreSessionReader>? readers,
+  }) : _readers = readers ?? {};
 
-  final ClaudeStoreReader claudeReader;
-
-  /// The rollout walk. Still reachable, and still the answer for a Codex whose
-  /// app-server cannot be spawned or will not answer.
-  final CodexStoreReader codexReader;
-
-  /// What actually answers for `codexRollout`: `thread/list` when it can, the
-  /// walk above when it cannot.
-  late final CodexAppServerReader codexAppServerReader;
-
-  final AntigravityStoreSessions antigravityReader;
   final PathTranslator translator;
   final AgentRegistry registry;
 
-  /// Which reader answers for which on-disk layout. A lookup, not a branch: a
-  /// new agent is a descriptor, and only a genuinely new layout is a reader.
-  Map<AgentStoreFormat, StoreSessionReader> get _readersByFormat => {
-    AgentStoreFormat.claudeJsonl: claudeReader,
-    AgentStoreFormat.codexRollout: codexAppServerReader,
-    AgentStoreFormat.antigravityStore: antigravityReader,
-  };
+  /// One reader per agent for this service's life, so the caches behind them —
+  /// the whole reason a second scan costs what changed rather than the whole
+  /// store — outlive a single scan. Created on first use; [readers] seeds it,
+  /// for a test that needs to hold one.
+  final Map<String, StoreSessionReader> _readers;
+
+  /// The reader for [agentId]'s store, or null when its adapter declares none.
+  StoreSessionReader? readerFor(String agentId) {
+    final cached = _readers[agentId];
+    if (cached != null) return cached;
+    final store = registry.adapterFor(agentId)?.store;
+    if (store == null) return null;
+    // The app's SQLite binding, handed to the package's reader: it turns a
+    // database-backed store from "not recorded" into step counts and titles.
+    return _readers[agentId] = store.sessionReader(readRows: readSqliteRows);
+  }
 
   /// The store reads [stores] needs, agent-major and in registry order: Claude's
   /// store is cheap and Codex's opens every candidate, so Claude answers first.
   List<StoreScanJob> jobsFor(List<CliStore> stores) => [
-    for (final descriptor in registry.descriptors)
-      for (final store in stores)
-        if (store.homesByAgentId[descriptor.id] case final home?)
-          if (descriptor.store!.format != AgentStoreFormat.none)
+    for (final adapter in registry.adapters)
+      if (adapter.store != null)
+        for (final store in stores)
+          if (store.homeFor(adapter.id) case final home?)
             StoreScanJob(
-              agentId: descriptor.id,
-              format: descriptor.store!.format,
+              agentId: adapter.id,
               storeHome: home,
               environmentId: store.environmentId,
+              storeServer: store.storeServerFor(adapter.id),
             ),
   ];
 
-  /// Runs one job. [directories], [slots] and [appServer] are passed straight
-  /// through — see [StoreSessionReader.read].
+  /// Runs one job. [workingDirectories] narrows a store whose layout is
+  /// addressable from one to the directories they encode to — see
+  /// [StoreSessionReader.read] — and [slots] is passed straight through; the
+  /// job carries its own store server.
   Future<List<DetectedSession>> runJob(
     StoreScanJob job, {
-    Set<String>? directories,
+    Set<String>? workingDirectories,
     StoreScanSlots? slots,
-    CodexAppServerLaunch? appServer,
   }) async {
-    final reader = _readersByFormat[job.format];
+    final reader = readerFor(job.agentId);
     if (reader == null) return const [];
     return reader.read(
       job.storeHome,
       job.environmentId,
-      directories: directories,
+      directories: _directoriesFor(job.agentId, workingDirectories),
       slots: slots,
-      appServer: appServer,
+      storeServer: job.storeServer,
     );
   }
 
-  /// The app-server launches in [stores], by environment id.
-  static Map<String, CodexAppServerLaunch> codexAppServersIn(
-    List<CliStore> stores,
-  ) => {for (final store in stores) store.environmentId: ?store.codexAppServer};
-
   /// Reads every store and returns the flat list; [onJob] sees each job as it
-  /// finishes. No app-server here: `CreateProcessW` costs ~1 s on this isolate.
+  /// finishes. No store server here: `CreateProcessW` costs ~1 s on this
+  /// isolate.
   Future<List<DetectedSession>> readStores(
     List<CliStore> stores, {
-    Set<String>? claudeDirectories,
+    Set<String>? workingDirectories,
     int concurrency = kStoreScanConcurrency,
     void Function(StoreScanJob job, List<DetectedSession> sessions)? onJob,
   }) async {
     final all = <DetectedSession>[];
     for (final job in jobsFor(stores)) {
       final sessions = await runJob(
-        job,
-        directories: job.format == AgentStoreFormat.claudeJsonl
-            ? claudeDirectories
-            : null,
+        job.withoutStoreServer(),
+        workingDirectories: workingDirectories,
         slots: StoreScanSlots(concurrency: concurrency),
       );
       onJob?.call(job, sessions);
       all.addAll(sessions);
     }
     return all;
+  }
+
+  /// The store directories [workingDirectories] encode to in [agentId]'s
+  /// store, or null — read everything — when there are none to narrow to or
+  /// the store cannot be narrowed.
+  Set<String>? _directoriesFor(
+    String agentId,
+    Set<String>? workingDirectories,
+  ) {
+    if (workingDirectories == null) return null;
+    final store = registry.adapterFor(agentId)?.store;
+    if (store == null) return null;
+    final names = {
+      for (final directory in workingDirectories)
+        ?store.directoryNameFor(directory),
+    };
+    return names.isEmpty ? null : names;
   }
 
   /// Reads [stores] and merges the sessions into projects, using
@@ -133,13 +130,21 @@ class CliDetectionService {
 class StoreScanJob {
   const StoreScanJob({
     required this.agentId,
-    required this.format,
     required this.storeHome,
     required this.environmentId,
+    this.storeServer,
   });
 
   final String agentId;
-  final AgentStoreFormat format;
   final String storeHome;
   final String environmentId;
+
+  /// How to reach the agent's store server here, when it has one installed.
+  final StoreServerLaunch? storeServer;
+
+  StoreScanJob withoutStoreServer() => StoreScanJob(
+    agentId: agentId,
+    storeHome: storeHome,
+    environmentId: environmentId,
+  );
 }

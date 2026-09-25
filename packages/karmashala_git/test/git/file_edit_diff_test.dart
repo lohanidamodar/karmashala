@@ -1,4 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:test/test.dart';
 
@@ -220,17 +221,18 @@ void main() {
       },
     };
     expect(
-      fileEditsFromTranscriptLine(claude, AgentIds.claudeCode),
+      (const ClaudeCodeAdapter().fileChanges as TranscriptFileEdits)
+          .editsOnLine(claude),
       hasLength(1),
     );
     // Codex rules find nothing in a Claude line, and vice versa — the readers
     // must not both fire on one line and double-report an edit.
-    expect(fileEditsFromTranscriptLine(claude, AgentIds.codex), isEmpty);
+    expect(codexFileEdits(claude), isEmpty);
   });
 
   group('collecting a whole transcript', () {
     test('a call and its result are one edit, not two', () {
-      final collector = FileEditCollector()
+      final collector = ClaudeFileEditCollector()
         ..add({
           'type': 'assistant',
           'message': {
@@ -247,7 +249,7 @@ void main() {
               },
             ],
           },
-        }, AgentIds.claudeCode)
+        })
         ..add({
           'type': 'user',
           'message': {
@@ -269,7 +271,7 @@ void main() {
               },
             ],
           },
-        }, AgentIds.claudeCode);
+        });
 
       // One row, upgraded in place to the version that knows where the change
       // landed — not the fragment followed by the patch.
@@ -278,7 +280,7 @@ void main() {
     });
 
     test('an unmatched result is still an edit', () {
-      final collector = FileEditCollector()
+      final collector = ClaudeFileEditCollector()
         ..add({
           'type': 'user',
           'toolUseResult': {
@@ -287,13 +289,13 @@ void main() {
             'content': 'hi\n',
             'structuredPatch': <Object?>[],
           },
-        }, AgentIds.claudeCode);
+        });
       expect(collector.edits.single.kind, FileEditKind.created);
     });
 
     test('Codex patches are collected in the order they were applied', () {
-      final collector = FileEditCollector()
-        ..add({
+      final lines = [
+        {
           'payload': {
             'type': 'patch_apply_end',
             'success': true,
@@ -301,8 +303,8 @@ void main() {
               '/repo/one.md': {'type': 'add', 'content': 'a\n'},
             },
           },
-        }, AgentIds.codex)
-        ..add({
+        },
+        {
           'payload': {
             'type': 'patch_apply_end',
             'success': true,
@@ -310,11 +312,10 @@ void main() {
               '/repo/two.md': {'type': 'add', 'content': 'b\n'},
             },
           },
-        }, AgentIds.codex);
-      expect(collector.edits.map((e) => e.path), [
-        '/repo/one.md',
-        '/repo/two.md',
-      ]);
+        },
+      ];
+      final edits = [for (final line in lines) ...codexFileEdits(line)];
+      expect(edits.map((e) => e.path), ['/repo/one.md', '/repo/two.md']);
     });
   });
 

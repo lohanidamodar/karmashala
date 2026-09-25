@@ -53,8 +53,9 @@ final stores = await CliStoreLocator(
   runnerFor: resolve,
   installations: installations,
 ).locate(environments);
-final found = await ClaudeStoreReader().read(
-  stores.first.claudeHome!,
+final claude = AgentRegistry.builtIn.adapterFor(AgentIds.claudeCode)!;
+final found = await claude.store!.sessionReader().read(
+  stores.first.homeFor(claude.id)!,
   stores.first.environmentId,
 );
 ```
@@ -131,9 +132,11 @@ made.
 
 ## Adding a CLI
 
-A descriptor in `built_in_agents.dart`, and — only if it speaks a stream
-protocol worth reading — an adapter. A descriptor on its own is discovered,
-listed, launchable and askable through the generic adapter.
+One folder, `src/agents/<agent>/`: a descriptor, and an `AgentAdapter` that
+returns it and overrides the capabilities that have been established (a chat
+protocol, a store, a usage endpoint, …). A `DataOnlyAgentAdapter` — a
+descriptor and no code — is discovered, listed, launchable and askable, and
+degrades everywhere else.
 
 Every claim in a descriptor carries the evidence it was read off, and an
 unknown is declared as unknown rather than guessed: an agent whose permission

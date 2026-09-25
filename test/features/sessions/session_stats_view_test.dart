@@ -7,42 +7,33 @@ import 'package:karmashala/src/features/sessions/presentation/session_stats_dial
 /// The stats dialog's wording and its number formatting, asserted without
 /// pumping a frame — the same bargain `UsageChipView` makes.
 void main() {
-  AgentDescriptor descriptor(AgentStoreFormat? format) => AgentDescriptor(
+  const x = AgentDescriptor(
     id: 'x',
     displayName: 'X',
-    binaries: const AgentBinaries(windows: ['x'], posix: ['x']),
-    store: format == null
-        ? null
-        : AgentStoreSpec(homeDirectoryName: '.x', format: format),
+    binaries: AgentBinaries(windows: ['x'], posix: ['x']),
+    store: AgentStoreSpec(homeDirectoryName: '.x'),
   );
 
   group('which agents have anything to count', () {
     test('the two that write a readable transcript do', () {
       expect(
-        agentStoreRecordsStats(descriptor(AgentStoreFormat.claudeJsonl)),
+        agentStoreRecordsStats(const ClaudeCodeAdapter(descriptor: x)),
         isTrue,
       );
-      expect(
-        agentStoreRecordsStats(descriptor(AgentStoreFormat.codexRollout)),
-        isTrue,
-      );
+      expect(agentStoreRecordsStats(const CodexAdapter(descriptor: x)), isTrue);
     });
 
     test('a store that yields identity without content does not', () {
       // Antigravity: the directory is readable, the messages inside it are
       // protobuf in an unpublished schema. Identity is not a count.
       expect(
-        agentStoreRecordsStats(descriptor(AgentStoreFormat.antigravityStore)),
+        agentStoreRecordsStats(const AntigravityAdapter(descriptor: x)),
         isFalse,
       );
     });
 
     test('an agent with no declared store does not', () {
-      expect(agentStoreRecordsStats(descriptor(null)), isFalse);
-      expect(
-        agentStoreRecordsStats(descriptor(AgentStoreFormat.none)),
-        isFalse,
-      );
+      expect(agentStoreRecordsStats(const DataOnlyAgentAdapter(x)), isFalse);
       expect(agentStoreRecordsStats(null), isFalse);
     });
   });

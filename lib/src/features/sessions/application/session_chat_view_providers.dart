@@ -4,7 +4,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/launch.dart';
@@ -28,9 +27,8 @@ SessionChatView screenSessionChatView(Ref ref, String sessionId) {
   if (agentId == null) return nothingToRead;
   // **The store's answer comes before the session's**: a session with no CLI
   // id yet will get one, and an agent whose store we cannot open will not.
-  final descriptor = ref.read(agentRegistryProvider).byId(agentId);
-  final format = descriptor?.store?.format;
-  if (format == null || format == AgentStoreFormat.none) {
+  final adapter = ref.read(agentRegistryProvider).adapterFor(agentId);
+  if (adapter?.descriptor.store == null || adapter?.store == null) {
     return const SessionChatView.read(
       ChatViewEvidence.storeUnreadable,
       prior: false,
@@ -38,7 +36,7 @@ SessionChatView screenSessionChatView(Ref ref, String sessionId) {
   }
   final externalId = row.externalSessionId;
   if (externalId == null || externalId.isEmpty) return nothingToRead;
-  return SessionChatView.unread(prior: agentSupportsChatView(descriptor));
+  return SessionChatView.unread(prior: agentSupportsChatView(adapter));
 }
 
 /// **The measurement, once the scan has said where the file would be.** A

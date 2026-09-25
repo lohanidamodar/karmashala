@@ -20,12 +20,12 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../data/cli_session_mutator.dart';
-import 'codex_app_server_providers.dart';
+import 'agent_store_server_providers.dart';
 import '../data/conversation_index_dao.dart';
 import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
 import '../data/imported_session_dao.dart';
-import 'antigravity_attribution_service.dart';
+import 'directory_conversation_attribution_service.dart';
 import 'cli_detection_service.dart';
 import 'conversation_index_backfill.dart';
 import 'conversation_indexer.dart';
@@ -152,11 +152,12 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
   );
 });
 
-/// Writes the Antigravity conversation id onto the session row that is on it.
-/// `agy` neither accepts an id nor writes one where a scan could match it.
-final antigravityAttributionServiceProvider =
-    Provider<AntigravitySessionAttributionService>((ref) {
-      return AntigravitySessionAttributionService(
+/// Writes the conversation id onto the session row that is on it, for an
+/// agent whose store records the last conversation per directory — a CLI that
+/// neither accepts an id nor writes one where a scan could match it.
+final directoryConversationAttributionServiceProvider =
+    Provider<DirectoryConversationAttributionService>((ref) {
+      return DirectoryConversationAttributionService(
         sessionDao: ref.watch(sessionDaoProvider),
         installationDao: ref.watch(agentInstallationDaoProvider),
         repositoryDao: ref.watch(repositoryDaoProvider),
@@ -280,7 +281,7 @@ final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
   return () async {
     // Antigravity's attribution needs no store scan — one JSON file per store
     // and the pane's own screen — so it runs outside the pass.
-    await ref.read(antigravityAttributionServiceProvider).attribute();
+    await ref.read(directoryConversationAttributionServiceProvider).attribute();
     final pass = ref.read(cliStoreScanPassProvider);
     try {
       await ref.read(launchedSessionAttributionServiceProvider).attribute();
@@ -372,8 +373,11 @@ final conversationPresenceProvider = Provider<ConversationPresenceProbe>((ref) {
     required String environmentId,
     required String conversationId,
   }) async {
-    final spec = descriptor.store;
-    if (spec == null || spec.format == AgentStoreFormat.none) {
+    final store = ref
+        .read(agentRegistryProvider)
+        .adapterFor(descriptor.id)
+        ?.store;
+    if (descriptor.store == null || store == null) {
       return ConversationPresence.unknown;
     }
     try {
@@ -383,16 +387,16 @@ final conversationPresenceProvider = Provider<ConversationPresenceProbe>((ref) {
           .locate(environments);
       final index = ref.read(conversationStoreIndexProvider);
       var here = ConversationPresence.unknown;
-      for (final store in stores) {
-        final home = store.homesByAgentId[descriptor.id];
+      for (final cliStore in stores) {
+        final home = cliStore.homeFor(descriptor.id);
         if (home == null) continue;
         final answer = await index.presenceOf(
           storeHome: home,
-          format: spec.format,
+          store: store,
           conversationId: conversationId,
         );
         if (answer == ConversationPresence.present) return answer;
-        if (store.environmentId == environmentId) here = answer;
+        if (cliStore.environmentId == environmentId) here = answer;
       }
       return here;
     } on Object {
@@ -402,7 +406,7 @@ final conversationPresenceProvider = Provider<ConversationPresenceProbe>((ref) {
 });
 
 final cliSessionMutatorProvider = Provider<CliSessionMutator>(
-  (ref) => CliSessionMutator(),
+  (ref) => CliSessionMutator(registry: ref.watch(agentRegistryProvider)),
 );
 
 /// Detects projects/sessions from the Claude Code and Codex CLI stores, merges
@@ -442,7 +446,11 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
   Future<void> renameSession(DetectedSession session, String newTitle) async {
     await ref
         .read(cliSessionMutatorProvider)
-        .rename(session, newTitle, codex: ref.read(codexAppServersProvider));
+        .rename(
+          session,
+          newTitle,
+          servers: ref.read(agentStoreServersProvider),
+        );
     await detect();
   }
 

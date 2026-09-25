@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/checkpoints/application/agent_rewind_points.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
@@ -210,7 +209,7 @@ void main() {
 
     test('the note points at the agent\'s own mechanism', () {
       final claude = agentRewindNote(
-        AgentIds.claudeCode,
+        const ClaudeCodeAdapter().rewind,
         const AgentRewindPoints(
           agentId: AgentIds.claudeCode,
           checkpoints: 4,
@@ -220,8 +219,11 @@ void main() {
       expect(claude, contains('4 rewind points'));
       expect(claude, contains('2 with file edits'));
       expect(claude, contains('Esc twice or run /rewind'));
-      expect(agentRewindNote(AgentIds.codex, null), contains('no undo'));
-      expect(agentRewindNote('antigravity', null), isNull);
+      expect(
+        agentRewindNote(const CodexAdapter().rewind, null),
+        contains('no undo'),
+      );
+      expect(agentRewindNote(const AntigravityAdapter().rewind, null), isNull);
     });
   });
 

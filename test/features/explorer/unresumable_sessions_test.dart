@@ -56,10 +56,7 @@ const _claudeish = AgentDescriptor(
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
     allowsConcurrentResume: true,
   ),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.claude',
-    format: AgentStoreFormat.claudeJsonl,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.claude'),
 );
 
 /// Codex's shape: it mints its own id, so it can never make the promise this
@@ -69,10 +66,7 @@ const _codexish = AgentDescriptor(
   displayName: 'Codexish',
   binaries: AgentBinaries(windows: ['codexish'], posix: ['codexish']),
   launch: AgentLaunchSpec(permission: testPermissionSupport),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.codex',
-    format: AgentStoreFormat.codexRollout,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.codex'),
 );
 
 class _StaticSettings extends SettingsController {
@@ -146,7 +140,9 @@ void main() {
   ProviderContainer containerOver(
     AppDatabase db, {
     bool locatable = true,
-    List<AgentDescriptor> agents = const [_claudeish],
+    List<AgentAdapter> agents = const [
+      ClaudeCodeAdapter(descriptor: _claudeish),
+    ],
   }) {
     clock = _MovableClock(testTime);
     locator = _CountingLocator([
@@ -343,7 +339,10 @@ void main() {
       emptyStore();
       final container = containerOver(
         db,
-        agents: const [_claudeish, _codexish],
+        agents: const [
+          ClaudeCodeAdapter(descriptor: _claudeish),
+          CodexAdapter(descriptor: _codexish),
+        ],
       );
       // A Codex-shaped row: an external id the CLI chose, not one we promised.
       container

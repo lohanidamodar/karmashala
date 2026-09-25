@@ -6,14 +6,14 @@
 /// and an `AgentLaunch`, so the command line can be asserted in a test.
 library;
 
-export 'src/agents/data/antigravity_adapter.dart'
+export 'src/agents/antigravity/antigravity_chat_protocol.dart'
     show antigravityLaunchArgs, parseAntigravityMessage;
-export 'src/agents/data/claude_code_adapter.dart'
+export 'src/agents/claude_code/claude_code_chat_protocol.dart'
     show claudeLaunchArgs, parseClaudeMessage, encodeClaudeUserMessage;
-export 'src/agents/data/codex_adapter.dart'
+export 'src/agents/codex/codex_chat_protocol.dart'
     show codexLaunchArgs, parseCodexMessage, encodeCodexUserMessage;
-export 'src/agents/data/generic_agent_adapter.dart'
+export 'src/agents/adapter/generic_chat_protocol.dart'
     show genericLaunchArgs, parseGenericAgentLine;
-export 'src/agents/domain/agent_adapter.dart' show AgentLaunch;
+export 'src/agents/adapter/agent_chat_protocol.dart' show AgentLaunch;
 export 'src/agents/domain/anthropic_credential_env.dart';
 export 'src/cli_detection/domain/agent_command_line.dart';

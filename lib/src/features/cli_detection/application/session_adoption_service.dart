@@ -423,7 +423,6 @@ class SessionAdoptionService {
     final installation = _installationFor(repository, candidate.agentId);
     if (installation == null) return null;
 
-    final descriptor = agents.byId(candidate.agentId);
     final session = Session(
       id: ids.newId(),
       repositoryId: repository.id,
@@ -438,7 +437,7 @@ class SessionAdoptionService {
       externalSessionId: externalSessionId,
       paneId: candidate.paneId,
       surface: SessionSurface.pane,
-      view: defaultViewFor(descriptor),
+      view: defaultViewFor(agents.adapterFor(candidate.agentId)),
       // Permission deliberately null: the user chose the mode by typing it, and
       // stamping a default would claim a policy this session may not be under.
     );

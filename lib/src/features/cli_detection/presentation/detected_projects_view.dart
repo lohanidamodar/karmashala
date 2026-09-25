@@ -8,6 +8,8 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
+import '../../agents/application/agent_providers.dart';
+import '../../agents/presentation/agent_glyph_icon.dart';
 import '../application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 
@@ -134,16 +136,14 @@ class DetectedProjectsView extends ConsumerWidget {
   }
 }
 
-class _ProjectTile extends StatelessWidget {
+class _ProjectTile extends ConsumerWidget {
   const _ProjectTile({required this.project});
   final DetectedProject project;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final claude = project.countFor(AgentIds.claudeCode);
-    final codex = project.countFor(AgentIds.codex);
-    final antigravity = project.countFor(AgentIds.antigravity);
+    final adapters = ref.watch(agentRegistryProvider).adapters;
     return ExpansionTile(
       leading: const Icon(AppIcons.folder),
       title: Text(project.name),
@@ -156,10 +156,10 @@ class _ProjectTile extends StatelessWidget {
       trailing: Wrap(
         spacing: 6,
         children: [
-          if (claude > 0) _Badge(agentId: AgentIds.claudeCode, count: claude),
-          if (codex > 0) _Badge(agentId: AgentIds.codex, count: codex),
-          if (antigravity > 0)
-            _Badge(agentId: AgentIds.antigravity, count: antigravity),
+          // One badge per agent that has sessions here, in registry order.
+          for (final adapter in adapters)
+            if (project.countFor(adapter.id) case final count when count > 0)
+              _Badge(adapter: adapter, count: count),
         ],
       ),
       childrenPadding: const EdgeInsets.only(
@@ -192,15 +192,17 @@ class _SessionTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final controller = ref.read(detectedProjectsControllerProvider.notifier);
-    final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
+    final registry = ref.watch(agentRegistryProvider);
+    final cliLabel = registry.displayNameFor(session.cli);
     return ListTile(
       dense: true,
       leading: subagent
           ? const Icon(AppIcons.arrowBendDownRight)
           : Icon(
-              session.cli == AgentIds.codex
-                  ? AppIcons.terminal
-                  : AppIcons.robot,
+              agentGlyphIcon(
+                registry.adapterFor(session.cli)?.presentation.glyph ??
+                    AgentGlyph.robot,
+              ),
             ),
       title: Text(
         session.displayTitle,
@@ -302,17 +304,17 @@ class _SessionTile extends ConsumerWidget {
 /// How many sessions one CLI contributed to a project. Named in words, not by
 /// hue: the app has one accent, and a colour alone is not a label.
 class _Badge extends StatelessWidget {
-  const _Badge({required this.agentId, required this.count});
+  const _Badge({required this.adapter, required this.count});
 
-  final String agentId;
+  final AgentAdapter adapter;
   final int count;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // "Claude Code" → "Claude": short enough for a trailing badge, and read
-    // from the registry so it cannot drift from what the app calls the agent.
-    final name = AgentRegistry.builtIn.displayNameFor(agentId).split(' ').first;
+    // from the adapter so it cannot drift from what the app calls the agent.
+    final name = adapter.presentation.shortName;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.sm,

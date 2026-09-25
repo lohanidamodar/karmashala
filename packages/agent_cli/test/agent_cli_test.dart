@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 /// | `parseDistributions` | `parseWslDistributions` |
 /// | `locateCommand` | `locateRequest` |
 /// | `parseClaudeStreamJson` | `parseClaudeMessage` |
-/// | `cliInvocation(CliAgentKind)` | `oneShotInvocation(AgentIds)` |
+/// | `cliInvocation(CliAgentKind)` | `AgentAdapter.oneShot` |
 /// | `parseVersion` | `parseAgentVersion` |
 /// | `CliAgent` | `AgentInstallation` |
 void main() {
@@ -192,12 +192,11 @@ void main() {
     );
   });
 
-  group('oneShotInvocation', () {
+  group('AgentAdapter.oneShot', () {
     test('claude runs with tools off and a replaced system prompt', () {
       // These are coding agents. Left alone they will read files and run
       // commands instead of answering a spoken question.
-      final call = oneShotInvocation(
-        AgentIds.claudeCode,
+      final call = const ClaudeCodeAdapter().oneShot(
         'What is the capital of Nepal?',
         systemPrompt: 'You are a voice assistant.',
       );
@@ -216,15 +215,14 @@ void main() {
 
     test('codex is told to run outside a git repository', () {
       // It refuses otherwise, and an app's working directory is not a repo.
-      final call = oneShotInvocation(AgentIds.codex, 'hi');
+      final call = const CodexAdapter().oneShot('hi');
       expect(call.arguments, contains('--skip-git-repo-check'));
       expect(call.arguments, contains('--json'));
       expect(call.arguments.first, 'exec');
     });
 
     test('codex takes the system prompt inline, having no flag for it', () {
-      final call = oneShotInvocation(
-        AgentIds.codex,
+      final call = const CodexAdapter().oneShot(
         'What is the capital?',
         systemPrompt: 'Reply in one sentence.',
       );
@@ -236,15 +234,11 @@ void main() {
 
     test('a model override reaches each CLI in its own spelling', () {
       expect(
-        oneShotInvocation(AgentIds.claudeCode, 'x', model: 'sonnet').arguments,
+        const ClaudeCodeAdapter().oneShot('x', model: 'sonnet').arguments,
         containsAllInOrder(['--model', 'sonnet']),
       );
       expect(
-        oneShotInvocation(
-          AgentIds.codex,
-          'x',
-          model: 'gpt-5.1-codex',
-        ).arguments,
+        const CodexAdapter().oneShot('x', model: 'gpt-5.1-codex').arguments,
         containsAllInOrder(['--model', 'gpt-5.1-codex']),
       );
     });
@@ -252,7 +246,7 @@ void main() {
     test('an agent nobody has a descriptor for is still asked', () {
       // The prompt as its only argument, which is what a CLI with no flags
       // does — and better than refusing to ask at all.
-      expect(oneShotInvocation('somethingNew', 'hi').arguments, ['hi']);
+      expect(genericOneShot(null, 'hi').arguments, ['hi']);
     });
   });
 

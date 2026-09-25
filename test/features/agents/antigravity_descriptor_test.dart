@@ -162,12 +162,17 @@ void main() {
       // schema. `none` described the first half and cost the second: with it,
       // `CliDetectionService` skipped the store outright and every Antigravity
       // conversation was invisible to the app.
-      expect(descriptor.store!.format, AgentStoreFormat.antigravityStore);
+      expect(descriptor.store, isNotNull);
+      expect(
+        AgentRegistry.builtIn.adapterFor(AgentIds.antigravity)!.store,
+        isA<AntigravityStore>(),
+      );
     });
 
     test('locating the store does not conjure a chat view', () {
-      expect(agentSupportsChatView(descriptor), isFalse);
-      expect(defaultViewFor(descriptor), SessionView.terminal);
+      final adapter = AgentRegistry.builtIn.adapterFor(AgentIds.antigravity);
+      expect(agentSupportsChatView(adapter), isFalse);
+      expect(defaultViewFor(adapter), SessionView.terminal);
     });
   });
 

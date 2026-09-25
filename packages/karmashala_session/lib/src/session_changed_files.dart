@@ -1,4 +1,4 @@
-import 'package:karmashala_git/git.dart';
+import 'package:agent_cli/read.dart' show FileEditKind;
 
 /// One file a session changed, as **whichever record answered** describes it.
 class SessionChangedFile {

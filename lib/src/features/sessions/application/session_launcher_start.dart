@@ -263,7 +263,13 @@ extension SessionStartVerbs on SessionLauncher {
               ? null
               : (request.parentLink ?? SessionLink.spawn),
           surface: request.surface,
-          view: request.view ?? defaultViewFor(descriptor),
+          view:
+              request.view ??
+              defaultViewFor(
+                _ref
+                    .read(agentRegistryProvider)
+                    .adapterFor(request.installation.agentId),
+              ),
           // Only what was **chosen**: stamping the resolved default here froze
           // every session at whatever Settings said the day it started.
           permissionMode: request.permissionOverride?.canonical,

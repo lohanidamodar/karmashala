@@ -1,25 +1,33 @@
+import '../adapter/agent_adapter.dart';
+import '../adapter/built_in_agent_adapters.dart';
 import './agent_descriptor.dart';
-import './built_in_agents.dart';
 
 /// The set of agents the app knows about, in probe/display order.
 ///
-/// Discovery, CLI-store location and status detection all read this instead of
-/// hardcoding agent facts, so a new agent is a new [AgentDescriptor] rather than
-/// a code change in each of those places.
+/// A registry of **adapters**: everything agent-specific is reached through
+/// one, so a new agent is a new `AgentAdapter` registered here rather than a
+/// code change in each place that used to ask who the agent was.
 class AgentRegistry {
-  const AgentRegistry(this.descriptors);
+  const AgentRegistry(this.adapters);
 
   /// The agents shipped with the app.
-  static const AgentRegistry builtIn = AgentRegistry(builtInAgentDescriptors);
+  static const AgentRegistry builtIn = AgentRegistry(builtInAgentAdapters);
 
-  final List<AgentDescriptor> descriptors;
+  final List<AgentAdapter> adapters;
 
-  AgentDescriptor? byId(String id) {
-    for (final descriptor in descriptors) {
-      if (descriptor.id == id) return descriptor;
+  /// Each adapter's descriptor, in registry order.
+  List<AgentDescriptor> get descriptors => [
+    for (final adapter in adapters) adapter.descriptor,
+  ];
+
+  AgentAdapter? adapterFor(String id) {
+    for (final adapter in adapters) {
+      if (adapter.id == id) return adapter;
     }
     return null;
   }
+
+  AgentDescriptor? byId(String id) => adapterFor(id)?.descriptor;
 
   /// A human-readable name for [id], falling back to the raw id for an agent
   /// this registry has never heard of (e.g. a stored installation whose

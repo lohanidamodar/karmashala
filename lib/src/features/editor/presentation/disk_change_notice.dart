@@ -1,3 +1,4 @@
+import 'package:agent_cli/read.dart' show FileEditKind, FileEditRecord;
 import 'package:flutter/material.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';

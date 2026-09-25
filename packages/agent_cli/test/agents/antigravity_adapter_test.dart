@@ -1,8 +1,7 @@
 import 'dart:convert';
 
-import 'package:agent_cli/src/agents/data/antigravity_adapter.dart';
-import 'package:agent_cli/src/agents/domain/agent_ids.dart';
-import 'package:agent_cli/src/ask/one_shot.dart';
+import 'package:agent_cli/src/agents/antigravity/antigravity_chat_protocol.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/src/sessions/session_event_types.dart';
 import 'package:test/test.dart';
 
@@ -138,10 +137,9 @@ void main() {
     });
   });
 
-  group('oneShotInvocation for Antigravity', () {
+  group('AntigravityAdapter.oneShot', () {
     test('constructs arguments with --print and stream-json output format', () {
-      final invocation = oneShotInvocation(
-        AgentIds.antigravity,
+      final invocation = const AntigravityAdapter().oneShot(
         'Summarize this repo',
       );
 
@@ -154,8 +152,7 @@ void main() {
     });
 
     test('includes system prompt prepended to prompt', () {
-      final invocation = oneShotInvocation(
-        AgentIds.antigravity,
+      final invocation = const AntigravityAdapter().oneShot(
         'What is 2+2?',
         systemPrompt: 'Be concise.',
       );
@@ -169,8 +166,7 @@ void main() {
     });
 
     test('includes --model when specified', () {
-      final invocation = oneShotInvocation(
-        AgentIds.antigravity,
+      final invocation = const AntigravityAdapter().oneShot(
         'Analyze code',
         model: 'gemini-3.8-flash-high',
       );
@@ -186,7 +182,7 @@ void main() {
     });
 
     test('parses assistant text from stream-json output line', () {
-      final invocation = oneShotInvocation(AgentIds.antigravity, 'Hello');
+      final invocation = const AntigravityAdapter().oneShot('Hello');
 
       final line = jsonEncode({
         'event': 'step_update',

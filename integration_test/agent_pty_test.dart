@@ -12,7 +12,7 @@ import 'package:integration_test/integration_test.dart';
 
 /// Drives **real agent CLIs in real ConPTYs** through the app's own launch path.
 ///
-/// `GenericAgentAdapter` shipped in Loop 30 having never met a real CLI, and the
+/// `GenericChatProtocol` shipped in Loop 30 having never met a real CLI, and the
 /// grid status source is a claim about text an agent draws on a screen. Both are
 /// the kind of thing a unit suite agrees with and reality does not, so this
 /// starts the actual binaries and reads the actual buffer.

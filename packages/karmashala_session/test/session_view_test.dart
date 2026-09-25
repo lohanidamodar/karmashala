@@ -7,43 +7,56 @@ void main() {
 
   group('a chat view is a capability of the agent, not a second runtime', () {
     test('an agent whose transcript we can read has one', () {
-      expect(agentSupportsChatView(registry.byId(AgentIds.claudeCode)), isTrue);
-      expect(agentSupportsChatView(registry.byId(AgentIds.codex)), isTrue);
+      expect(
+        agentSupportsChatView(registry.adapterFor(AgentIds.claudeCode)),
+        isTrue,
+      );
+      expect(
+        agentSupportsChatView(registry.adapterFor(AgentIds.codex)),
+        isTrue,
+      );
     });
 
-    test('Antigravity has a protocol adapter and no chat view', () {
+    test('Antigravity has a protocol and no chat view', () {
       // The distinction that matters: the capability is "can we read this
-      // agent's own record of the conversation", not "did someone write an
-      // AgentAdapter subclass". Antigravity has the second and not the first,
-      // and correctly gets the terminal only.
-      final antigravity = registry.byId(AgentIds.antigravity)!;
-      expect(antigravity.kind, isNotNull);
+      // agent's own record of the conversation", not "does it speak a chat
+      // protocol". Antigravity has the second and not the first, and correctly
+      // gets the terminal only.
+      final antigravity = registry.adapterFor(AgentIds.antigravity)!;
+      expect(
+        antigravity.capabilities,
+        contains(AgentCapability.structuredChat),
+      );
       expect(agentSupportsChatView(antigravity), isFalse);
       expect(defaultViewFor(antigravity), SessionView.terminal);
     });
 
     test('an agent that exists only as registry data has none', () {
-      const rover = AgentDescriptor(
-        id: 'roverCli',
-        displayName: 'Rover',
-        binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
+      const rover = DataOnlyAgentAdapter(
+        AgentDescriptor(
+          id: 'roverCli',
+          displayName: 'Rover',
+          binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
+        ),
       );
       expect(agentSupportsChatView(rover), isFalse);
       expect(defaultViewFor(rover), SessionView.terminal);
     });
 
-    test('an agent declaring an unreadable store has none', () {
-      const opaque = AgentDescriptor(
-        id: 'opaque',
-        displayName: 'Opaque',
-        binaries: AgentBinaries(windows: ['o'], posix: ['o']),
-        store: AgentStoreSpec(
-          homeDirectoryName: '.opaque',
-          format: AgentStoreFormat.none,
-        ),
-      );
-      expect(agentSupportsChatView(opaque), isFalse);
-    });
+    test(
+      'an agent declaring a store home and no store capability has none',
+      () {
+        const opaque = DataOnlyAgentAdapter(
+          AgentDescriptor(
+            id: 'opaque',
+            displayName: 'Opaque',
+            binaries: AgentBinaries(windows: ['o'], posix: ['o']),
+            store: AgentStoreSpec(homeDirectoryName: '.opaque'),
+          ),
+        );
+        expect(agentSupportsChatView(opaque), isFalse);
+      },
+    );
 
     test('an unknown agent has none, and does not throw', () {
       expect(agentSupportsChatView(null), isFalse);
@@ -52,7 +65,7 @@ void main() {
 
     test('the default is chat where one can be built', () {
       expect(
-        defaultViewFor(registry.byId(AgentIds.claudeCode)),
+        defaultViewFor(registry.adapterFor(AgentIds.claudeCode)),
         SessionView.chat,
       );
     });

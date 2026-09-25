@@ -61,12 +61,12 @@ void main() {
     expect(events.single.data['text'], 'plain reply');
   });
 
-  test('AntigravityAdapter starts the executable bare', () async {
+  test('AntigravityChatProtocol starts the executable bare', () async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final runner = FakeCommandRunner();
-    final adapter = AntigravityAdapter(runnerFor: (_) => runner);
+    final adapter = AntigravityChatProtocol(runnerFor: (_) => runner);
 
     adapter.start(
       AgentLaunch(

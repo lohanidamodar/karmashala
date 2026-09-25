@@ -27,7 +27,7 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// An agent that exists only as a registry entry: no `AgentKind`, no protocol
+/// An agent that exists only as a registry entry: no adapter code, no protocol
 /// adapter, no store. If this can run, "adding an agent is a data entry" is
 /// true of the runtime and not only of discovery.
 const _rover = AgentDescriptor(
@@ -55,7 +55,7 @@ const _talkative = AgentDescriptor(
 
 ({ProviderContainer container, AppDatabase db}) harness({
   Settings settings = const Settings(),
-  AgentRegistry registry = const AgentRegistry([_rover]),
+  AgentRegistry registry = const AgentRegistry([DataOnlyAgentAdapter(_rover)]),
   Set<String> missingDirectories = const {},
 }) {
   final db = AppDatabase.memory();
@@ -551,7 +551,9 @@ void main() {
   });
 
   test('an agent that does take one is launched with it', () async {
-    final h = harness(registry: const AgentRegistry([_talkative]));
+    final h = harness(
+      registry: const AgentRegistry([DataOnlyAgentAdapter(_talkative)]),
+    );
     addTearDown(h.container.dispose);
     addTearDown(h.db.close);
 

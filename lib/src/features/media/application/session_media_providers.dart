@@ -134,7 +134,10 @@ final sessionMediaProvider = StreamProvider.autoDispose
         yield const [];
         return;
       }
-      final store = SessionMediaStore(root);
+      final store = SessionMediaStore(
+        root,
+        registry: ref.read(agentRegistryProvider),
+      );
 
       var path = source.filePath;
       final externalId = source.externalSessionId;
@@ -267,7 +270,10 @@ final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
 
     final SessionMediaScan scan;
     try {
-      scan = await SessionMediaStore(root).refresh(path, source.cli);
+      scan = await SessionMediaStore(
+        root,
+        registry: ref.read(agentRegistryProvider),
+      ).refresh(path, source.cli);
     } catch (_) {
       return SessionImageUnavailable(
         'Karmashala could not read this session\'s transcript, so it cannot '

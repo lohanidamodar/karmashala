@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/stream.dart';
 import '../domain/session_media_item.dart';
 
 /// A session's pictures, with base64-only ones written to disk one at a time;
@@ -13,6 +12,7 @@ class SessionMediaStore {
     this.cacheRoot, {
     this.cap = kSessionMediaCap,
     this.maxItemBytes = kMaxSessionMediaBytes,
+    this.registry = AgentRegistry.builtIn,
   });
 
   /// Where extracted pictures and the manifest live — application support, not
@@ -23,6 +23,9 @@ class SessionMediaStore {
   final int cap;
 
   final int maxItemBytes;
+
+  /// Where each agent's picture reader is found (`AgentAdapter.media`).
+  final AgentRegistry registry;
 
   /// The manifest for [transcriptPath], or null when there is none to read.
   Future<SessionMediaScan?> load(String transcriptPath) async {
@@ -71,9 +74,10 @@ class SessionMediaStore {
       items: const [],
       scannedBytes: 0,
     );
-    // Antigravity's transcript is a SQLite database of protobuf in an
-    // unpublished schema; refused by name, as `readCliTranscript` refuses it.
-    if (cli == AgentIds.antigravity) return nothing;
+    // An agent whose adapter declares no picture reader — its transcript is
+    // not one this package parses for pictures — has none to list.
+    final reader = registry.adapterFor(cli)?.media;
+    if (reader == null) return nothing;
 
     final file = File(transcriptPath);
     final int length;
@@ -99,18 +103,18 @@ class SessionMediaStore {
     // Copies are named by position in the file, so a rewrite must start clean.
     if (base == null) await _purge(transcriptPath);
 
-    final scan = await _scan(file, cli, from: base);
+    final scan = await _scan(file, reader, from: base);
     await _writeManifest(scan);
     return scan;
   }
 
   Future<SessionMediaScan> _scan(
     File file,
-    String cli, {
+    AgentMediaReader reader, {
     required SessionMediaScan? from,
   }) async {
     final items = <SessionMediaItem>[...?from?.items];
-    final pending = _PendingCalls(
+    final pending = TranscriptMediaCalls(
       names: from?.pendingTools,
       pathed: from?.pathedTools,
     );
@@ -130,9 +134,7 @@ class SessionMediaStore {
       linesDecoded++;
       if (decoded is! Map) return;
       final at = _timestampOf(decoded);
-      final found = cli == AgentIds.codex
-          ? _codexBlocks(decoded)
-          : _claudeBlocks(decoded, pending);
+      final found = reader.blocksIn(decoded, pending);
       for (final block in found) {
         final item = await _itemFor(
           block,
@@ -235,155 +237,8 @@ class SessionMediaStore {
     return value is String ? DateTime.tryParse(value)?.toUtc() : null;
   }
 
-  /// The pictures in one line: a `tool_use` naming a file, a paste (usually on
-  /// `attachment.prompt`, not `message.content`), or a `tool_result` image.
-  static List<_Block> _claudeBlocks(
-    Map<Object?, Object?> json,
-    _PendingCalls pending,
-  ) {
-    final blocks = <_Block>[];
-    final message = json['message'];
-    if (message is Map && message['content'] is List) {
-      final before = blocks.length;
-      _claudeContent(message['content']! as List, pending, blocks);
-      _numberPastes(blocks, before, json['imagePasteIds']);
-    }
-    // A queued prompt is not a `user` line at all.
-    final attachment = json['attachment'];
-    if (attachment is Map) {
-      final before = blocks.length;
-      for (final key in const ['prompt', 'content']) {
-        final list = attachment[key];
-        if (list is! List) continue;
-        for (final part in list) {
-          if (part is Map && part['type'] == 'image') {
-            blocks.add(_Block.bytes(part, SessionMediaOrigin.pasted));
-          }
-        }
-      }
-      // The ids hang off the attachment on this shape, not off the record.
-      _numberPastes(blocks, before, attachment['imagePasteIds']);
-    }
-    return blocks;
-  }
-
-  /// Gives pastes since [from] the `[Image #N]` ids the CLI printed, paired
-  /// positionally and only on equal lengths — a wrong id opens a wrong picture.
-  static void _numberPastes(List<_Block> blocks, int from, Object? raw) {
-    if (raw is! List) return;
-    final ids = [
-      for (final id in raw)
-        if (id is int) id,
-    ];
-    if (ids.length != raw.length) return;
-    final pasted = [
-      for (var i = from; i < blocks.length; i++)
-        if (blocks[i].origin == SessionMediaOrigin.pasted) blocks[i],
-    ];
-    if (pasted.length != ids.length) return;
-    for (var i = 0; i < ids.length; i++) {
-      pasted[i].pasteId = ids[i];
-    }
-  }
-
-  static void _claudeContent(
-    List<Object?> content,
-    _PendingCalls pending,
-    List<_Block> blocks,
-  ) {
-    for (final part in content) {
-      if (part is! Map) continue;
-      switch (part['type']) {
-        case 'tool_use':
-          final name = part['name'];
-          if (name is! String) continue;
-          final path = toolActivityFor(name, part['input']).imagePath;
-          final id = part['id'];
-          if (id is String) {
-            pending.names[id] = name;
-            if (path != null) pending.pathed.add(id);
-          }
-          if (path != null) blocks.add(_Block.path(path, tool: name));
-        case 'image':
-          blocks.add(_Block.bytes(part, SessionMediaOrigin.pasted));
-        case 'tool_result':
-          final id = part['tool_use_id'];
-          final tool = id is String ? pending.names.remove(id) : null;
-          // Claude answers `Read(shot.png)` with the file's bytes too, so the
-          // same picture is in the transcript twice; the file on disk wins.
-          if (id is String && pending.pathed.remove(id)) continue;
-          final result = part['content'];
-          if (result is! List) continue;
-          for (final inner in result) {
-            if (inner is Map && inner['type'] == 'image') {
-              blocks.add(
-                _Block.bytes(inner, SessionMediaOrigin.captured, tool: tool),
-              );
-            }
-          }
-      }
-    }
-  }
-
-  /// The pictures in one Codex line. Best effort: unverified against a real
-  /// store, so written to find nothing rather than to guess wrong.
-  static List<_Block> _codexBlocks(Map<Object?, Object?> json) {
-    final payload = json['payload'];
-    if (payload is! Map) return const [];
-    final blocks = <_Block>[];
-    switch (payload['type']) {
-      case 'message':
-        final content = payload['content'];
-        if (content is! List) return const [];
-        for (final part in content) {
-          if (part is! Map) continue;
-          if (part['type'] != 'input_image' && part['type'] != 'image') {
-            continue;
-          }
-          final url = part['image_url'] ?? part['url'];
-          if (url is! String) continue;
-          final data = _dataUri(url);
-          if (data != null) {
-            blocks.add(
-              _Block.inline(data.$1, data.$2, SessionMediaOrigin.pasted),
-            );
-          } else if (looksLikeImagePath(url)) {
-            blocks.add(_Block.path(url));
-          }
-        }
-      case 'function_call':
-      case 'custom_tool_call':
-        final name = payload['name'];
-        final arguments = payload['arguments'];
-        if (arguments is! String) return const [];
-        final Object? decoded;
-        try {
-          decoded = jsonDecode(arguments);
-        } on FormatException {
-          return const [];
-        }
-        final path = toolActivityFor(
-          name is String ? name : 'tool',
-          decoded,
-        ).imagePath;
-        if (path != null) {
-          blocks.add(_Block.path(path, tool: name is String ? name : null));
-        }
-    }
-    return blocks;
-  }
-
-  static (String, String)? _dataUri(String value) {
-    if (!value.startsWith('data:')) return null;
-    final comma = value.indexOf(',');
-    if (comma < 0) return null;
-    final head = value.substring(5, comma);
-    if (!head.endsWith(';base64')) return null;
-    return (head.substring(0, head.length - 7), value.substring(comma + 1));
-  }
-
   Future<_Extracted> _itemFor(
-    _Block block, {
+    TranscriptMediaBlock block, {
     required int sequence,
     required DateTime? at,
     required String transcriptPath,
@@ -410,7 +265,7 @@ class SessionMediaStore {
       return _Extracted(
         SessionMediaItem(
           id: id,
-          origin: block.origin,
+          origin: _originOf(block.origin),
           sequence: sequence,
           toolName: block.tool,
           at: at,
@@ -427,7 +282,7 @@ class SessionMediaStore {
       return _Extracted(
         SessionMediaItem(
           id: id,
-          origin: block.origin,
+          origin: _originOf(block.origin),
           sequence: sequence,
           toolName: block.tool,
           at: at,
@@ -446,7 +301,7 @@ class SessionMediaStore {
     // `TranscriptImagePreview`, whose accessible name is the file's.
     final file = File(
       '${_cacheDir(transcriptPath).path}/'
-      '${_slug(block.tool ?? block.origin.name)}-$sequence.'
+      '${_slug(block.tool ?? _originOf(block.origin).name)}-$sequence.'
       '${extension ?? 'png'}',
     );
     var written = 0;
@@ -462,7 +317,7 @@ class SessionMediaStore {
       return _Extracted(
         SessionMediaItem(
           id: id,
-          origin: block.origin,
+          origin: _originOf(block.origin),
           sequence: sequence,
           toolName: block.tool,
           at: at,
@@ -476,7 +331,7 @@ class SessionMediaStore {
     return _Extracted(
       SessionMediaItem(
         id: id,
-        origin: block.origin,
+        origin: _originOf(block.origin),
         sequence: sequence,
         path: file.path,
         toolName: block.tool,
@@ -487,6 +342,13 @@ class SessionMediaStore {
       written,
     );
   }
+
+  static SessionMediaOrigin _originOf(TranscriptMediaOrigin origin) =>
+      switch (origin) {
+        TranscriptMediaOrigin.read => SessionMediaOrigin.read,
+        TranscriptMediaOrigin.pasted => SessionMediaOrigin.pasted,
+        TranscriptMediaOrigin.captured => SessionMediaOrigin.captured,
+      };
 
   /// A file-name-safe tool name: `mcp__karmashala__device_screenshot` becomes
   /// `device_screenshot`.
@@ -646,75 +508,6 @@ class SessionMediaScan {
     pendingTools: pendingTools,
     pathedTools: pathedTools,
   );
-}
-
-/// The `tool_use` calls seen but not yet answered; carried between passes so a
-/// screenshot can still be named and a duplicated file copy still skipped.
-class _PendingCalls {
-  _PendingCalls({Map<String, String>? names, Set<String>? pathed})
-    : names = {...?names},
-      pathed = {...?pathed};
-
-  final Map<String, String> names;
-  final Set<String> pathed;
-}
-
-/// A picture found in one line, before it is resolved to something drawable.
-class _Block {
-  _Block._({
-    required this.origin,
-    this.path,
-    this.data,
-    this.mediaType,
-    this.tool,
-  });
-
-  factory _Block.path(String path, {String? tool}) =>
-      _Block._(origin: SessionMediaOrigin.read, path: path, tool: tool);
-
-  /// An Anthropic content block: `{type:'image', source:{type:'base64', …}}`,
-  /// or the raw MCP shape `{type:'image', data, mimeType}` some records carry.
-  factory _Block.bytes(
-    Map<Object?, Object?> block,
-    SessionMediaOrigin origin, {
-    String? tool,
-  }) {
-    final source = block['source'];
-    if (source is Map && source['type'] == 'base64') {
-      return _Block._(
-        origin: origin,
-        data: source['data'] is String ? source['data'] as String : null,
-        mediaType: source['media_type'] is String
-            ? source['media_type'] as String
-            : null,
-        tool: tool,
-      );
-    }
-    return _Block._(
-      origin: origin,
-      data: block['data'] is String ? block['data'] as String : null,
-      mediaType: block['mimeType'] is String
-          ? block['mimeType'] as String
-          : null,
-      tool: tool,
-    );
-  }
-
-  factory _Block.inline(
-    String mediaType,
-    String data,
-    SessionMediaOrigin origin,
-  ) => _Block._(origin: origin, data: data, mediaType: mediaType);
-
-  final SessionMediaOrigin origin;
-  final String? path;
-  final String? data;
-  final String? mediaType;
-  final String? tool;
-
-  /// The `[Image #N]` number, filled in by [SessionMediaStore._numberPastes];
-  /// mutable because it is knowable only once the whole line has been read.
-  int? pasteId;
 }
 
 /// An item, and how many bytes producing it wrote out.

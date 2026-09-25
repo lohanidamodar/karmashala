@@ -253,7 +253,7 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
-          AgentRegistry([...builtInAgentDescriptors, _mute]),
+          AgentRegistry([...builtInAgentAdapters, DataOnlyAgentAdapter(_mute)]),
         ),
         settingsControllerProvider.overrideWith(
           () => _StaticSettings(const Settings()),

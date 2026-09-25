@@ -69,10 +69,7 @@ const _claudeish = AgentDescriptor(
     permission: testPermissionSupport,
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
   ),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.claude',
-    format: AgentStoreFormat.claudeJsonl,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.claude'),
 );
 
 /// What one reading cost. A record rather than four locals, so the comparison
@@ -141,25 +138,25 @@ class _CountingIndex extends ConversationStoreIndex {
   @override
   Future<Set<String>?> idsIn({
     required String storeHome,
-    required AgentStoreFormat format,
+    required AgentStore? store,
   }) {
-    _counts.add('$storeHome/$format');
+    _counts.add('$storeHome/$store');
     return const ConversationStoreIndex().idsIn(
       storeHome: storeHome,
-      format: format,
+      store: store,
     );
   }
 
   @override
   Future<ConversationPresence> presenceOf({
     required String storeHome,
-    required AgentStoreFormat format,
+    required AgentStore? store,
     required String conversationId,
   }) {
     _counts.add('single/$storeHome');
     return const ConversationStoreIndex().presenceOf(
       storeHome: storeHome,
-      format: format,
+      store: store,
       conversationId: conversationId,
     );
   }
@@ -210,7 +207,7 @@ void main() {
         ),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
-          const AgentRegistry([_claudeish]),
+          const AgentRegistry([ClaudeCodeAdapter(descriptor: _claudeish)]),
         ),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
         agentSessionStatusProvider.overrideWith(
@@ -324,7 +321,7 @@ void main() {
           ),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
           agentRegistryProvider.overrideWithValue(
-            const AgentRegistry([_claudeish]),
+            const AgentRegistry([ClaudeCodeAdapter(descriptor: _claudeish)]),
           ),
           settingsControllerProvider.overrideWith(_StaticSettings.new),
           agentSessionStatusProvider.overrideWith(

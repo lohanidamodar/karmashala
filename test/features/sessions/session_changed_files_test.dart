@@ -11,9 +11,10 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
-import 'package:karmashala/src/features/cli_detection/application/codex_app_server_providers.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_app_servers.dart';
+import 'package:karmashala/src/features/cli_detection/application/agent_store_server_providers.dart';
+import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:agent_cli/read.dart' show FileEditKind;
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -64,7 +65,7 @@ void main() {
   late List<CommandRequest> started;
 
   /// The pool the app itself uses, over a runner that hands back scripted JSON.
-  CodexAppServers poolFor(AppDatabase db) => CodexAppServers(
+  AgentStoreServers poolFor(AppDatabase db) => AgentStoreServers(
     runnerFactory: FakeCommandRunnerFactory(
       fallback: FakeCommandRunner(
         processFactory: (request) {
@@ -81,7 +82,7 @@ void main() {
     overrides: [
       databaseProvider.overrideWithValue(db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
-      codexAppServersProvider.overrideWith((ref) {
+      agentStoreServersProvider.overrideWith((ref) {
         final pool = poolFor(db);
         ref.onDispose(pool.closeAll);
         return pool;
@@ -315,7 +316,7 @@ void main() {
               'one connection per environment, reused — the pool is what turns a '
               '~1 s spawn into a one-off',
         );
-        expect(container.read(codexAppServersProvider).openConnections, 1);
+        expect(container.read(agentStoreServersProvider).openConnections, 1);
         expect(
           processSpawnsOnThisIsolate,
           before,

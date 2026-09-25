@@ -7,4 +7,6 @@
 library;
 
 export 'src/ask/cli_session.dart';
-export 'src/ask/one_shot.dart';
+export 'src/agents/adapter/generic_one_shot.dart';
+export 'src/ask/cli_invocation.dart';
+export 'src/ask/assistant_text.dart';

@@ -139,7 +139,10 @@ Harness harness({
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('sesid00')),
       agentRegistryProvider.overrideWithValue(
-        const AgentRegistry([_rover, _flaky]),
+        const AgentRegistry([
+          DataOnlyAgentAdapter(_rover),
+          DataOnlyAgentAdapter(_flaky),
+        ]),
       ),
       settingsControllerProvider.overrideWith(
         () => _StaticSettings(const Settings()),

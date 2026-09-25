@@ -37,7 +37,7 @@ void main() {
   });
   tearDown(() => db.close());
 
-  SessionEngine buildEngine({AdapterResolver? resolver}) => SessionEngine(
+  SessionEngine buildEngine({ChatProtocolResolver? resolver}) => SessionEngine(
     sessionDao: sessionDao,
     eventDao: eventDao,
     sessionRepositoryDao: SessionRepositoryDao(db),
@@ -45,7 +45,8 @@ void main() {
       runnerFactory: FakeCommandRunnerFactory(),
       environmentDao: ExecutionEnvironmentDao(db),
     ),
-    resolveAdapter: resolver ?? (agentId) => FakeAgentAdapter(agentId: agentId),
+    resolveProtocol:
+        resolver ?? (agentId) => FakeChatProtocol(agentId: agentId),
     clock: FixedClock(testTime),
     ids: SequentialIdGenerator(),
   );
@@ -230,7 +231,7 @@ void main() {
   test('a self-completing agent marks the session completed', () async {
     final engine = buildEngine(
       resolver: (agentId) =>
-          FakeAgentAdapter(agentId: agentId, autoComplete: true),
+          FakeChatProtocol(agentId: agentId, autoComplete: true),
     );
     final session = await engine.start(
       repository: repository(),
@@ -247,7 +248,7 @@ void main() {
 }
 
 /// Captures the [AgentLaunch] it receives, for asserting what the engine passed.
-class _CapturingAdapter implements AgentAdapter {
+class _CapturingAdapter implements AgentChatProtocol {
   AgentLaunch? captured;
 
   @override
@@ -261,7 +262,7 @@ class _CapturingAdapter implements AgentAdapter {
 }
 
 /// A spawn that fails synchronously: a rotted executable path, a refused exec.
-class _RefusingAdapter implements AgentAdapter {
+class _RefusingAdapter implements AgentChatProtocol {
   @override
   String get agentId => AgentIds.claudeCode;
 
@@ -272,7 +273,7 @@ class _RefusingAdapter implements AgentAdapter {
 
 /// A CLI that starts, says why it is leaving, and exits 1 — a `--resume` of a
 /// session the CLI no longer has.
-class _ExitingAdapter implements AgentAdapter {
+class _ExitingAdapter implements AgentChatProtocol {
   @override
   String get agentId => AgentIds.claudeCode;
 

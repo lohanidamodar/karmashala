@@ -26,18 +26,16 @@ enum SessionView {
   SessionView get other => this == chat ? terminal : chat;
 }
 
-/// **The prior**: whether this agent's store *format* is one we read. No longer
-/// the answer — [SessionChatView] is the per-session reading a surface asks.
-bool agentSupportsChatView(AgentDescriptor? descriptor) {
-  final format = descriptor?.store?.format;
-  return format == AgentStoreFormat.claudeJsonl ||
-      format == AgentStoreFormat.codexRollout;
-}
+/// **The prior**: whether this agent's adapter says a chat view is built from
+/// its transcripts. No longer the answer — [SessionChatView] is the
+/// per-session reading a surface asks.
+bool agentSupportsChatView(AgentAdapter? adapter) =>
+    adapter?.transcripts?.buildsChatView ?? false;
 
 /// The default view for an agent: chat where we can build one, terminal
 /// otherwise. The user can always switch.
-SessionView defaultViewFor(AgentDescriptor? descriptor) =>
-    agentSupportsChatView(descriptor) ? SessionView.chat : SessionView.terminal;
+SessionView defaultViewFor(AgentAdapter? adapter) =>
+    agentSupportsChatView(adapter) ? SessionView.chat : SessionView.terminal;
 
 /// Why a permission mode is being resolved. Callers say what they are doing and
 /// exactly one place turns that into a selection.

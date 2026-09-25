@@ -6,9 +6,9 @@ import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:agent_cli/usage.dart';
-import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'agent_installations_controller.dart';
+import 'agent_providers.dart';
 import 'usage_history.dart';
 
 /// Fetches live usage/limits for an agent installation. Every fresh reading is
@@ -17,6 +17,7 @@ final agentUsageServiceProvider = Provider<AgentUsageService>((ref) {
   final service = AgentUsageService(
     storeLocator: ref.watch(cliStoreLocatorProvider),
     clock: ref.watch(agentCliClockProvider),
+    registry: ref.watch(agentRegistryProvider),
   );
   // Read lazily: the store is only needed once a reading actually arrives.
   service.addReadingListener(
@@ -47,12 +48,11 @@ final usageInstallationForSessionProvider = Provider.autoDispose
         agentInstallationsControllerProvider,
       )) {
         if (installation.id != session.agentInstallationId) continue;
-        final agentId = installation.agentId;
-        return agentId == AgentIds.claudeCode ||
-                agentId == AgentIds.codex ||
-                agentId == AgentIds.antigravity
-            ? installation
-            : null;
+        final usage = ref
+            .watch(agentRegistryProvider)
+            .adapterFor(installation.agentId)
+            ?.usage;
+        return usage == null ? null : installation;
       }
       return null;
     });

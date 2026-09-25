@@ -33,20 +33,14 @@ const _claudeish = AgentDescriptor(
   id: 'claudeish',
   displayName: 'Claudeish',
   binaries: AgentBinaries(windows: ['claudeish'], posix: ['claudeish']),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.claude',
-    format: AgentStoreFormat.claudeJsonl,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.claude'),
 );
 
 const _codexish = AgentDescriptor(
   id: 'codexish',
   displayName: 'Codexish',
   binaries: AgentBinaries(windows: ['codexish'], posix: ['codexish']),
-  store: AgentStoreSpec(
-    homeDirectoryName: '.codex',
-    format: AgentStoreFormat.codexRollout,
-  ),
+  store: AgentStoreSpec(homeDirectoryName: '.codex'),
 );
 
 const _storeless = AgentDescriptor(
@@ -85,7 +79,9 @@ void main() {
 
   ProviderContainer containerOver(
     List<CliStore> stores, {
-    List<AgentDescriptor> agents = const [_claudeish],
+    List<AgentAdapter> agents = const [
+      ClaudeCodeAdapter(descriptor: _claudeish),
+    ],
   }) {
     final db = AppDatabase.memory();
     addTearDown(db.close);
@@ -113,7 +109,7 @@ void main() {
         expect(
           await const ConversationStoreIndex().idsIn(
             storeHome: home('.claude'),
-            format: AgentStoreFormat.claudeJsonl,
+            store: const ClaudeCodeStore(),
           ),
           {'one', 'two'},
         );
@@ -128,7 +124,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().idsIn(
           storeHome: home('.codex'),
-          format: AgentStoreFormat.codexRollout,
+          store: const CodexStore(),
         ),
         {'0199c2f5-1111-2222-3333-444455556666'},
       );
@@ -141,7 +137,7 @@ void main() {
         expect(
           await const ConversationStoreIndex().idsIn(
             storeHome: home('.nowhere'),
-            format: AgentStoreFormat.claudeJsonl,
+            store: const ClaudeCodeStore(),
           ),
           isNull,
         );
@@ -156,7 +152,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().idsIn(
           storeHome: home('.claude'),
-          format: AgentStoreFormat.claudeJsonl,
+          store: const ClaudeCodeStore(),
         ),
         isEmpty,
       );
@@ -166,7 +162,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().idsIn(
           storeHome: home('.gemini'),
-          format: AgentStoreFormat.none,
+          store: null,
         ),
         isNull,
       );
@@ -282,7 +278,7 @@ void main() {
             homesByAgentId: {'storeless': home('.claude')},
           ),
         ],
-        agents: const [_storeless],
+        agents: const [DataOnlyAgentAdapter(_storeless)],
       );
       writeClaude(home('.claude'), '-c-src-demo', 'kept');
 
@@ -308,7 +304,10 @@ void main() {
             },
           ),
         ],
-        agents: const [_claudeish, _codexish],
+        agents: const [
+          ClaudeCodeAdapter(descriptor: _claudeish),
+          CodexAdapter(descriptor: _codexish),
+        ],
       );
       writeClaude(home('.claude'), '-c-src-demo', 'shared-id');
       writeCodex(home('.codex'), 'aaaaaaaa-1111-2222-3333-444455556666');

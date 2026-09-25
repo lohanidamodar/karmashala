@@ -178,10 +178,7 @@ void main() {
       id: 'nothing',
       displayName: 'No Skills CLI',
       binaries: AgentBinaries(windows: ['nope'], posix: ['nope']),
-      store: AgentStoreSpec(
-        homeDirectoryName: '.nope',
-        format: AgentStoreFormat.none,
-      ),
+      store: AgentStoreSpec(homeDirectoryName: '.nope'),
     );
     final store = storeHomeFor(unsupported);
     Directory(store).createSync(recursive: true);

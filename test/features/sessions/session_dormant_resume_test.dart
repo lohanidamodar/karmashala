@@ -91,7 +91,9 @@ ProviderContainer containerOver(
     hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
     commandRunnerFactoryProvider.overrideWithValue(FakeCommandRunnerFactory()),
     idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
-    agentRegistryProvider.overrideWithValue(const AgentRegistry([_sharing])),
+    agentRegistryProvider.overrideWithValue(
+      const AgentRegistry([DataOnlyAgentAdapter(_sharing)]),
+    ),
     settingsControllerProvider.overrideWith(_StaticSettings.new),
     // The whereabouts provider watches this for a "last seen" time; a real
     // poll would leave an autoDispose stream mid-flight. Nothing here is

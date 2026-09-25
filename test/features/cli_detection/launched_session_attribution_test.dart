@@ -24,7 +24,7 @@ import '../../support/fixtures.dart';
 /// Codex takes no `--session-id`, so `SessionLauncher` records `null` and, in
 /// its own words, the row "keep[s] a null id until something discovers it".
 /// Nothing did: `SessionAdoptionService` only ever looks at panes the app did
-/// *not* launch, and `AntigravitySessionAttributionService` is gated on `agy`'s
+/// *not* launch, and `DirectoryConversationAttributionService` is gated on `agy`'s
 /// store. This service is the something.
 void main() {
   late AppDatabase db;

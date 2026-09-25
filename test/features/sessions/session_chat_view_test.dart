@@ -283,14 +283,11 @@ void main() {
           id: 'roverCli',
           displayName: 'Rover',
           binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
-          store: AgentStoreSpec(
-            homeDirectoryName: '.rover',
-            format: AgentStoreFormat.none,
-          ),
+          store: AgentStoreSpec(homeDirectoryName: '.rover'),
         );
         final made = containerFor(
           agentId: rover.id,
-          registry: const AgentRegistry([rover]),
+          registry: const AgentRegistry([DataOnlyAgentAdapter(rover)]),
         );
         final reading = made.container.read(sessionChatViewProvider('s1'));
         expect(reading.evidence, ChatViewEvidence.storeUnreadable);

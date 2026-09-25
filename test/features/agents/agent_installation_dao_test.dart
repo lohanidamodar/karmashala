@@ -73,7 +73,7 @@ void main() {
     expect(dao.getById('legacy')!.agentId, AgentIds.claudeCode);
   });
 
-  test('an agent with no AgentKind member persists and round-trips', () {
+  test('a data-only agent persists and round-trips', () {
     dao.insert(agentInstallation(id: 'rover', agentId: 'roverCli'));
     expect(dao.getById('rover')!.agentId, 'roverCli');
     expect(

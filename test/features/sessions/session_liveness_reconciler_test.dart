@@ -60,7 +60,9 @@ class _StaticSettings extends SettingsController {
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(const AgentRegistry([_agent])),
+      agentRegistryProvider.overrideWithValue(
+        const AgentRegistry([DataOnlyAgentAdapter(_agent)]),
+      ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );

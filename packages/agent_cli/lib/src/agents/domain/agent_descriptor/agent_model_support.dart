@@ -39,18 +39,6 @@ enum AgentModelStyle {
   unsupported,
 }
 
-/// Where an agent's own model list can be read. See `agent_model_catalog.dart`.
-enum AgentModelDiscovery {
-  /// The curated list is all there is.
-  none,
-
-  /// A `list_models` control request in Claude Code's print mode.
-  claudeListModels,
-
-  /// `$CODEX_HOME/models_cache.json`, kept by the CLI per account.
-  codexModelsCache,
-}
-
 /// Whether one agent can be told which model to use, and how.
 ///
 /// Modelled exactly like [AgentMcpSupport] and [AgentForkSupport] — declared
@@ -66,7 +54,7 @@ enum AgentModelDiscovery {
 /// * **Can a *running* session be moved?** Claude Code and Antigravity take an
 ///   in-session `/model <id>`; Codex's `/model` opens a picker and takes no
 ///   argument, so for Codex the honest answer is "relaunch". See
-///   `built_in_agents.dart`, where each claim carries what it was read off.
+///   each agent's descriptor, where each claim carries what it was read off.
 ///
 /// [models] is a **curated list**, and that is stated rather than implied: no
 /// CLI here publishes a machine-readable catalogue that this app can read
@@ -83,7 +71,6 @@ class AgentModelSupport {
     required this.slashCommand,
     required this.models,
     required this.evidence,
-    this.discovery = AgentModelDiscovery.none,
   }) : pickerCommand = '',
        style = AgentModelStyle.liveAndAtLaunch;
 
@@ -92,7 +79,6 @@ class AgentModelSupport {
     required this.flag,
     required this.models,
     required this.evidence,
-    this.discovery = AgentModelDiscovery.none,
     this.pickerCommand = '',
   }) : slashCommand = '',
        style = AgentModelStyle.atLaunchOnly;
@@ -105,7 +91,6 @@ class AgentModelSupport {
     required this.evidence,
   }) : flag = '',
        slashCommand = '',
-       discovery = AgentModelDiscovery.none,
        pickerCommand = '',
        style = AgentModelStyle.listedOnly;
 
@@ -115,7 +100,6 @@ class AgentModelSupport {
     this.slashCommand,
     this.models,
     this.evidence,
-    this.discovery,
     this.pickerCommand,
   );
 
@@ -128,7 +112,6 @@ class AgentModelSupport {
     slashCommand,
     List.unmodifiable(found),
     evidence,
-    discovery,
     pickerCommand,
   );
 
@@ -139,14 +122,10 @@ class AgentModelSupport {
       slashCommand = '',
       models = const [],
       evidence = '',
-      discovery = AgentModelDiscovery.none,
       pickerCommand = '',
       style = AgentModelStyle.unsupported;
 
   final AgentModelStyle style;
-
-  /// Where this agent's own list is read from, when it has one.
-  final AgentModelDiscovery discovery;
 
   /// An in-session command that opens the agent's **own** model picker, for an
   /// agent whose model cannot be named in a running session. Empty when none.

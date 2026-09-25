@@ -6,7 +6,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_app_servers.dart';
+import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
@@ -68,7 +68,7 @@ void main() {
     );
   }
 
-  CodexAppServers servers({bool codexInstalled = true}) {
+  AgentStoreServers servers({bool codexInstalled = true}) {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     if (codexInstalled) {
       AgentInstallationDao(db).insert(
@@ -79,7 +79,7 @@ void main() {
         ),
       );
     }
-    return CodexAppServers(
+    return AgentStoreServers(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
       environments: ExecutionEnvironmentDao(db),
       installations: AgentInstallationDao(db),
@@ -94,7 +94,7 @@ void main() {
     final pool = servers();
     addTearDown(pool.closeAll);
 
-    await mutator.rename(session, 'new name', codex: pool);
+    await mutator.rename(session, 'new name', servers: pool);
 
     expect(server.lastNameSet, {'threadId': 'u1', 'name': 'new name'});
     expect(
@@ -110,7 +110,7 @@ void main() {
     final pool = servers();
     addTearDown(pool.closeAll);
 
-    await mutator.rename(seedStore(), 'new name', codex: pool);
+    await mutator.rename(seedStore(), 'new name', servers: pool);
 
     expect(runner.startRequests, hasLength(1));
     final request = runner.startRequests.single;
@@ -132,8 +132,8 @@ void main() {
     final pool = servers();
     addTearDown(pool.closeAll);
 
-    await mutator.rename(session, 'first', codex: pool);
-    await mutator.rename(session, 'second', codex: pool);
+    await mutator.rename(session, 'first', servers: pool);
+    await mutator.rename(session, 'second', servers: pool);
 
     expect(runner.startRequests, hasLength(1));
     expect(pool.openConnections, 1);
@@ -142,7 +142,7 @@ void main() {
 
   test('closing the pool leaves no app-server running', () async {
     final pool = servers();
-    await mutator.rename(seedStore(), 'new name', codex: pool);
+    await mutator.rename(seedStore(), 'new name', servers: pool);
 
     await pool.closeAll();
 
@@ -166,7 +166,7 @@ void main() {
       final pool = servers(codexInstalled: false);
       addTearDown(pool.closeAll);
 
-      await mutator.rename(session, 'new name', codex: pool);
+      await mutator.rename(session, 'new name', servers: pool);
 
       expect(runner.startRequests, isEmpty);
       expectStoreUntouched(session);
@@ -187,7 +187,7 @@ void main() {
       final pool = servers();
       addTearDown(pool.closeAll);
 
-      await mutator.rename(session, 'new name', codex: pool);
+      await mutator.rename(session, 'new name', servers: pool);
 
       expectStoreUntouched(session);
     });
@@ -200,7 +200,7 @@ void main() {
       final pool = servers();
       addTearDown(pool.closeAll);
 
-      await mutator.rename(session, 'new name', codex: pool);
+      await mutator.rename(session, 'new name', servers: pool);
 
       expectStoreUntouched(session);
     });
@@ -234,7 +234,7 @@ void main() {
       environmentId: wsl.id,
       processFactory: (_) => server,
     );
-    final pool = CodexAppServers(
+    final pool = AgentStoreServers(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
       environments: ExecutionEnvironmentDao(db),
       installations: AgentInstallationDao(db),
@@ -243,11 +243,13 @@ void main() {
 
     final client = pool.forEnvironment(
       wsl.id,
+      AgentIds.codex,
       storeHome: r'\\wsl.localhost\Ubuntu\home\me\.codex',
     );
 
     expect(client, isNotNull);
-    expect(client!.expectedCodexHome, '/home/me/.codex');
-    expect((await client.setThreadName('u1', 'new name')).ok, isTrue);
+    final codex = (client! as CodexStoreServerClient).client;
+    expect(codex.expectedCodexHome, '/home/me/.codex');
+    expect((await codex.setThreadName('u1', 'new name')).ok, isTrue);
   });
 }

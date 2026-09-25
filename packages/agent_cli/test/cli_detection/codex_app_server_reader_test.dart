@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:agent_cli/src/agents/domain/agent_ids.dart';
-import 'package:agent_cli/src/cli_detection/data/codex_app_server_client.dart';
-import 'package:agent_cli/src/cli_detection/data/codex_app_server_launch.dart';
-import 'package:agent_cli/src/cli_detection/data/codex_app_server_reader.dart';
-import 'package:agent_cli/src/cli_detection/data/codex_store_reader.dart';
+import 'package:agent_cli/src/agents/codex/codex_app_server_client.dart';
+import 'package:agent_cli/src/agents/adapter/store_server_launch.dart';
+import 'package:agent_cli/src/agents/codex/codex_app_server_reader.dart';
+import 'package:agent_cli/src/agents/codex/codex_store_reader.dart';
 import 'package:agent_cli/src/cli_detection/domain/detected_session.dart';
 import 'package:agent_cli/src/environments/environment_kind.dart';
 import 'package:agent_cli/src/environments/execution_environment.dart';
@@ -100,7 +100,7 @@ void main() {
     final sessions = await reader.read(
       home,
       'windows',
-      appServer: CodexAppServerLaunch(
+      storeServer: StoreServerLaunch(
         environment: windows,
         executable: r'C:\codex.exe',
       ),
@@ -146,7 +146,7 @@ void main() {
     final session = (await reader.read(
       home,
       'wsl:archlinux',
-      appServer: CodexAppServerLaunch(
+      storeServer: StoreServerLaunch(
         environment: wsl,
         executable: '/home/me/.local/bin/codex',
       ),
@@ -178,7 +178,7 @@ void main() {
       final server = FakeCodexAppServer.withThreads([
         row('u3', cwd: '/w', path: file),
       ], codexHome: home);
-      final launch = CodexAppServerLaunch(
+      final launch = StoreServerLaunch(
         environment: windows,
         executable: 'codex',
       );
@@ -188,7 +188,7 @@ void main() {
       final overProtocol = await reader.read(
         home,
         'windows',
-        appServer: launch,
+        storeServer: launch,
       );
       final overFiles = await CodexStoreReader(
         cache: CodexRolloutCache(),
@@ -215,10 +215,7 @@ void main() {
     final preview = (await reader.read(
       home,
       'windows',
-      appServer: CodexAppServerLaunch(
-        environment: windows,
-        executable: 'codex',
-      ),
+      storeServer: StoreServerLaunch(environment: windows, executable: 'codex'),
     )).single.preview;
 
     expect(preview.length, 120);
@@ -238,7 +235,7 @@ void main() {
       await reader.read(
         home,
         'windows',
-        appServer: CodexAppServerLaunch(
+        storeServer: StoreServerLaunch(
           environment: windows,
           executable: 'codex',
         ),
@@ -283,7 +280,7 @@ void main() {
         final good = await reader.read(
           home,
           'windows',
-          appServer: CodexAppServerLaunch(
+          storeServer: StoreServerLaunch(
             environment: windows,
             executable: 'codex',
           ),
@@ -291,7 +288,7 @@ void main() {
         final broken = await reader.read(
           home,
           'wsl:archlinux',
-          appServer: CodexAppServerLaunch(
+          storeServer: StoreServerLaunch(
             environment: wsl,
             executable: '/no/such/codex',
           ),
@@ -338,7 +335,7 @@ void main() {
         Future<List<DetectedSession>> scan() => reader.read(
           home,
           'windows',
-          appServer: CodexAppServerLaunch(
+          storeServer: StoreServerLaunch(
             environment: windows,
             executable: 'codex',
           ),

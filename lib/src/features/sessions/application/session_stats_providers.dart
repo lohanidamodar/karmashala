@@ -5,7 +5,6 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/usage.dart';
-import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
@@ -84,17 +83,17 @@ class SessionStatsService {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
-    final descriptor = agentId == null
+    final adapter = agentId == null
         ? null
-        : _ref.read(agentRegistryProvider).byId(agentId);
-    final name = descriptor?.displayName ?? agentId ?? '';
+        : _ref.read(agentRegistryProvider).adapterFor(agentId);
+    final name = adapter?.descriptor.displayName ?? agentId ?? '';
 
     // Read first and independently of everything below: the two sections
     // answer different questions and neither is a precondition of the other.
-    final lifetime = await _lifetimeFor(agentId, descriptor, session);
+    final lifetime = await _lifetimeFor(agentId, adapter, session);
 
-    final format = descriptor?.store?.format;
-    if (!agentStoreRecordsStats(descriptor)) {
+    final stats = adapter?.stats;
+    if (stats == null) {
       return SessionStatsView.unavailable(
         SessionStatsUnavailable.agentRecordsNoCounts,
         name,
@@ -130,10 +129,11 @@ class SessionStatsService {
       );
     }
 
-    final stats = format == AgentStoreFormat.claudeJsonl
-        ? await _ref.read(claudeStatsReaderProvider).readSessionStats(path)
-        : await _ref.read(codexStatsReaderProvider).readSessionStats(path);
-    if (stats == null) {
+    final counted = await _ref
+        .read(sessionStatsReadersProvider)
+        .sessionReaderFor(agentId, stats)
+        .readSessionStats(path);
+    if (counted == null) {
       return SessionStatsView.unavailable(
         SessionStatsUnavailable.transcriptNotFound,
         name,
@@ -143,7 +143,7 @@ class SessionStatsService {
       );
     }
     return SessionStatsView.computed(
-      stats,
+      counted,
       name,
       lifetime: lifetime.$1,
       lifetimeUnavailable: lifetime.$2,
@@ -155,13 +155,11 @@ class SessionStatsService {
   /// detection already resolved, so WSL and SSH get their own totals.
   Future<(LifetimeStats?, LifetimeStatsUnavailable?)> _lifetimeFor(
     String? agentId,
-    AgentDescriptor? descriptor,
+    AgentAdapter? adapter,
     Session session,
   ) async {
-    final format = descriptor?.store?.format;
-    if (agentId == null ||
-        (format != AgentStoreFormat.claudeJsonl &&
-            format != AgentStoreFormat.codexRollout)) {
+    final stats = adapter?.stats;
+    if (agentId == null || stats == null) {
       return (null, LifetimeStatsUnavailable.agentKeepsNoAggregate);
     }
 
@@ -170,12 +168,13 @@ class SessionStatsService {
       return (null, LifetimeStatsUnavailable.sourceNotFound);
     }
 
-    final stats = format == AgentStoreFormat.claudeJsonl
-        ? await _ref.read(claudeLifetimeReaderProvider).read(home)
-        : await _ref.read(codexLifetimeReaderProvider).read(home);
-    return stats == null
+    final lifetime = await _ref
+        .read(sessionStatsReadersProvider)
+        .lifetimeReaderFor(agentId, stats)
+        .read(home);
+    return lifetime == null
         ? (null, LifetimeStatsUnavailable.sourceNotFound)
-        : (stats, null);
+        : (lifetime, null);
   }
 
   /// This agent's store home in the session's environment, falling back to any
@@ -201,30 +200,28 @@ class SessionStatsService {
   }
 }
 
-/// Whether an agent's own store records anything countable — a query over what
-/// the registry declares, so an unknown format answers "no", not zeros.
-bool agentStoreRecordsStats(AgentDescriptor? descriptor) {
-  final format = descriptor?.store?.format;
-  return format == AgentStoreFormat.claudeJsonl ||
-      format == AgentStoreFormat.codexRollout;
+/// Whether an agent's own records hold anything countable — a question for its
+/// adapter, so an agent that declares no stats answers "no", not zeros.
+bool agentStoreRecordsStats(AgentAdapter? adapter) => adapter?.stats != null;
+
+/// One stats reader per agent per app, so the incremental caches behind them
+/// are shared with the store scan rather than rebuilt per dialog.
+class SessionStatsReaders {
+  final Map<String, SessionStatsReader> _sessions = {};
+  final Map<String, LifetimeStatsReader> _lifetimes = {};
+
+  SessionStatsReader sessionReaderFor(String agentId, AgentStats stats) =>
+      _sessions.putIfAbsent(agentId, stats.sessionStatsReader);
+
+  LifetimeStatsReader lifetimeReaderFor(String agentId, AgentStats stats) =>
+      _lifetimes.putIfAbsent(
+        agentId,
+        () => stats.lifetimeReader(readRows: readSqliteRows),
+      );
 }
 
-/// One reader per app, so the incremental caches behind them are shared with
-/// the store scan rather than rebuilt per dialog.
-final claudeStatsReaderProvider = Provider<ClaudeStoreReader>(
-  (ref) => ClaudeStoreReader(),
-);
-
-final codexStatsReaderProvider = Provider<CodexStatsReader>(
-  (ref) => CodexStatsReader(),
-);
-
-final claudeLifetimeReaderProvider = Provider<ClaudeLifetimeReader>(
-  (ref) => ClaudeLifetimeReader(),
-);
-
-final codexLifetimeReaderProvider = Provider<CodexLifetimeReader>(
-  (ref) => const CodexLifetimeReader(readRows: readSqliteRows),
+final sessionStatsReadersProvider = Provider<SessionStatsReaders>(
+  (ref) => SessionStatsReaders(),
 );
 
 final sessionStatsServiceProvider = Provider<SessionStatsService>(

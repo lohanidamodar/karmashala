@@ -5,8 +5,9 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/codex_app_server_providers.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_app_servers.dart';
+import 'package:agent_cli/read.dart' show CodexStoreServerClient;
+import 'package:karmashala/src/features/cli_detection/application/agent_store_server_providers.dart';
+import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -56,8 +57,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        codexAppServersProvider.overrideWithValue(
-          CodexAppServers(
+        agentStoreServersProvider.overrideWithValue(
+          AgentStoreServers(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
             environments: ExecutionEnvironmentDao(db),
             installations: AgentInstallationDao(db),
@@ -139,10 +140,13 @@ void main() {
           .read(terminalSessionsControllerProvider)
           .titleRevision;
       final client = container
-          .read(codexAppServersProvider)
-          .forEnvironment('windows')!;
+          .read(agentStoreServersProvider)
+          .forEnvironment('windows', AgentIds.codex)!;
 
-      await client.setThreadName('u1', 'Renamed in Codex');
+      await (client as CodexStoreServerClient).client.setThreadName(
+        'u1',
+        'Renamed in Codex',
+      );
 
       final row = SessionDao(db).getById('s1')!;
       expect(row.title, 'Renamed in Codex');

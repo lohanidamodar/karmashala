@@ -9,7 +9,7 @@ library;
 import 'dart:typed_data';
 
 import '../domain/diff_line.dart';
-import '../domain/file_edit.dart';
+import 'package:agent_cli/read.dart' show FileEditKind, FileEditRecord;
 import 'git_diff_parsing.dart';
 
 /// The most content, per side, that is worth diffing.

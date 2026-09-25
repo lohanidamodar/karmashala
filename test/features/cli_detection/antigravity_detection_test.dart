@@ -13,8 +13,8 @@ import 'package:sqlite3/sqlite3.dart';
 ///
 /// the design note: the reader landed, the enum
 /// value did not, and `CliDetectionService.readStores` switches exhaustively on
-/// [AgentStoreFormat] — so the descriptor was pinned at
-/// [AgentStoreFormat.none] and every Antigravity conversation was invisible to
+/// store capability — so the agent was declared storeless and every
+/// Antigravity conversation was invisible to
 /// detection, to adoption's store sweep and to the presence probe.
 void main() {
   late Directory tmp;
@@ -100,17 +100,18 @@ void main() {
 
   group('the descriptor', () {
     test('declares a readable store, so detection reaches the reader', () {
-      final descriptor = AgentRegistry.builtIn.byId(AgentIds.antigravity)!;
-      expect(descriptor.store!.format, AgentStoreFormat.antigravityStore);
+      final adapter = AgentRegistry.builtIn.adapterFor(AgentIds.antigravity)!;
+      expect(adapter.descriptor.store, isNotNull);
+      expect(adapter.store, isA<AntigravityStore>());
     });
 
     test('still offers no chat view — message content stays protobuf', () {
       // §8: `steps.step_payload` is an unpublished schema, so a readable store
-      // is not a readable transcript. `agentSupportsChatView` is an allowlist
-      // for exactly this reason.
-      final descriptor = AgentRegistry.builtIn.byId(AgentIds.antigravity)!;
-      expect(agentSupportsChatView(descriptor), isFalse);
-      expect(defaultViewFor(descriptor), SessionView.terminal);
+      // is not a readable transcript: the adapter's transcripts say no chat
+      // view is built.
+      final adapter = AgentRegistry.builtIn.adapterFor(AgentIds.antigravity)!;
+      expect(agentSupportsChatView(adapter), isFalse);
+      expect(defaultViewFor(adapter), SessionView.terminal);
     });
   });
 
@@ -174,7 +175,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: storeHome,
-          format: AgentStoreFormat.antigravityStore,
+          store: const AntigravityStore(),
           conversationId: id,
         ),
         ConversationPresence.present,
@@ -187,7 +188,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: storeHome,
-          format: AgentStoreFormat.antigravityStore,
+          store: const AntigravityStore(),
           conversationId: id,
         ),
         ConversationPresence.absent,
@@ -195,7 +196,7 @@ void main() {
       expect(
         await const ConversationStoreIndex().presenceOf(
           storeHome: p.join(tmp.path, 'nothing-here'),
-          format: AgentStoreFormat.antigravityStore,
+          store: const AntigravityStore(),
           conversationId: id,
         ),
         ConversationPresence.unknown,

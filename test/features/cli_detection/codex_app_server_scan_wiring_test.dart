@@ -70,8 +70,11 @@ void main() {
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 
-      expect(store.codexAppServer!.executable, r'C:\Users\me\.bin\codex.exe');
-      expect(store.codexAppServer!.environment.id, 'windows');
+      expect(
+        store.storeServerFor(AgentIds.codex)!.executable,
+        r'C:\Users\me\.bin\codex.exe',
+      );
+      expect(store.storeServerFor(AgentIds.codex)!.environment.id, 'windows');
     });
 
     test('no Codex installed means no app-server to carry', () async {
@@ -83,8 +86,12 @@ void main() {
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 
-      expect(store.codexAppServer, isNull);
-      expect(store.codexHome, isNotNull, reason: 'the store is still walked');
+      expect(store.storeServerFor(AgentIds.codex), isNull);
+      expect(
+        store.homeFor(AgentIds.codex),
+        isNotNull,
+        reason: 'the store is still walked',
+      );
     });
 
     test('a locator with no DAO walks every store, as it always did', () async {
@@ -93,7 +100,7 @@ void main() {
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 
-      expect(store.codexAppServer, isNull);
+      expect(store.storeServerFor(AgentIds.codex), isNull);
     });
   });
 
@@ -117,17 +124,16 @@ void main() {
         'updatedAt': 1788585458,
       },
     ], codexHome: home);
-    final detection = CliDetectionService(
-      codexAppServerReader: CodexAppServerReader(
-        fallback: CodexStoreReader(cache: CodexRolloutCache()),
-        openClient: (launch, expectedCodexHome) => CodexAppServerClient(
-          connect: () async => server,
-          timeout: const Duration(seconds: 5),
-          expectedCodexHome: expectedCodexHome,
-        ),
+    final reader = CodexAppServerReader(
+      fallback: CodexStoreReader(cache: CodexRolloutCache()),
+      openClient: (launch, expectedCodexHome) => CodexAppServerClient(
+        connect: () async => server,
+        timeout: const Duration(seconds: 5),
+        expectedCodexHome: expectedCodexHome,
       ),
     );
-    addTearDown(detection.codexAppServerReader.close);
+    final detection = CliDetectionService(readers: {AgentIds.codex: reader});
+    addTearDown(reader.close);
 
     final chunks = await InlineStoreScanRunner(detection: detection)
         .scan(
@@ -136,10 +142,12 @@ void main() {
               CliStore(
                 environmentId: 'windows',
                 homesByAgentId: {AgentIds.codex: home},
-                codexAppServer: CodexAppServerLaunch(
-                  environment: windowsEnv(),
-                  executable: r'C:\codex.exe',
-                ),
+                storeServersByAgentId: {
+                  AgentIds.codex: StoreServerLaunch(
+                    environment: windowsEnv(),
+                    executable: r'C:\codex.exe',
+                  ),
+                },
               ),
             ],
           ),
@@ -149,7 +157,7 @@ void main() {
     final session = chunks.single.sessions.single;
     expect(session.title, 'from the server');
     expect(session.preview, 'the real question');
-    expect(detection.codexAppServerReader.fallbacksServed, 0);
+    expect(reader.fallbacksServed, 0);
   });
 
   test('a main-isolate read never starts an app-server', () async {
@@ -158,27 +166,28 @@ void main() {
     // draws is the lag this whole design exists to avoid, so the walk answers.
     final home = codexStore('u3');
     var opened = 0;
-    final detection = CliDetectionService(
-      codexAppServerReader: CodexAppServerReader(
-        fallback: CodexStoreReader(cache: CodexRolloutCache()),
-        openClient: (launch, expectedCodexHome) {
-          opened++;
-          return CodexAppServerClient(
-            connect: () async => FakeCodexAppServer.withThreads(const []),
-          );
-        },
-      ),
+    final reader = CodexAppServerReader(
+      fallback: CodexStoreReader(cache: CodexRolloutCache()),
+      openClient: (launch, expectedCodexHome) {
+        opened++;
+        return CodexAppServerClient(
+          connect: () async => FakeCodexAppServer.withThreads(const []),
+        );
+      },
     );
-    addTearDown(detection.codexAppServerReader.close);
+    final detection = CliDetectionService(readers: {AgentIds.codex: reader});
+    addTearDown(reader.close);
 
     final sessions = await detection.readStores([
       CliStore(
         environmentId: 'windows',
         homesByAgentId: {AgentIds.codex: home},
-        codexAppServer: CodexAppServerLaunch(
-          environment: windowsEnv(),
-          executable: r'C:\codex.exe',
-        ),
+        storeServersByAgentId: {
+          AgentIds.codex: StoreServerLaunch(
+            environment: windowsEnv(),
+            executable: r'C:\codex.exe',
+          ),
+        },
       ),
     ]);
 
@@ -203,10 +212,12 @@ void main() {
               CliStore(
                 environmentId: 'windows',
                 homesByAgentId: {AgentIds.codex: home},
-                codexAppServer: CodexAppServerLaunch(
-                  environment: windowsEnv(),
-                  executable: p.join(tmp.path, 'no-such-codex'),
-                ),
+                storeServersByAgentId: {
+                  AgentIds.codex: StoreServerLaunch(
+                    environment: windowsEnv(),
+                    executable: p.join(tmp.path, 'no-such-codex'),
+                  ),
+                },
               ),
             ],
           ),

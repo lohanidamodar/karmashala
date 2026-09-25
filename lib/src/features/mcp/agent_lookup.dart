@@ -11,11 +11,13 @@ import 'package:karmashala_session/launch.dart';
 String? parseCli(ProviderContainer container, String? cli) {
   if (cli == null) return null;
   final normalized = cli.trim().toLowerCase();
-  for (final descriptor in container.read(agentRegistryProvider).descriptors) {
-    if (descriptor.id.toLowerCase() == normalized) return descriptor.id;
+  final adapters = container.read(agentRegistryProvider).adapters;
+  for (final adapter in adapters) {
+    if (adapter.id.toLowerCase() == normalized) return adapter.id;
   }
-  if (normalized == 'claude' || normalized == 'claude code') {
-    return AgentIds.claudeCode;
+  // The names a caller writes for an agent, which its adapter declares.
+  for (final adapter in adapters) {
+    if (adapter.aliases.contains(normalized)) return adapter.id;
   }
   return null;
 }

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:agent_cli/src/agents/data/streaming_agent_session.dart';
-import 'package:agent_cli/src/agents/domain/agent_adapter.dart';
+import 'package:agent_cli/src/agents/adapter/agent_chat_protocol.dart';
 import 'package:agent_cli/src/sessions/session_event_types.dart';
 import 'package:test/test.dart';
 

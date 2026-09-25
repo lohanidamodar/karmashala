@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **One adapter per agent.** `AgentAdapter` (in `descriptors.dart`) is the
+  boundary: the descriptor plus capabilities — chat protocol, one-shot, store,
+  transcripts, stats, file changes, pictures, rewind, usage, accounts, store
+  server, directory conversations, model list — each null where the agent
+  lacks it. Claude Code, Codex and Antigravity each live in
+  `src/agents/<agent>/`. `AgentRegistry` holds adapters; `adapterFor(id)`.
+- Breaking: the old protocol `AgentAdapter` is `AgentChatProtocol`
+  (`ClaudeCodeChatProtocol`, `CodexChatProtocol`, `AntigravityChatProtocol`,
+  `GenericChatProtocol`, `FakeChatProtocol`); `AgentKind`, `AgentStoreFormat`,
+  `AgentModelDiscovery` and `oneShotInvocation` are gone — ask the adapter.
+  `CodexAppServerLaunch` is `StoreServerLaunch`; `CliStore.claudeHome` & co.
+  are `homeFor(agentId)`. `FileEditRecord` moved here from `karmashala_git`.
+
 ## 0.2.0
 
 Karmashala's coding-agent layer folded in; this package becomes its home.

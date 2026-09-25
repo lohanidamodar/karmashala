@@ -107,7 +107,9 @@ class _StaticSettings extends SettingsController {
       // Never shell out: an external launch must not open a real terminal.
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(AgentRegistry([_exclusive])),
+      agentRegistryProvider.overrideWithValue(
+        AgentRegistry([DataOnlyAgentAdapter(_exclusive)]),
+      ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );
@@ -272,7 +274,7 @@ void main() {
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
-          const AgentRegistry([undeclared]),
+          const AgentRegistry([DataOnlyAgentAdapter(undeclared)]),
         ),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
       ],
@@ -342,7 +344,7 @@ void main() {
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
-          const AgentRegistry([undeclared]),
+          const AgentRegistry([DataOnlyAgentAdapter(undeclared)]),
         ),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
       ],

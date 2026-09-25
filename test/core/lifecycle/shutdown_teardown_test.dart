@@ -53,7 +53,7 @@ void main() {
   });
   tearDown(() => db.close());
 
-  SessionEngine buildEngine(AdapterResolver resolver) => SessionEngine(
+  SessionEngine buildEngine(ChatProtocolResolver resolver) => SessionEngine(
     sessionDao: sessionDao,
     eventDao: eventDao,
     sessionRepositoryDao: SessionRepositoryDao(db),
@@ -61,7 +61,7 @@ void main() {
       runnerFactory: FakeCommandRunnerFactory(),
       environmentDao: ExecutionEnvironmentDao(db),
     ),
-    resolveAdapter: resolver,
+    resolveProtocol: resolver,
     clock: FixedClock(testTime),
     ids: SequentialIdGenerator(),
   );
@@ -133,7 +133,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
-          agentAdapterResolverProvider.overrideWithValue((_) => adapter),
+          chatProtocolResolverProvider.overrideWithValue((_) => adapter),
         ],
       );
       final engine = container.read(sessionEngineProvider);
@@ -194,7 +194,7 @@ void main() {
 
 /// An adapter whose sessions record being stopped, and can be made to take
 /// their time about it.
-class _RecordingAdapter implements AgentAdapter {
+class _RecordingAdapter implements AgentChatProtocol {
   _RecordingAdapter({this.gate});
 
   /// Held until this completes, standing in for a child process that does not

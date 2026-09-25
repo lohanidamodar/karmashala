@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
@@ -44,20 +43,26 @@ class SessionTranscriptLocator {
   }) async {
     if (externalSessionId.isEmpty) return null;
     final found = (await index())['$agentId/$externalSessionId'];
-    if (found != null || agentId != AgentIds.antigravity) return found;
-    return _antigravityRecordFor(externalSessionId);
+    if (found != null) return found;
+    final store = _ref.read(agentRegistryProvider).adapterFor(agentId)?.store;
+    if (store == null) return null;
+    return _recordFor(agentId, store, externalSessionId);
   }
 
-  /// The scan leaves out an Antigravity conversation its store places in no
-  /// directory (`AntigravityStoreSessions`) — 38 of the 44 with a transcript
-  /// here. Its record is looked for by id instead, in every store located.
-  Future<String?> _antigravityRecordFor(String id) async {
+  /// A store's scan can leave out a conversation it files under no directory
+  /// (38 of the 44 Antigravity conversations with a transcript, measured). Its
+  /// record is looked for by id instead, where the adapter says it may be, in
+  /// every store located.
+  Future<String?> _recordFor(
+    String agentId,
+    AgentStore store,
+    String id,
+  ) async {
     try {
-      for (final store in await _stores()) {
-        final home = store.antigravityHome;
+      for (final located in await _stores()) {
+        final home = located.homeFor(agentId);
         if (home == null) continue;
-        for (final extension in const ['.db', '.pb']) {
-          final record = p.join(home, 'conversations', '$id$extension');
+        for (final record in store.recordCandidates(home, id)) {
           if (await File(record).exists()) return record;
         }
       }

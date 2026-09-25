@@ -1,7 +1,7 @@
 /// Canonical `type` strings for normalized session events.
 ///
 /// Lifecycle events (`session.*`) are emitted by the session engine; content
-/// events (`message.*`, `agent.*`, `tool.*`) originate from an `AgentAdapter`.
+/// events (`message.*`, `agent.*`, `tool.*`) originate from an `AgentChatProtocol`.
 /// Keeping them centralized lets the UI and the future mobile app rely on a
 /// stable vocabulary regardless of which agent produced them.
 class SessionEventTypes {

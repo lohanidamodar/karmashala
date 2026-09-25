@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:agent_cli/src/agents/data/claude_auth_service.dart';
+import 'package:agent_cli/src/agents/claude_code/claude_auth_service.dart';
 import 'package:test/test.dart';
 
 import '../support/fakes.dart';

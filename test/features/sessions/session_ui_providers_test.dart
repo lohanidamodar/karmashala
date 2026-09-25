@@ -33,8 +33,8 @@ void main() {
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
-        agentAdapterResolverProvider.overrideWithValue(
-          (agentId) => FakeAgentAdapter(agentId: agentId),
+        chatProtocolResolverProvider.overrideWithValue(
+          (agentId) => FakeChatProtocol(agentId: agentId),
         ),
       ],
     );

@@ -440,7 +440,7 @@ class SessionStatsButton extends ConsumerWidget {
         ?.agentId;
     if (agentId == null) return false;
     return agentStoreRecordsStats(
-      ref.read(agentRegistryProvider).byId(agentId),
+      ref.read(agentRegistryProvider).adapterFor(agentId),
     );
   }
 }

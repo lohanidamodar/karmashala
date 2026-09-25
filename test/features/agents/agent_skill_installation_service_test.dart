@@ -151,10 +151,7 @@ void main() {
       id: 'unchecked',
       displayName: 'Unchecked CLI',
       binaries: AgentBinaries(windows: ['unchecked'], posix: ['unchecked']),
-      store: AgentStoreSpec(
-        homeDirectoryName: '.unchecked',
-        format: AgentStoreFormat.none,
-      ),
+      store: AgentStoreSpec(homeDirectoryName: '.unchecked'),
       skills: AgentSkillSupport.none(
         refusal: 'nobody has read this CLI\'s documentation',
       ),
@@ -168,7 +165,7 @@ void main() {
           homesByAgentId: {'unchecked': store},
         ),
       ]),
-      registry: const AgentRegistry([unchecked]),
+      registry: const AgentRegistry([DataOnlyAgentAdapter(unchecked)]),
     );
 
     final report = await serviceIn(container).sweep();
@@ -189,10 +186,7 @@ void main() {
         id: 'silent',
         displayName: 'Silent CLI',
         binaries: AgentBinaries(windows: ['silent'], posix: ['silent']),
-        store: AgentStoreSpec(
-          homeDirectoryName: '.silent',
-          format: AgentStoreFormat.none,
-        ),
+        store: AgentStoreSpec(homeDirectoryName: '.silent'),
       );
       final store = p.join(home.path, '.silent');
       Directory(store).createSync(recursive: true);
@@ -203,7 +197,7 @@ void main() {
             homesByAgentId: {'silent': store},
           ),
         ]),
-        registry: const AgentRegistry([silent]),
+        registry: const AgentRegistry([DataOnlyAgentAdapter(silent)]),
       );
 
       final report = await serviceIn(container).sweep();

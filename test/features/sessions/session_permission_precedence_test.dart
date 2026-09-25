@@ -93,7 +93,9 @@ const _trust = PermissionSelection({'mode': 'trust'});
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(const AgentRegistry([_rover])),
+      agentRegistryProvider.overrideWithValue(
+        const AgentRegistry([DataOnlyAgentAdapter(_rover)]),
+      ),
       // Nothing under `C:\src\demo` exists on a test machine, so the default
       // probe would call every recorded directory gone.
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),

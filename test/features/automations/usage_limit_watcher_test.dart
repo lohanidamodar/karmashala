@@ -24,7 +24,7 @@ import 'scheduled_resume_harness.dart';
 void main() {
   late ResumeHarness h;
   late StreamController<SessionStatusEntry> changes;
-  CodexRateLimitSnapshot? rollout;
+  RateLimitRecord? rollout;
   final rolloutReads = <String>[];
 
   void build({String agentId = AgentIds.codex}) {
@@ -35,7 +35,7 @@ void main() {
       agentId: agentId,
       extra: [
         sessionStatusChangesProvider.overrideWithValue(changes.stream),
-        codexRateLimitReaderProvider.overrideWithValue((path) async {
+        rateLimitRecordReaderProvider.overrideWithValue((path) async {
           rolloutReads.add(path);
           return rollout;
         }),
@@ -80,11 +80,11 @@ void main() {
     probeFailed: false,
   );
 
-  CodexRateLimitSnapshot limited({
+  RateLimitRecord limited({
     Duration resetsIn = const Duration(hours: 2),
     Duration recordedAgo = const Duration(seconds: 20),
     double percent = 100,
-  }) => CodexRateLimitSnapshot(
+  }) => RateLimitRecord(
     windows: [
       UsageWindow(
         label: '5-hour',

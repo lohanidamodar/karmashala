@@ -1,8 +1,7 @@
 import 'dart:io';
 
-import 'package:agent_cli/src/agents/data/antigravity_session_resume.dart';
-import 'package:agent_cli/src/agents/domain/agent_ids.dart';
-import 'package:agent_cli/src/agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/src/agents/antigravity/antigravity_session_resume.dart';
 import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 
@@ -70,7 +69,7 @@ void main() {
       );
 
       expect(learned.conversationId, conversation);
-      expect(learned.source, AntigravityIdSource.announcement);
+      expect(learned.source, DirectoryConversationSource.announcement);
     });
 
     test('it wins over the store, and needs no other evidence', () async {
@@ -148,7 +147,7 @@ void main() {
       );
 
       expect(learned.conversationId, conversation);
-      expect(learned.source, AntigravityIdSource.lastConversation);
+      expect(learned.source, DirectoryConversationSource.lastConversation);
     });
 
     test('an entry written before the launch is an earlier session', () async {
@@ -308,7 +307,7 @@ void main() {
         conversationId: conversation,
       );
 
-      expect(plan, isA<AntigravityResumeById>());
+      expect(plan, isA<DirectoryResumeById>());
       expect(plan.arguments, ['--conversation', conversation]);
     });
 
@@ -322,8 +321,8 @@ void main() {
         lastConversationForDirectory: conversation,
       );
 
-      expect(plan, isA<AntigravityContinueLatest>());
-      expect((plan as AntigravityContinueLatest).conversationId, conversation);
+      expect(plan, isA<DirectoryContinueLatest>());
+      expect((plan as DirectoryContinueLatest).conversationId, conversation);
     });
 
     test('and names it rather than passing --continue', () {
@@ -349,7 +348,7 @@ void main() {
         lastConversationForDirectory: otherConversation,
       );
 
-      expect((plan as AntigravityResumeById).conversationId, conversation);
+      expect((plan as DirectoryResumeById).conversationId, conversation);
     });
 
     test('nothing to continue refuses, in words', () {
@@ -360,7 +359,7 @@ void main() {
 
       expect(plan.arguments, isEmpty);
       expect(
-        (plan as AntigravityResumeRefused).reason,
+        (plan as DirectoryResumeRefused).reason,
         contains('no conversation for $workdir to continue'),
       );
     });
@@ -377,7 +376,7 @@ void main() {
       );
 
       expect(
-        (plan as AntigravityResumeRefused).reason,
+        (plan as DirectoryResumeRefused).reason,
         contains('another session here already holds'),
       );
     });
@@ -393,7 +392,7 @@ void main() {
       );
 
       expect(
-        (plan as AntigravityResumeRefused).reason,
+        (plan as DirectoryResumeRefused).reason,
         contains('cannot be told to continue without one'),
       );
     });

@@ -6,6 +6,7 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_self_update_providers.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
 import 'agent_label.dart';
@@ -139,29 +140,31 @@ class AgentUpdatesSection extends ConsumerWidget {
   }
 }
 
-/// Settings → Accounts & usage → Claude accounts, for the installations found.
+/// Settings → Accounts & usage → Claude accounts: the installations whose
+/// agent signs in through Anthropic's OAuth login.
 class InstalledClaudeAccountsSection extends ConsumerWidget {
   const InstalledClaudeAccountsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => ClaudeAccountsSection(
-    installations: ref
-        .watch(agentInstallationsControllerProvider)
-        .where((i) => i.agentId == AgentIds.claudeCode)
-        .toList(),
+    installations: _installationsWhere(
+      ref,
+      (adapter) => adapter.accounts is AnthropicOAuthAccounts,
+    ),
   );
 }
 
-/// Settings → Accounts & usage → Codex accounts, for the installations found.
+/// Settings → Accounts & usage → Codex accounts: the installations whose agent
+/// signs in through an OpenAI `auth.json`.
 class InstalledCodexAccountsSection extends ConsumerWidget {
   const InstalledCodexAccountsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => CodexAccountsSection(
-    installations: ref
-        .watch(agentInstallationsControllerProvider)
-        .where((i) => i.agentId == AgentIds.codex)
-        .toList(),
+    installations: _installationsWhere(
+      ref,
+      (adapter) => adapter.accounts is OpenAiAuthFileAccounts,
+    ),
   );
 }
 
@@ -171,16 +174,22 @@ class InstalledUsageSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => UsageSection(
-    // An allowlist, not a blocklist: an agent we have no usage endpoint for is
-    // simply not offered one.
-    installations: ref
-        .watch(agentInstallationsControllerProvider)
-        .where(
-          (i) =>
-              i.agentId == AgentIds.claudeCode ||
-              i.agentId == AgentIds.codex ||
-              i.agentId == AgentIds.antigravity,
-        )
-        .toList(),
+    // An allowlist, not a blocklist: an agent whose adapter declares no usage
+    // endpoint is simply not offered one.
+    installations: _installationsWhere(ref, (adapter) => adapter.usage != null),
   );
+}
+
+/// The found installations whose agent's adapter passes [test].
+List<AgentInstallation> _installationsWhere(
+  WidgetRef ref,
+  bool Function(AgentAdapter adapter) test,
+) {
+  final registry = ref.watch(agentRegistryProvider);
+  return [
+    for (final installation in ref.watch(agentInstallationsControllerProvider))
+      if (registry.adapterFor(installation.agentId) case final adapter?
+          when test(adapter))
+        installation,
+  ];
 }

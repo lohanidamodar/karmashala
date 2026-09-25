@@ -111,9 +111,12 @@ void main() {
     final service = serviceFor(const []);
     await service.importForRepositories(repos());
 
-    expect(asked.single.claudeDirectories, contains('c--hub'));
+    final names = asked.single.workingDirectories!
+        .map(const ClaudeCodeStore().directoryNameFor)
+        .toSet();
+    expect(names, contains('c--hub'));
     expect(
-      asked.single.claudeDirectories,
+      names,
       hasLength(2),
       reason: 'the Windows spelling and its /mnt/c form, both lowercased',
     );
@@ -134,10 +137,10 @@ void main() {
         sessionDao: SessionDao(db),
         ids: SequentialIdGenerator('i-'),
         clock: FixedClock(testTime),
-        narrowClaudeStore: false,
+        narrowByDirectory: false,
       );
       await service.importForRepositories(repos());
-      expect(asked.single.claudeDirectories, isNull);
+      expect(asked.single.workingDirectories, isNull);
     },
   );
 }

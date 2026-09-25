@@ -22,10 +22,7 @@ import '../../settings/domain/usage_limit_settings.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'scheduled_resume_providers.dart';
 
-/// Claude Code's own word, in `StopFailure.error`, for a turn a limit ended.
-const String kClaudeRateLimitReason = 'rate_limit';
-
-/// How old a Codex rate-limit record may be and still explain *this* turn
+/// How old an agent's rate-limit record may be and still explain *this* turn
 /// ending. Older, and it is the last thing a previous run knew.
 const Duration kLimitRecordFreshness = Duration(minutes: 10);
 
@@ -69,11 +66,11 @@ final sessionStatusChangesProvider = Provider<Stream<SessionStatusEntry>>(
   (ref) => ref.watch(sessionStatusRegistryProvider).statusChanges,
 );
 
-/// Reads a Codex rollout's newest rate-limit block. A seam over the file read.
-final codexRateLimitReaderProvider =
-    Provider<Future<CodexRateLimitSnapshot?> Function(String path)>(
-      (ref) => readCodexRateLimits,
-    );
+/// Reads the newest rate-limit record from an agent's state file. A seam over
+/// the file read: null — the default — reads it the way the agent's adapter
+/// says (`StateFileRateLimitEvidence.read`).
+final rateLimitRecordReaderProvider =
+    Provider<Future<RateLimitRecord?> Function(String path)?>((ref) => null);
 
 /// One session's turn ending on its account's usage limit.
 @immutable
@@ -204,7 +201,8 @@ class UsageLimitWatcher extends Notifier<int> {
   }
 
   /// The limit behind [entry], or null. Per agent, and only from evidence the
-  /// agent itself wrote: a hook's failure reason, or a rollout's own record.
+  /// agent itself wrote — what its adapter declares: a hook's failure reason,
+  /// or a state file's own rate-limit record.
   Future<UsageLimitHit?> detect(
     Session session,
     SessionStatusEntry entry,
@@ -213,16 +211,19 @@ class UsageLimitWatcher extends Notifier<int> {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return null;
-    final name = ref
-        .read(agentRegistryProvider)
-        .displayNameFor(installation.agentId);
+    final registry = ref.read(agentRegistryProvider);
+    final name = registry.displayNameFor(installation.agentId);
+    final evidence = registry
+        .adapterFor(installation.agentId)
+        ?.usage
+        ?.limitEvidence;
     final now = _now;
 
-    switch (installation.agentId) {
-      case AgentIds.claudeCode:
-        if (entry.report.failureReason != kClaudeRateLimitReason) return null;
-        // `rate_limit` is also a passing 429. Only a spent window makes it a
-        // usage limit, and only a reading names the reset.
+    switch (evidence) {
+      case HookFailureReasonEvidence(:final reason):
+        if (entry.report.failureReason != reason) return null;
+        // The same word can be a passing rate limit. Only a spent window
+        // makes it a usage limit, and only a reading names the reset.
         final access = resumeUsageAccess(ref, session);
         if (!access.readable) return null;
         final AgentUsage reading;
@@ -245,10 +246,11 @@ class UsageLimitWatcher extends Notifier<int> {
           agentName: name,
           window: blocking.window,
         );
-      case AgentIds.codex:
+      case StateFileRateLimitEvidence(:final read):
         final path = entry.session.stateFilePath;
         if (path == null || path.isEmpty) return null;
-        final snapshot = await ref.read(codexRateLimitReaderProvider)(path);
+        final reader = ref.read(rateLimitRecordReaderProvider) ?? read;
+        final snapshot = await reader(path);
         if (snapshot == null || !snapshot.limitReached) return null;
         final recordedAt = snapshot.recordedAt;
         if (recordedAt == null ||
@@ -264,7 +266,7 @@ class UsageLimitWatcher extends Notifier<int> {
           agentName: name,
           window: window,
         );
-      default:
+      case NoUsageLimitEvidence() || null:
         return null;
     }
   }

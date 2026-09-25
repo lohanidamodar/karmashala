@@ -17,15 +17,19 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 const _registry = AgentRegistry([
-  AgentDescriptor(
-    id: AgentIds.claudeCode,
-    displayName: 'Claude Code',
-    binaries: AgentBinaries(windows: ['claude'], posix: ['claude']),
+  DataOnlyAgentAdapter(
+    AgentDescriptor(
+      id: AgentIds.claudeCode,
+      displayName: 'Claude Code',
+      binaries: AgentBinaries(windows: ['claude'], posix: ['claude']),
+    ),
   ),
-  AgentDescriptor(
-    id: AgentIds.codex,
-    displayName: 'Codex CLI',
-    binaries: AgentBinaries(windows: ['codex'], posix: ['codex']),
+  DataOnlyAgentAdapter(
+    AgentDescriptor(
+      id: AgentIds.codex,
+      displayName: 'Codex CLI',
+      binaries: AgentBinaries(windows: ['codex'], posix: ['codex']),
+    ),
   ),
 ]);
 

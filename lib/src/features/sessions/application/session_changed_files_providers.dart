@@ -9,7 +9,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../checkpoints/data/checkpoint_dao.dart';
 import '../../checkpoints/domain/checkpoint.dart';
-import '../../cli_detection/application/codex_app_server_providers.dart';
+import '../../cli_detection/application/agent_store_server_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -92,50 +92,71 @@ class SessionChangedFilesService {
     );
   }
 
-  /// The agent's own answer, or null and the reason there is none.
+  /// The agent's own answer, or null and the reason there is none — asked of
+  /// the kind of record its adapter declares, never of who the agent is.
   Future<(List<SessionChangedFile>?, SessionRecordGap, String)>
   _fromAgentRecord(
     Session session,
     String? agentId,
     ExecutionEnvironment? environment,
   ) async {
-    switch (agentId) {
-      case AgentIds.codex:
-        return _fromCodex(session, environment);
-      case AgentIds.claudeCode:
-        return _fromClaudeTranscript(session, environment);
-      default:
-        return (null, SessionRecordGap.agentKeepsNoRecord, '');
-    }
+    final record = agentId == null
+        ? null
+        : _ref.read(agentRegistryProvider).adapterFor(agentId)?.fileChanges;
+    return switch (record) {
+      StoreServerFileChanges() => _fromStoreServer(
+        session,
+        agentId!,
+        environment,
+      ),
+      TranscriptFileEdits(:final editsOnLine) => _fromTranscript(
+        session,
+        agentId!,
+        environment,
+        editsOnLine,
+      ),
+      null => (null, SessionRecordGap.agentKeepsNoRecord, ''),
+    };
   }
 
-  Future<(List<SessionChangedFile>?, SessionRecordGap, String)> _fromCodex(
+  /// The agent's store server, asked for the conversation's file changes.
+  Future<(List<SessionChangedFile>?, SessionRecordGap, String)>
+  _fromStoreServer(
     Session session,
+    String agentId,
     ExecutionEnvironment? environment,
   ) async {
-    final threadId = session.externalSessionId ?? '';
-    if (threadId.isEmpty) {
+    final conversationId = session.externalSessionId ?? '';
+    if (conversationId.isEmpty) {
       return (null, SessionRecordGap.noConversationYet, '');
     }
     if (environment == null) {
       return (null, SessionRecordGap.recordUnreadable, 'no environment row');
     }
-    // The shared pool: a workspace that has already renamed a thread pays no
-    // spawn at all, and one that has not pays exactly one — for the connection.
+    // The shared pool: a workspace that has already renamed a conversation
+    // pays no spawn at all, and one that has not pays exactly one — for the
+    // connection.
     final client = _ref
-        .read(codexAppServersProvider)
-        .forEnvironment(environment.id);
+        .read(agentStoreServersProvider)
+        .forEnvironment(environment.id, agentId);
     if (client == null) {
+      final name =
+          _ref
+              .read(agentRegistryProvider)
+              .adapterFor(agentId)
+              ?.presentation
+              .shortName ??
+          agentId;
       return (
         null,
         SessionRecordGap.recordUnreadable,
-        'no Codex to ask on ${environment.name}',
+        'no $name to ask on ${environment.name}',
       );
     }
-    final result = await client.listFileChanges(threadId);
+    final result = await client.listFileChanges(conversationId);
     final failure = result.failure;
     if (failure != null) {
-      return (null, SessionRecordGap.recordUnreadable, failure.message);
+      return (null, SessionRecordGap.recordUnreadable, failure);
     }
     final byPath = <String, SessionChangedFile>{};
     for (final change in result.changes) {
@@ -144,25 +165,18 @@ class SessionChangedFilesService {
         environment,
         path: change.path,
         movedTo: change.movedTo,
-        kind: switch (change.kind) {
-          CodexFileChangeKind.add => FileEditKind.created,
-          CodexFileChangeKind.delete => FileEditKind.deleted,
-          // An `update` is a modification; a kind this build does not know is
-          // still a change Codex reported, and "modified" is the weaker claim.
-          CodexFileChangeKind.update ||
-          CodexFileChangeKind.unknown => FileEditKind.modified,
-        },
+        kind: change.kind,
       );
     }
     return (byPath.values.toList(growable: false), SessionRecordGap.none, '');
   }
 
-  /// Claude Code's transcript, streamed and reduced to paths as it goes. **No
-  /// Claude row is ever `deleted`**: the CLI has no delete tool, so `Bash rm`.
-  Future<(List<SessionChangedFile>?, SessionRecordGap, String)>
-  _fromClaudeTranscript(
+  /// The agent's transcript, streamed and reduced to paths as it goes.
+  Future<(List<SessionChangedFile>?, SessionRecordGap, String)> _fromTranscript(
     Session session,
+    String agentId,
     ExecutionEnvironment? environment,
+    List<FileEditRecord> Function(Map<String, Object?> json) editsOnLine,
   ) async {
     final externalId = session.externalSessionId ?? '';
     if (externalId.isEmpty) {
@@ -170,7 +184,7 @@ class SessionChangedFilesService {
     }
     final path = await _ref
         .read(sessionTranscriptLocatorProvider)
-        .locate(agentId: AgentIds.claudeCode, externalSessionId: externalId);
+        .locate(agentId: agentId, externalSessionId: externalId);
     if (path == null) {
       return (
         null,
@@ -191,7 +205,7 @@ class SessionChangedFilesService {
           continue;
         }
         if (decoded is! Map<String, Object?>) continue;
-        for (final edit in claudeFileEdits(decoded)) {
+        for (final edit in editsOnLine(decoded)) {
           _record(byPath, environment, path: edit.path, kind: edit.kind);
         }
       }

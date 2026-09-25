@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/antigravity_attribution_service.dart';
+import 'package:karmashala/src/features/cli_detection/application/directory_conversation_attribution_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -106,9 +106,9 @@ void main() {
     );
   }
 
-  AntigravitySessionAttributionService service({
+  DirectoryConversationAttributionService service({
     Map<String, List<String>> paneTails = const {},
-  }) => AntigravitySessionAttributionService(
+  }) => DirectoryConversationAttributionService(
     sessionDao: dao,
     installationDao: AgentInstallationDao(db),
     repositoryDao: RepositoryDao(db),

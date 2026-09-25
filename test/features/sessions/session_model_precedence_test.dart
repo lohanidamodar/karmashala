@@ -60,7 +60,9 @@ const _rover = AgentDescriptor(
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(const AgentRegistry([_rover])),
+      agentRegistryProvider.overrideWithValue(
+        const AgentRegistry([DataOnlyAgentAdapter(_rover)]),
+      ),
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),
     ],
   );

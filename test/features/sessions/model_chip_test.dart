@@ -283,7 +283,7 @@ void main() {
     final h = await harness(
       tester,
       agentId: _untellable.id,
-      registry: const AgentRegistry([_untellable]),
+      registry: const AgentRegistry([DataOnlyAgentAdapter(_untellable)]),
     );
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
@@ -309,7 +309,7 @@ void main() {
     final h = await harness(
       tester,
       agentId: _unknownModels.id,
-      registry: const AgentRegistry([_unknownModels]),
+      registry: const AgentRegistry([DataOnlyAgentAdapter(_unknownModels)]),
     );
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);

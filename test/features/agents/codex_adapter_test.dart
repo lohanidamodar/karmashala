@@ -115,13 +115,13 @@ void main() {
     });
   });
 
-  group('CodexAdapter', () {
+  group('CodexChatProtocol', () {
     test('starts "codex app-server" in the installation environment', () async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final runner = FakeCommandRunner();
-      final adapter = CodexAdapter(runnerFor: (_) => runner);
+      final adapter = CodexChatProtocol(runnerFor: (_) => runner);
 
       adapter.start(
         AgentLaunch(

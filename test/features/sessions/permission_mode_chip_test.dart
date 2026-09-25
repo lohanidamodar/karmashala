@@ -223,7 +223,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: _unestablished.id,
-      registry: const AgentRegistry([_unestablished]),
+      registry: const AgentRegistry([DataOnlyAgentAdapter(_unestablished)]),
     );
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
@@ -236,7 +236,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: _unestablished.id,
-      registry: const AgentRegistry([_unestablished]),
+      registry: const AgentRegistry([DataOnlyAgentAdapter(_unestablished)]),
     );
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);

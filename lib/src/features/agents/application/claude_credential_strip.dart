@@ -1,4 +1,3 @@
-
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/descriptors.dart';
@@ -41,17 +40,22 @@ final inheritedCredentialDecisionProvider =
             required bool inheritsHostEnvironment,
             required Map<String, String> settingsEnvironment,
           }) async {
-            // Only Claude Code reads these, and only a pane that inherits *this*
-            // host's environment can be changed by removing something from it — a
-            // WSL or SSH child is handed a different environment entirely.
+            // Only an agent signing in through Anthropic's OAuth login reads
+            // these, and only a pane that inherits *this* host's environment can
+            // be changed by removing something from it — a WSL or SSH child is
+            // handed a different environment entirely.
             if (!inheritsHostEnvironment) {
               return InheritedCredentialDecision.none;
             }
-            if (installation.agentId != AgentIds.claudeCode) {
+            final accounts = ref
+                .read(agentRegistryProvider)
+                .adapterFor(installation.agentId)
+                ?.accounts;
+            if (accounts is! AnthropicOAuthAccounts) {
               return InheritedCredentialDecision.none;
             }
             final hostEnvironment = ref.read(hostEnvironmentProvider);
-            final wouldInherit = anthropicCredentialVariables.any(
+            final wouldInherit = accounts.inheritedCredentialVariables.any(
               (name) => (hostEnvironment[name] ?? '').trim().isNotEmpty,
             );
             // Nothing to decide, so nothing is read off disk and no Keychain is

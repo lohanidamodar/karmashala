@@ -3,7 +3,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/frame_yield.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/application/antigravity_resume_providers.dart';
+import '../../agents/application/directory_resume_providers.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -101,9 +102,9 @@ class ExplorerActions {
       // The CLI never told us its id, but an agent whose store records which
       // conversation each directory last used can still answer. Null means the
       // question does not apply to this agent.
-      final plan = await _ref.read(antigravityResumePlannerProvider)(session);
+      final plan = await _ref.read(directoryResumePlannerProvider)(session);
       final resolved = plan == null ? null : conversationIn(plan);
-      if (plan is AntigravityResumeRefused) {
+      if (plan is DirectoryResumeRefused) {
         // The row is still selected so its detail is on screen; what changes is
         // that the message now says *which* of several situations this is.
         return ExplorerResult(ExplorerOutcome.selected, message: plan.reason);
@@ -126,7 +127,9 @@ class ExplorerActions {
           .read(sessionDaoProvider)
           .updateExternalSessionId(sessionId, resolved);
       externalId = resolved;
-      continueNotice = antigravityContinueNotice(
+      continueNotice = continueLatestNotice(
+        _ref,
+        session,
         resolved,
         sessionWorkingDirectoryOf(_ref, session)?.path ?? '',
       );

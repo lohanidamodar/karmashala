@@ -4,7 +4,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_app_servers.dart';
+import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
@@ -126,22 +126,22 @@ void main() {
     );
 
     test('Claude Code refuses', () {
-      final adapter = ClaudeCodeAdapter(runnerFor: appRunnerResolver());
+      final adapter = ClaudeCodeChatProtocol(runnerFor: appRunnerResolver());
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
     test('Codex refuses', () {
-      final adapter = CodexAdapter(runnerFor: appRunnerResolver());
+      final adapter = CodexChatProtocol(runnerFor: appRunnerResolver());
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
     test('Antigravity refuses', () {
-      final adapter = AntigravityAdapter(runnerFor: appRunnerResolver());
+      final adapter = AntigravityChatProtocol(runnerFor: appRunnerResolver());
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
     test('an agent with no protocol refuses', () {
-      final adapter = GenericAgentAdapter(
+      final adapter = GenericChatProtocol(
         agentId: 'roverCli',
         launch: const AgentLaunchSpec(),
         runnerFor: appRunnerResolver(),
@@ -150,17 +150,20 @@ void main() {
     });
   });
 
-  test('CodexAppServers hands out nothing for an environment that is gone', () {
-    final pool = CodexAppServers(
-      runnerFactory: factory(),
-      environments: ExecutionEnvironmentDao(db),
-      installations: AgentInstallationDao(db),
-    );
+  test(
+    'AgentStoreServers hands out nothing for an environment that is gone',
+    () {
+      final pool = AgentStoreServers(
+        runnerFactory: factory(),
+        environments: ExecutionEnvironmentDao(db),
+        installations: AgentInstallationDao(db),
+      );
 
-    expect(pool.forEnvironment(gone.environmentId), isNull);
-    expect(pool.openConnections, 0);
-    expect(runner.startRequests, isEmpty);
-  });
+      expect(pool.forEnvironment(gone.environmentId, AgentIds.codex), isNull);
+      expect(pool.openConnections, 0);
+      expect(runner.startRequests, isEmpty);
+    },
+  );
 
   test('repository discovery runs no remote scan for an environment that is '
       'gone', () async {

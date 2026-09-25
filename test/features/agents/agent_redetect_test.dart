@@ -18,15 +18,19 @@ import '../../support/fixtures.dart';
 /// Two agents, neither declaring a Windows install location — these tests are
 /// about what re-detection does with what it finds, not about where it looks.
 const _registry = AgentRegistry([
-  AgentDescriptor(
-    id: AgentIds.claudeCode,
-    displayName: 'Claude Code',
-    binaries: AgentBinaries(windows: ['claude'], posix: ['claude']),
+  DataOnlyAgentAdapter(
+    AgentDescriptor(
+      id: AgentIds.claudeCode,
+      displayName: 'Claude Code',
+      binaries: AgentBinaries(windows: ['claude'], posix: ['claude']),
+    ),
   ),
-  AgentDescriptor(
-    id: AgentIds.codex,
-    displayName: 'Codex CLI',
-    binaries: AgentBinaries(windows: ['codex'], posix: ['codex']),
+  DataOnlyAgentAdapter(
+    AgentDescriptor(
+      id: AgentIds.codex,
+      displayName: 'Codex CLI',
+      binaries: AgentBinaries(windows: ['codex'], posix: ['codex']),
+    ),
   ),
 ]);
 

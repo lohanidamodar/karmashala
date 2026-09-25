@@ -168,9 +168,10 @@ class LaunchedSessionAttributionService {
       // Keyed on the capability, not an agent name: a row for an agent we could
       // have told its id is a fork or a failed launch, not something to infer.
       if (descriptor.launch.sessionIdAssignment.isSupported) continue;
-      // Antigravity is excluded by ownership: its own service has better
-      // evidence — `agy` prints its resume command into our pane.
-      if (descriptor.store?.format == AgentStoreFormat.antigravityStore) {
+      // An agent whose store records the last conversation per directory is
+      // excluded by ownership: its own service has better evidence — the CLI
+      // prints its resume command into our pane.
+      if (agents.adapterFor(descriptor.id)?.directoryConversations != null) {
         continue;
       }
 

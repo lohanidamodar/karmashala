@@ -82,7 +82,9 @@ class _StaticSettings extends SettingsController {
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(AgentRegistry([_codex])),
+      agentRegistryProvider.overrideWithValue(
+        AgentRegistry([DataOnlyAgentAdapter(_codex)]),
+      ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );
