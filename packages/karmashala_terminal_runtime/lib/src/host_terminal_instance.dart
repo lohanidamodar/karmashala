@@ -198,6 +198,11 @@ class HostTerminalInstance
   /// a re-dial neither repeats a byte nor drops one.
   int _lastOffset = 0;
 
+  /// The host this pane's session runs in, by the pid and start time its
+  /// welcome gave. A redial that meets another host has met a replacement:
+  /// the session died with the one before it.
+  (int, DateTime)? _hostIdentity;
+
   /// Whether this pane opened holding the app's own record of its history: on
   /// the host path there are two records of the same output, and showing both
   /// would print the session twice. See [_dial].
@@ -369,26 +374,43 @@ class HostTerminalInstance
     'session it held before is no longer running]\x1b[0m\r\n',
   );
 
-  /// Reaches the host again after the link closed: measured afresh, so a host
-  /// that died is started again and one that only dropped the socket is simply
-  /// redialled. A host that answers but is not ready is waited for, never
-  /// replaced — an unanswered handshake is not evidence that nobody is there.
+  /// Reaches the host again after the link closed. The session lives only as
+  /// long as the host that runs it, so a redial reattaches only to *that*
+  /// host: one that only dropped the socket is simply redialled, and a
+  /// replacement, or nobody at all, ends the pane honestly — no code, never a
+  /// fresh session opened in its place. This machine's host is started again
+  /// by its supervisor, never by a pane, so a local pane only looks. A host
+  /// that answers but is not ready is waited for — an unanswered handshake is
+  /// not evidence that nobody is there.
   Future<void> _redial() async {
+    var nobody = 0;
     for (final delay in redialDelays) {
       await Future<void>.delayed(delay);
       if (_disposed || _exited || _link != null) return;
       final local = access;
-      if (local is LocalHostSessionAccess) local.forget();
       final HostDeployment deployment;
       try {
-        deployment = await access.deployment();
+        deployment = local is LocalHostSessionAccess
+            ? await local.observe()
+            : await access.deployment();
       } on Object catch (e) {
         _logger.debug('pane $id could not ask its host again: $e');
         continue;
       }
       if (_disposed || _exited) return;
+      if (local is LocalHostSessionAccess) {
+        // Another protocol on the socket is another host: ours has gone.
+        if (deployment.status == HostDeploymentStatus.protocolMismatch) {
+          _endedWithHost(_hostStopped);
+          return;
+        }
+        // Twice, so one refused connect under load is not taken for a death.
+        if (_nobodyThere(deployment) && ++nobody >= 2) {
+          _endedWithHost(_hostStopped);
+          return;
+        }
+      }
       if (!deployment.isReady) continue;
-      if (deployment.restartedByUs) _sayRestarted();
       if (await _dial(deployment, redialing: true)) return;
     }
     if (_disposed || _exited) return;
@@ -399,8 +421,27 @@ class HostTerminalInstance
     );
   }
 
+  static const _hostStopped =
+      'the session host stopped, and this session ended with it';
+
+  /// Whether [reading] says nothing listens on this machine's socket.
+  static bool _nobodyThere(HostDeployment reading) =>
+      reading.status == HostDeploymentStatus.noBinary ||
+      (reading.status == HostDeploymentStatus.unknown &&
+          !reading.hostUnresponsive);
+
+  /// Ends the pane because its session is gone with no code to report.
+  void _endedWithHost(String why) {
+    if (_exited || _disposed) return;
+    _exited = true;
+    _exitCode = null;
+    _emit('\r\n\x1b[90m[$why; no exit code]\x1b[0m\r\n');
+    _liveness.value = PaneLiveness.exited;
+  }
+
   /// Answers whether the pane is attached. A first dial that fails ends the
-  /// pane; a redial that fails leaves [_redial] to try again.
+  /// pane; a redial that fails leaves [_redial] to try again; a redial that
+  /// finds the session gone ends it honestly and counts as handled.
   Future<bool> _dial(
     HostDeployment deployment, {
     bool redialing = false,
@@ -418,6 +459,19 @@ class HostTerminalInstance
         await link.close();
         return false;
       }
+      final welcome = link.welcome;
+      final identity = welcome == null
+          ? null
+          : (welcome.pid, welcome.startedAt.toUtc());
+      if (redialing &&
+          _hostIdentity != null &&
+          identity != null &&
+          identity != _hostIdentity) {
+        await link.close();
+        _endedWithHost(_hostStopped);
+        return true;
+      }
+      _hostIdentity ??= identity;
       _link = link;
 
       final attachment = await _attachOrOpen(
@@ -426,6 +480,7 @@ class HostTerminalInstance
         height,
         resumeFrom,
         deployment,
+        redialing: redialing,
       );
       final skip = _skipsReplay(attachment, resumeFrom);
       if (skip) {
@@ -478,6 +533,11 @@ class HostTerminalInstance
       // replays from where the pane stopped, and must never clear it.
       _hasStoredHistory = false;
       return true;
+    } on _SessionGone {
+      _link = null;
+      if (link != null) unawaited(link.close().catchError((Object _) {}));
+      _endedWithHost('the session host no longer holds this session');
+      return true;
     } on Object catch (e) {
       _link = null;
       if (link != null) unawaited(link.close().catchError((Object _) {}));
@@ -498,8 +558,9 @@ class HostTerminalInstance
     int width,
     int height,
     int sinceOffset,
-    HostDeployment deployment,
-  ) async {
+    HostDeployment deployment, {
+    required bool redialing,
+  }) async {
     final sessionId = hostSessionId;
     // An agent launched now whose record the host kept after it exited —
     // `claude` quit with Ctrl-C twice — would otherwise be reattached to that
@@ -523,6 +584,8 @@ class HostTerminalInstance
       // Only the host saying there is no such session earns an open. A timeout
       // or any other refusal may mean the session is there and alive.
       if (e.code != ProtocolErrorCode.unknownSession) rethrow;
+      // A pane coming back to its session never starts another in its place.
+      if (redialing) throw const _SessionGone();
     }
     // An older host still serves the sessions it holds, but a new one started
     // in it would run with that build's behaviour.
@@ -762,3 +825,8 @@ const String outdatedHostRefusal =
     'would have run with that version\'s behaviour. Reopen this pane to run it '
     'inside the app, or restart the session host from Settings › Terminal '
     '(that ends the sessions it holds).';
+
+/// A redial found the host holding no session of this pane's id.
+class _SessionGone implements Exception {
+  const _SessionGone();
+}

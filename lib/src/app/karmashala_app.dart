@@ -6,6 +6,7 @@ import '../features/settings/application/settings_controller.dart';
 import 'probe_banner.dart';
 import '../features/settings/domain/app_theme_mode.dart';
 import '../features/ssh/presentation/ssh_prompt_host.dart';
+import '../features/terminal/presentation/session_host_banner.dart';
 import 'shell/app_shell.dart';
 import 'package:karmashala_ui/theme.dart';
 
@@ -44,8 +45,9 @@ class KarmashalaApp extends ConsumerWidget {
         AppThemeMode.dark => ThemeMode.dark,
       },
       // Inside `home` rather than `builder` because the SSH prompt host needs a
-      // Navigator above it to show a host key fingerprint on.
-      home: const SshPromptHost(child: AppShell()),
+      // Navigator above it to show a host key fingerprint on, and the session
+      // host banner one to confirm a restart on.
+      home: const SshPromptHost(child: SessionHostBanner(child: AppShell())),
     );
   }
 }

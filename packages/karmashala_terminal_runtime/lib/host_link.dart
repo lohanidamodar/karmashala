@@ -5,3 +5,4 @@ library;
 
 export 'src/host_pane_link.dart';
 export 'src/local_host_access.dart';
+export 'src/local_host_supervisor.dart';

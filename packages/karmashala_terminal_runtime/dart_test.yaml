@@ -1,0 +1,6 @@
+# Test tags. Declaring one here is what stops the runner warning about it; it
+# changes no default behaviour.
+tags:
+  # Builds and runs a real `karmashala_host serve` in temp folders of its own
+  # (test/live/). Posix only.
+  live:

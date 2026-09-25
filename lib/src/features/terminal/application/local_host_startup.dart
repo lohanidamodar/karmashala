@@ -22,23 +22,26 @@ import 'local_host_providers.dart';
 /// the access, so a pane opening meanwhile shares it rather than starting a
 /// second host — and an older host holding running sessions is left running,
 /// exactly as a pane leaves it. **Never fails**: a host that cannot be started
-/// is logged, and panes keep their fallback.
+/// is logged, panes keep their fallback, and the supervisor tries again.
 final localHostStartupProvider = Provider<Future<HostDeployment?>?>((ref) {
-  final access = ref.watch(localHostSessionAccessProvider);
-  // Asked second, so that with no host possible the settings are never read.
-  if (access == null || !ref.watch(hostBackedLocalPanesProvider)) return null;
-  return _startLocalHost(ref.container, access);
+  final supervisor = ref.watch(localHostSupervisorProvider);
+  if (supervisor == null) return null;
+  return _startLocalHost(ref.container, supervisor);
 });
 
 Future<HostDeployment?> _startLocalHost(
   ProviderContainer container,
-  LocalHostSessionAccess access,
+  LocalHostSupervisor supervisor,
 ) async {
   final log = AppLogger.named('host.local');
   HostDeployment? reading;
   try {
-    reading = await access.deployment();
-    if (reading.status == HostDeploymentStatus.ready) {
+    // The supervisor's first start: from here on it keeps the host up, with
+    // the same arguments, for as long as the app is open.
+    reading = await supervisor.start();
+    if (reading == null) {
+      log.warning('Starting the session host at launch failed.');
+    } else if (reading.status == HostDeploymentStatus.ready) {
       log.info('Session host at launch: ${reading.reason}');
     } else {
       log.warning(

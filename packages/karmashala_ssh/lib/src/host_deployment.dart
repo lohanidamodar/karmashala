@@ -91,6 +91,7 @@ class HostDeployment {
     this.hostOutdated = false,
     this.liveSessionIds,
     this.hostUnresponsive = false,
+    this.hostPid,
   });
 
   factory HostDeployment.unknown(String reason, DateTime observedAt) =>
@@ -136,6 +137,11 @@ class HostDeployment {
   /// came inside the bound — busy, or stuck. A second host must not be started
   /// over it; only a restart the person asks for replaces it.
   final bool hostUnresponsive;
+
+  /// The pid the answering host gave in its welcome; null when none answered.
+  /// A different pid for the same socket is a different host: whatever the
+  /// last one ran ended with it.
+  final int? hostPid;
 
   bool get isReady => status == HostDeploymentStatus.ready;
 

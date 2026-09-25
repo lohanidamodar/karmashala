@@ -20,6 +20,7 @@ class HostLifecycleSubscriber {
     required this.onStatusChanged,
     this.onHook,
     this.onAttached,
+    this.onLost,
     this.mcpTools,
     this.companion,
     this.automations,
@@ -45,6 +46,10 @@ class HostLifecycleSubscriber {
 
   /// Each time a link opens — the host may be a new one, on a new endpoint.
   final void Function()? onAttached;
+
+  /// Each time an open link is lost — the host may have died. Not on
+  /// [dispose]. Whoever keeps the host up decides; this only dials again.
+  final void Function()? onLost;
 
   /// Runs agents' tool calls the host forwards; offered on every link. Null
   /// runs none, and the host tells agents the app is not running.
@@ -226,6 +231,7 @@ class HostLifecycleSubscriber {
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
+    onLost?.call();
     _scheduleRetry();
   }
 

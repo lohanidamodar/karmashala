@@ -49,6 +49,9 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
   final source = ref.watch(hostLifecycleSourceProvider);
   if (source == null) return null;
   final hookLog = AppLogger.named('agent-hooks');
+  // Keeps the host up: told of each loss, and each host it brings back is
+  // dialled at once rather than on the subscriber's own backoff.
+  final supervisor = ref.watch(localHostSupervisorProvider);
   final subscriber = HostLifecycleSubscriber(
     source: source,
     sessionDao: ref.watch(sessionDaoProvider),
@@ -77,7 +80,11 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
       paneSessionId: hook.paneSessionId,
       logger: hookLog,
     ),
-    onAttached: () => unawaited(sweepHostHooks(ref.container, logger: hookLog)),
+    onAttached: () {
+      supervisor?.hostAttached();
+      unawaited(sweepHostHooks(ref.container, logger: hookLog));
+    },
+    onLost: () => supervisor?.hostLost('the lifecycle link to it closed'),
     // The host serves agents' MCP; this app runs the tools it forwards.
     mcpTools: ref.read(mcpToolDispatcherProvider),
     // The host serves the phone companion; this app answers what only it can.
@@ -94,7 +101,11 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
       subscriber.nudge();
     }
   });
-  ref.onDispose(() => unawaited(subscriber.dispose()));
+  final restarted = supervisor?.restarted.listen((_) => subscriber.nudge());
+  ref.onDispose(() {
+    unawaited(restarted?.cancel());
+    unawaited(subscriber.dispose());
+  });
   // The first dial waits for the launch's start of this machine's host (and the
   // hook sweep after it) rather than racing it. It never fails.
   final starting = ref.watch(localHostStartupProvider);

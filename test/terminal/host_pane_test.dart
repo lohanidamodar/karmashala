@@ -493,6 +493,56 @@ void main() {
       expect(screenOf(pane).replaceAll('\n', ''), contains('could not reach'));
     });
 
+    test('a host that died and was replaced ends the pane with no code, and '
+        'nothing is opened in the new one', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
+      final first = access.channels.single;
+      first.pushOutput(0, 'working\r\n');
+      await settle();
+
+      // The host went, and took its session with it; another answers now.
+      access.hostPid = 12;
+      access.liveSessions.clear();
+      await first.close();
+      await settle();
+
+      expect(access.channels, hasLength(2));
+      final second = access.channels.last;
+      expect(second.all<AttachMessage>(), isEmpty);
+      expect(second.all<OpenMessage>(), isEmpty, reason: 'a fresh session');
+      expect(pane.liveness.value, PaneLiveness.exited);
+      expect(pane.exitCode, isNull, reason: 'never a zero');
+      expect(
+        screenOf(pane).replaceAll('\n', ''),
+        contains('the session host stopped'),
+      );
+      expect(screenOf(pane), contains('working'), reason: 'what it showed');
+    });
+
+    test('the same host no longer holding the session ends the pane; it is '
+        'never opened again in its place', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
+      final first = access.channels.single;
+
+      access.liveSessions.clear();
+      await first.close();
+      await settle();
+
+      final second = access.channels.last;
+      expect(second.only<AttachMessage>().sessionId, 'karmashala_local_p1');
+      expect(second.all<OpenMessage>(), isEmpty);
+      expect(pane.liveness.value, PaneLiveness.exited);
+      expect(pane.exitCode, isNull);
+      expect(
+        screenOf(pane).replaceAll('\n', ''),
+        contains('no longer holds this session'),
+      );
+    });
+
     test('a pane closed meanwhile dials nothing', () async {
       final access = PaneAccess(readyDeployment());
       final pane = paneOn(access);

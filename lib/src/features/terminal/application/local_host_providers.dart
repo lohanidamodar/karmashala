@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala_host/host_paths.dart';
@@ -66,13 +67,45 @@ final hostBackedLocalPanesProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).hostBackedLocalPanes,
 );
 
+/// What keeps this machine's host up while the app is open, or null when local
+/// panes are not host-backed or no host may be reached. Started by
+/// `localHostStartupProvider`; one per app run.
+final localHostSupervisorProvider = Provider<LocalHostSupervisor?>((ref) {
+  final access = ref.watch(localHostSessionAccessProvider);
+  if (access == null || !ref.watch(hostBackedLocalPanesProvider)) return null;
+  final supervisor = LocalHostSupervisor(access: access);
+  ref.onDispose(() => unawaited(supervisor.dispose()));
+  return supervisor;
+});
+
+/// The supervision as it stands — running, restarting, outdated, stopped —
+/// or null without a supervisor.
+final localHostSupervisionProvider = StreamProvider<HostSupervision?>((ref) {
+  final supervisor = ref.watch(localHostSupervisorProvider);
+  if (supervisor == null) return Stream.value(null);
+  return (() async* {
+    yield supervisor.state;
+    yield* supervisor.changes;
+  })();
+});
+
 /// What Settings shows about the host on this machine. Null until something has
 /// looked, and it stays null rather than becoming a confident "not running".
-/// Nothing polls and nothing here starts a daemon — [observe] takes no action.
+/// [observe] takes no action; starting and restarting go through the
+/// supervisor when there is one, so its count and state stay the truth.
 class LocalHostStatusController extends Notifier<HostDeployment?> {
   @override
-  HostDeployment? build() =>
-      ref.watch(localHostSessionAccessProvider)?.lastReading;
+  HostDeployment? build() {
+    final supervisor = ref.watch(localHostSupervisorProvider);
+    if (supervisor != null) {
+      final changes = supervisor.changes.listen((supervision) {
+        final reading = supervision.reading;
+        if (reading != null) state = reading;
+      });
+      ref.onDispose(changes.cancel);
+    }
+    return ref.watch(localHostSessionAccessProvider)?.lastReading;
+  }
 
   bool _busy = false;
   bool get isChecking => _busy;
@@ -95,6 +128,11 @@ class LocalHostStatusController extends Notifier<HostDeployment?> {
     if (access == null || _busy) return;
     _busy = true;
     try {
+      final supervisor = ref.read(localHostSupervisorProvider);
+      if (supervisor != null) {
+        state = await supervisor.restartNow() ?? state;
+        return;
+      }
       access.forget();
       state = await access.deployment();
     } finally {
@@ -109,6 +147,11 @@ class LocalHostStatusController extends Notifier<HostDeployment?> {
     if (access == null || _busy) return;
     _busy = true;
     try {
+      final supervisor = ref.read(localHostSupervisorProvider);
+      if (supervisor != null) {
+        state = await supervisor.restartNow(force: force) ?? state;
+        return;
+      }
       state = await access.restartHost(force: force);
     } finally {
       _busy = false;

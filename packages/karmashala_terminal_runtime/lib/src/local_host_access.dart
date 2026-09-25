@@ -77,6 +77,20 @@ class LocalHostSessionAccess implements HostSessionAccess {
   Future<HostDeployment>? _reading;
   HostDeployment? _last;
 
+  final _serveExits = StreamController<HostServeExit>.broadcast();
+  final _serveOutput = _OutputTail();
+
+  /// Each time a `serve` this access started stops after it had come up —
+  /// both of its pipes closed. The only sign of the process itself going that
+  /// a detached start can give (it has no exit code); a host this app adopted
+  /// rather than started never fires it, and the lifecycle link is what
+  /// notices that one.
+  Stream<HostServeExit> get serveExited => _serveExits.stream;
+
+  /// The last lines the `serve` this access started printed, oldest first.
+  /// Empty when it started none, or none printed anything.
+  List<String> get lastServeOutput => _serveOutput.lines;
+
   /// The last reading taken, or null when nobody has looked. Null is *unknown*
   /// and never a negative answer (§19).
   HostDeployment? get lastReading => _last;
@@ -137,7 +151,13 @@ class LocalHostSessionAccess implements HostSessionAccess {
   Future<HostDeployment> restartHost({required bool force}) async {
     final binary = executable.locate();
     if (binary == null) return deployment();
-    final refused = await _stop(binary, force: force);
+    // A host of another protocol cannot be asked what it holds, so `stop`
+    // without force refuses it; its own records on disk are what say it
+    // holds nothing, and then ending it ends nothing.
+    final mismatched =
+        _last?.status == HostDeploymentStatus.protocolMismatch &&
+        (runningOnDisk()?.isEmpty ?? false);
+    final refused = await _stop(binary, force: force || mismatched);
     forget();
     if (refused != null) {
       final now = DateTime.now();
@@ -170,11 +190,11 @@ class LocalHostSessionAccess implements HostSessionAccess {
     if (_last?.hostOutdated ?? false) _last = null;
     return switch (answered) {
       _Welcomed() => throw StateError('handled above'),
-      _Mismatched(:final reason) => HostDeployment(
-        status: HostDeploymentStatus.protocolMismatch,
-        observedAt: now,
-        reason: reason,
-        remotePath: binary?.path,
+      _Mismatched(:final reason) => _last = _mismatched(
+        reason,
+        binary?.path,
+        runningOnDisk(),
+        now,
       ),
       _NoAnswer(:final reason) => HostDeployment(
         status: HostDeploymentStatus.unknown,
@@ -249,13 +269,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
           : _replaceOutdated(answered.welcome, binary);
     }
     if (answered is _Mismatched) {
-      return HostDeployment(
-        status: HostDeploymentStatus.protocolMismatch,
-        observedAt: DateTime.now(),
-        reason: answered.reason,
-        platform: _platform(now),
-        remotePath: binary.path,
-      );
+      return _replaceMismatched(answered.reason, binary);
     }
 
     if (answered is _NoAnswer) {
@@ -321,6 +335,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
     hostVersion: welcome.hostVersion,
     protocolVersion: welcome.protocolVersion,
     restartedByUs: restartedByUs,
+    hostPid: welcome.pid,
   );
 
   /// Whether [welcome] came from the build this app would start. A binary that
@@ -359,6 +374,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
         hostVersion: ready.hostVersion,
         protocolVersion: ready.protocolVersion,
         restartedByUs: true,
+        hostPid: ready.hostPid,
       );
     }
     final now = DateTime.now();
@@ -401,7 +417,106 @@ class LocalHostSessionAccess implements HostSessionAccess {
       protocolVersion: welcome.protocolVersion,
       hostOutdated: true,
       liveSessionIds: live,
+      hostPid: welcome.pid,
     );
+  }
+
+  /// A host that speaks another protocol — an earlier Karmashala's, left
+  /// running across an update — is replaced like an older build, but it cannot
+  /// be asked what it holds: its own session records on disk say it. Only when
+  /// they say nothing is running is it stopped; unreadable records count as
+  /// holding some, because a host holding live sessions is never killed
+  /// without the person saying so.
+  Future<HostDeployment> _replaceMismatched(String reason, File binary) async {
+    final now = DateTime.now();
+    final live = runningOnDisk();
+    if (live == null || live.isNotEmpty) {
+      return _mismatched(reason, binary.path, live, now);
+    }
+    final refused = await _stop(binary, force: true);
+    if (refused != null) {
+      return _mismatched(reason, binary.path, live, now, stopRefused: refused);
+    }
+    final started = await _start(binary);
+    final fresh = started == null ? await _sayHello() : null;
+    if (fresh is _Welcomed) {
+      final ready = _ready(fresh.welcome, binary.path, restartedByUs: true);
+      return HostDeployment(
+        status: ready.status,
+        observedAt: ready.observedAt,
+        reason:
+            'Replaced a session host that spoke another protocol, and held no '
+            'running sessions, with the one this app ships.',
+        platform: ready.platform,
+        remotePath: ready.remotePath,
+        hostVersion: ready.hostVersion,
+        protocolVersion: ready.protocolVersion,
+        restartedByUs: true,
+        hostPid: ready.hostPid,
+      );
+    }
+    return HostDeployment(
+      status: HostDeploymentStatus.cannotStart,
+      observedAt: DateTime.now(),
+      reason:
+          'Stopped a session host that spoke another protocol and held no '
+          'running sessions, but '
+          '${started ?? 'nothing answered on ${_paths.socketPath} after starting ${binary.path}'}.',
+      platform: _platform(now),
+      remotePath: binary.path,
+    );
+  }
+
+  HostDeployment _mismatched(
+    String said,
+    String? path,
+    List<String>? live,
+    DateTime now, {
+    String? stopRefused,
+  }) {
+    final holds = live == null
+        ? 'Its session records could not be read, so it may hold running '
+              'sessions'
+        : 'It holds ${live.length} running session(s)';
+    return HostDeployment(
+      status: HostDeploymentStatus.protocolMismatch,
+      observedAt: now,
+      reason:
+          'A session host from an earlier Karmashala is running here and '
+          'speaks another protocol ($said). $holds, so it was left running '
+          'until you restart it; new terminals run inside the app meanwhile.'
+          '${stopRefused == null ? '' : ' Stopping it was refused: $stopRefused'}',
+      platform: _platform(now),
+      remotePath: path,
+      hostOutdated: true,
+      liveSessionIds: live,
+    );
+  }
+
+  /// The sessions the host's own records on disk say are running, or null
+  /// when a record cannot be read. What a host of another protocol holds,
+  /// since it will not be asked; the host rewrites a record the moment its
+  /// session ends, and marks those it lost when it starts.
+  List<String>? runningOnDisk() {
+    final root = Directory(_paths.sessionsDirectory);
+    try {
+      if (!root.existsSync()) return const [];
+      final running = <String>[];
+      for (final entry in root.listSync().whereType<Directory>()) {
+        final meta = File('${entry.path}/meta.json');
+        if (!meta.existsSync()) continue;
+        final decoded = jsonDecode(meta.readAsStringSync());
+        if (decoded is! Map) return null;
+        if (decoded['state'] == 'running') {
+          final id = decoded['id'];
+          running.add(id is String ? id : entry.uri.pathSegments.last);
+        }
+      }
+      return running;
+    } on Object catch (e) {
+      _logger.debug('could not read the host\'s session records: $e');
+      return null;
+    }
   }
 
   /// The running sessions' ids, or null when the host would not say.
@@ -533,9 +648,15 @@ class LocalHostSessionAccess implements HostSessionAccess {
 
     final ready = Completer<String?>();
     final said = StringBuffer();
+    var served = false;
+    _serveOutput.clear();
     void look(String text) {
+      _serveOutput.add(text);
+      // Only until the banner: after it, the tail is all that is kept.
+      if (ready.isCompleted) return;
       said.write(text);
-      if (!ready.isCompleted && said.toString().contains('serving on')) {
+      if (said.toString().contains('serving on')) {
+        served = true;
         ready.complete(null);
       }
     }
@@ -548,7 +669,19 @@ class LocalHostSessionAccess implements HostSessionAccess {
     // detached process can report it.
     var open = 2;
     void closed() {
-      if (--open > 0 || ready.isCompleted) return;
+      if (--open > 0) return;
+      if (ready.isCompleted) {
+        // After the banner: the host this access started has gone.
+        if (served) {
+          _serveExits.add(
+            HostServeExit(
+              lastOutput: _serveOutput.lines,
+              observedAt: DateTime.now(),
+            ),
+          );
+        }
+        return;
+      }
       final text = said.toString().trim();
       // "Another host is already running" (serve's exit 3) means one is up
       // after all — a race with another app instance, not a failure to report.
@@ -688,4 +821,42 @@ class _NoAnswer extends _HelloOutcome {
 class _Mismatched extends _HelloOutcome {
   const _Mismatched(this.reason);
   final String reason;
+}
+
+/// A `serve` this app started stopped after it had come up.
+class HostServeExit {
+  const HostServeExit({required this.lastOutput, required this.observedAt});
+
+  /// The last lines it printed, oldest first — often the reason it went.
+  final List<String> lastOutput;
+  final DateTime observedAt;
+}
+
+/// The last lines a `serve` printed, bounded: a host that runs for weeks and
+/// logs every automation must not grow the app with it.
+class _OutputTail {
+  static const _keep = 20;
+  final _lines = <String>[];
+  var _partial = '';
+
+  void add(String text) {
+    final parts = '$_partial$text'.split('\n');
+    _partial = parts.removeLast();
+    for (final line in parts) {
+      final trimmed = line.trimRight();
+      if (trimmed.isEmpty) continue;
+      _lines.add(trimmed);
+      if (_lines.length > _keep) _lines.removeAt(0);
+    }
+  }
+
+  void clear() {
+    _lines.clear();
+    _partial = '';
+  }
+
+  List<String> get lines => List.unmodifiable([
+    ..._lines,
+    if (_partial.trim().isNotEmpty) _partial.trimRight(),
+  ]);
 }

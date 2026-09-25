@@ -39,6 +39,10 @@ class PaneAccess implements HostSessionAccess {
   /// is about what a pane does with a session that already has history.
   int resumedTotalBytes = 0;
   var deploymentAsks = 0;
+
+  /// The pid the host gives in its welcome. Changed by a test to stand for a
+  /// host that died and was replaced by another.
+  var hostPid = 11;
   Object? deploymentError;
 
   @override
@@ -81,6 +85,7 @@ class PaneAccess implements HostSessionAccess {
       resumedTotalBytes: resumedTotalBytes,
       attachRefusal: attachRefusal,
       predatesWithholding: predatesWithholding,
+      hostPid: hostPid,
     );
     channels.add(channel);
     return channel;
@@ -102,7 +107,10 @@ class ScriptedHostChannel implements RemoteChannel {
     this.resumedTotalBytes = 0,
     this.attachRefusal,
     this.predatesWithholding = false,
+    this.hostPid = 11,
   }) : endedSessions = endedSessions ?? <String>{};
+
+  final int hostPid;
 
   /// Shared with the machine: sessions whose process exited, still listed.
   final Set<String> endedSessions;
@@ -146,7 +154,7 @@ class ScriptedHostChannel implements RemoteChannel {
               operatingSystem: 'linux',
               architecture: 'x64',
               ptyLibrary: 'libc.so.6',
-              pid: 11,
+              pid: hostPid,
               startedAt: DateTime.utc(2026),
               observedAt: DateTime.utc(2026),
             ),

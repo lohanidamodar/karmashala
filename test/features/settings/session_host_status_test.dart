@@ -148,7 +148,11 @@ void main() {
       final access = _FakeAccess(r);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [localHostSessionAccessProvider.overrideWithValue(access)],
+          overrides: [
+            localHostSessionAccessProvider.overrideWithValue(access),
+            // No supervisor: these are the row's own readings and actions.
+            hostBackedLocalPanesProvider.overrideWithValue(false),
+          ],
           child: const MaterialApp(
             home: Scaffold(body: SessionHostStatusLine()),
           ),
@@ -203,15 +207,17 @@ void main() {
     testWidgets(
       'is offered for a host that will not answer, which is not asked again',
       (tester) async {
-        final access = await pumpLine(
-          tester,
-          HostDeployment(
-            status: HostDeploymentStatus.unknown,
-            observedAt: DateTime.now(),
-            reason: 'silent',
-            hostUnresponsive: true,
-          ),
-        )..live = const [];
+        final access =
+            await pumpLine(
+                tester,
+                HostDeployment(
+                  status: HostDeploymentStatus.unknown,
+                  observedAt: DateTime.now(),
+                  reason: 'silent',
+                  hostUnresponsive: true,
+                ),
+              )
+              ..live = const [];
         expect(find.byKey(const ValueKey('session-host-start')), findsNothing);
         await tester.tap(restart);
         await tester.pumpAndSettle();
