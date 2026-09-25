@@ -34,6 +34,10 @@ dependencies:
   # the same rule for the host's socket, so the two cannot disagree about it.
   karmashala_local_ipc:
     path: ../local_ipc
+  # The MCP wire and its HTTP binding: the daemon serves agents' tools with the
+  # same code the app did, so the two cannot answer differently. Pure Dart.
+  karmashala_mcp:
+    path: ../karmashala_mcp
   # `karmashala_host relay`: the same bundle a box already has can be the
   # relay for a desktop, so CI ships no second artifact. Pure Dart, no build
   # hook, and it imports nothing of ours — the dependency runs one way.

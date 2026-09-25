@@ -38,6 +38,17 @@ class FakeHostLifecycle implements HostLifecycleSource {
   /// The hold ids the app released, in order.
   final replies = <int>[];
 
+  /// Each link's tool calls, pushed by the test as the daemon forwarding them.
+  final mcpCallLinks = <StreamController<HostMcpCall>>[];
+
+  /// The catalogues the app offered, one per link.
+  final offeredTools = <List<Map<String, Object?>>>[];
+
+  /// How the app answered each forwarded call.
+  final mcpAnswers = <({int callId, Object? result, String? error})>[];
+
+  StreamController<HostMcpCall> get mcpCallLink => mcpCallLinks.last;
+
   StreamController<SessionLifecycleEvent> get link => links.last;
   StreamController<RelayedAgentHook> get hookLink => hookLinks.last;
   StreamController<HostSessionChange> get changeLink => changeLinks.last;
@@ -49,6 +60,8 @@ class FakeHostLifecycle implements HostLifecycleSource {
     final link = StreamController<SessionLifecycleEvent>();
     final hooks = StreamController<RelayedAgentHook>();
     final changes = StreamController<HostSessionChange>();
+    final calls = StreamController<HostMcpCall>();
+    mcpCallLinks.add(calls);
     links.add(link);
     hookLinks.add(hooks);
     changeLinks.add(changes);
@@ -70,7 +83,13 @@ class FakeHostLifecycle implements HostLifecycleSource {
       hooks: hooks.stream,
       replyHook: replies.add,
       sessionChanges: changes.stream,
+      mcpCalls: calls.stream,
+      offerMcpTools: offeredTools.add,
+      answerMcpCall: (callId, {result, error}) =>
+          mcpAnswers.add((callId: callId, result: result, error: error)),
       close: () async {
+        // Not awaited: a link whose app offers no tools never listens.
+        if (!calls.isClosed) unawaited(calls.close());
         if (!link.isClosed) await link.close();
         if (!hooks.isClosed) await hooks.close();
         if (!changes.isClosed) await changes.close();

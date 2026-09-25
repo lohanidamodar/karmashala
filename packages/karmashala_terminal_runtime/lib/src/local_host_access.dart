@@ -22,6 +22,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
     this.serveEnvironment,
     this.stopServe,
     this.dataDirectory,
+    this.serveFlags = const [],
   }) : _paths = paths ?? HostPaths.resolve(),
        _logger = logger ?? AppLogger.named('host.local');
 
@@ -53,11 +54,19 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// opens as its store. Asked at start, since resolving it is async.
   final Future<String> Function()? dataDirectory;
 
+  /// More `serve` flags: a probe's host asks for an ephemeral MCP port, so it
+  /// never takes the real host's.
+  final List<String> serveFlags;
+
   /// What `serve` is started with. Without [dataDirectory] it has no
   /// `--data-dir`, and `serve` refuses in words.
   Future<List<String>> serveArguments() async {
     final directory = await dataDirectory?.call();
-    return ['serve', if (directory != null) '--data-dir=$directory'];
+    return [
+      'serve',
+      if (directory != null) '--data-dir=$directory',
+      ...serveFlags,
+    ];
   }
 
   /// Where this access looks for its host — its socket, lock and sessions.

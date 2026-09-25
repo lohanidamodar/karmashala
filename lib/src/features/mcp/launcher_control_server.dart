@@ -8,49 +8,19 @@ import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:karmashala_core/logging.dart';
-import '../../core/util/clock_provider.dart';
-import '../automations/application/project_check_tools.dart';
 import '../agents/application/agent_hook_intake.dart';
 import '../agents/application/host_hook_endpoint.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../browser/application/browser_consent_providers.dart';
-import '../browser/application/browser_providers.dart';
-import 'package:karmashala_browser/tools.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_reporting/hooks.dart' show kPaneSessionHeader;
-import '../flutter_apps/application/flutter_app_tools.dart';
-import '../app_projects/application/project_build_tools.dart';
-import '../flutter_apps/application/flutter_run_tools.dart';
 import '../checkpoints/application/checkpoint_turn_hints.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
-import '../verification/application/verification_providers.dart';
-import '../verification/application/verification_tool_schemas.dart';
-import '../verification/application/verification_tools.dart';
-import 'attention_tools.dart';
-import 'checkpoint_tools.dart';
-import 'decision_tools.dart';
-import 'review_thread_tools.dart';
 import 'control_server_status.dart';
-import 'device_tools.dart';
-import 'fanout_tools.dart';
 import 'package:karmashala_mcp/access.dart';
-import 'package:karmashala_mcp/instructions.dart';
-import 'inventory_tools.dart';
-import 'project_tools.dart';
-import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'mcp_session_token_reaper.dart';
-import 'package:karmashala_mcp/catalogue.dart';
-import 'session_launch_tools.dart';
+import 'mcp_tool_dispatcher.dart';
 import 'session_mcp.dart';
-import 'session_tools.dart';
-import 'snippet_tools.dart';
-import 'recording_tools.dart';
-import 'terminal_tools.dart';
-import 'tmux_tools.dart';
-import 'todo_tools.dart';
-import 'workspace_tools.dart';
-import 'worktree_tools.dart';
 import '../../core/paths/app_support_directory.dart';
 import '../../core/probe/probe_mode.dart';
 
@@ -151,14 +121,9 @@ class LauncherControlServer implements SessionMcp {
     logger: _logger,
   );
 
-  /// One agent per request, however often it arrives: a worktree under `/mnt/c`
-  /// outlives the 60s Claude Code waits, and its retry started a second agent.
-  late final LaunchDedupe _launches = LaunchDedupe(
-    clock: _container.read(clockProvider),
-    onCollapsed: (tool) => _logger.warning(
-      'A repeat $tool was collapsed onto the identical launch already made; '
-      'nothing new was started. The caller most likely timed out and retried.',
-    ),
+  /// Where each call is run; shared with the session host's forwarded calls.
+  late final McpToolDispatcher _tools = _container.read(
+    mcpToolDispatcherProvider,
   );
 
   /// The MCP endpoint URL for an unattributed caller, or null when nothing is
@@ -188,50 +153,14 @@ class LauncherControlServer implements SessionMcp {
     required String sessionId,
     required ExecutionEnvironment environment,
     required bool withConfigFile,
-  }) {
-    final url = mcpUrlFor(sessionId, environment: environment.kind);
-    // An agent whose convention is the URL itself has no file to read a
-    // `command` out of.
-    if (!withConfigFile) {
-      return url == null ? null : SessionMcpAccess(url: url);
-    }
-    final entry = _serverEntryFor(environment.kind, url);
-    if (entry == null) return null;
-    final windowsPath = _sessionConfigs?.write(
-      sessionId: sessionId,
-      entry: entry,
-    );
-    if (windowsPath == null) return null;
-    final agentPath = agentConfigPathFor(windowsPath, environment.kind);
-    // A file the agent cannot name is a flag pointing at nothing, which is a
-    // worse launch than the one that passes no flag at all.
-    if (agentPath == null) return null;
-    // Reported only when the file actually names one: a config that spawns the
-    // bridge is not dialling anything, so its URL would point at nothing.
-    final describesUrl = entry['url'] != null;
-    return SessionMcpAccess(
-      url: describesUrl ? url : null,
-      configPath: agentPath,
-    );
-  }
-
-  /// The `mcpServers.karmashala` entry for an agent in [environment], or `null`.
-  /// Only [EnvironmentKind.wsl] differs: it is given the stdio bridge.
-  Map<String, Object?>? _serverEntryFor(
-    EnvironmentKind environment,
-    String? url,
-  ) {
-    if (environment == EnvironmentKind.wsl) {
-      final bridge = _bridgeExecutable()?.path;
-      // Spelled the way the agent names it. `null` is a UNC install directory,
-      // which has no `/mnt/` form.
-      final agentPath = bridge == null
-          ? null
-          : agentConfigPathFor(bridge, environment);
-      if (agentPath != null) return LauncherMcp.commandServerEntry(agentPath);
-    }
-    return url == null ? null : LauncherMcp.httpServerEntry(url);
-  }
+  }) => sessionMcpAccess(
+    sessionId: sessionId,
+    environment: environment,
+    withConfigFile: withConfigFile,
+    url: mcpUrlFor(sessionId, environment: environment.kind),
+    configs: _sessionConfigs,
+    bridgeExecutable: _bridgeExecutable,
+  );
 
   /// `host:port` for an agent in [environment], or null when there is none.
   String? _mcpHostFor(EnvironmentKind environment) {
@@ -253,18 +182,6 @@ class LauncherControlServer implements SessionMcp {
   /// Shared with the hook scripts that produce the payloads, so the two ends
   /// of the wire cannot come to disagree about what is too big.
   static const _maxRequestBytes = kAgentHookPayloadLimitBytes;
-
-  /// What `serverInfo` reports. Not the app's version: this is the version of
-  /// the *tool surface*, and it moves when the tools do.
-  static const String _serverVersion = '2.0.0';
-
-  /// The one paragraph a model reads before it has called anything.
-  static const String _instructions =
-      'These tools drive Karmashala itself — the sessions, terminal tabs, '
-      'projects, notes, inbox and delivery state of the app this agent is '
-      'running inside. Tools that name a session default to the session '
-      'calling them, so omit sessionId to act on yourself. Anything Karmashala '
-      'has not measured is reported as "not recorded" rather than guessed.';
 
   /// Where agents' installed hooks post to, once [start] has bound the port;
   /// `null` before that, and when the session host takes them instead.
@@ -306,14 +223,11 @@ class LauncherControlServer implements SessionMcp {
         : AgentHookEndpoint(port: server.port, token: _generateToken());
     _mcpEndpoint = McpHttpEndpoint(
       server: McpServer(
-        name: 'karmashala',
-        version: _serverVersion,
-        // Read on every `tools/list` rather than captured, because the browser
-        // and verification tools come from services that may not be up yet.
-        catalogue: () => annotatedToolSchemas(toolSchemas),
-        invoke: (name, arguments, callerSessionId) =>
-            _dispatch(name, arguments, callerSessionId),
-        instructions: _instructions,
+        name: kKarmashalaMcpName,
+        version: kKarmashalaMcpVersion,
+        catalogue: McpToolDispatcher.servedCatalogue,
+        invoke: _tools.dispatch,
+        instructions: kKarmashalaMcpInstructions,
       ),
       callers: _callers,
       logger: _logger,
@@ -745,7 +659,7 @@ class LauncherControlServer implements SessionMcp {
       // Which of *our* sessions is calling: read from the environment Karmashala
       // stamped on the process, not from the model.
       final callerSessionId = payload['callerSessionId'] as String?;
-      final result = await _dispatch(tool, args, callerSessionId);
+      final result = await _tools.dispatch(tool, args, callerSessionId);
       response.headers.contentType = ContentType.json;
       response.write(jsonEncode({'ok': true, 'result': result}));
       await response.close();
@@ -771,7 +685,7 @@ class LauncherControlServer implements SessionMcp {
           (payload['arguments'] as Map?)?.cast<String, dynamic>() ??
           const <String, dynamic>{};
       final callerSessionId = payload['callerSessionId'] as String?;
-      final result = await _dispatch(tool, args, callerSessionId);
+      final result = await _tools.dispatch(tool, args, callerSessionId);
       return jsonEncode({'ok': true, 'result': result});
     } on Object catch (error) {
       return jsonEncode({'ok': false, 'error': '$error'});
@@ -848,175 +762,6 @@ class LauncherControlServer implements SessionMcp {
 
   bool _constantTimeEquals(String? actual, String expected) =>
       constantTimeEquals(actual, expected);
-
-  /// One RPC, guarded against being made twice. Only the tools that *start*
-  /// something go through the ledger; a read must not be collapsed.
-  Future<Object?> _dispatch(
-    String? tool,
-    Map<String, dynamic> args, [
-    String? callerSessionId,
-  ]) {
-    if (tool != null && startsAnAgent(tool, args)) {
-      return _launches.run(
-        tool: tool,
-        arguments: args,
-        callerSessionId: callerSessionId,
-        start: () => _invoke(tool, args, callerSessionId),
-      );
-    }
-    return _invoke(tool, args, callerSessionId);
-  }
-
-  Future<Object?> _invoke(
-    String? tool,
-    Map<String, dynamic> args, [
-    String? callerSessionId,
-  ]) async {
-    switch (tool) {
-      case '__list_tools__':
-        return toolSchemas;
-      case final String name when InventoryTools.handles(name):
-        return InventoryTools(_container).call(name, args);
-      case final String name when ProjectControlTools.handles(name):
-        return ProjectControlTools(_container).call(name, args);
-      // The caller's identity matters: a session started here is recorded as
-      // its child, which is what the spawn-depth cap counts.
-      case final String name when SessionLaunchTools.handles(name):
-        return SessionLaunchTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when FanOutTools.handles(name):
-        return FanOutTools(_container).call(name, args);
-      case final String name when TmuxControlTools.handles(name):
-        return TmuxControlTools(_container).call(name, args);
-      case final String name when CheckpointControlTools.handles(name):
-        return CheckpointControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when SessionControlTools.handles(name):
-        return SessionControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when AttentionControlTools.handles(name):
-        return AttentionControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when TodoControlTools.handles(name):
-        return TodoControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when DecisionControlTools.handles(name):
-        return DecisionControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when ReviewThreadTools.handles(name):
-        return ReviewThreadTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when WorkspaceControlTools.handles(name):
-        return WorkspaceControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when WorktreeControlTools.handles(name):
-        return WorktreeControlTools(_container).call(name, args);
-      case final String name when DeviceControlTools.handles(name):
-        return DeviceControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when TerminalControlTools.handles(name):
-        return TerminalControlTools(_container).call(name, args);
-      case final String name when RecordingControlTools.handles(name):
-        return RecordingControlTools(_container).call(name, args);
-      case final String name when SnippetControlTools.handles(name):
-        return SnippetControlTools(_container).call(name, args);
-      case final String name when InstructionsTools.handles(name):
-        return const InstructionsTools().call(name, args);
-      // Consent is resolved here, not in features/browser: which project a call
-      // is for is a sessions question, and nothing about it is cached.
-      case final String name when BrowserTools.handles(name):
-        return BrowserTools(
-          _container.read(browserServiceProvider),
-          consent: browserConsentFor(
-            _container,
-            callerSessionId: callerSessionId,
-          ),
-        ).call(name, args);
-      case final String name when FlutterAppTools.handles(name):
-        return FlutterAppTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when FlutterRunTools.handles(name):
-        return FlutterRunTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when ProjectBuildTools.handles(name):
-        return ProjectBuildTools(_container).call(name, args);
-      case final String name when ProjectCheckTools.handles(name):
-        return ProjectCheckTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when VerificationTools.handles(name):
-        await resolveVerificationRoot();
-        final verification = _container.read(verificationServiceProvider);
-        // Noted *before* the call, because finishing clears the active run: the
-        // seam where verification writes to the decision record.
-        final finishing = name == 'verification_finish'
-            ? verification.activeRun?.id
-            : null;
-        // The caller is the producer of every verdict recorded here (G3).
-        final answer = await VerificationTools(
-          verification,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-        if (finishing != null) {
-          recordFinishedVerdict(_container, verification.get(finishing));
-        }
-        return answer;
-      default:
-        throw ArgumentError('Unknown tool: $tool');
-    }
-  }
-
-  /// MCP tool definitions (name/description/inputSchema) served to the bridge.
-  static const List<Map<String, dynamic>> toolSchemas = [
-    ...checkpointControlToolSchemas,
-    ...inventoryToolSchemas,
-    ...projectControlToolSchemas,
-    ...projectCheckToolSchemas,
-    ...sessionLaunchToolSchemas,
-    ...fanOutToolSchemas,
-    ...sessionHandoffToolSchemas,
-    ...tmuxToolSchemas,
-    ...instructionsToolSchemas,
-    ...sessionControlToolSchemas,
-    ...terminalControlToolSchemas,
-    ...recordingControlToolSchemas,
-    ...snippetControlToolSchemas,
-    ...workspaceControlToolSchemas,
-    ...worktreeControlToolSchemas,
-    ...deviceControlToolSchemas,
-    ...attentionControlToolSchemas,
-    ...todoControlToolSchemas,
-    ...decisionControlToolSchemas,
-    ...reviewThreadToolSchemas,
-    ...browserToolSchemas,
-    ...flutterAppToolSchemas,
-    ...flutterRunToolSchemas,
-    ...projectBuildToolSchemas,
-    ...verificationToolSchemas,
-  ];
 }
 
 /// A hardening step that did not apply, thrown out of the privileged-transport

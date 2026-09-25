@@ -329,6 +329,16 @@ class _ControlServerRestartRowState
     final status = ref.watch(controlServerStatusProvider);
     final started = ref.watch(controlServerHandleProvider) != null;
     final up = status.transport != PrivilegedRpcTransport.notStarted;
+    if (status.transport == PrivilegedRpcTransport.sessionHost) {
+      return Padding(
+        padding: const EdgeInsets.only(left: Insets.sm),
+        child: Text(
+          'The session host serves agent tools, so this app has no control '
+          'server to restart. Restarting the session host restarts them.',
+          style: theme.textTheme.bodySmall,
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

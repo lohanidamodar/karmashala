@@ -1,5 +1,5 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala_mcp/instructions.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -159,7 +159,7 @@ void main() {
   group('the tool itself', () {
     test('it is served and annotated as reading nothing', () {
       final names = [
-        for (final schema in LauncherControlServer.toolSchemas) schema['name'],
+        for (final schema in McpToolDispatcher.toolSchemas) schema['name'],
       ];
       expect(names, contains('instructions'));
       expect(kMcpToolAnnotations['instructions']?.readOnly, isTrue);

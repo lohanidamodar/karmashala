@@ -25,6 +25,8 @@ dependencies:
   # JSON helpers the launch fingerprint is built from.
   karmashala_core:
     path: ../karmashala_core
+  # HMAC for caller tokens derived from a persisted secret.
+  crypto: ^3.0.6
   # Locating the bridge executable beside the running app.
   path: ^1.9.1
 

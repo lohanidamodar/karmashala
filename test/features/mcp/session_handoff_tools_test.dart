@@ -1,8 +1,8 @@
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, dynamic> _schema(String name) =>
-    LauncherControlServer.toolSchemas.firstWhere((s) => s['name'] == name);
+    McpToolDispatcher.toolSchemas.firstWhere((s) => s['name'] == name);
 
 void main() {
   group('session_handoff', () {

@@ -4,19 +4,18 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_devices/providers.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_ui_providers.dart';
-import 'launcher_control_server.dart';
 import 'package:karmashala_mcp/protocol.dart';
 
-/// Retires a session's MCP token once that session is over. A closed *tab* is
-/// not over — taking that token would break an agent still holding the URL.
+/// Retires a session's MCP token, and the devices it drove, once that session
+/// is over. A closed *tab* is not over — taking that token would break an agent
+/// still holding the URL. Without [_callers] — the session host issues tokens
+/// and refuses an over session's itself — only device claims are released.
 class McpSessionTokenReaper {
-  /// Positional, like [LauncherControlServer]'s own container: these two are
-  /// what the reaper *is*, not options on it.
   McpSessionTokenReaper(this._container, this._callers, {AppLogger? logger})
     : _log = logger ?? AppLogger.named('mcp-control');
 
   final ProviderContainer _container;
-  final McpCallerRegistry _callers;
+  final McpCallerRegistry? _callers;
   final AppLogger _log;
 
   ProviderSubscription<int>? _subscription;
@@ -46,15 +45,17 @@ class McpSessionTokenReaper {
   /// Forgets the token of every session that is over, and drops the devices it
   /// was driving: one place decides "ended", so the two answers cannot differ.
   void sweep() {
-    final held = _callers.sessions;
-    if (held.isEmpty) return;
     try {
-      final dao = _container.read(sessionDaoProvider);
       final claims = _container.read(deviceClaimsProvider);
+      final held =
+          _callers?.sessions ??
+          {for (final c in claims.standingClaims) c.holderSessionId};
+      if (held.isEmpty) return;
+      final dao = _container.read(sessionDaoProvider);
       for (final sessionId in held) {
         final session = dao.getById(sessionId);
         if (session != null && !session.isOver) continue;
-        _callers.forget(sessionId);
+        _callers?.forget(sessionId);
         claims.release(sessionId);
         _log.debug('retired the MCP token for session $sessionId');
       }

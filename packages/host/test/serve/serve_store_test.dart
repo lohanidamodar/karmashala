@@ -100,7 +100,7 @@ void main() {
     final dataDir = Directory(p.join(root.path, 'data'));
     final stop = Completer<void>();
     final serving = runServe(
-      ['--companion-port=0', '--data-dir=${dataDir.path}'],
+      ['--companion-port=0', '--mcp-port=0', '--data-dir=${dataDir.path}'],
       out: out,
       err: err,
       paths: HostPaths(hostDir),
@@ -125,5 +125,9 @@ void main() {
       out.text.toString(),
       contains('store ${p.join(dataDir.path, 'karmashala.sqlite')}'),
     );
+    // Agents' tools are served too, and the handshake beside the store is
+    // taken back off disk when the daemon stops.
+    expect(out.text.toString(), contains('agent tools on port '));
+    expect(File(p.join(dataDir.path, 'mcp_bridge.json')).existsSync(), isFalse);
   }, testOn: 'mac-os || linux');
 }

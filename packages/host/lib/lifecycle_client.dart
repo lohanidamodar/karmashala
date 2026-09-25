@@ -5,6 +5,7 @@ library;
 export 'src/client/lifecycle_watch.dart';
 export 'src/hooks/hook_endpoint_file.dart';
 export 'src/hooks/hook_server.dart' show kHookSessionHeader;
+export 'src/mcp/mcp_credentials.dart' show McpCredentials;
 export 'src/protocol/messages.dart'
     show
         AgentHookEvent,
@@ -12,6 +13,7 @@ export 'src/protocol/messages.dart'
         HostSessionState,
         LifecycleEvent,
         LifecycleEventKind,
+        McpCallMessage,
         SessionChangedMessage,
         WelcomeMessage;
 export 'src/transport/socket_transport.dart' show SocketHostConnection;

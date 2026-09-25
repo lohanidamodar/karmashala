@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -302,7 +303,7 @@ void main() {
   group('the catalogue', () {
     test('every snippet tool is served and annotated', () {
       final served = <String>{
-        for (final schema in LauncherControlServer.toolSchemas)
+        for (final schema in McpToolDispatcher.toolSchemas)
           schema['name']! as String,
       };
 

@@ -20,6 +20,7 @@ class HostLifecycleWatch {
   final _events = StreamController<LifecycleEvent>();
   final _hooks = StreamController<AgentHookEvent>();
   final _sessionChanges = StreamController<SessionChangedMessage>();
+  final _mcpCalls = StreamController<McpCallMessage>();
   final _done = Completer<void>();
   StreamSubscription<List<int>>? _incoming;
   Completer<HostMessage>? _awaiting;
@@ -46,16 +47,37 @@ class HostLifecycleWatch {
   /// [events].
   Stream<SessionChangedMessage> get sessionChanges => _sessionChanges.stream;
 
-  /// Releases the agent held under [holdId]. Nothing when the link is gone:
-  /// the host then releases it at its bound.
-  void replyHook(int holdId) {
+  /// Each agent tool call the daemon forwards, once this client has offered
+  /// tools with [offerMcpTools]; answer each with [answerMcpCall].
+  Stream<McpCallMessage> get mcpCalls => _mcpCalls.stream;
+
+  /// Makes this client the one that runs agents' tools, with [tools] as the
+  /// catalogue the daemon serves — and keeps serving when this client is gone.
+  void offerMcpTools(List<Map<String, Object?>> tools) =>
+      _write(McpToolsMessage(tools));
+
+  /// How the call [callId] ended: [result], or the [error] text when it failed.
+  void answerMcpCall(int callId, {Object? result, String? error}) => _write(
+    error == null
+        ? McpResultMessage.success(callId, result)
+        : McpResultMessage.failure(callId, error),
+  );
+
+  /// Throws when [message] cannot be encoded — a result that is not JSON —
+  /// so the caller can answer with that instead of leaving the call open.
+  void _write(HostMessage message) {
     if (_done.isCompleted) return;
+    final bytes = message.toFrame().encode();
     try {
-      _connection.add(HookReplyMessage(holdId).toFrame().encode());
+      _connection.add(bytes);
     } on Object {
       // The link went down between the check and the write.
     }
   }
+
+  /// Releases the agent held under [holdId]. Nothing when the link is gone:
+  /// the host then releases it at its bound.
+  void replyHook(int holdId) => _write(HookReplyMessage(holdId));
 
   /// Completes when the link ends, from either side.
   Future<void> get done => _done.future;
@@ -181,6 +203,10 @@ class HostLifecycleWatch {
       if (!_sessionChanges.isClosed) _sessionChanges.add(message);
       return;
     }
+    if (message is McpCallMessage) {
+      if (!_mcpCalls.isClosed) _mcpCalls.add(message);
+      return;
+    }
     if (awaiting != null &&
         !awaiting.isCompleted &&
         (message is WelcomeMessage ||
@@ -202,6 +228,7 @@ class HostLifecycleWatch {
     if (!_events.isClosed) unawaited(_events.close());
     if (!_hooks.isClosed) unawaited(_hooks.close());
     if (!_sessionChanges.isClosed) unawaited(_sessionChanges.close());
+    if (!_mcpCalls.isClosed) unawaited(_mcpCalls.close());
     if (!_done.isCompleted) _done.complete();
   }
 

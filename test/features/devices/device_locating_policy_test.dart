@@ -1,6 +1,6 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala/src/features/mcp/device_tools.dart';
 import 'package:karmashala_mcp/instructions.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The locating policy is only a policy if an agent meets it while choosing.
@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// The description `tools/list` serves for [name].
 String _description(String name) =>
-    LauncherControlServer.toolSchemas.firstWhere(
+    McpToolDispatcher.toolSchemas.firstWhere(
           (schema) => schema['name'] == name,
           orElse: () => throw StateError('no schema for $name'),
         )['description']!

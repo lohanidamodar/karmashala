@@ -1,9 +1,9 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
     show formatResetClock;
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala/src/features/mcp/inventory_tools.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/remote/application/remote_session_snapshots.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 
@@ -48,7 +48,7 @@ void main() {
     // could would let an agent schedule an agent — the line
     // `no_automation_tools_test.dart` holds for automations.
     final names = [
-      for (final schema in LauncherControlServer.toolSchemas)
+      for (final schema in McpToolDispatcher.toolSchemas)
         schema['name']! as String,
     ];
     expect(

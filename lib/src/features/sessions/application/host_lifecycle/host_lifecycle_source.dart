@@ -13,11 +13,19 @@ class HostLifecycleFeed {
     Stream<RelayedAgentHook>? hooks,
     void Function(int holdId)? replyHook,
     Stream<HostSessionChange>? sessionChanges,
+    Stream<HostMcpCall>? mcpCalls,
+    void Function(List<Map<String, Object?>> tools)? offerMcpTools,
+    void Function(int callId, {Object? result, String? error})? answerMcpCall,
   }) : hooks = hooks ?? const Stream.empty(),
        replyHook = replyHook ?? _noReply,
-       sessionChanges = sessionChanges ?? const Stream.empty();
+       sessionChanges = sessionChanges ?? const Stream.empty(),
+       mcpCalls = mcpCalls ?? const Stream.empty(),
+       offerMcpTools = offerMcpTools ?? _noOffer,
+       answerMcpCall = answerMcpCall ?? _noAnswer;
 
   static void _noReply(int holdId) {}
+  static void _noOffer(List<Map<String, Object?>> tools) {}
+  static void _noAnswer(int callId, {Object? result, String? error}) {}
 
   final List<SessionFacts> snapshot;
 
@@ -33,12 +41,32 @@ class HostLifecycleFeed {
   /// Each row the host wrote a lifecycle status to. The row is the record.
   final Stream<HostSessionChange> sessionChanges;
 
+  /// Agents' tool calls the host took, once this app has offered its tools.
+  final Stream<HostMcpCall> mcpCalls;
+
+  /// Makes this app the one the host forwards tool calls to, with [tools] as
+  /// the catalogue it serves agents — also while this app is closed.
+  final void Function(List<Map<String, Object?>> tools) offerMcpTools;
+
+  /// How one forwarded call ended: its result, or the error text.
+  final void Function(int callId, {Object? result, String? error})
+  answerMcpCall;
+
   /// Lets the agent held under a hook's [RelayedAgentHook.holdId] go on.
   final void Function(int holdId) replyHook;
 
   /// Hangs up; the host's sessions are untouched.
   final Future<void> Function() close;
 }
+
+/// One tool call the host authenticated: [callerSessionId] is the session its
+/// token named, never anything the arguments say.
+typedef HostMcpCall = ({
+  int callId,
+  String tool,
+  Map<String, dynamic> arguments,
+  String? callerSessionId,
+});
 
 /// The host wrote [status] to the row [sessionId].
 typedef HostSessionChange = ({String sessionId, String status});

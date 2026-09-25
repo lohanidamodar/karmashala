@@ -1,5 +1,5 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala_mcp/instructions.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// decided whether it can be undone.
 void main() {
   final servedNames = <String>{
-    for (final schema in LauncherControlServer.toolSchemas)
+    for (final schema in McpToolDispatcher.toolSchemas)
       schema['name']! as String,
   };
 
@@ -67,10 +67,10 @@ void main() {
   });
 
   test('annotations reach the served schemas, and only add to them', () {
-    final annotated = annotatedToolSchemas(LauncherControlServer.toolSchemas);
-    expect(annotated, hasLength(LauncherControlServer.toolSchemas.length));
+    final annotated = annotatedToolSchemas(McpToolDispatcher.toolSchemas);
+    expect(annotated, hasLength(McpToolDispatcher.toolSchemas.length));
     for (var i = 0; i < annotated.length; i++) {
-      final original = LauncherControlServer.toolSchemas[i];
+      final original = McpToolDispatcher.toolSchemas[i];
       final hints = annotated[i]['annotations']! as Map<String, Object?>;
       expect(annotated[i]['name'], original['name']);
       expect(annotated[i]['description'], original['description']);

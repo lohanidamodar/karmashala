@@ -53,7 +53,7 @@ void main() {
     test('the protocol version did not move', () {
       // If this ever has to change, every already-deployed host stops
       // answering until it is replaced. Pinned so that is a decision.
-      expect(kProtocolVersion, 2);
+      expect(kProtocolVersion, 3);
     });
   });
 

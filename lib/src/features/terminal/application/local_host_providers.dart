@@ -45,6 +45,7 @@ final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
     paths: paths,
     serveEnvironment: {kHostDirectoryEnvironmentVariable: paths.directory.path},
     dataDirectory: () async => data,
+    serveFlags: const ['--mcp-port=0'],
   );
 });
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala_core/logging.dart';
+import 'mcp_caller_key.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_protocol.dart';
 
@@ -21,7 +22,7 @@ class McpHttpEndpoint {
   static const int _maxRequestBytes = 1024 * 1024;
 
   final McpServer server;
-  final McpCallerRegistry callers;
+  final McpCallerLookup callers;
   final AppLogger _logger;
 
   /// The credential this endpoint accepts from a caller with no session of its

@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -112,7 +113,7 @@ void main() {
 
   test('the four todo tools are advertised to the bridge', () {
     final names = <String>[
-      for (final schema in LauncherControlServer.toolSchemas)
+      for (final schema in McpToolDispatcher.toolSchemas)
         schema['name']! as String,
     ];
     expect(

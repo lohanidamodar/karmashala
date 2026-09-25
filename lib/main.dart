@@ -240,7 +240,7 @@ Future<void> _bootstrap(AppLogger logger) async {
     onTimeout: () {},
   );
 
-  if (controlServer != null) {
+  if (controlServer != null || lifecycle.agentToolsAtHost) {
     lifecycle.installAgentHooks(
       controlServer,
       afterFirstFrame: afterFirstFrame,

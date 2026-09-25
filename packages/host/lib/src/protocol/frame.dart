@@ -50,7 +50,13 @@ enum MessageType {
   // checkpoint); the agent's request is answered.
   hookReply(0x1b),
   // host → client: the daemon wrote a session row's lifecycle status.
-  sessionChanged(0x1c);
+  sessionChanged(0x1c),
+  // Protocol 3: the daemon serves agents' MCP and the app runs the tools.
+  // client → host: the tool catalogue; host → client: one call; client →
+  // host: its answer.
+  mcpTools(0x1d),
+  mcpCall(0x1e),
+  mcpResult(0x1f);
 
   const MessageType(this.code);
   final int code;

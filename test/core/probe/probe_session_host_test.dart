@@ -88,6 +88,8 @@ void main() {
       expect(await access.serveArguments(), [
         'serve',
         '--data-dir=${p.absolute(data.path)}',
+        // Its MCP endpoint never takes the owner's port.
+        '--mcp-port=0',
       ]);
     },
     skip: desktop ? null : 'no local host off the desktop',

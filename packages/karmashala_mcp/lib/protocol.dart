@@ -2,6 +2,9 @@
 /// is served over, and the credential that says which session is calling.
 library;
 
+export 'src/mcp_bridge_handshake.dart';
+export 'src/mcp_caller_key.dart';
 export 'src/mcp_caller_registry.dart';
 export 'src/mcp_http_endpoint.dart';
 export 'src/mcp_protocol.dart';
+export 'src/mcp_server_identity.dart';

@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'mcp_caller_key.dart';
+
 /// Which Karmashala session a tool call is coming *from* — stamped on the
 /// process or carried in the URL, never something the model can say.
-class McpCallerRegistry {
+class McpCallerRegistry implements McpCallerLookup {
   McpCallerRegistry({Random? random}) : _random = random ?? Random.secure();
 
   final Random _random;
@@ -22,6 +24,7 @@ class McpCallerRegistry {
   }
 
   /// The session [token] names, or null if it names none.
+  @override
   String? sessionFor(String token) => _sessionByToken[token];
 
   /// Every session a token has been minted for, as a snapshot — so a caller

@@ -8,6 +8,7 @@ import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
 import '../hooks/hook_holds.dart';
 import '../host_version.dart';
+import '../mcp/mcp_tool_relay.dart';
 import '../protocol/frame.dart';
 import '../protocol/messages.dart';
 import '../protocol/wire.dart';
@@ -25,6 +26,7 @@ class HostServer {
     this.hostVersion = kHostVersion,
     this.openPairing,
     this.build,
+    this.mcpTools,
     HookHolds? holds,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
@@ -49,6 +51,9 @@ class HostServer {
   )?
   openPairing;
   final String hostVersion;
+
+  /// Where agents' tool calls go to the app that runs them; null serves none.
+  final McpToolRelay? mcpTools;
 
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
@@ -134,6 +139,7 @@ class _ClientSession {
     _subscriptions.clear();
     _exitWatches.clear();
     await _lifecycleWatch?.cancel();
+    _server.mcpTools?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
     await _connection.close();
@@ -272,6 +278,10 @@ class _ClientSession {
         );
       case HookReplyMessage():
         _server.lifecycle.replyHook(message.holdId);
+      case McpToolsMessage():
+        _server.mcpTools?.adopt(this, message.tools, _send);
+      case McpResultMessage():
+        _server.mcpTools?.answer(this, message);
       default:
         _send(
           ErrorMessage(

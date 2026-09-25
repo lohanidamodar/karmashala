@@ -80,7 +80,12 @@ class LocalHost {
       await _host,
       // Port 0: several test hosts run at once and the real default is a fixed
       // port, so they would fight over it and each blame the other.
-      ['serve', '--companion-port=0', '--data-dir=${home.path}/data'],
+      [
+        'serve',
+        '--companion-port=0',
+        '--mcp-port=0',
+        '--data-dir=${home.path}/data',
+      ],
       environment: {'USERPROFILE': home.path, 'HOME': home.path},
       workingDirectory: Directory.current.path,
       mode: detached

@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_tool_schemas.dart';
 import 'package:karmashala/src/features/verification/application/verification_tools.dart';
@@ -38,7 +38,7 @@ void main() {
     });
 
     test('every schema is served by the control server', () {
-      final served = LauncherControlServer.toolSchemas
+      final served = McpToolDispatcher.toolSchemas
           .map((s) => s['name'])
           .toSet();
       for (final schema in verificationToolSchemas) {

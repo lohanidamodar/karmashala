@@ -1,6 +1,6 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_mcp/instructions.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 
 /// The skills, held against the two things they claim: that they list the
 /// topics the `instructions` tool actually serves, and that every tool they
@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 /// has — to every session on the machine, until someone notices.
 void main() {
   final servedNames = <String>{
-    for (final schema in LauncherControlServer.toolSchemas)
+    for (final schema in McpToolDispatcher.toolSchemas)
       schema['name']! as String,
   };
 

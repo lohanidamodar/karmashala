@@ -8,10 +8,11 @@ import 'wire.dart';
 
 part 'hook_messages.dart';
 part 'lifecycle_messages.dart';
+part 'mcp_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 2;
+const int kProtocolVersion = 3;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -861,4 +862,7 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.hook => HookMessage.decode(frame),
   MessageType.hookReply => HookReplyMessage.decode(frame),
   MessageType.sessionChanged => SessionChangedMessage.decode(frame),
+  MessageType.mcpTools => McpToolsMessage.decode(frame),
+  MessageType.mcpCall => McpCallMessage.decode(frame),
+  MessageType.mcpResult => McpResultMessage.decode(frame),
 };

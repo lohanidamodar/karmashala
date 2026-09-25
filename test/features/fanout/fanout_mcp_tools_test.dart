@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -64,11 +65,9 @@ void main() {
   }
 
   test('both tools are advertised to the bridge', () {
-    final names = [
-      for (final s in LauncherControlServer.toolSchemas) s['name'],
-    ];
+    final names = [for (final s in McpToolDispatcher.toolSchemas) s['name']];
     expect(names, containsAll(<String>['fanout_list', 'fanout_get']));
-    for (final schema in LauncherControlServer.toolSchemas) {
+    for (final schema in McpToolDispatcher.toolSchemas) {
       if (schema['name'] != 'fanout_get') continue;
       final input = schema['inputSchema']! as Map<String, dynamic>;
       expect(input['required'], ['id']);
@@ -228,7 +227,7 @@ void main() {
   });
 
   test('the tool says it carries attribution before it is called', () {
-    final schema = LauncherControlServer.toolSchemas.firstWhere(
+    final schema = McpToolDispatcher.toolSchemas.firstWhere(
       (s) => s['name'] == 'fanout_get',
     );
     expect(schema['description'], contains('who produced'));

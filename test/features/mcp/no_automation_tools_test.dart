@@ -1,5 +1,5 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 
 /// Arming an automation is a human action in the UI and nowhere else.
@@ -15,7 +15,7 @@ import 'package:karmashala_mcp/catalogue.dart';
 /// checks is a rule that has already been broken once.
 void main() {
   final servedNames = <String>{
-    for (final schema in LauncherControlServer.toolSchemas)
+    for (final schema in McpToolDispatcher.toolSchemas)
       schema['name']! as String,
   };
 

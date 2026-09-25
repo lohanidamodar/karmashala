@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -172,7 +173,7 @@ void main() {
   group('tool registration', () {
     test('the three tree tools are advertised to the bridge', () {
       final names = [
-        for (final schema in LauncherControlServer.toolSchemas)
+        for (final schema in McpToolDispatcher.toolSchemas)
           schema['name'] as String,
       ];
       expect(
@@ -198,7 +199,7 @@ void main() {
     });
 
     test('every schema is a well-formed object schema', () {
-      for (final schema in LauncherControlServer.toolSchemas) {
+      for (final schema in McpToolDispatcher.toolSchemas) {
         expect(schema['description'], isA<String>());
         final input = schema['inputSchema'] as Map<String, dynamic>;
         expect(input['type'], 'object');
@@ -495,7 +496,7 @@ void main() {
   group('device_stop_emulator', () {
     test('is advertised alongside the other device tools', () {
       final names = [
-        for (final schema in LauncherControlServer.toolSchemas)
+        for (final schema in McpToolDispatcher.toolSchemas)
           schema['name'] as String,
       ];
       expect(names, contains('device_stop_emulator'));

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart'
+    show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
@@ -11,6 +13,9 @@ import '../companion/host_pairing_service.dart';
 import '../domain/session_registry.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
+import '../mcp/daemon_mcp.dart';
+import '../mcp/mcp_endpoint_server.dart';
+import '../mcp/mcp_tool_relay.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../transport/socket_transport.dart';
@@ -125,11 +130,13 @@ Future<int> runServe(
       ? null
       : await _openCompanion(database, registry, _companionPort(args), errSink);
 
+  final mcpTools = McpToolRelay(cachePath: paths.mcpToolsPath);
   final server = HostServer(
     registry: registry,
     ptyLibrary: pty.library,
     openPairing: companion?.openPairing,
     build: hostBuildOf(Platform.resolvedExecutable),
+    mcpTools: mcpTools,
   );
   final recording = database == null
       ? null
@@ -139,6 +146,14 @@ Future<int> runServe(
           clock: () => DateTime.now().toUtc(),
         )..start());
   final hookServer = await _openHookServer(paths, server.lifecycle, errSink);
+  final mcp = await _openMcp(
+    paths,
+    dataDirectory,
+    mcpTools,
+    database,
+    _mcpPort(args),
+    errSink,
+  );
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
 
@@ -170,6 +185,13 @@ Future<int> runServe(
           : 'agent hooks on port ${hookServer.port}',
     )
     ..writeln(
+      mcp == null
+          ? 'agent tools unavailable — the line above says why'
+          : mcp.serving
+          ? 'agent tools on port ${mcp.endpoint.port}'
+          : 'agent tools refused — the line above says why',
+    )
+    ..writeln(
       database == null
           ? 'no store — session status is not recorded; the line above says why'
           : 'store ${p.join(dataDirectory, 'karmashala.sqlite')}',
@@ -193,6 +215,8 @@ Future<int> runServe(
   }
   await listener.close();
   await hookServer?.close();
+  await mcp?.close();
+  mcpTools.close();
   await companion?.close();
   await recording?.close();
   await registry.shutdown();
@@ -222,6 +246,34 @@ Future<HookServer?> _openHookServer(
   } on Object catch (error) {
     await server?.close();
     errSink.writeln('karmashala_host: no agent hook endpoint ($error)');
+    return null;
+  }
+}
+
+/// The MCP endpoint agents dial, with the handshake in [dataDirectory] where
+/// the app and the bridge look. Null, reported, when it cannot start.
+Future<DaemonMcp?> _openMcp(
+  HostPaths paths,
+  String dataDirectory,
+  McpToolRelay relay,
+  AppDatabase? database,
+  int preferredPort,
+  IOSink errSink,
+) async {
+  try {
+    final sessions = database == null ? null : SessionDao(database);
+    return await DaemonMcp.start(
+      paths: paths,
+      dataDirectory: dataDirectory,
+      relay: relay,
+      sessionIsOver: sessions == null
+          ? null
+          : (sessionId) => sessions.getById(sessionId)?.isOver ?? true,
+      preferredPort: preferredPort,
+      log: (message) => errSink.writeln('karmashala_host: $message'),
+    );
+  } on Object catch (error) {
+    errSink.writeln('karmashala_host: no MCP endpoint ($error)');
     return null;
   }
 }
@@ -299,6 +351,18 @@ String? dataDirectoryOf(List<String> args) {
     if (value.isNotEmpty) return p.absolute(value);
   }
   return null;
+}
+
+/// `--mcp-port=<n>`, asked for when no earlier port is remembered. A probe's
+/// host passes 0, so it never takes the real one's port.
+int _mcpPort(List<String> args) {
+  const flag = '--mcp-port=';
+  for (final arg in args) {
+    if (!arg.startsWith(flag)) continue;
+    final parsed = int.tryParse(arg.substring(flag.length));
+    if (parsed != null && parsed >= 0 && parsed <= 65535) return parsed;
+  }
+  return kPreferredMcpPort;
 }
 
 /// `--companion-port=<n>`, or the shared default. 0 asks the OS for a free one,

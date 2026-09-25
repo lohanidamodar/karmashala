@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -299,7 +300,7 @@ void main() {
     test('tools/list serves every tool, each with annotations', () async {
       final response = await call(legacy('tools/list'));
       final tools = resultOf(response.body)['tools']! as List<Object?>;
-      expect(tools, hasLength(LauncherControlServer.toolSchemas.length));
+      expect(tools, hasLength(McpToolDispatcher.toolSchemas.length));
       for (final tool in tools.cast<Map<String, Object?>>()) {
         expect(
           tool['annotations'],

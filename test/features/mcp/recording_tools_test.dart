@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_media/media.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
 import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/recording_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -96,9 +96,7 @@ void main() {
       for (final name in names) {
         expect(RecordingControlTools.handles(name), isTrue, reason: name);
         expect(
-          LauncherControlServer.toolSchemas.any(
-            (schema) => schema['name'] == name,
-          ),
+          McpToolDispatcher.toolSchemas.any((schema) => schema['name'] == name),
           isTrue,
           reason: '$name is not served',
         );

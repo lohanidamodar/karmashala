@@ -9,6 +9,8 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_devices/devices.dart';
 import '../../mcp/control_server_status.dart';
+import '../../mcp/host_session_mcp.dart';
+import '../../mcp/session_mcp.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'environment_health.dart';
 import 'environment_providers.dart';
@@ -164,6 +166,13 @@ class SystemHealthService {
       PrivilegedRpcTransport.loopbackHttp => HealthLevel.healthy,
       PrivilegedRpcTransport.notStarted => HealthLevel.unknown,
       PrivilegedRpcTransport.unavailable => HealthLevel.failed,
+      // Read off the host's handshake: whether it published a credential.
+      PrivilegedRpcTransport.sessionHost => switch (ref.read(
+        sessionMcpProvider,
+      )) {
+        HostSessionMcp(:final serving) when serving => HealthLevel.healthy,
+        _ => HealthLevel.unknown,
+      },
     };
     return SystemCheck(
       id: SystemCheckId.controlServer,

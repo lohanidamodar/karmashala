@@ -32,6 +32,16 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       sessionChanges: watch.sessionChanges.map(
         (change) => (sessionId: change.sessionId, status: change.status),
       ),
+      mcpCalls: watch.mcpCalls.map(
+        (call) => (
+          callId: call.callId,
+          tool: call.tool,
+          arguments: call.arguments.cast<String, dynamic>(),
+          callerSessionId: call.callerSessionId,
+        ),
+      ),
+      offerMcpTools: watch.offerMcpTools,
+      answerMcpCall: watch.answerMcpCall,
     );
   }
 

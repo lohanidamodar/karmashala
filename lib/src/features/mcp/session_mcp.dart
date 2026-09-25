@@ -5,6 +5,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_mcp/access.dart';
 
 /// Everything one launching session needs to reach the app's own MCP endpoint,
 /// already in the **agent's** terms: nothing downstream translates again.
@@ -24,8 +25,8 @@ class SessionMcpAccess {
   final String? configPath;
 }
 
-/// What a launch asks about the MCP endpoint, implemented by
-/// `LauncherControlServer` — the only thing that knows what survived hardening.
+/// What a launch asks about the MCP endpoint: the session host's
+/// (`HostSessionMcp`), or this app's own server where there is no host.
 abstract class SessionMcp {
   /// Where [sessionId] reaches the endpoint from [environment], or `null` when
   /// there is nothing truthful to hand it — a normal answer, not a failure.
@@ -34,6 +35,57 @@ abstract class SessionMcp {
     required ExecutionEnvironment environment,
     required bool withConfigFile,
   });
+}
+
+/// What [sessionId] in [environment] is handed for an endpoint it dials at
+/// [url] — the URL itself, or a config file in [configs] — or `null`.
+SessionMcpAccess? sessionMcpAccess({
+  required String sessionId,
+  required ExecutionEnvironment environment,
+  required bool withConfigFile,
+  required String? url,
+  required SessionMcpConfigs? configs,
+  required File? Function() bridgeExecutable,
+}) {
+  // An agent whose convention is the URL itself has no file to read a
+  // `command` out of.
+  if (!withConfigFile) {
+    return url == null ? null : SessionMcpAccess(url: url);
+  }
+  final entry = _serverEntryFor(environment.kind, url, bridgeExecutable);
+  if (entry == null) return null;
+  final windowsPath = configs?.write(sessionId: sessionId, entry: entry);
+  if (windowsPath == null) return null;
+  final agentPath = agentConfigPathFor(windowsPath, environment.kind);
+  // A file the agent cannot name is a flag pointing at nothing, which is a
+  // worse launch than the one that passes no flag at all.
+  if (agentPath == null) return null;
+  // Reported only when the file actually names one: a config that spawns the
+  // bridge is not dialling anything, so its URL would point at nothing.
+  final describesUrl = entry['url'] != null;
+  return SessionMcpAccess(
+    url: describesUrl ? url : null,
+    configPath: agentPath,
+  );
+}
+
+/// The `mcpServers.karmashala` entry for an agent in [environment], or `null`.
+/// Only [EnvironmentKind.wsl] differs: it is given the stdio bridge.
+Map<String, Object?>? _serverEntryFor(
+  EnvironmentKind environment,
+  String? url,
+  File? Function() bridgeExecutable,
+) {
+  if (environment == EnvironmentKind.wsl) {
+    final bridge = bridgeExecutable()?.path;
+    // Spelled the way the agent names it. `null` is a UNC install directory,
+    // which has no `/mnt/` form.
+    final agentPath = bridge == null
+        ? null
+        : agentConfigPathFor(bridge, environment);
+    if (agentPath != null) return LauncherMcp.commandServerEntry(agentPath);
+  }
+  return url == null ? null : LauncherMcp.httpServerEntry(url);
 }
 
 /// [windowsPath] as the agent running in [kind] would name it, or `null` when
@@ -63,14 +115,18 @@ class SessionMcpConfigs {
 
   final Directory directory;
 
-  /// Creates [directory] empty and locked to this user, or `null` when the ACL
-  /// did not apply — with a credential inside, that is the boundary missing.
+  /// Creates [directory] locked to this user — emptied first unless [keep] —
+  /// or `null` when the ACL did not apply: with a credential inside, that is
+  /// the boundary missing. [keep] is for credentials that outlive this app.
   static Future<SessionMcpConfigs?> prepare(
     Directory directory,
-    Future<bool> Function(Directory) restrict,
-  ) async {
+    Future<bool> Function(Directory) restrict, {
+    bool keep = false,
+  }) async {
     try {
-      if (directory.existsSync()) directory.deleteSync(recursive: true);
+      if (!keep && directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
       await directory.create(recursive: true);
       if (!await restrict(directory)) return null;
       return SessionMcpConfigs(directory);

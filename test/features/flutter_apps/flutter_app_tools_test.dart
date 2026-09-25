@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -93,7 +94,7 @@ void main() {
 
     test('all five are served, and each says what it does', () {
       final served = <String>{
-        for (final schema in LauncherControlServer.toolSchemas)
+        for (final schema in McpToolDispatcher.toolSchemas)
           schema['name'] as String,
       };
       expect(served.intersection(names.toSet()), names.toSet());

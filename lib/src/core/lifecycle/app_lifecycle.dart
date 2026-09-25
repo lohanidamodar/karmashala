@@ -11,6 +11,7 @@ import '../../features/mcp/control_server_restart.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
+import '../../features/mcp/host_agent_tools.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
@@ -87,6 +88,7 @@ class AppLifecycle {
 
   SystemIntegrationService? _systemIntegration;
   LauncherControlServer? _controlServer;
+  HostAgentTools? _hostAgentTools;
   MemoryCensusLogger? _memoryCensus;
   Future<void>? _hookInstallation;
   Future<void>? _shutdown;
@@ -105,6 +107,10 @@ class AppLifecycle {
 
   SystemIntegrationService? get systemIntegration => _systemIntegration;
   LauncherControlServer? get controlServer => _controlServer;
+
+  /// Whether the session host serves agents' tools this run, so no control
+  /// server was started.
+  bool get agentToolsAtHost => _hostAgentTools != null;
 
   /// Whether this instance is a probe, which leaves every global store alone.
   bool get isProbe => _container.read(probeModeProvider).enabled;
@@ -136,10 +142,25 @@ class AppLifecycle {
   }
 
   /// Starts the local control server and retains it *before* `start()` returns,
-  /// which publishes the handshake part-way. `null` if it never started at all.
+  /// which publishes the handshake part-way. `null` if it never started at all
+  /// — and whenever the session host serves agents' tools instead.
   Future<LauncherControlServer?> startControlServer({
     LauncherControlServer? server,
   }) async {
+    if (server == null && _container.read(agentToolsAtHostProvider)) {
+      final atHost = HostAgentTools(_container, logger: _logger);
+      _hostAgentTools = atHost;
+      try {
+        if (!await atHost.start()) _hostAgentTools = null;
+      } on Object catch (error, stack) {
+        _logger.warning(
+          'Agent tools at the host failed to start.',
+          error,
+          stack,
+        );
+      }
+      return null;
+    }
     final instance =
         server ?? LauncherControlServer(_container, logger: _logger);
     // Before the await: a partially started server may hold a port and files,
@@ -159,7 +180,7 @@ class AppLifecycle {
   /// Installs the agents' status hooks in the background and retains the future,
   /// so shutdown can wait for a config rewrite rather than cut it off.
   void installAgentHooks(
-    LauncherControlServer server, {
+    LauncherControlServer? server, {
     Future<void> Function()? afterFirstFrame,
   }) {
     if (isProbe) {
@@ -170,7 +191,7 @@ class AppLifecycle {
     }
     // The WSL switch usually does not exist yet when the app launches, so the
     // first sweep skips WSL; the server says when it binds and a re-sweep is free.
-    server.onWslInterfaceBound = () {
+    server?.onWslInterfaceBound = () {
       _logger.info('The WSL switch is up; installing hooks for it now.');
       _installAgentHooksNow(server);
     };
@@ -216,7 +237,7 @@ class AppLifecycle {
   }
 
   void _installAgentHooksNow(
-    LauncherControlServer server, {
+    LauncherControlServer? server, {
     Future<void> Function()? gate,
     bool unlessCurrent = false,
   }) {
@@ -227,7 +248,7 @@ class AppLifecycle {
   /// reports published. Retained so shutdown can wait for a config rewrite
   /// instead of cutting it off.
   Future<void> _sweepAgentHooks(
-    LauncherControlServer server,
+    LauncherControlServer? server,
     Future<void> Function()? gate,
     bool unlessCurrent,
   ) async {
@@ -250,7 +271,7 @@ class AppLifecycle {
     await _container.read(localHostStartupProvider);
     final endpoint = installableHookEndpoint(
       _container,
-      appRoute: server.hookEndpoint,
+      appRoute: server?.hookEndpoint,
     );
     if (endpoint == null) return;
     await sweepAgentHooks(
@@ -521,11 +542,10 @@ class AppLifecycle {
 
     // 3. The control server. `stop()` deletes the handshake — the whole reason
     //    this owner exists.
-    await _step(
-      'control server',
-      watch,
-      () => _controlServer?.stop() ?? Future<void>.value(),
-    );
+    await _step('control server', watch, () async {
+      await _controlServer?.stop();
+      await _hostAgentTools?.stop();
+    });
 
     // 4. The OS integration: hotkeys, tray, listeners.
     await _step(

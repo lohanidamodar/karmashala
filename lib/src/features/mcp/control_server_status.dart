@@ -14,6 +14,10 @@ enum PrivilegedRpcTransport {
   /// for it in code (`useLocalSocket: false`); nothing in the app does.
   loopbackHttp,
 
+  /// The session host serves agents' tools; this app only runs them, so they
+  /// are listed, and refused by name, while it is closed.
+  sessionHost,
+
   /// No privileged transport at all: hardening failed, so nothing privileged was
   /// bound and only the deliberately low-privilege `/agent-hook` is served.
   unavailable,
@@ -49,6 +53,12 @@ class ControlServerStatus {
     hookEndpointAvailable: false,
   );
 
+  /// The session host serves the endpoint; this app runs no server of its own.
+  static const ControlServerStatus atHost = ControlServerStatus._(
+    transport: PrivilegedRpcTransport.sessionHost,
+    hookEndpointAvailable: true,
+  );
+
   /// Privileged RPC is up on [transport].
   const ControlServerStatus.running(PrivilegedRpcTransport transport)
     : this._(transport: transport, hookEndpointAvailable: true);
@@ -79,7 +89,8 @@ class ControlServerStatus {
 
   bool get privilegedRpcAvailable =>
       transport == PrivilegedRpcTransport.ownerOnlySocket ||
-      transport == PrivilegedRpcTransport.loopbackHttp;
+      transport == PrivilegedRpcTransport.loopbackHttp ||
+      transport == PrivilegedRpcTransport.sessionHost;
 
   bool get failedClosed => transport == PrivilegedRpcTransport.unavailable;
 
@@ -90,6 +101,9 @@ class ControlServerStatus {
       'Agent tools are available over the owner-only socket.',
     PrivilegedRpcTransport.loopbackHttp =>
       'Agent tools are available over authenticated loopback.',
+    PrivilegedRpcTransport.sessionHost =>
+      'Agent tools are served by the session host, and keep their '
+          'connection while the app is closed.',
     PrivilegedRpcTransport.unavailable =>
       'Agent tools are off — $_stageMessage. Agents can still report status.',
   };
@@ -127,7 +141,8 @@ class ControlServerStatus {
       '${failureStage == null ? '' : ', ${failureStage!.name}: $failureDetail'})';
 }
 
-/// Ambient state, written by `LauncherControlServer` as it starts and stops.
+/// Ambient state, written by whichever of `LauncherControlServer` and
+/// `HostAgentTools` this run started.
 class ControlServerStatusController extends Notifier<ControlServerStatus> {
   @override
   ControlServerStatus build() => ControlServerStatus.notStarted;

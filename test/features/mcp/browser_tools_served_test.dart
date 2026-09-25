@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala_browser/tools.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,9 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// test stayed green.
 void main() {
   test('the control server serves the browser tools alongside its own', () {
-    final names = [
-      for (final s in LauncherControlServer.toolSchemas) s['name'],
-    ];
+    final names = [for (final s in McpToolDispatcher.toolSchemas) s['name']];
     expect(names, containsAll(['list_sessions', 'browser_click']));
     expect(names.toSet(), hasLength(names.length));
     // The package's own list is the source: every schema it publishes has to
