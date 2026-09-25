@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
+import 'package:karmashala_session/session.dart' show SessionStatus;
+import 'package:karmashala_session_engine/karmashala_session_engine.dart'
+    as engine;
 import 'package:test/test.dart';
 
 import 'pipe_connection.dart';
@@ -107,9 +110,24 @@ void main() {
       LifecycleEventKind.closed,
     ]);
     expect(events[1].exitCode, 143);
+    expect(
+      events[1].endedByClose,
+      isTrue,
+      reason: 'the exit a close caused says so, before closed does',
+    );
     expect(events[2].exitCode, 143);
     expect(events[2].reason, 'closed on request');
     expect(events[2].endedByClose, isTrue);
+    // What every watcher derives, at every step: never `failed`.
+    expect(
+      [
+        for (final event in events)
+          engine.lifecycleStatusFrom(
+            SessionStatusRecording.eventOf(event).facts,
+          ),
+      ],
+      [SessionStatus.running, SessionStatus.cancelled, SessionStatus.cancelled],
+    );
 
     // A watcher arriving later still learns it was closed, not that it vanished.
     final later = await watch(server);
@@ -124,6 +142,67 @@ void main() {
     expect(server.lifecycle.snapshot().single.state, HostSessionState.running);
     await feed.close();
     await later.close();
+  });
+
+  test('between the exit a close caused and closed, the snapshot row says '
+      'the close ended it', () async {
+    final session = registry.open('pane', request);
+    final closing = registry.close('pane');
+    await pump();
+    expect(
+      server.lifecycle.snapshot().single.endedByClose,
+      isFalse,
+      reason: 'still running while the signal is on its way',
+    );
+    launcher.handles.last.finish(143);
+    await session.ended;
+    final row = server.lifecycle.snapshot().single;
+    expect(row.state, HostSessionState.exited);
+    expect(row.endedByClose, isTrue);
+    expect(
+      engine.lifecycleStatusFrom(SessionStatusRecording.factsOf(row, clock)),
+      SessionStatus.cancelled,
+    );
+    await closing;
+  });
+
+  test('an exit nobody asked for keeps its real code and status', () async {
+    final feed = await watch(server);
+    final events = <LifecycleEvent>[];
+    feed.events.listen(events.add);
+
+    registry.open('crash', request);
+    launcher.handles.last.finish(143);
+    await pump();
+    registry.open('lost', request);
+    launcher.handles.last.finish(-1);
+    await pump();
+
+    final exits = events
+        .where((e) => e.kind == LifecycleEventKind.exited)
+        .toList();
+    expect(exits.map((e) => e.endedByClose), [isFalse, isFalse]);
+    expect(
+      [
+        for (final e in exits)
+          engine.lifecycleStatusFrom(SessionStatusRecording.eventOf(e).facts),
+      ],
+      [SessionStatus.failed, SessionStatus.unknown],
+    );
+    expect(
+      server.lifecycle.snapshot().map((row) => row.endedByClose),
+      everyElement(isFalse),
+    );
+    // A shutdown is the host stopping, not anybody closing a session.
+    registry.open('stopping', request);
+    final stopping = registry.shutdown();
+    await pump();
+    launcher.handles.last.finish(143);
+    await stopping;
+    await pump();
+    expect(events.last.kind, LifecycleEventKind.exited);
+    expect(events.last.endedByClose, isFalse);
+    await feed.close();
   });
 
   // Found running the app: after a host crash, a pane lets go of the dead
@@ -143,6 +222,14 @@ void main() {
     final closed = events.last;
     expect(closed.kind, LifecycleEventKind.closed);
     expect(closed.endedByClose, isFalse);
+    expect(
+      events.where((e) => e.kind == LifecycleEventKind.exited).single,
+      isA<LifecycleEvent>().having(
+        (e) => e.endedByClose,
+        'endedByClose',
+        false,
+      ),
+    );
     expect(closed.exitCode, isNull);
     expect(closed.reason, isNot('closed on request'));
 

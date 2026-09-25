@@ -7,8 +7,8 @@ T roundTrip<T extends HostMessage>(HostMessage message) {
 }
 
 void main() {
-  test('protocol 5 carries automations', () {
-    expect(kProtocolVersion, 5);
+  test('protocol 5 carries automations (6: exits a close caused say so)', () {
+    expect(kProtocolVersion, 6);
   });
 
   test('a notice says which kind', () {

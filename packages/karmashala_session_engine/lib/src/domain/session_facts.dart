@@ -27,8 +27,9 @@ class SessionFacts {
   /// The host's words for why it ended, e.g. `host stopped while running`.
   final String? reason;
 
-  /// On `closed`: the close is what ended the process. False when a client
-  /// only let go of the record of a session that had already ended.
+  /// On `exited` and `closed`: a close on request is what ended the process.
+  /// False when a client only let go of the record of a session that had
+  /// already ended, and on any exit nobody asked for.
   final bool endedByClose;
 
   /// UTC.

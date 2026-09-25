@@ -81,6 +81,41 @@ void main() {
     expect(dao.runById('run2')!.state, AutomationRunState.running);
   });
 
+  test('a run the person stopped settles as stopped by them and spends no '
+      'budget', () {
+    running('run1', 's1');
+    settler.settleSession('s1', SessionEnding.failed);
+    expect(dao.getById('auto1')!.consecutiveFailures, 1);
+
+    running('run2', 's2');
+    settler.settleSession('s2', SessionEnding.cancelled);
+    final run = dao.runById('run2')!;
+    expect(
+      run.state,
+      AutomationRunSettler.stateOfEnding(SessionEnding.cancelled),
+    );
+    expect(run.reason, contains('was stopped by you'));
+    expect(checked, ['run1', 'run2']);
+    final automation = dao.getById('auto1')!;
+    expect(
+      automation.consecutiveFailures,
+      1,
+      reason: 'neither spent nor reset',
+    );
+    expect(automation.enabled, isTrue);
+  });
+
+  test('a second ending for a settled run changes nothing and runs no checks '
+      'again', () {
+    running('run1', 's1');
+    settler.settleSession('s1', SessionEnding.cancelled);
+    settler.settleSession('s1', SessionEnding.failed);
+    expect(dao.runById('run1')!.reason, contains('was stopped by you'));
+    expect(checked, ['run1']);
+    expect(drained, ['r1']);
+    expect(dao.getById('auto1')!.consecutiveFailures, 0);
+  });
+
   test('failures in a row spend the budget and stop the automation', () {
     for (final id in ['run1', 'run2']) {
       running(id, 's-$id');

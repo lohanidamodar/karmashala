@@ -55,6 +55,8 @@ class AutomationRunSettler {
   }
 
   /// [sessionId] ended as [ending]; the run it belongs to, if any, settles.
+  /// Once: a run already settled keeps its verdict, and a second ending for
+  /// the same session runs no checks and spends no budget again.
   void settleSession(String sessionId, SessionEnding ending) {
     final run = _dao.runForSession(sessionId);
     if (run == null || run.state != AutomationRunState.running) return;
@@ -66,11 +68,24 @@ class AutomationRunSettler {
     // Losing sight of a session is not an ending: "finished" here would free
     // the checkout while an agent may still be editing.
     if (state == null) return;
-    finish(run, state, 'The agent this run started ${ending.label}.');
+    finish(
+      run,
+      state,
+      'The agent this run started ${ending.label}.',
+      // A person stopping the agent says nothing about whether the
+      // automation works: it neither spends nor refills the budget.
+      counts: ending != SessionEnding.cancelled,
+    );
   }
 
-  /// Records the verdict, runs the checks, and lets the next run in.
-  void finish(AutomationRun run, AutomationRunState state, String reason) {
+  /// Records the verdict, runs the checks, and lets the next run in. [counts]
+  /// false leaves the automation's failure count as it was.
+  void finish(
+    AutomationRun run,
+    AutomationRunState state,
+    String reason, {
+    bool counts = true,
+  }) {
     final finished = run.copyWith(
       state: state,
       reason: reason,
@@ -83,10 +98,12 @@ class AutomationRunSettler {
     _runChecks(finished);
 
     // Counted before the re-read, so the disabling decision includes this run.
-    _dao.recordOutcome(
-      run.automationId,
-      failed: state == AutomationRunState.failed,
-    );
+    if (counts) {
+      _dao.recordOutcome(
+        run.automationId,
+        failed: state == AutomationRunState.failed,
+      );
+    }
     final automation = _dao.getById(run.automationId);
     if (automation == null) return;
     _stopIfFailedOut(automation);
@@ -108,7 +125,9 @@ class AutomationRunSettler {
     _onChanged();
   }
 
-  /// The run's verdict for one ending, or **null when it is not one**.
+  /// The run's verdict for one ending, or **null when it is not one**. A run
+  /// the person stopped reads `failed` ("was stopped by you"), but [settleWith]
+  /// does not count it against the automation.
   static AutomationRunState? stateOfEnding(SessionEnding ending) =>
       switch (ending) {
         SessionEnding.completed => AutomationRunState.finished,

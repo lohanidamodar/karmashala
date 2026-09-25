@@ -215,8 +215,9 @@ class SessionRegistry {
   Future<SessionLifecycle> close(String id, {int signal = 15}) async {
     final session = require(id);
     // Taken before the terminate: whether this close is what ended the process,
-    // or only lets go of the record of one that had already ended.
-    final endedByClose = !session.lifecycle.hasEnded;
+    // or only lets go of the record of one that had already ended. Marked on
+    // the session, so the exit the signal causes is reported as the close's.
+    final endedByClose = session.markCloseRequested();
     final end = await session.terminate(signal: signal);
     _sessions.remove(id);
     // Closed on purpose, so the record goes too; a disconnect never reaches here.

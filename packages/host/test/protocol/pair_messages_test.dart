@@ -64,8 +64,8 @@ void main() {
     });
 
     test('the protocol version is pinned, so moving it is a decision', () {
-      // Protocol 4: the companion in the daemon, and the pair messages grew.
-      expect(kProtocolVersion, 5);
+      // Protocol 6: an exit a close on request caused carries endedByClose.
+      expect(kProtocolVersion, 6);
     });
   });
 

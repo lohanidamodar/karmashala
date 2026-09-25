@@ -118,6 +118,20 @@ class HostSession {
   var _released = false;
 
   SessionLifecycle get lifecycle => _lifecycle;
+
+  /// Somebody asked to close this session while its process still ran, so
+  /// the exit that follows is the close's doing, not the program's. Set by
+  /// the registry's close before it signals; a shutdown never sets it.
+  bool get closeRequested => _closeRequested;
+  var _closeRequested = false;
+
+  /// Marks the coming end as a close on request. False, and nothing marked,
+  /// when the process had already ended: letting go of a record is not a stop.
+  bool markCloseRequested() {
+    if (_lifecycle.hasEnded) return false;
+    return _closeRequested = true;
+  }
+
   int get pid => _pty.pid;
   Future<SessionLifecycle> get ended => _ended.future;
 

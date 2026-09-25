@@ -11,17 +11,20 @@ import 'session_facts.dart';
 /// | exited, code 0                 | `completed` |
 /// | exited, non-zero code          | `failed`    |
 /// | exited, no code                | `unknown`   |
-/// | closed, the close ended it     | `cancelled` |
+/// | exited or closed, a close on request ended it | `cancelled` |
 /// | closed, it had already ended   | as its exit |
 ///
-/// An exit with no code is one nobody watched, so it is never a success. A
+/// An exit with no code is one nobody watched, so it is never a success. The
+/// exit a close causes is the signal's code (143), so it is the close — on the
+/// `exited` before the `closed` too, or the row reads `failed` in between. A
 /// close that only let go of a dead session's record — a pane clearing away a
 /// leftover after a host crash — is not the person stopping it.
 SessionStatus lifecycleStatusFrom(SessionFacts? facts) {
   if (facts == null) return SessionStatus.unknown;
   return switch (facts.state) {
     HostSessionState.running => SessionStatus.running,
-    HostSessionState.closed when facts.endedByClose => SessionStatus.cancelled,
+    HostSessionState.closed ||
+    HostSessionState.exited when facts.endedByClose => SessionStatus.cancelled,
     HostSessionState.closed || HostSessionState.exited => _fromExit(facts),
   };
 }

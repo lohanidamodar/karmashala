@@ -30,8 +30,10 @@ class LifecycleEvent {
   /// On `started`.
   final int? pid;
 
-  /// On `closed`: the close ended a running process. False when it only let
-  /// go of the record of a session that had already ended.
+  /// On `exited` and `closed`: a close on request ended a running process —
+  /// on `exited`, the code is the signal's, not the program's verdict. False
+  /// on a `closed` that only let go of the record of a session that had
+  /// already ended, and on every exit nobody asked for.
   final bool endedByClose;
 
   Map<String, Object?> toJson() => {
@@ -96,7 +98,7 @@ class HostSessionFacts {
   final DateTime? startedAt;
   final DateTime? endedAt;
 
-  /// As on [LifecycleEvent.endedByClose], for a `closed` row.
+  /// As on [LifecycleEvent.endedByClose], for an `exited` or `closed` row.
   final bool endedByClose;
 
   Map<String, Object?> toJson() => {

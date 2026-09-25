@@ -6,6 +6,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_session/session.dart' show SessionEnding;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
 import 'package:karmashala_store/database.dart';
@@ -288,6 +289,38 @@ void main() {
       await pump();
       expect(runs().single.state, AutomationRunState.failed);
       expect(automationDao().getById('auto-r1')!.consecutiveFailures, 1);
+    });
+
+    // Found live: `session_end` closed the run's session; the exit the signal
+    // caused (143) was read as the agent failing, and the run settled on it.
+    test('its session closed on request settles it as stopped by you, and '
+        'spends no budget', () async {
+      nightly();
+      await startDaemon();
+      final run = runs().single;
+      final statuses = <String>[];
+      final watching = recording.changes.listen(
+        (change) => statuses.add(change.to.name),
+      );
+      addTearDown(watching.cancel);
+
+      final closing = registry.close(hostSessionIdOf(run.sessionId!));
+      await pump();
+      launcher.handles.first.finish(143);
+      await closing;
+      await pump();
+
+      final settled = runs().single;
+      expect(
+        settled.state,
+        AutomationRunSettler.stateOfEnding(SessionEnding.cancelled),
+      );
+      expect(settled.reason, contains('was stopped by you'));
+      expect(settled.reason, isNot(contains('stopped in error')));
+      expect(statuses, ['cancelled'], reason: 'never failed on the way');
+      final automation = automationDao().getById('auto-r1')!;
+      expect(automation.consecutiveFailures, 0);
+      expect(automation.enabled, isTrue);
     });
   });
 

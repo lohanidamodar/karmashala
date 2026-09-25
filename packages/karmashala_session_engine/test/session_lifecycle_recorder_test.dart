@@ -121,6 +121,33 @@ void main() {
     expect(statusOf('s1'), SessionStatus.cancelled);
   });
 
+  test('a close on request is cancelled from its exit on: one write, never '
+      'failed in between', () {
+    insert('s1', SessionStatus.running);
+    final written = [
+      apply(
+        facts(
+          's1',
+          HostSessionState.exited,
+          exitCode: 143,
+          endedByClose: true,
+          after: _second,
+        ),
+      ),
+      apply(
+        facts(
+          's1',
+          HostSessionState.closed,
+          exitCode: 143,
+          endedByClose: true,
+          after: _second * 2,
+        ),
+      ),
+    ].nonNulls.map((change) => change.to);
+    expect(written, [SessionStatus.cancelled]);
+    expect(statusOf('s1'), SessionStatus.cancelled);
+  });
+
   test('running again after an ending is running', () {
     insert('s1', SessionStatus.completed);
     apply(facts('s1', HostSessionState.running));

@@ -29,7 +29,7 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 25, 10, 0, 30);
 
   test('the feed\'s frame types, and the bump that reshaped `watch`', () {
-    expect(kProtocolVersion, 5);
+    expect(kProtocolVersion, 6);
     expect(MessageType.watch.code, 0x17);
     expect(MessageType.watching.code, 0x18);
     expect(MessageType.lifecycle.code, 0x19);
@@ -80,6 +80,26 @@ void main() {
     ).event;
     expect(exited.exitCode, 0, reason: 'a real zero survives as a zero');
     expect(exited.reason, 'exited');
+    expect(exited.endedByClose, isFalse);
+
+    final exitedByClose = roundTrip(
+      LifecycleMessage(
+        LifecycleEvent(
+          sessionId: 'karmashala_a',
+          kind: LifecycleEventKind.exited,
+          observedAt: t0,
+          exitCode: 143,
+          reason: 'exited',
+          endedByClose: true,
+        ),
+      ),
+    ).event;
+    expect(exitedByClose.exitCode, 143);
+    expect(
+      exitedByClose.endedByClose,
+      isTrue,
+      reason: 'the exit a close caused says so on the wire',
+    );
 
     final closed = roundTrip(
       LifecycleMessage(

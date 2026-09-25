@@ -70,6 +70,40 @@ void main() {
       },
     );
 
+    // Found live: an automation's session ended by `session_end` read
+    // `failed` on its `exited` (the signal's 143) before `closed` said
+    // cancelled, and the run settled on the first.
+    test('exited because a close asked it to: cancelled, never failed', () {
+      SessionFacts exited({int? exitCode}) => SessionFacts(
+        hostSessionId: 'h',
+        state: HostSessionState.exited,
+        observedAt: DateTime.utc(2026),
+        exitCode: exitCode,
+        reason: 'exited',
+        endedByClose: true,
+      );
+      for (final code in [143, 137, 1, 0, null]) {
+        expect(
+          lifecycleStatusFrom(exited(exitCode: code)),
+          SessionStatus.cancelled,
+          reason: 'code $code',
+        );
+      }
+    });
+
+    test('an exit nobody asked for keeps its own status', () {
+      SessionFacts crashed(int? exitCode) => SessionFacts(
+        hostSessionId: 'h',
+        state: HostSessionState.exited,
+        observedAt: DateTime.utc(2026),
+        exitCode: exitCode,
+      );
+      expect(lifecycleStatusFrom(crashed(143)), SessionStatus.failed);
+      expect(lifecycleStatusFrom(crashed(139)), SessionStatus.failed);
+      expect(lifecycleStatusFrom(crashed(null)), SessionStatus.unknown);
+      expect(lifecycleStatusFrom(crashed(0)), SessionStatus.completed);
+    });
+
     // Found running the app: after a host crash the pane lets go of the dead
     // session's record, and that close read as the person stopping it.
     test('closed after it had already ended: what its exit says', () {

@@ -178,6 +178,8 @@ class LifecycleFeed {
     if (_exitReported[session] == true) return;
     _exitReported[session] = true;
     final end = session.lifecycle;
+    // The exit a close caused says so, or a watcher reads the signal's code
+    // as the program failing before the `closed` that follows corrects it.
     _emit(
       LifecycleEvent(
         sessionId: session.id,
@@ -185,6 +187,7 @@ class LifecycleFeed {
         observedAt: _now(),
         exitCode: end.exitCode,
         reason: reasonOf(end),
+        endedByClose: session.closeRequested,
       ),
     );
   }
@@ -200,6 +203,8 @@ class LifecycleFeed {
       reason: reasonOf(lifecycle),
       startedAt: session.startedAt,
       endedAt: lifecycle.endedAt,
+      // Ended by a close still finishing: the row says so before `closed`.
+      endedByClose: lifecycle.hasEnded && session.closeRequested,
     );
   }
 
