@@ -910,7 +910,7 @@ void main() {
         'revealed': launcher.reveal(id),
         'attribution': launcher.attributionFor(id)?.render('a message'),
         'sendTo': launcher.sendTo(id, 'carry on'),
-        'answerPrompt': launcher.answerPrompt(id, 'y'),
+        'pressKeys': launcher.pressKeys(id, 'y'),
         'rowAfterReads': rowOf(id),
       });
     }

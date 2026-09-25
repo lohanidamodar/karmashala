@@ -25,8 +25,10 @@ class HostLifecycleWatch {
   final _companionEvents = StreamController<CompanionEventMessage>();
   final _automationCalls = StreamController<AutomationCallMessage>();
   final _automationsChanged = StreamController<void>();
+  final _agentStatuses = StreamController<AgentStatusMessage>();
   final _pairings = <int, Completer<PairedMessage>>{};
   final _checks = <int, Completer<ChecksRanMessage>>{};
+  final _prompts = <int, Completer<PromptAnsweredMessage>>{};
   var _lastRequestId = 2;
   final _done = Completer<void>();
   StreamSubscription<List<int>>? _incoming;
@@ -41,6 +43,27 @@ class HostLifecycleWatch {
 
   /// The latest hook per agent session when the host answered, oldest first.
   late final List<AgentHookEvent> hookSnapshot;
+
+  /// What the agent in each session the host holds was doing when it
+  /// answered, as `HostedAgentStatus.toJson`.
+  late final List<Map<String, Object?>> statusSnapshot;
+
+  /// Every agent status after [statusSnapshot], buffered like [events].
+  Stream<AgentStatusMessage> get agentStatuses => _agentStatuses.stream;
+
+  /// Asks the host to answer a prompt the agent in a session it holds has
+  /// open — `PromptAnswerRequest.toJson` — and completes with how it ended.
+  Future<PromptAnsweredMessage> answerPrompt(Map<String, Object?> request) {
+    if (_done.isCompleted) {
+      return Future.error(
+        const HostLifecycleWatchRefused('the host link is closed'),
+      );
+    }
+    final requestId = ++_lastRequestId;
+    final answer = _prompts[requestId] = Completer<PromptAnsweredMessage>();
+    _write(PromptAnswerMessage(requestId: requestId, request: request));
+    return answer.future;
+  }
 
   /// Every event after [snapshot], in order. Single-subscription, so events
   /// arriving before anyone listens are buffered, not lost.
@@ -248,6 +271,7 @@ class HostLifecycleWatch {
     final watching = await _expect<WatchingMessage>(answerWithin);
     snapshot = List.unmodifiable(watching.sessions);
     hookSnapshot = List.unmodifiable(watching.hooks);
+    statusSnapshot = List.unmodifiable(watching.statuses);
     snapshotObservedAt = watching.observedAt;
   }
 
@@ -332,6 +356,14 @@ class HostLifecycleWatch {
       _checks.remove(message.requestId)?.complete(message);
       return;
     }
+    if (message is AgentStatusMessage) {
+      if (!_agentStatuses.isClosed) _agentStatuses.add(message);
+      return;
+    }
+    if (message is PromptAnsweredMessage) {
+      _prompts.remove(message.requestId)?.complete(message);
+      return;
+    }
     if (message is ErrorMessage) {
       final pairing = _pairings.remove(message.requestId);
       if (pairing != null) {
@@ -365,6 +397,7 @@ class HostLifecycleWatch {
     if (!_companionEvents.isClosed) unawaited(_companionEvents.close());
     if (!_automationCalls.isClosed) unawaited(_automationCalls.close());
     if (!_automationsChanged.isClosed) unawaited(_automationsChanged.close());
+    if (!_agentStatuses.isClosed) unawaited(_agentStatuses.close());
     for (final pairing in _pairings.values) {
       pairing.completeError(
         const HostLifecycleWatchRefused('the host link closed'),
@@ -377,6 +410,12 @@ class HostLifecycleWatch {
       );
     }
     _checks.clear();
+    for (final prompt in _prompts.values) {
+      prompt.completeError(
+        const HostLifecycleWatchRefused('the host link closed'),
+      );
+    }
+    _prompts.clear();
     if (!_done.isCompleted) _done.complete();
   }
 

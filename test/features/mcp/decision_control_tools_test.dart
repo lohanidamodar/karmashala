@@ -10,8 +10,8 @@ import 'package:karmashala/src/features/mcp/decision_tools.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -227,15 +227,24 @@ void main() {
   });
 
   group('an answered approval prompt', () {
+    /// An answer in one of this app's panes, as `session_answer` asks for it:
+    /// on what the screen shows, whatever the status says.
+    Future<SessionApprovalAnswer> answer({required bool approve}) => container
+        .read(localPromptAnswersProvider)
+        .answer(
+          ApprovalAnswerRequest(
+            sessionId: 's1',
+            approve: approve,
+            requireOpenPrompt: false,
+          ),
+        );
+
     test('records what the agent said the key does, attributed to the '
-        'user', () {
+        'user', () async {
       attachPane('s1');
 
-      // The card's path: press the agent's own approve key.
-      expect(
-        container.read(sessionLauncherProvider).answerPrompt('s1', '\r'),
-        isTrue,
-      );
+      // Not a menu on this screen: the agent's own approve key.
+      await answer(approve: true);
 
       final decision = recordOf('s1').single;
       expect(decision.kind, DecisionKind.approvalGranted);
@@ -249,9 +258,9 @@ void main() {
       expect(decision.originId, isNull);
     });
 
-    test('a refusal is recorded as a refusal, not as an approval', () {
+    test('a refusal is recorded as a refusal, not as an approval', () async {
       attachPane('s1');
-      container.read(sessionLauncherProvider).answerPrompt('s1', '\x1b');
+      await answer(approve: false);
 
       // Filing a denial under "approval granted" would make the record say the
       // opposite of what happened.
@@ -274,24 +283,17 @@ void main() {
       },
     );
 
-    test('a keystroke the agent never named records nothing', () {
-      attachPane('s1');
-      // True because the key reached the terminal — this method also carries
-      // answers we did not compose — and empty because guessing at what an
-      // unrecognised keystroke authorised is exactly the inference the record
-      // must not contain.
-      expect(
-        container.read(sessionLauncherProvider).answerPrompt('s1', 'y'),
-        isTrue,
-      );
-      expect(recordOf('s1'), isEmpty);
-    });
-
-    test('an answer that never landed records nothing', () {
+    test('an answer that never landed records nothing', () async {
       // No pane: the keystroke went nowhere, so nothing was authorised.
-      expect(
-        container.read(sessionLauncherProvider).answerPrompt('s1', '\r'),
-        isFalse,
+      await expectLater(
+        answer(approve: true),
+        throwsA(
+          isA<SessionPromptRefusal>().having(
+            (r) => r.noTerminal,
+            'noTerminal',
+            isTrue,
+          ),
+        ),
       );
       expect(recordOf('s1'), isEmpty);
     });

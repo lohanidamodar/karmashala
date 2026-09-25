@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
@@ -9,6 +11,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/host_lifecycle/host_agent_statuses.dart';
 import '../../sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
@@ -173,7 +176,13 @@ watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
 
 /// The one status registry — everything that shows or reacts to a status reads
 /// it. Cycled only by `AgentStatusWatcher.start()`; reading starts nothing.
-final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
+///
+/// A session this machine's host holds is rendered from the host's own status
+/// ([hostAgentStatusesProvider]); only panes no host holds — the in-app PTY
+/// path, imported sessions — are computed here.
+final Provider<SessionStatusRegistry>
+sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
+  final hostStatuses = ref.watch(hostAgentStatusesProvider);
   final registry = SessionStatusRegistry(
     statusService: ref.watch(agentStatusServiceProvider),
     agents: ref.watch(agentRegistryProvider),
@@ -193,6 +202,10 @@ final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
     resolveTranscripts: () =>
         ref.read(sessionTranscriptLocatorProvider).index(),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
+    heldByHost: (session) =>
+        ref.read(hostLifecycleSubscriberProvider)?.knows(session.openId) ??
+        false,
+    hostStatusFor: (session) => hostStatuses.of(session.openId),
     // Adoption rides this cycle rather than starting a ticker of its own; its
     // store scan shares the slow slot the transcript search already pays for.
     onCycle: (mayScanStores) async {
@@ -205,7 +218,11 @@ final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
       await ref.read(cliStoreSyncRunnerProvider)();
     },
   );
-  ref.onDispose(registry.dispose);
+  final moves = hostStatuses.changes.listen(registry.hostStatusMoved);
+  ref.onDispose(() {
+    unawaited(moves.cancel());
+    registry.dispose();
+  });
   return registry;
 });
 

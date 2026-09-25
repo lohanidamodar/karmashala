@@ -14,6 +14,7 @@ import '../data/companion_attachment_store.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_approval_bindings.dart';
+import '../../sessions/application/session_status_providers.dart';
 import 'remote_attachment_bindings.dart';
 import 'remote_binding_support.dart';
 import 'remote_providers.dart';
@@ -27,7 +28,7 @@ import 'remote_workspace_bindings.dart';
 
 // The seams a test stubs are reached through this library, as they always
 // were; moving them into their families must not move anybody's import.
-export 'remote_approval_bindings.dart' show remoteApprovalEvidenceProvider;
+export 'remote_approval_bindings.dart' show remotePromptsProvider;
 export 'remote_binding_support.dart'
     show remoteCheckoutBranchProvider, remoteFolderMissingProvider;
 export 'remote_session_snapshots.dart'
@@ -69,7 +70,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       final live = resolved.native?.id ?? sessionId;
       // Typed into an open menu or question, the text is lost and its Enter
       // picks whatever is highlighted — "No, exit" on a folder-trust prompt.
-      final report = await ref.read(remoteApprovalEvidenceProvider)(live);
+      final report = ref.read(sessionStatusLookupProvider)(live);
       if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
         throw const RemoteApiRefusal(
           ErrorCode.badRequest,
@@ -92,11 +93,9 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
           'terminal',
         );
       }
-      return answerRemoteApproval(
-        ref,
-        resolved.native?.id ?? sessionId,
-        decision,
-      );
+      return ref
+          .read(remotePromptsProvider)
+          .answerApproval(resolved.native?.id ?? sessionId, decision);
     },
     answerQuestion: (request) async {
       final resolved = resolve(request.sessionId);
@@ -108,17 +107,18 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         );
       }
       final native = resolved.native?.id;
-      return answerRemoteQuestion(
-        ref,
-        native == null
-            ? request
-            : RemoteQuestionAnswerRequest(
-                sessionId: native,
-                toolUseId: request.toolUseId,
-                answers: request.answers,
-                decline: request.decline,
-              ),
-      );
+      return ref
+          .read(remotePromptsProvider)
+          .answerQuestion(
+            native == null
+                ? request
+                : RemoteQuestionAnswerRequest(
+                    sessionId: native,
+                    toolUseId: request.toolUseId,
+                    answers: request.answers,
+                    decline: request.decline,
+                  ),
+          );
     },
     usage: () => remoteUsageSnapshot(ref),
     notes: () => remoteNotesSnapshot(ref),
@@ -140,19 +140,20 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         );
       }
       final native = resolved.native?.id;
-      return answerRemoteMenu(
-        ref,
-        native == null
-            ? request
-            : RemoteMenuAnswerRequest(
-                sessionId: native,
-                menuId: request.menuId,
-                option: request.option,
-              ),
-      );
+      return ref
+          .read(remotePromptsProvider)
+          .answerMenu(
+            native == null
+                ? request
+                : RemoteMenuAnswerRequest(
+                    sessionId: native,
+                    menuId: request.menuId,
+                    option: request.option,
+                  ),
+          );
     },
     approvalEvidenceFor: (sessionId) =>
-        remoteApprovalEvidenceFor(ref, sessionId),
+        ref.read(remotePromptsProvider).approvalEvidence(sessionId),
     registerPush: (deviceId, token, platform, presence) async {
       ref
           .read(pairedDeviceDaoProvider)

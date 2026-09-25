@@ -1,0 +1,41 @@
+name: karmashala_agent_status
+description: >-
+  What an agent in a terminal Karmashala holds is doing, and answering what it
+  asks: the status kept per session from its hooks and its screen (the agent
+  adapter's rules, hooks first), and the approve/deny, menu and question
+  answers typed into its terminal. The session host runs it on the sessions it
+  holds; the app runs the same code only for panes no host holds. No providers
+  and no UI. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The descriptors: hook spec, grid rules, approval keys, menu and question
+  # support — every agent-specific word this package reads, by capability.
+  agent_cli:
+    path: ../agent_cli
+  # The hook receiver and the status service whose precedence this keeps.
+  karmashala_agent_reporting:
+    path: ../karmashala_agent_reporting
+  # `Clock`.
+  karmashala_core:
+    path: ../karmashala_core
+  # `DecisionRecord`, what an answered prompt is filed as.
+  karmashala_session:
+    path: ../karmashala_session
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1
+  # Captured agent screens are replayed into a real grid in the tests.
+  xterm2:
+    git:
+      url: https://github.com/lohanidamodar/xterm2.git
+      ref: 4f7450a543500a8d50d0e97fa8dc19c131b5c778

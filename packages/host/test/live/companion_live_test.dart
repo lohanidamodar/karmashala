@@ -1,6 +1,7 @@
 @Tags(['live'])
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
@@ -248,6 +249,112 @@ void main() {
         expect(observer.tail(4000), isNot(contains('must-not-arrive')));
       },
     );
+  });
+
+  // The agent's status and its prompts are the daemon's: with no app
+  // connected, a phone sees the permission prompt and answers it, and the key
+  // reaches the agent's PTY. The agent is a stand-in that draws Claude Code's
+  // real permission modal (a captured PTY stream) and reports the line it
+  // reads back.
+  group('a hosted agent\'s prompt, with the app closed', () {
+    late LocalHostClient agentObserver;
+
+    /// Starts the fake agent in the seeded agent row's host session, as a pane
+    /// that then goes away, and watches its bytes without driving it.
+    Future<void> startAgent() async {
+      final captured = File(
+        '../../test/features/agents/fixtures/claude-code-permission-modal.raw',
+      ).readAsStringSync();
+      final teardown = captured.indexOf('Session terminated');
+      final screen = File('${home.path}/permission-modal.raw')
+        ..writeAsStringSync(
+          teardown < 0 ? captured : captured.substring(0, teardown),
+        );
+      final pane = await LocalHostClient.connect(host.socketPath, 'agent-pane');
+      await pane.expect<WelcomeMessage>();
+      pane.send(
+        OpenMessage(
+          requestId: pane.nextId(),
+          sessionId: hostSessionIdOf(seededAgentSessionId),
+          argv: [
+            '/bin/sh',
+            '-c',
+            'cat "\$1"; read -r line; echo "ANSWERED<\$line>"; sleep 120',
+            'fake-agent',
+            screen.path,
+          ],
+          workingDirectory: home.path,
+          environment: const {'TERM': 'xterm-256color'},
+          columns: 120,
+          rows: 30,
+        ),
+      );
+      await pane.expect<AttachedMessage>();
+      // The pane goes, as the app's does when it quits: the agent runs on.
+      await pane.close();
+
+      agentObserver = await LocalHostClient.connect(
+        host.socketPath,
+        'agent-observer',
+      );
+      await agentObserver.expect<WelcomeMessage>();
+      agentObserver.send(
+        AttachMessage(
+          requestId: agentObserver.nextId(),
+          sessionId: hostSessionIdOf(seededAgentSessionId),
+          sinceOffset: 0,
+          claimWrite: false,
+        ),
+      );
+      await agentObserver.expect<AttachedMessage>();
+      addTearDown(agentObserver.close);
+    }
+
+    test('the phone sees it waiting, reads the menu and approves', () async {
+      final client = await dial(phone);
+      // Live and watching the row before the prompt opens, so the news of it
+      // opening reaches this link.
+      await client.listSessions();
+      final asked = client.events
+          .where((e) => e is ApprovalRequestedEvent)
+          .cast<ApprovalRequestedEvent>()
+          .first;
+      await client.subscribeSession(seededAgentSessionId);
+      await startAgent();
+
+      final listed = await readUntil(
+        client.listSessions,
+        (sessions) => sessions.any(
+          (s) =>
+              s.sessionId == seededAgentSessionId &&
+              s.attention == kAttentionNeedsApproval,
+        ),
+      );
+      expect(
+        listed
+            .singleWhere((s) => s.sessionId == seededAgentSessionId)
+            .attention,
+        kAttentionNeedsApproval,
+        reason: 'read off the screen by the daemon, with no app',
+      );
+
+      final request = (await asked.timeout(
+        const Duration(seconds: 20),
+      )).request;
+      expect(request.waiting, RemoteWaitKind.approval);
+      expect(request.menu, isNotNull, reason: 'the modal is a menu');
+      expect(request.menu!.options.first, 'Yes');
+
+      expect(
+        await client.answerApproval(seededAgentSessionId, approve: true),
+        'Yes',
+      );
+      expect(
+        await agentObserver.output('ANSWERED<>'),
+        isTrue,
+        reason: agentObserver.tail(400),
+      );
+    });
   });
 
   group('with the app back', () {

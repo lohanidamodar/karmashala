@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_companion/widgets.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart'
+    show remoteMenuOf;
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -13,8 +16,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../remote/application/remote_approval_bindings.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../application/session_launcher.dart';
-import '../application/session_menu_answerer.dart';
+import '../application/session_prompt_answers.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 
@@ -42,10 +44,10 @@ class ApprovalRequestCard extends ConsumerWidget {
     final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);
     final rules = descriptor?.approval ?? const AgentApprovalRules();
     final agentName = descriptor?.displayName ?? report.agentId;
-    // A pane we can type into. Without one — an external terminal, a session
-    // whose process has gone — the buttons would silently do nothing.
-    final canAnswer =
-        ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null;
+    // A pane we can type into, or a process this machine's host runs and
+    // answers in. Without either — an external terminal, a session whose
+    // process has gone — the buttons would silently do nothing.
+    final canAnswer = ref.read(sessionAnswerableProvider)(sessionId);
 
     final standard = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,13 +165,19 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
   }
 
   AgentScreenMenu? _read() =>
-      ref.read(sessionMenuAnswererProvider).read(widget.sessionId);
+      ref.read(sessionPromptAnswersProvider).menuOnScreen(widget.sessionId);
 
   Future<void> _choose(AgentScreenMenu menu, int option) async {
     try {
       await ref
-          .read(sessionMenuAnswererProvider)
-          .choose(widget.sessionId, menuId: menu.id, option: option);
+          .read(sessionPromptAnswersProvider)
+          .answer(
+            MenuAnswerRequest(
+              sessionId: widget.sessionId,
+              menuId: menu.id,
+              option: option,
+            ),
+          );
     } on SessionPromptRefusal catch (refusal) {
       // Worded for the card's own snack bar, which reads a gateway refusal.
       throw GatewayException(refusal.message);
@@ -456,21 +464,34 @@ class _Answers extends ConsumerWidget {
     );
   }
 
-  void _press(BuildContext context, WidgetRef ref, AgentApprovalKey answer) {
+  Future<void> _press(
+    BuildContext context,
+    WidgetRef ref,
+    AgentApprovalKey answer,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final sent = ref
-        .read(sessionLauncherProvider)
-        .answerPrompt(sessionId, answer.keys);
-    if (sent) return;
-    // Only reported when it did not land: a successful keypress needs no
-    // announcement — the agent's own screen is the acknowledgement.
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text(
-          'That session is no longer running, so the key was not sent.',
+    try {
+      await ref
+          .read(sessionPromptAnswersProvider)
+          .answer(
+            ApprovalAnswerRequest(
+              sessionId: sessionId,
+              approve: identical(answer, rules.approve),
+            ),
+          );
+    } on SessionPromptRefusal catch (refusal) {
+      // Only reported when it did not land: a successful keypress needs no
+      // announcement — the agent's own screen is the acknowledgement.
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            refusal.noTerminal || refusal.notFound
+                ? 'That session is no longer running, so the key was not sent.'
+                : 'Nothing was sent: ${refusal.message}.',
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 }
 

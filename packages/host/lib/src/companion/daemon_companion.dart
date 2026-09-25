@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show HostedAgentStatus;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_remote/host.dart';
@@ -12,6 +15,7 @@ import 'package:karmashala_store/devices.dart';
 
 import '../domain/session_registry.dart';
 import '../protocol/messages.dart';
+import '../status/daemon_prompt_answers.dart';
 import 'companion_app_relay.dart';
 import 'companion_handler.dart';
 import 'registry_screens.dart';
@@ -35,6 +39,7 @@ class DaemonCompanion implements CompanionHandler {
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
     CompanionScreens? screens,
+    this.prompts,
     this.onLog,
     DateTime Function()? clock,
   }) : _relayFactory = relayFactory,
@@ -55,6 +60,10 @@ class DaemonCompanion implements CompanionHandler {
   final Duration transcriptPollInterval;
   final CompanionScreens screens;
 
+  /// Answers approvals, questions and menus for the sessions this host holds,
+  /// app or no app; null when no agent status is kept (no store).
+  final DaemonPromptAnswers? prompts;
+
   /// Lifecycle only — never a code, a key or a payload.
   final void Function(String message)? onLog;
 
@@ -71,11 +80,15 @@ class DaemonCompanion implements CompanionHandler {
   late final RemoteHostBindings bindings = hostCompanionBindings(
     hostName: hostName,
     app: app,
+    hosted: prompts == null ? null : CompanionPrompts(prompts!.answers),
+    holds: prompts?.holds,
     atRest: SessionsAtRest(
       sessions: _sessions,
       names: WorkspaceNames(database),
       screens: screens,
       hostName: hostName,
+      attentionOf: (sessionId) =>
+          remoteAttentionOf(prompts?.statusOf(sessionId)),
       clock: _now,
     ),
     notes: () async => notesSnapshot(
@@ -101,6 +114,7 @@ class DaemonCompanion implements CompanionHandler {
   void Function(HostMessage)? _appSend;
   Future<void> _chain = Future<void>.value();
   StreamSubscription<LifecycleEvent>? _events;
+  StreamSubscription<HostedAgentStatus>? _statuses;
 
   /// The running server, or null while remote access is off.
   RemoteHostService? get service => _service;
@@ -114,11 +128,16 @@ class DaemonCompanion implements CompanionHandler {
   int paired() => _devices.getActive().length;
 
   /// Serves by the config the store kept, or a box's defaults when no app has
-  /// ever sent one, following [sessionEvents] — the host's lifecycle feed.
-  /// Throws when the LAN listener cannot bind at all.
-  Future<void> start({required Stream<LifecycleEvent> sessionEvents}) async {
+  /// ever sent one, following [sessionEvents] — the host's lifecycle feed —
+  /// and [statusChanges], what the agents it holds are doing. Throws when the
+  /// LAN listener cannot bind at all.
+  Future<void> start({
+    required Stream<LifecycleEvent> sessionEvents,
+    Stream<HostedAgentStatus>? statusChanges,
+  }) async {
     app.onChanged = (_) => _sessionsMoved();
     _events = sessionEvents.listen(_onLifecycle);
+    _statuses = statusChanges?.listen(_onStatus);
     await _serialised(() => _apply(_configs.read() ?? _config));
   }
 
@@ -219,6 +238,8 @@ class DaemonCompanion implements CompanionHandler {
   Future<void> close() async {
     await _events?.cancel();
     _events = null;
+    await _statuses?.cancel();
+    _statuses = null;
     app.onChanged = null;
     app.close();
     await _serialised(_stopService);
@@ -298,6 +319,34 @@ class DaemonCompanion implements CompanionHandler {
       }
     });
   }
+
+  /// An agent this host holds moved: live phones re-read their lists, and —
+  /// with no app to announce it — a prompt opening is news, as the app's
+  /// `approvalRequested` notice would have made it.
+  void _onStatus(HostedAgentStatus status) {
+    final wasWaiting = _waiting.contains(status.sessionId);
+    final waiting =
+        status.report.status == AgentActivityStatus.awaitingApproval;
+    if (waiting) {
+      _waiting.add(status.sessionId);
+    } else {
+      _waiting.remove(status.sessionId);
+    }
+    if (app.connected) return;
+    _sessionsMoved();
+    final service = _service;
+    if (service == null || !waiting || wasWaiting) return;
+    unawaited(
+      service
+          .notifyApprovalRequested(status.sessionId)
+          .catchError(
+            (Object error) => onLog?.call('approval news failed: $error'),
+          ),
+    );
+  }
+
+  /// Rows whose agent is waiting on a person now, so each wait is news once.
+  final _waiting = <String>{};
 
   Future<void> _pushEnding(LifecycleEvent event) async {
     final service = _service;

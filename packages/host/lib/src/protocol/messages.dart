@@ -11,10 +11,11 @@ part 'lifecycle_messages.dart';
 part 'automation_messages.dart';
 part 'companion_messages.dart';
 part 'mcp_messages.dart';
+part 'status_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 6;
+const int kProtocolVersion = 7;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -893,4 +894,7 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.automationResult => AutomationResultMessage.decode(frame),
   MessageType.checksRun => ChecksRunMessage.decode(frame),
   MessageType.checksRan => ChecksRanMessage.decode(frame),
+  MessageType.agentStatus => AgentStatusMessage.decode(frame),
+  MessageType.promptAnswer => PromptAnswerMessage.decode(frame),
+  MessageType.promptAnswered => PromptAnsweredMessage.decode(frame),
 };

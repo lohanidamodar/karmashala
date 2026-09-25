@@ -503,20 +503,20 @@ void main() {
     final written = <String>[];
     instance.terminal.onOutput = written.add;
 
-    expect(launcher.answerPrompt(launched.session.id, '\r'), isTrue);
+    expect(launcher.pressKeys(launched.session.id, '\r'), isTrue);
     // Exactly the key, once. `sendTo` trims and appends a carriage return to
     // submit a *message*; doing either here would erase the whole payload or
     // press a second key nobody asked for.
     expect(written, ['\r']);
 
     written.clear();
-    expect(launcher.answerPrompt(launched.session.id, '\x1b'), isTrue);
+    expect(launcher.pressKeys(launched.session.id, '\x1b'), isTrue);
     expect(written, ['\x1b']);
 
     // Nothing to press is a refusal the caller can report, not a silent no-op.
     written.clear();
-    expect(launcher.answerPrompt(launched.session.id, ''), isFalse);
-    expect(launcher.answerPrompt('no-such-session', '\r'), isFalse);
+    expect(launcher.pressKeys(launched.session.id, ''), isFalse);
+    expect(launcher.pressKeys('no-such-session', '\r'), isFalse);
     expect(written, isEmpty);
   });
 

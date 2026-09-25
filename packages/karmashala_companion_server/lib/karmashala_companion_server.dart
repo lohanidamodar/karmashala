@@ -9,6 +9,7 @@ export 'src/protocol/companion_call_dispatcher.dart';
 export 'src/protocol/companion_method.dart';
 export 'src/protocol/forwarded_bindings.dart';
 export 'src/service/companion_app_link.dart';
+export 'src/service/companion_prompts.dart';
 export 'src/service/companion_screens.dart';
 export 'src/service/host_companion_bindings.dart';
 export 'src/service/notes_snapshot.dart';

@@ -76,7 +76,13 @@ enum MessageType {
   automationCall(0x27),
   automationResult(0x28),
   checksRun(0x29),
-  checksRan(0x2a);
+  checksRan(0x2a),
+  // Protocol 7: the daemon keeps what each hosted agent is doing and answers
+  // its prompts. host → client: one session's agent status; client → host:
+  // answer a prompt; host → client: how that ended.
+  agentStatus(0x2b),
+  promptAnswer(0x2c),
+  promptAnswered(0x2d);
 
   const MessageType(this.code);
   final int code;

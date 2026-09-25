@@ -1,10 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:riverpod/riverpod.dart';
 
-import '../../terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_terminal_runtime/screen_reading.dart';
-import 'session_launcher.dart';
-import 'session_menu_answerer.dart';
+import '../domain/prompt_refusal.dart';
 
 /// Answers Claude Code's `AskUserQuestion` by driving its screen and checking
 /// every step lands before the next: the tab is drawn, the highlight reached
@@ -211,19 +207,3 @@ class SessionQuestionTypist {
     return flat.contains(probe);
   }
 }
-
-final sessionQuestionTypistProvider = Provider<SessionQuestionTypist>((ref) {
-  return SessionQuestionTypist(
-    readScreen: (sessionId) {
-      final paneId = ref.read(sessionLauncherProvider).livePaneFor(sessionId);
-      if (paneId == null) return null;
-      final instance = ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(paneId);
-      if (instance == null) return null;
-      return terminalTailLines(instance.terminal, lines: kMenuScreenRows);
-    },
-    press: (sessionId, keys) =>
-        ref.read(sessionLauncherProvider).pressKeys(sessionId, keys),
-  );
-});

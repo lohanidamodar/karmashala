@@ -5,6 +5,7 @@ import 'package:karmashala_remote/remote.dart';
 
 import '../protocol/forwarded_bindings.dart';
 import 'companion_app_link.dart';
+import 'companion_prompts.dart';
 import 'sessions_at_rest.dart';
 
 /// The companion bindings the session host serves a phone with — one binding
@@ -17,8 +18,12 @@ import 'sessions_at_rest.dart';
 ///   is richer — attention, titles it tracks, imported history, the agent's own
 ///   record — so it answers when it can; closed, the host answers from its rows
 ///   and its screens rather than refusing.
-/// - **The app's, or refused**: everything that needs the desktop — approvals,
-///   questions and menus read off an agent's screen by the agent's own rules,
+/// - **The host's for a session it holds, else the app's**: approvals,
+///   questions, menus and the evidence for them — read off the host's own
+///   screen by the agent's own rules and typed into the PTY it holds
+///   ([hosted], for the sessions [holds] names), whether or not the app is
+///   open. A session the host does not hold is the app's, or refused.
+/// - **The app's, or refused**: everything else that needs the desktop —
 ///   starting and resuming through the launcher, the composer's attachments,
 ///   workspaces, usage and a session's model or mode. With no app connected
 ///   the phone is told "the Karmashala app is not running".
@@ -26,6 +31,8 @@ RemoteHostBindings hostCompanionBindings({
   required String hostName,
   required CompanionAppLink app,
   required SessionsAtRest atRest,
+  CompanionPrompts? hosted,
+  bool Function(String sessionId)? holds,
   required Future<RemoteNotesSnapshot> Function() notes,
   required Future<void> Function(
     String deviceId,
@@ -41,6 +48,19 @@ RemoteHostBindings hostCompanionBindings({
   Future<T> appOnly<T>(Future<T> Function() call) {
     if (!app.connected) return Future.error(companionAppNotRunning);
     return call();
+  }
+
+  /// The host's own answer for a session it holds, else the app's.
+  Future<T> hostedOr<T>(
+    String sessionId,
+    Future<T> Function(CompanionPrompts prompts) here,
+    Future<T> Function() forward,
+  ) {
+    final prompts = hosted;
+    if (prompts != null && (holds?.call(sessionId) ?? false)) {
+      return here(prompts);
+    }
+    return appOnly(forward);
   }
 
   return RemoteHostBindings(
@@ -62,13 +82,26 @@ RemoteHostBindings hostCompanionBindings({
     sendPrompt: (sessionId, text, {attachment}) => app.connected
         ? forwarded.sendPrompt(sessionId, text, attachment: attachment)
         : atRest.sendPrompt(sessionId, text, attachment: attachment),
-    answerApproval: (sessionId, decision) =>
-        appOnly(() => forwarded.answerApproval(sessionId, decision)),
-    approvalEvidenceFor: (sessionId) =>
-        appOnly(() => forwarded.approvalEvidence(sessionId)),
-    answerQuestion: (request) =>
-        appOnly(() => forwarded.answerQuestion(request)),
-    answerMenu: (request) => appOnly(() => forwarded.answerMenu(request)),
+    answerApproval: (sessionId, decision) => hostedOr(
+      sessionId,
+      (prompts) => prompts.answerApproval(sessionId, decision),
+      () => forwarded.answerApproval(sessionId, decision),
+    ),
+    approvalEvidenceFor: (sessionId) => hostedOr(
+      sessionId,
+      (prompts) => prompts.approvalEvidence(sessionId),
+      () => forwarded.approvalEvidence(sessionId),
+    ),
+    answerQuestion: (request) => hostedOr(
+      request.sessionId,
+      (prompts) => prompts.answerQuestion(request),
+      () => forwarded.answerQuestion(request),
+    ),
+    answerMenu: (request) => hostedOr(
+      request.sessionId,
+      (prompts) => prompts.answerMenu(request),
+      () => forwarded.answerMenu(request),
+    ),
     usage: () => appOnly(forwarded.usage),
     notes: notes,
     registerPush: registerPush,

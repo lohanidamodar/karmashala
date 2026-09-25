@@ -12,11 +12,15 @@ import 'package:karmashala/src/features/checkpoints/application/session_checkpoi
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_agent_statuses.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_subscriber.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/relayed_agent_hook.dart';
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
+import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
@@ -537,6 +541,138 @@ void main() {
       expect(recorder.unheld, ['s1']);
       expect(recorder.settledCalls, 0);
       expect(host.replies, isEmpty);
+    });
+  });
+
+  // The daemon keeps what each agent it holds is doing (protocol 7); the app
+  // renders that and computes nothing of its own for those sessions.
+  group('agent status the host keeps', () {
+    HostedAgentStatus said(
+      String id,
+      AgentActivityStatus status, {
+      AgentWaitKind waiting = AgentWaitKind.unrecorded,
+      List<String> evidence = const [],
+    }) => HostedAgentStatus(
+      sessionId: id,
+      report: AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 'cli-$id',
+        status: status,
+        source: AgentStatusSource.terminalGrid,
+        observedAt: _at(2),
+        waiting: waiting,
+        evidence: evidence,
+      ),
+    );
+
+    test('is what the app renders for a session the host holds', () async {
+      row('s1');
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
+      host.statusSnapshot = [
+        said(
+          's1',
+          AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.approval,
+          evidence: const ['Do you want to proceed?'],
+        ),
+      ];
+      await startWatching();
+      final registry = container.read(sessionStatusRegistryProvider);
+      await registry.cycle();
+
+      final report = registry.reportForOpenId('s1')!;
+      expect(report.hasOpenPrompt, isTrue);
+      expect(report.evidence, ['Do you want to proceed?']);
+      expect(report.sessionId, 'cli-s1', reason: 'keyed as the registry keys');
+
+      // A frame moves it at once, out of turn, as a hook used to.
+      final moved = registry.hookChanges.first;
+      host.statusLink.add((
+        sessionId: 's1',
+        status: said('s1', AgentActivityStatus.idle),
+      ));
+      await _settle();
+      expect((await moved).report.status, AgentActivityStatus.idle);
+
+      // A hook the host relayed still runs the intake, but the status is the
+      // host's word: it computed its own from the same hook.
+      host.hookLink.add(
+        RelayedAgentHook(
+          agentId: AgentIds.claudeCode,
+          event: 'UserPromptSubmit',
+          body: jsonEncode({'session_id': 'cli-s1'}),
+          receivedAt: _at(3),
+          paneSessionId: 's1',
+        ),
+      );
+      await _settle();
+      expect(registry.reportForOpenId('s1')!.status, AgentActivityStatus.idle);
+    });
+
+    test('a link lost leaves none of it standing', () async {
+      row('s1');
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
+      host.statusSnapshot = [said('s1', AgentActivityStatus.working)];
+      await startWatching();
+      expect(container.read(hostAgentStatusesProvider).of('s1'), isNotNull);
+
+      await host.link.close();
+      await _settle();
+      expect(container.read(hostAgentStatusesProvider).of('s1'), isNull);
+    });
+
+    test('an answer for a session the host runs is the host\'s', () async {
+      row('s1');
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
+      await startWatching();
+
+      final answer = await container
+          .read(sessionPromptAnswersProvider)
+          .answer(const ApprovalAnswerRequest(sessionId: 's1', approve: true));
+
+      expect(answer.answered, 'Yes');
+      final asked = host.promptRequests.single as ApprovalAnswerRequest;
+      expect(asked.sessionId, 's1');
+      expect(asked.approve, isTrue);
+    });
+
+    test('a refusal from the host reaches the caller in its words', () async {
+      row('s1');
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
+      host.answerPrompt = (_) => Future.error(
+        const SessionPromptRefusal('this session has no prompt open to answer'),
+      );
+      await startWatching();
+
+      await expectLater(
+        container
+            .read(sessionPromptAnswersProvider)
+            .answer(
+              const ApprovalAnswerRequest(sessionId: 's1', approve: true),
+            ),
+        throwsA(
+          isA<SessionPromptRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('no prompt open'),
+          ),
+        ),
+      );
+    });
+
+    test('a session no host holds is answered by the app, not sent', () async {
+      row('s2');
+      await startWatching();
+
+      await expectLater(
+        container
+            .read(sessionPromptAnswersProvider)
+            .answer(
+              const ApprovalAnswerRequest(sessionId: 's2', approve: true),
+            ),
+        throwsA(isA<SessionPromptRefusal>()),
+      );
+      expect(host.promptRequests, isEmpty);
     });
   });
 

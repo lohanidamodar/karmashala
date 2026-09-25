@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show HostedAgentStatus;
 import 'package:karmashala_automations/check_runner.dart';
 import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/runner.dart';
@@ -63,6 +66,7 @@ class DaemonAutomations implements AutomationHandler {
     final rows = CheckoutRows(database);
     facts = DaemonCheckoutFacts(rows, windows: windows);
     _sessions = sessions;
+    _automations = automations;
 
     final checkRunner = ProjectCheckRunner(
       automations: automations,
@@ -182,6 +186,7 @@ class DaemonAutomations implements AutomationHandler {
   final void Function() _announce;
   final void Function(String message) _log;
   late final SessionDao _sessions;
+  late final AutomationDao _automations;
 
   final AutomationAppRelay relay = AutomationAppRelay();
   late final DaemonCheckoutFacts facts;
@@ -194,6 +199,12 @@ class DaemonAutomations implements AutomationHandler {
   late final FirstRunPromptWatch firstRunPrompts;
 
   StreamSubscription<SessionLifecycleChange>? _statusChanges;
+  StreamSubscription<HostedAgentStatus>? _agentStatuses;
+
+  /// What the agent of each running run this host launched is doing, by run
+  /// id — the host's own status, so a run can be seen waiting on a person (or
+  /// idle) before its process ends. Settling still waits for the process.
+  final Map<String, HostedAgentStatus> runAgentStatus = {};
   var _stopped = false;
   var _announcing = false;
 
@@ -203,8 +214,12 @@ class DaemonAutomations implements AutomationHandler {
   /// Arms the scheduler — firing once what fell due while no host ran, inside
   /// the grace — settles runs whose sessions ended meanwhile, and follows
   /// every status the host writes from now on.
-  Future<void> start(Stream<SessionLifecycleChange> statusChanges) async {
+  Future<void> start(
+    Stream<SessionLifecycleChange> statusChanges, {
+    Stream<HostedAgentStatus>? agentStatus,
+  }) async {
     _statusChanges = statusChanges.listen(_onStatus);
+    _agentStatuses = agentStatus?.listen(_onAgentStatus);
     settler.sweep(owns: _ownsSession);
     await scheduler.start();
   }
@@ -215,6 +230,26 @@ class DaemonAutomations implements AutomationHandler {
     scheduler.stop();
     relay.close();
     await _statusChanges?.cancel();
+    await _agentStatuses?.cancel();
+  }
+
+  /// A hosted agent's status moved. For a run's agent it is kept by run, and a
+  /// wait on a person is said once in the log — nobody may be watching.
+  void _onAgentStatus(HostedAgentStatus status) {
+    final run = _automations.runForSession(status.sessionId);
+    if (run == null || run.state != AutomationRunState.running) {
+      runAgentStatus.removeWhere((_, s) => s.sessionId == status.sessionId);
+      return;
+    }
+    final before = runAgentStatus[run.id]?.report.status;
+    runAgentStatus[run.id] = status;
+    final now = status.report.status;
+    if (now == AgentActivityStatus.awaitingApproval && before != now) {
+      final said = status.report.evidence.isEmpty
+          ? ''
+          : ': ${status.report.evidence.first.trim()}';
+      _log('automations: run ${run.id} is waiting on a person$said');
+    }
   }
 
   /// A row this host's recorder wrote. Deferred: the recorder's stream is

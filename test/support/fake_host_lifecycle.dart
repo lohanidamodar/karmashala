@@ -8,6 +8,7 @@ import 'package:karmashala_host/lifecycle_client.dart'
         CompanionEventMessage,
         CompanionNoticeMessage,
         PairedMessage;
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -37,6 +38,20 @@ class FakeHostLifecycle implements HostLifecycleSource {
   final links = <StreamController<SessionLifecycleEvent>>[];
   final hookLinks = <StreamController<RelayedAgentHook>>[];
   final changeLinks = <StreamController<HostSessionChange>>[];
+
+  /// What the host says each agent it holds is doing, sent on each open.
+  List<HostedAgentStatus> statusSnapshot = const [];
+
+  /// Each link's agent status frames, pushed by the test as the daemon.
+  final statusLinks = <StreamController<HostAgentStatusChange>>[];
+  StreamController<HostAgentStatusChange> get statusLink => statusLinks.last;
+
+  /// The prompt answers the app asked the host for, in order, and how the
+  /// host answers them.
+  final promptRequests = <PromptAnswerRequest>[];
+  Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)
+  answerPrompt = (request) async =>
+      const SessionApprovalAnswer(answered: 'Yes', effect: 'by the host');
 
   /// What each open said the app runs itself.
   final runByClient = <List<String>>[];
@@ -102,6 +117,8 @@ class FakeHostLifecycle implements HostLifecycleSource {
     final companionEvents = StreamController<CompanionEventMessage>();
     companionCallLinks.add(companionCalls);
     companionEventLinks.add(companionEvents);
+    final statuses = StreamController<HostAgentStatusChange>();
+    statusLinks.add(statuses);
     links.add(link);
     hookLinks.add(hooks);
     changeLinks.add(changes);
@@ -133,6 +150,12 @@ class FakeHostLifecycle implements HostLifecycleSource {
       answerCompanionCall: (callId, {result, code, message}) => companionAnswers
           .add((callId: callId, result: result, code: code, message: message)),
       noticeCompanion: companionNotices.add,
+      statusSnapshot: List.of(statusSnapshot),
+      agentStatuses: statuses.stream,
+      answerPrompt: (request) {
+        promptRequests.add(request);
+        return answerPrompt(request);
+      },
       pairCompanion:
           ({required capabilities, relay = '', relayIsLocal = false}) async {
             pairings.add((
@@ -149,6 +172,7 @@ class FakeHostLifecycle implements HostLifecycleSource {
         if (!calls.isClosed) unawaited(calls.close());
         if (!companionCalls.isClosed) unawaited(companionCalls.close());
         if (!companionEvents.isClosed) unawaited(companionEvents.close());
+        if (!statuses.isClosed) unawaited(statuses.close());
         if (!link.isClosed) await link.close();
         if (!hooks.isClosed) await hooks.close();
         if (!changes.isClosed) await changes.close();

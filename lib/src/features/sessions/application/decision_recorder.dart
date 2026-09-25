@@ -15,30 +15,23 @@ class DecisionRecorder {
   final Ref _ref;
   final _log = AppLogger.named('decisions');
 
-  /// The user (or an agent through `session_answer`) answered an approval
-  /// prompt. [effect] is the agent's own words; a denial files as a rejection.
-  DecisionRecord? recordApproval({
-    required String sessionId,
-    required bool granted,
-    required String effect,
-    String? answerLabel,
-    String decidedBy = 'the user',
-    String? decidedBySessionId,
-  }) => _append(
-    sessionId: sessionId,
-    kind: granted
-        ? DecisionKind.approvalGranted
-        : DecisionKind.approachRejected,
-    summary: effect,
-    detail: answerLabel == null
-        ? null
-        : 'Answered "$answerLabel" at the agent\'s own prompt.',
-    decidedBy: decidedBy,
-    recordedBySessionId: decidedBySessionId,
-    // No id: the prompt is drawn by another program and is gone the moment it
-    // is answered, so there is nothing to name.
-    origin: DecisionOrigin.approvalPrompt,
-  );
+  /// A prompt answered in one of this app's panes, already shaped by
+  /// `approvalDecisionRecord` — the record the session host files for a
+  /// session it holds. Appended as it is; best-effort.
+  DecisionRecord? file(DecisionRecord decision) {
+    try {
+      final appended = _ref.read(decisionRecordDaoProvider).append(decision);
+      _ref.read(decisionsRevisionProvider.notifier).bump();
+      return appended;
+    } catch (error, stack) {
+      _log.warning(
+        'Could not record a decision for session ${decision.sessionId}.',
+        error,
+        stack,
+      );
+      return null;
+    }
+  }
 
   /// A verification run reached a verdict — `verification_finish`, and nothing
   /// else. [attribution] says whether the verifier was also the author.

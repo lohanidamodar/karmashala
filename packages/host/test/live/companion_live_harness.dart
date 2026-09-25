@@ -22,6 +22,10 @@ const String seededSessionTitle = 'Fix the cart';
 const String seededNote = 'Try a compact tab strip';
 const String seededTodo = 'Ship the fix';
 
+/// A second row, whose installation is Claude Code's: the daemon keeps its
+/// agent's status off the screen the test's fake agent draws.
+const String seededAgentSessionId = 'live-agent';
+
 /// Seeds `<dataDir>/karmashala.sqlite` the way the app would have left it — a
 /// project, a repository, one session row not yet started, a note and a todo —
 /// and closes it again before the host opens the same file.
@@ -51,6 +55,23 @@ void seedStore(Directory dataDir) {
         useWorktree: false,
         status: SessionStatus.created,
         createdAt: t0,
+      ),
+    );
+    database.execute(
+      'INSERT INTO agent_installations (id, agent_kind, environment_id, '
+      'executable_path, created_at, executable_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?);',
+      ['a2', 'claudeCode', 'local', '/usr/bin/claude', t0.toIso8601String(), 1],
+    );
+    SessionDao(database).insert(
+      Session(
+        id: seededAgentSessionId,
+        repositoryId: 'r1',
+        agentInstallationId: 'a2',
+        title: 'Create the note',
+        useWorktree: false,
+        status: SessionStatus.created,
+        createdAt: t0.add(const Duration(seconds: 1)),
       ),
     );
     NoteDao(database).insert(

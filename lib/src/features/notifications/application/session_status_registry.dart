@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/status.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_notifications/watched.dart';
 
@@ -167,7 +168,10 @@ class SessionStatusCycle {
   final int scans;
 }
 
-/// The one place a session's status lives: hooks and grids for every session
+/// The one place a session's status lives **in the app**: for a session this
+/// machine's session host holds, what the host says ([hostStatusFor]) — the
+/// host keeps it from the hooks it takes and the screen it holds; for every
+/// other session (a pane of the app's own, an imported one), hooks and grids
 /// every cycle, transcript probes rationed behind them. Flutter-free by design.
 class SessionStatusRegistry {
   SessionStatusRegistry({
@@ -179,6 +183,8 @@ class SessionStatusRegistry {
     this.resolveTranscripts,
     this.visibleSessionIds,
     this.onCycle,
+    this.heldByHost,
+    this.hostStatusFor,
     this.stateFileSource = const AgentStateFileStatusSource(),
     this.probeBudget = kStatusProbeBudget,
     this.probeConcurrency = kStatusProbeConcurrency,
@@ -208,6 +214,14 @@ class SessionStatusRegistry {
   /// Work that rides this cycle rather than starting a ticker of its own, with
   /// `mayScanStores` true at most once per [transcriptSearchInterval].
   final Future<void> Function(bool mayScanStores)? onCycle;
+
+  /// Whether this machine's session host holds [WatchedSession]'s process.
+  /// Its status is then the host's, never computed here.
+  final bool Function(WatchedSession session)? heldByHost;
+
+  /// What the host says the agent in a session it holds is doing, or null
+  /// while it has said nothing (read as `unknown`).
+  final HostedAgentStatus? Function(WatchedSession session)? hostStatusFor;
 
   final AgentStateFileStatusSource stateFileSource;
   final int probeBudget;
@@ -321,7 +335,7 @@ class SessionStatusRegistry {
         final next = current();
         // Only when the *evidence* moved: a cycle that reconfirms a status
         // must not become eighty widget rebuilds a second.
-        if (_sameEvidence(last, next)) return;
+        if (sameStatusEvidence(last, next)) return;
         last = next;
         controller.add(next);
       }, onDone: controller.close);
@@ -344,8 +358,9 @@ class SessionStatusRegistry {
         controller.onCancel = subscription.cancel;
       });
 
-  /// Sessions a hook just changed the status of, as the callback lands — the
-  /// event path `AgentStatusWatcher` listens on so approvals do not wait a pass.
+  /// Sessions an event just changed the status of — a hook callback landing,
+  /// or the session host's status frame — the path `AgentStatusWatcher`
+  /// listens on so approvals do not wait a pass.
   Stream<SessionStatusEntry> get hookChanges => _hookChanges.stream;
 
   /// Every session whose status evidence moved, one entry per move and from
@@ -369,6 +384,8 @@ class SessionStatusRegistry {
       _requestEarlyCycle();
       return;
     }
+    // The host took this hook too, and its status frame is the word.
+    if (_isHosted(tracked.session)) return;
     final now = clock.nowUtc();
     final query =
         tracked.query ??
@@ -390,11 +407,31 @@ class SessionStatusRegistry {
       statusService.compose(query: query, now: now, hook: hook),
       now,
     );
-    if (_sameEvidence(before, tracked.report)) return;
+    if (sameStatusEvidence(before, tracked.report)) return;
     hookFastUpdates++;
     if (!_changes.isClosed) _changes.add(null);
     if (!_hookChanges.isClosed) _hookChanges.add(tracked.entry());
   }
+
+  /// The session host said something new about the agent in the workspace
+  /// row [openId]: folded in now, out of turn. A row not tracked yet asks for
+  /// a cycle, rationed like a hook's.
+  void hostStatusMoved(String openId) {
+    if (_disposed) return;
+    final tracked = _byOpenId[openId];
+    if (tracked == null) {
+      _requestEarlyCycle();
+      return;
+    }
+    final before = tracked.report;
+    _observe(tracked, clock.nowUtc());
+    if (sameStatusEvidence(before, tracked.report)) return;
+    if (!_changes.isClosed) _changes.add(null);
+    if (!_hookChanges.isClosed) _hookChanges.add(tracked.entry());
+  }
+
+  bool _isHosted(WatchedSession session) =>
+      !session.imported && (heldByHost?.call(session) ?? false);
 
   void _requestEarlyCycle() {
     final now = clock.nowUtc();
@@ -574,6 +611,10 @@ class SessionStatusRegistry {
   /// Recomputes one session from the sources already in memory, and records
   /// whether its transcript still has to be consulted.
   void _observe(_Tracked tracked, DateTime now) {
+    if (_isHosted(tracked.session)) {
+      _observeHosted(tracked, now);
+      return;
+    }
     final query = AgentStatusQuery(
       agentId: tracked.session.key.agentId,
       sessionId: tracked.session.key.sessionId,
@@ -597,6 +638,35 @@ class SessionStatusRegistry {
         statusService.needsStateFile(hook, grid) &&
         descriptor.stateFile != null;
     _recompose(tracked, now);
+  }
+
+  /// A session the host holds: its word, keyed as this registry keys the
+  /// session. No hook, grid or transcript is read here for it.
+  void _observeHosted(_Tracked tracked, DateTime now) {
+    final key = tracked.session.key;
+    tracked
+      ..query = null
+      ..hook = null
+      ..grid = null
+      ..snapshot = null
+      ..wantsProbe = false;
+    final said = hostStatusFor?.call(tracked.session)?.report;
+    tracked.publish(
+      AgentStatusReport(
+        agentId: key.agentId,
+        sessionId: key.sessionId,
+        status: said?.status ?? AgentActivityStatus.unknown,
+        source: said?.source ?? AgentStatusSource.none,
+        observedAt: said?.observedAt ?? now,
+        sourceModifiedAt: said?.sourceModifiedAt,
+        detail: said?.detail,
+        evidence: said?.evidence ?? const [],
+        waiting: said?.waiting ?? AgentWaitKind.unrecorded,
+        ending: said?.ending,
+        failureReason: said?.failureReason,
+      ),
+      now,
+    );
   }
 
   /// Re-ranks one session's sources without touching disk or the terminal.
@@ -747,25 +817,6 @@ class SessionStatusRegistry {
   }
 }
 
-/// Whether two reports say the same thing about the same evidence.
-/// `observedAt` is excluded: it moves every cycle and only means "we looked".
-bool _sameEvidence(AgentStatusReport a, AgentStatusReport b) =>
-    a.status == b.status &&
-    a.source == b.source &&
-    a.detail == b.detail &&
-    a.sourceModifiedAt == b.sourceModifiedAt &&
-    a.agentId == b.agentId &&
-    a.sessionId == b.sessionId &&
-    _sameLines(a.evidence, b.evidence);
-
-bool _sameLines(List<String> a, List<String> b) {
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
-
 /// Everything the registry keeps about one session between cycles.
 class _Tracked {
   _Tracked(this.session, DateTime now, this._onMoved)
@@ -808,7 +859,7 @@ class _Tracked {
       session.imported || session.key.sessionId != session.openId;
 
   void publish(AgentStatusReport next, DateTime now) {
-    final moved = !_sameEvidence(report, next);
+    final moved = !sameStatusEvidence(report, next);
     if (moved) changedAt = now;
     report = next;
     sampledAt = now;

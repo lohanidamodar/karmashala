@@ -7,6 +7,7 @@ import 'package:karmashala_host/lifecycle_client.dart'
         CompanionEventMessage,
         CompanionNoticeMessage,
         PairedMessage;
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import 'relayed_agent_hook.dart';
@@ -36,7 +37,13 @@ class HostLifecycleFeed {
     void Function(AutomationNoticeKind kind)? noticeAutomations,
     void Function(int callId, {String? error})? answerAutomationCall,
     Future<ChecksRanMessage> Function(String sessionId)? runChecks,
+    this.statusSnapshot = const [],
+    Stream<HostAgentStatusChange>? agentStatuses,
+    Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)?
+    answerPrompt,
   }) : hooks = hooks ?? const Stream.empty(),
+       agentStatuses = agentStatuses ?? const Stream.empty(),
+       answerPrompt = answerPrompt ?? _noAnswers,
        replyHook = replyHook ?? _noReply,
        sessionChanges = sessionChanges ?? const Stream.empty(),
        mcpCalls = mcpCalls ?? const Stream.empty(),
@@ -53,6 +60,22 @@ class HostLifecycleFeed {
        noticeAutomations = noticeAutomations ?? _noAutomationNotice,
        answerAutomationCall = answerAutomationCall ?? _noAutomationAnswer,
        runChecks = runChecks ?? _noChecks;
+
+  static Future<SessionApprovalAnswer> _noAnswers(PromptAnswerRequest r) =>
+      Future.error(const SessionPromptRefusal('this host answers no prompts'));
+
+  /// What the agent in each session the host holds was doing when it
+  /// answered — the status this app renders for those sessions.
+  final List<HostedAgentStatus> statusSnapshot;
+
+  /// Every agent status after [statusSnapshot]; a null status is one the host
+  /// stopped keeping.
+  final Stream<HostAgentStatusChange> agentStatuses;
+
+  /// Asks the host to answer a prompt in a session it holds. Throws
+  /// [SessionPromptRefusal] with the host's reason.
+  final Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)
+  answerPrompt;
 
   static void _noAutomationNotice(AutomationNoticeKind kind) {}
   static void _noAutomationAnswer(int callId, {String? error}) {}
@@ -173,6 +196,10 @@ typedef CompanionPair =
 
 /// The host wrote [status] to the row [sessionId].
 typedef HostSessionChange = ({String sessionId, String status});
+
+/// What the agent in the row [sessionId] is doing now, or — [status] null —
+/// that the host stopped keeping it.
+typedef HostAgentStatusChange = ({String sessionId, HostedAgentStatus? status});
 
 /// Where one host's lifecycle is read from. Injectable so a test never reaches
 /// a real host.

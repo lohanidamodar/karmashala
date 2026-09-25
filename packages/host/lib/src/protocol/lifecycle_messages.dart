@@ -170,6 +170,7 @@ class WatchingMessage extends HostMessage {
     required this.observedAt,
     required this.sessions,
     this.hooks = const [],
+    this.statuses = const [],
   });
 
   final int requestId;
@@ -179,12 +180,17 @@ class WatchingMessage extends HostMessage {
   /// The latest hook per agent session, so a watcher that was away catches up.
   final List<AgentHookEvent> hooks;
 
+  /// What the agent in each session the host holds is doing, as
+  /// `HostedAgentStatus.toJson` — a watcher renders from these, not its own.
+  final List<Map<String, Object?>> statuses;
+
   @override
   Frame toFrame() {
     final body = {
       'observedAt': observedAt.toUtc().toIso8601String(),
       'sessions': [for (final s in sessions) s.toJson()],
       'hooks': [for (final h in hooks) h.toJson()],
+      'statuses': statuses,
     };
     final w = WireWriter()
       ..u32(requestId)
@@ -200,11 +206,19 @@ class WatchingMessage extends HostMessage {
     if (rows is! List) throw const WireFormatException('watching: no sessions');
     final hooks = map['hooks'];
     if (hooks is! List) throw const WireFormatException('watching: no hooks');
+    // Absent from a host that keeps no agent status (no store).
+    final statuses = map['statuses'] ?? const <Object?>[];
+    if (statuses is! List) {
+      throw const WireFormatException('watching: statuses is not a list');
+    }
     return WatchingMessage(
       requestId: requestId,
       observedAt: _time(map, 'observedAt') ?? _missing('observedAt'),
       sessions: [for (final row in rows) ?HostSessionFacts.fromJson(row)],
       hooks: [for (final hook in hooks) AgentHookEvent.fromJson(hook)],
+      statuses: [
+        for (final status in statuses) _object(status, 'watching: status'),
+      ],
     );
   }
 }

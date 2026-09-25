@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_terminal_runtime/instances.dart'
@@ -19,6 +20,8 @@ class HostLifecycleSubscriber {
     required this.hasLivePane,
     required this.onStatusChanged,
     this.onHook,
+    this.onAgentStatuses,
+    this.onAgentStatus,
     this.onAttached,
     this.onLost,
     this.mcpTools,
@@ -43,6 +46,15 @@ class HostLifecycleSubscriber {
   /// Each hook once: a snapshot hook already applied on an earlier link is not
   /// applied again. A held hook is replied to when this completes, or fails.
   final FutureOr<void> Function(RelayedAgentHook hook)? onHook;
+
+  /// Every agent status the host keeps, whenever a link opens — and nothing,
+  /// when it is lost: a host nobody can reach keeps no status this app may
+  /// render.
+  final void Function(List<HostedAgentStatus> statuses)? onAgentStatuses;
+
+  /// One session's agent status moved, or — null — the host let it go.
+  final void Function(String sessionId, HostedAgentStatus? status)?
+  onAgentStatus;
 
   /// Each time a link opens — the host may be a new one, on a new endpoint.
   final void Function()? onAttached;
@@ -75,6 +87,7 @@ class HostLifecycleSubscriber {
   StreamSubscription<RelayedAgentHook>? _hooks;
   StreamSubscription<HostSessionChange>? _statusChanges;
   StreamSubscription<HostMcpCall>? _mcpCalls;
+  StreamSubscription<HostAgentStatusChange>? _agentStatuses;
 
   /// When the latest hook applied per [RelayedAgentHook.sessionKey] arrived.
   final Map<String, DateTime> _hookApplied = {};
@@ -92,6 +105,21 @@ class HostLifecycleSubscriber {
 
   bool isRunning(String sessionId) =>
       _known[hostSessionIdOf(sessionId)] == HostSessionState.running;
+
+  /// Asks the host to answer a prompt in a session it runs. Throws
+  /// [SessionPromptRefusal] when it will not, or no link is open.
+  Future<SessionApprovalAnswer> answerPrompt(PromptAnswerRequest request) {
+    final feed = _feed;
+    if (feed == null) {
+      return Future.error(
+        const SessionPromptRefusal(
+          'the session host is not reachable right now',
+          noTerminal: true,
+        ),
+      );
+    }
+    return feed.answerPrompt(request);
+  }
 
   void start() => unawaited(_dial());
 
@@ -149,6 +177,10 @@ class HostLifecycleSubscriber {
     );
     // A host that started while no link was open wrote its snapshot then.
     onStatusChanged(null);
+    onAgentStatuses?.call(feed.statusSnapshot);
+    _agentStatuses = feed.agentStatuses.listen(
+      (change) => onAgentStatus?.call(change.sessionId, change.status),
+    );
     onAttached?.call();
     // A session the host no longer holds a hook for is forgotten here too.
     final held = {for (final hook in feed.hookSnapshot) hook.sessionKey};
@@ -226,6 +258,9 @@ class HostLifecycleSubscriber {
     _statusChanges = null;
     unawaited(_mcpCalls?.cancel());
     _mcpCalls = null;
+    unawaited(_agentStatuses?.cancel());
+    _agentStatuses = null;
+    onAgentStatuses?.call(const []);
     companion?.detached();
     automations?.detached();
     if (feed != null) unawaited(feed.close());
@@ -263,6 +298,8 @@ class HostLifecycleSubscriber {
     _statusChanges = null;
     await _mcpCalls?.cancel();
     _mcpCalls = null;
+    await _agentStatuses?.cancel();
+    _agentStatuses = null;
     if (_feed != null) {
       companion?.detached();
       automations?.detached();

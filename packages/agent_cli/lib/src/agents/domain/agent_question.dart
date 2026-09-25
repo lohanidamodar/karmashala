@@ -121,6 +121,7 @@ class AgentQuestionSupport {
     this.hookEvent,
     this.hookToolNamePath = const ['tool_name'],
     this.hookToolInputPath = const ['tool_input'],
+    this.hookToolUseIdPath = const ['tool_use_id'],
   });
 
   /// The tool whose call is a question.
@@ -133,6 +134,10 @@ class AgentQuestionSupport {
   /// Where that event's payload names the tool, and carries its input.
   final List<String> hookToolNamePath;
   final List<String> hookToolInputPath;
+
+  /// Where that event's payload names the tool call, so a question read off
+  /// the hook is the same call an answer names. Empty when it names none.
+  final List<String> hookToolUseIdPath;
 
   /// The keys that give [answers] to [questions], in order. Throws
   /// [ArgumentError] for an answer that does not fit — nothing is typed then.

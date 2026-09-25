@@ -1,6 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 /// A pane showing Claude Code's folder-trust menu, which moves its highlight on
 /// the arrow keys and records what Enter confirmed — the behaviour measured in

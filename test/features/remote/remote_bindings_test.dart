@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -26,14 +27,12 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
-import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
@@ -101,9 +100,7 @@ void main() {
         remoteDeliveryStageProvider.overrideWithValue(
           (sessionId) async => 'working',
         ),
-        remoteApprovalEvidenceProvider.overrideWithValue(
-          (sessionId) async => null,
-        ),
+        sessionStatusLookupProvider.overrideWithValue((sessionId) => null),
         remoteSessionPresenceProvider.overrideWithValue(
           (sessionId) =>
               (note: 'running here', lastSeen: DateTime.utc(2026, 8, 31, 9)),
@@ -728,9 +725,6 @@ void main() {
             remoteDeliveryStageProvider.overrideWithValue(
               (sessionId) async => 'working',
             ),
-            remoteApprovalEvidenceProvider.overrideWithValue(
-              (sessionId) async => null,
-            ),
             remoteSessionPresenceProvider.overrideWithValue(
               (sessionId) => (note: null, lastSeen: null),
             ),
@@ -927,9 +921,7 @@ void main() {
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
           ),
-          remoteApprovalEvidenceProvider.overrideWithValue(
-            (sessionId) async => report,
-          ),
+          sessionStatusLookupProvider.overrideWithValue((sessionId) => report),
           remoteSessionPresenceProvider.overrideWithValue(
             (sessionId) => (note: null, lastSeen: null),
           ),
@@ -1285,10 +1277,8 @@ void main() {
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
           ),
-          remoteApprovalEvidenceProvider.overrideWithValue(
-            (sessionId) async => report,
-          ),
-          remoteOpenQuestionProvider.overrideWithValue(
+          sessionStatusLookupProvider.overrideWithValue((sessionId) => report),
+          transcriptOpenQuestionProvider.overrideWithValue(
             (sessionId, agentId) async => open,
           ),
           remoteSessionPresenceProvider.overrideWithValue(
@@ -1500,25 +1490,16 @@ void main() {
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
           ),
-          remoteApprovalEvidenceProvider.overrideWithValue(
-            (sessionId) async => report,
-          ),
+          sessionStatusLookupProvider.overrideWithValue((sessionId) => report),
           remoteSessionPresenceProvider.overrideWithValue(
             (sessionId) => (note: null, lastSeen: null),
           ),
-          sessionMenuAnswererProvider.overrideWithValue(
-            SessionMenuAnswerer(
-              readScreen: (_) => screen(),
-              supportFor: (_) => const AgentMenuSupport(markers: ['❯']),
-              isAsking: (_) => report?.hasOpenPrompt ?? false,
-              press: (_, keys) {
-                pressed.add(keys);
-                if (keys == '\x1b[B') highlighted++;
-                return true;
-              },
-              poll: const Duration(milliseconds: 1),
-            ),
-          ),
+          promptPaneScreenProvider.overrideWithValue((_) => screen()),
+          promptPanePressProvider.overrideWithValue((_, keys) {
+            pressed.add(keys);
+            if (keys == '\x1b[B') highlighted++;
+            return true;
+          }),
         ],
       );
       addTearDown(built.dispose);
@@ -1728,7 +1709,7 @@ void main() {
       );
     locator.paths['claudeCode/ext-q9'] = transcript.path;
 
-    final open = await container.read(remoteOpenQuestionProvider)(
+    final open = await container.read(transcriptOpenQuestionProvider)(
       'q9',
       'claudeCode',
     );
@@ -1781,9 +1762,6 @@ void main() {
           ),
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
-          ),
-          remoteApprovalEvidenceProvider.overrideWithValue(
-            (sessionId) async => null,
           ),
           remoteSessionPresenceProvider.overrideWithValue(
             (sessionId) => (note: null, lastSeen: null),

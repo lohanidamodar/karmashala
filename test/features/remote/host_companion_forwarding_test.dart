@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -46,7 +47,7 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
         remoteDeliveryStageProvider.overrideWithValue((id) async => null),
-        remoteApprovalEvidenceProvider.overrideWithValue((id) async => null),
+        sessionStatusLookupProvider.overrideWithValue((_) => null),
         remoteSessionPresenceProvider.overrideWithValue(
           (id) => (note: null, lastSeen: null),
         ),

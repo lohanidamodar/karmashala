@@ -67,6 +67,10 @@ class LifecycleFeed {
   /// what it writes reaches that watcher too.
   void Function(Set<String> runByClient)? onWatched;
 
+  /// What the agent in each hosted session is doing, for a watcher's snapshot
+  /// (`HostedAgentStatus.toJson` each); null while no status is kept.
+  List<Map<String, Object?>> Function()? statusSnapshot;
+
   /// Sends the snapshot, then every event and hook, through [send]; cancel to
   /// stop. Subscribed in the same turn the snapshot is taken, so nothing falls
   /// between the two.
@@ -81,6 +85,7 @@ class LifecycleFeed {
         observedAt: _now(),
         sessions: snapshot(),
         hooks: hooks.latest(),
+        statuses: statusSnapshot?.call() ?? const [],
       ),
     );
     final subscription = _out.stream.listen(send);
@@ -92,6 +97,11 @@ class LifecycleFeed {
   /// verification rows.
   void publishAutomationsChanged() =>
       _out.add(const AutomationsChangedMessage());
+
+  /// Tells every watcher what the agent in the row [sessionId] is doing now,
+  /// or — [status] null — that it is no longer kept.
+  void publishAgentStatus(String sessionId, Map<String, Object?>? status) =>
+      _out.add(AgentStatusMessage(sessionId: sessionId, status: status));
 
   /// Tells every watcher the daemon wrote [status] to the row [sessionId].
   void publishSessionChanged(String sessionId, String status) =>

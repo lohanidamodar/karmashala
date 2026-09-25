@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala/src/features/sessions/application/session_message_typist.dart';
 
 /// Claude Code's screen while it works, as 2.1.274 draws it: what it has taken

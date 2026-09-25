@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_host/lifecycle_client.dart' as wire;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
@@ -53,6 +54,33 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       noticeAutomations: watch.noticeAutomations,
       answerAutomationCall: watch.answerAutomationCall,
       runChecks: watch.runChecks,
+      statusSnapshot: [
+        for (final json in watch.statusSnapshot)
+          ?HostedAgentStatus.fromJson(json),
+      ],
+      agentStatuses: watch.agentStatuses.map(
+        (message) => (
+          sessionId: message.sessionId,
+          status: HostedAgentStatus.fromJson(message.status),
+        ),
+      ),
+      answerPrompt: (request) async =>
+          _answerOf(await watch.answerPrompt(request.toJson())),
+    );
+  }
+
+  /// The host's reply as the answer it reports, or the refusal it gave.
+  static SessionApprovalAnswer _answerOf(wire.PromptAnsweredMessage reply) {
+    if (reply.ok) {
+      return SessionApprovalAnswer(
+        answered: reply.answered ?? '',
+        effect: reply.effect ?? '',
+      );
+    }
+    throw SessionPromptRefusal(
+      reply.message ?? 'the session host did not answer it',
+      notFound: reply.refusal == wire.PromptRefusalKind.notFound,
+      noTerminal: reply.refusal == wire.PromptRefusalKind.noTerminal,
     );
   }
 

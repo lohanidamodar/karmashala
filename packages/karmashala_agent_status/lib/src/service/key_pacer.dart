@@ -1,7 +1,4 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:riverpod/riverpod.dart';
-
-import 'session_launcher.dart';
 
 /// Types an answer into a session's pane the way a person would: one keystroke
 /// at a time, and a longer pause after Enter, which draws the next screen. One
@@ -34,10 +31,3 @@ class SessionKeyPacer {
     return true;
   }
 }
-
-final sessionKeyPacerProvider = Provider<SessionKeyPacer>(
-  (ref) => SessionKeyPacer(
-    press: (sessionId, keys) =>
-        ref.read(sessionLauncherProvider).pressKeys(sessionId, keys),
-  ),
-);

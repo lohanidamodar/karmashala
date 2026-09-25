@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_decision_providers.dart';
-import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala/src/features/sessions/presentation/decision_record_panel.dart';
 

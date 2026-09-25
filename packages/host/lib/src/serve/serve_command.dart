@@ -18,6 +18,9 @@ import '../mcp/mcp_endpoint_server.dart';
 import '../mcp/mcp_tool_relay.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
+import '../status/daemon_agent_status.dart';
+import '../status/daemon_prompt_answers.dart';
+import '../status/session_answer_tool.dart';
 import '../transport/socket_transport.dart';
 import 'package:karmashala_local_ipc/socket_location.dart';
 import 'host_build.dart';
@@ -129,6 +132,21 @@ Future<int> runServe(
   // machine whose SQLite will not load still owns every PTY on it — and then
   // `pair` refuses by name and no status is recorded.
   final database = _openStore(dataDirectory, errSink);
+  // What each hosted agent is doing, from the hooks and screens this host
+  // holds, and the answers to what they ask. Needs the rows to know which
+  // agent a session runs, so there is none without a store.
+  late final HostServer server;
+  final status = database == null
+      ? null
+      : DaemonAgentStatus(
+          registry: registry,
+          database: database,
+          publish: (sessionId, body) =>
+              server.lifecycle.publishAgentStatus(sessionId, body),
+        );
+  final prompts = status == null
+      ? null
+      : DaemonPromptAnswers(status: status, database: database!);
   final companion = database == null
       ? null
       : DaemonCompanion(
@@ -136,17 +154,20 @@ Future<int> runServe(
           registry: registry,
           hostName: Platform.localHostname,
           lanPort: _companionPort(args),
+          prompts: prompts,
           onLog: (message) => errSink.writeln('karmashala_host: $message'),
         );
 
   final mcpTools = McpToolRelay(cachePath: paths.mcpToolsPath);
-  final server = HostServer(
+  server = HostServer(
     registry: registry,
     ptyLibrary: pty.library,
     companion: companion,
     build: hostBuildOf(Platform.resolvedExecutable),
     mcpTools: mcpTools,
-  );
+  )..prompts = prompts;
+  server.lifecycle.statusSnapshot = status?.snapshot;
+  status?.start();
   final recording = database == null
       ? null
       : (SessionStatusRecording(
@@ -156,8 +177,13 @@ Future<int> runServe(
         )..start());
   final companionServing =
       companion != null &&
-      await _startCompanion(companion, server.lifecycle, errSink);
-  final hookServer = await _openHookServer(paths, server.lifecycle, errSink);
+      await _startCompanion(companion, server.lifecycle, status, errSink);
+  final hookServer = await _openHookServer(
+    paths,
+    server.lifecycle,
+    status,
+    errSink,
+  );
   final mcp = await _openMcp(
     paths,
     dataDirectory,
@@ -175,7 +201,16 @@ Future<int> runServe(
     mcpTools: mcpTools,
     dataDirectory: dataDirectory,
     errSink: errSink,
+    agentStatus: status,
   );
+  // `session_answer` for a session this host holds is answered here; every
+  // other local tool is the automations', and the rest go to the app.
+  final automationsTool = mcpTools.local;
+  if (prompts != null) {
+    mcpTools.local = (tool, arguments, caller) =>
+        sessionAnswerTool(prompts, tool, arguments, caller) ??
+        automationsTool?.call(tool, arguments, caller);
+  }
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
 
@@ -248,6 +283,7 @@ Future<int> runServe(
   await mcp?.close();
   mcpTools.close();
   await companion?.close();
+  await status?.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await automations?.close();
   await recording?.close();
@@ -268,13 +304,19 @@ Future<int> runServe(
 Future<HookServer?> _openHookServer(
   HostPaths paths,
   LifecycleFeed lifecycle,
+  DaemonAgentStatus? status,
   IOSink errSink,
 ) async {
   final previous = HookEndpoint.read(paths.hookEndpointPath);
   HookServer? server;
   try {
     server = await HookServer.bind(
-      onHook: lifecycle.relayHook,
+      // The status first, so a watcher hears the status a hook moved no later
+      // than the hook itself.
+      onHook: (hook) {
+        status?.hook(hook);
+        return lifecycle.relayHook(hook);
+      },
       port: previous?.port ?? 0,
       token: previous?.token,
     );
@@ -344,6 +386,7 @@ Future<DaemonAutomations?> _startAutomations({
   required McpToolRelay mcpTools,
   required String dataDirectory,
   required IOSink errSink,
+  DaemonAgentStatus? agentStatus,
 }) async {
   if (database == null || recording == null) return null;
   final automations = DaemonAutomations(
@@ -360,7 +403,10 @@ Future<DaemonAutomations?> _startAutomations({
   try {
     server.automations = automations;
     mcpTools.local = automations.localTool;
-    await automations.start(recording.changes);
+    await automations.start(
+      recording.changes,
+      agentStatus: agentStatus?.changes,
+    );
     return automations;
   } on Object catch (error) {
     server.automations = null;
@@ -376,10 +422,14 @@ Future<DaemonAutomations?> _startAutomations({
 Future<bool> _startCompanion(
   DaemonCompanion companion,
   LifecycleFeed lifecycle,
+  DaemonAgentStatus? status,
   IOSink errSink,
 ) async {
   try {
-    await companion.start(sessionEvents: lifecycle.events);
+    await companion.start(
+      sessionEvents: lifecycle.events,
+      statusChanges: status?.changes,
+    );
     return true;
   } on Object catch (error) {
     errSink.writeln('karmashala_host: could not start the companion ($error)');

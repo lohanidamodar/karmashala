@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -19,8 +20,10 @@ import '../../../terminal/application/local_host_providers.dart';
 import '../../../terminal/application/local_host_startup.dart';
 import '../../../terminal/application/terminal_sessions_controller.dart';
 import '../session_liveness_reconciler.dart' show panesThatStartedRunning;
+import '../session_decision_providers.dart';
 import '../session_providers.dart';
 import '../session_signals.dart';
+import 'host_agent_statuses.dart';
 import 'host_lifecycle_source.dart';
 import 'host_lifecycle_subscriber.dart';
 import 'local_host_lifecycle_source.dart';
@@ -43,15 +46,15 @@ final sessionRunsOnThisMachineProvider = Provider<bool Function(Session)>((
 
 /// The subscriber to this machine's host, or null without a source. **Watched
 /// at startup**, beside the liveness reconciler: unwatched, it never dials.
-final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
-  ref,
-) {
+final Provider<HostLifecycleSubscriber?>
+hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
   final source = ref.watch(hostLifecycleSourceProvider);
   if (source == null) return null;
   final hookLog = AppLogger.named('agent-hooks');
   // Keeps the host up: told of each loss, and each host it brings back is
   // dialled at once rather than on the subscriber's own backoff.
   final supervisor = ref.watch(localHostSupervisorProvider);
+  final agentStatuses = ref.read(hostAgentStatusesProvider);
   final subscriber = HostLifecycleSubscriber(
     source: source,
     sessionDao: ref.watch(sessionDaoProvider),
@@ -80,6 +83,17 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
       paneSessionId: hook.paneSessionId,
       logger: hookLog,
     ),
+    // What the host says its agents are doing: the app renders it.
+    onAgentStatuses: agentStatuses.replaceAll,
+    onAgentStatus: (sessionId, status) {
+      final before = agentStatuses.apply(sessionId, status);
+      // A prompt that closed was answered — maybe from a phone, through the
+      // host, which filed the decision: the panel reads the record again.
+      if (before?.report.status == AgentActivityStatus.awaitingApproval &&
+          status?.report.status != AgentActivityStatus.awaitingApproval) {
+        ref.read(decisionsRevisionProvider.notifier).bump();
+      }
+    },
     onAttached: () {
       supervisor?.hostAttached();
       unawaited(sweepHostHooks(ref.container, logger: hookLog));

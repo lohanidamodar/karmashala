@@ -9538,7 +9538,7 @@
       "revealed": true,
       "attribution": "[message from the Karmashala session \"Reads\" (s-628)]\n\na message",
       "sendTo": true,
-      "answerPrompt": true,
+      "pressKeys": true,
       "rowAfterReads": {
         "title": "Reads",
         "status": "running",
@@ -9577,7 +9577,7 @@
       "revealed": true,
       "attribution": "[message from the Karmashala session \"Reads\" (s-631)]\n\na message",
       "sendTo": true,
-      "answerPrompt": true,
+      "pressKeys": true,
       "rowAfterReads": {
         "title": "Reads",
         "status": "running",
@@ -9616,7 +9616,7 @@
       "revealed": true,
       "attribution": "[message from the Karmashala session \"Reads\" (s-634)]\n\na message",
       "sendTo": true,
-      "answerPrompt": true,
+      "pressKeys": true,
       "rowAfterReads": {
         "title": "Reads",
         "status": "running",

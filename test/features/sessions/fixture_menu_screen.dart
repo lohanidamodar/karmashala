@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:xterm2/xterm.dart';
 

@@ -37,6 +37,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -353,7 +354,7 @@ void main() {
         // this one fake them: a git/gh probe, the agent status sources, the
         // filesystem and the cached checkout stat.
         remoteDeliveryStageProvider.overrideWithValue((_) async => 'working'),
-        remoteApprovalEvidenceProvider.overrideWithValue((_) async => null),
+        sessionStatusLookupProvider.overrideWithValue((_) => null),
         remoteSessionPresenceProvider.overrideWithValue(
           (_) => (note: 'running here', lastSeen: DateTime.utc(2026, 8, 31, 9)),
         ),

@@ -25,6 +25,11 @@ dependencies:
   # the automation, resume and project-check tables. Pure Dart.
   karmashala_automations:
     path: ../karmashala_automations
+  # What the agent in each hosted session is doing, kept from the hooks this
+  # host takes and the screens it holds, and the prompt answers typed into
+  # them. Pure Dart; the app runs the same code only for its own panes.
+  karmashala_agent_status:
+    path: ../karmashala_agent_status
   # The base checkpoint an automation run is undone to.
   karmashala_checkpoints:
     path: ../karmashala_checkpoints

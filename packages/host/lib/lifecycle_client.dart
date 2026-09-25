@@ -9,6 +9,7 @@ export 'src/mcp/mcp_credentials.dart' show McpCredentials;
 export 'src/protocol/messages.dart'
     show
         AgentHookEvent,
+        AgentStatusMessage,
         AutomationCallKind,
         AutomationCallMessage,
         AutomationNoticeKind,
@@ -25,6 +26,8 @@ export 'src/protocol/messages.dart'
         LifecycleEventKind,
         McpCallMessage,
         PairedMessage,
+        PromptAnsweredMessage,
+        PromptRefusalKind,
         SessionChangedMessage,
         WelcomeMessage;
 export 'src/transport/socket_transport.dart' show SocketHostConnection;

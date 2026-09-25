@@ -28,6 +28,7 @@ workspace:
   - packages/agent_cli
   - packages/host
   - packages/karmashala_agent_reporting
+  - packages/karmashala_agent_status
   - packages/karmashala_automations
   - packages/karmashala_browser
   - packages/karmashala_checkpoints
@@ -186,6 +187,11 @@ dependencies:
   # (docs/PACKAGE_SPLIT_2.md, the agents correction). Pure Dart.
   karmashala_agent_reporting:
     path: packages/karmashala_agent_reporting
+  # What an agent in a terminal is doing and answering its prompts: the
+  # status the session host keeps for the sessions it holds, and the same
+  # code for panes no host holds. Pure Dart.
+  karmashala_agent_status:
+    path: packages/karmashala_agent_status
   karmashala_local_ipc:
     path: packages/local_ipc
   # The relay server itself, embedded in the desktop app so "This computer

@@ -1,7 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
-import 'package:karmashala/src/features/sessions/application/session_question_typist.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 /// Claude Code's AskUserQuestion as drawn by 2.1.274 (captured with the live
 /// probe), and the failure seen on the Oppo: the first key after a tab change

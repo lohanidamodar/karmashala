@@ -213,6 +213,17 @@ class HostSession {
     return null;
   }
 
+  /// Keys the host itself types: an answer to a prompt it read on this very
+  /// screen, asked for by a client, a phone or an agent's `session_answer`.
+  /// Not subject to the token — whoever holds it is usually who asked, and
+  /// what is typed is only the keys the agent's adapter declares, each step
+  /// read back off the screen. False once the process has ended.
+  bool typeAsHost(Uint8List bytes) {
+    if (_lifecycle.hasEnded) return false;
+    _pty.write(bytes);
+    return true;
+  }
+
   ClaimRefusal? resize(
     String clientId,
     int newColumns,

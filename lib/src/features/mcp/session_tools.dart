@@ -1,13 +1,13 @@
 import 'dart:convert';
 
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../sessions/application/session_actions.dart';
-import '../sessions/application/session_approval_answerer.dart';
-import '../sessions/application/session_menu_answerer.dart';
 import '../sessions/application/session_launcher.dart';
+import '../sessions/application/session_prompt_answers.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_status_providers.dart';
 import '../sessions/application/session_wait.dart';
@@ -290,7 +290,9 @@ class SessionControlTools {
   /// Answers an approval prompt: a menu by the option the *agent's* adapter
   /// declares affirmative or negative, anything else with the key the agent
   /// names for it. Nothing invents a binding; an agent that names none is
-  /// reported as such — see [SessionApprovalAnswerer].
+  /// reported as such — see `SessionApprovalAnswerer`. A session this
+  /// machine's host runs is answered by the host (which also answers this
+  /// tool itself while it serves agents' tools); a pane of this app's here.
   Future<Object?> _answer(String sessionId, String decision) async {
     if (decision != 'approve' && decision != 'deny') {
       throw ArgumentError("decision must be 'approve' or 'deny'.");
@@ -299,16 +301,21 @@ class SessionControlTools {
     final SessionApprovalAnswer answer;
     try {
       answer = await _container
-          .read(sessionApprovalAnswererProvider)
+          .read(sessionPromptAnswersProvider)
           .answer(
-            sessionId,
-            approve: decision == 'approve',
-            // Named rather than left to default to "the user": the decision
-            // record this lands in is read by somebody who was not there.
-            decidedBy: callerSessionId == null
-                ? 'an agent through the MCP bridge'
-                : 'an agent in session $callerSessionId',
-            decidedBySessionId: callerSessionId,
+            ApprovalAnswerRequest(
+              sessionId: sessionId,
+              approve: decision == 'approve',
+              // The caller read the screen; the menu reader and the question
+              // guard still stand between it and a blind Enter.
+              requireOpenPrompt: false,
+              // Named rather than left to default to "the user": the decision
+              // record this lands in is read by somebody who was not there.
+              decidedBy: callerSessionId == null
+                  ? 'an agent through the MCP bridge'
+                  : 'an agent in session $callerSessionId',
+              decidedBySessionId: callerSessionId,
+            ),
           );
     } on SessionPromptRefusal catch (refusal) {
       final message = refusal.message;

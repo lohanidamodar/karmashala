@@ -15,6 +15,7 @@ import '../protocol/frame.dart';
 import '../protocol/messages.dart';
 import '../protocol/wire.dart';
 import '../pty/pty.dart';
+import '../status/daemon_prompt_answers.dart';
 import '../transport/transport.dart';
 import 'lifecycle_feed.dart';
 
@@ -58,6 +59,11 @@ class HostServer {
   /// The daemon's automations and checks; null when there is no store. Set
   /// after construction, because it needs this server's lifecycle feed.
   AutomationHandler? automations;
+
+  /// Answers the prompts of the agents this host holds; null when there is no
+  /// store to keep their status by. Set after construction, like
+  /// [automations].
+  DaemonPromptAnswers? prompts;
 
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
@@ -300,6 +306,8 @@ class _ClientSession {
         _server.automations?.answer(this, message);
       case ChecksRunMessage():
         _onChecksRun(message);
+      case PromptAnswerMessage():
+        _onPromptAnswer(message);
       default:
         _send(
           ErrorMessage(
@@ -309,6 +317,25 @@ class _ClientSession {
           ),
         );
     }
+  }
+
+  /// Not awaited: an answer reads the screen back between keys, and this
+  /// client's other frames must not wait behind it.
+  void _onPromptAnswer(PromptAnswerMessage message) {
+    final prompts = _server.prompts;
+    if (prompts == null) {
+      _send(
+        PromptAnsweredMessage.refused(
+          requestId: message.requestId,
+          refusal: PromptRefusalKind.refused,
+          message: 'this host keeps no agent status: it has no store',
+        ),
+      );
+      return;
+    }
+    unawaited(
+      prompts.answerFrame(message.requestId, message.request).then(_send),
+    );
   }
 
   /// Not awaited: a test suite takes minutes, and this client's other frames

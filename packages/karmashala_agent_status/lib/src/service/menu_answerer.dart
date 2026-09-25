@@ -1,27 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:riverpod/riverpod.dart';
 
-import '../../agents/application/agent_providers.dart';
-import '../../terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_terminal_runtime/screen_reading.dart';
-import 'session_launcher.dart';
-import 'session_providers.dart';
-import 'session_status_providers.dart';
-
-/// Why a menu or a question was not answered. Nothing was chosen when this is
-/// thrown — at worst the highlight was moved and left there.
-class SessionPromptRefusal implements Exception {
-  const SessionPromptRefusal(this.message, {this.noTerminal = false});
-
-  final String message;
-
-  /// The session has no live pane to press into — a refusal of where the
-  /// answer would go, not of the answer.
-  final bool noTerminal;
-
-  @override
-  String toString() => message;
-}
+import '../domain/prompt_refusal.dart';
 
 /// Reads the menu a session's agent has drawn — folder trust, a permission
 /// prompt, a startup offer — and answers it **by option**: the highlight is
@@ -143,42 +122,6 @@ class SessionMenuAnswerer {
   }
 }
 
-/// How often a surface showing a menu reads the screen again: one menu can
-/// follow another (folder trust, then external imports) with no status change.
-const Duration kMenuRereadInterval = Duration(milliseconds: 700);
-
 /// Rows read for a menu: more than the status source's twelve, because a menu's
 /// prompt sits above its options — the folder-trust screen is fourteen rows.
 const kMenuScreenRows = 40;
-
-final sessionMenuAnswererProvider = Provider<SessionMenuAnswerer>((ref) {
-  AgentDescriptor? agentOf(String sessionId) {
-    final session = ref.read(sessionDaoProvider).getById(sessionId);
-    if (session == null) return null;
-    final agentId = ref
-        .read(agentInstallationDaoProvider)
-        .getById(session.agentInstallationId)
-        ?.agentId;
-    return agentId == null
-        ? null
-        : ref.read(agentRegistryProvider).byId(agentId);
-  }
-
-  return SessionMenuAnswerer(
-    readScreen: (sessionId) {
-      final paneId = ref.read(sessionLauncherProvider).livePaneFor(sessionId);
-      if (paneId == null) return null;
-      final instance = ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(paneId);
-      if (instance == null) return null;
-      return terminalTailLines(instance.terminal, lines: kMenuScreenRows);
-    },
-    supportFor: (sessionId) => agentOf(sessionId)?.menus,
-    isAsking: (sessionId) =>
-        ref.read(sessionStatusLookupProvider)(sessionId)?.hasOpenPrompt ??
-        false,
-    press: (sessionId, keys) =>
-        ref.read(sessionLauncherProvider).pressKeys(sessionId, keys),
-  );
-});

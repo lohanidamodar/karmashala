@@ -1,25 +1,8 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:riverpod/riverpod.dart';
 
-import '../../agents/application/agent_providers.dart';
-import 'decision_recorder.dart';
-import 'session_launcher.dart';
-import 'session_menu_answerer.dart';
-import 'session_providers.dart';
-import 'session_status_providers.dart';
-
-/// What an approve or deny actually did, in words a reader who was not there
-/// can check against the agent's screen.
-class SessionApprovalAnswer {
-  const SessionApprovalAnswer({required this.answered, required this.effect});
-
-  /// The option chosen, in the agent's own words — or, where no menu was
-  /// answered, the label of the key pressed.
-  final String answered;
-
-  /// What that does to the agent.
-  final String effect;
-}
+import '../domain/approval_answer.dart';
+import '../domain/prompt_refusal.dart';
+import 'menu_answerer.dart';
 
 /// **Approve and deny, for every surface that offers them** — the MCP tool and
 /// the phone; the desktop card answers a menu by option already.
@@ -52,7 +35,8 @@ class SessionApprovalAnswerer {
   /// A question's screen has rows a menu reader would misread as options.
   final bool Function(String sessionId) hasOpenQuestion;
 
-  /// Presses one declared key and records it — [SessionLauncher.answerPrompt].
+  /// Presses one declared key and records what the agent's table says it
+  /// authorised; false without a terminal to press into.
   final bool Function(
     String sessionId,
     String keys, {
@@ -160,57 +144,3 @@ class SessionApprovalAnswerer {
     return question.isEmpty ? 'with no prompt' : 'asking "$question"';
   }
 }
-
-final sessionApprovalAnswererProvider = Provider<SessionApprovalAnswerer>((
-  ref,
-) {
-  AgentDescriptor? agentOf(String sessionId) {
-    final session = ref.read(sessionDaoProvider).getById(sessionId);
-    if (session == null) return null;
-    final agentId = ref
-        .read(agentInstallationDaoProvider)
-        .getById(session.agentInstallationId)
-        ?.agentId;
-    return agentId == null
-        ? null
-        : ref.read(agentRegistryProvider).byId(agentId);
-  }
-
-  return SessionApprovalAnswerer(
-    menus: ref.read(sessionMenuAnswererProvider),
-    rulesFor: (sessionId) =>
-        agentOf(sessionId)?.approval ?? const AgentApprovalRules(),
-    agentNameFor: (sessionId) => agentOf(sessionId)?.displayName ?? 'The agent',
-    hasOpenQuestion: (sessionId) =>
-        ref.read(sessionStatusLookupProvider)(sessionId)?.hasOpenQuestion ??
-        false,
-    pressAnswerKey:
-        (sessionId, keys, {required decidedBy, required decidedBySessionId}) =>
-            ref
-                .read(sessionLauncherProvider)
-                .answerPrompt(
-                  sessionId,
-                  keys,
-                  decidedBy: decidedBy,
-                  decidedBySessionId: decidedBySessionId,
-                ),
-    recordMenuAnswer:
-        (
-          sessionId, {
-          required granted,
-          required option,
-          required effect,
-          required decidedBy,
-          required decidedBySessionId,
-        }) => ref
-            .read(decisionRecorderProvider)
-            .recordApproval(
-              sessionId: sessionId,
-              granted: granted,
-              effect: effect,
-              answerLabel: option,
-              decidedBy: decidedBy,
-              decidedBySessionId: decidedBySessionId,
-            ),
-  );
-});

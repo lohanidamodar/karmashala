@@ -12,15 +12,17 @@ import 'screen_transcripts.dart';
 /// writes — and the sessions it runs, read and typed into through their
 /// screens.
 ///
-/// **Only what the host can see for itself.** No attention (the status
-/// registry is the app's), no delivery stage, no attachments, no agent
-/// record: a phone is told less, never something the host would be guessing.
+/// **Only what the host can see for itself.** Attention from the agent status
+/// it keeps for the sessions it holds; no delivery stage, no attachments, no
+/// agent record: a phone is told less, never something the host would be
+/// guessing.
 class SessionsAtRest {
   SessionsAtRest({
     required this.sessions,
     required this.names,
     required this.screens,
     required this.hostName,
+    this.attentionOf,
     ScreenTranscripts? transcripts,
     DateTime Function()? clock,
   }) : transcripts = transcripts ?? ScreenTranscripts(clock: clock),
@@ -32,6 +34,10 @@ class SessionsAtRest {
 
   /// This machine, as a row's whereabouts names it.
   final String hostName;
+
+  /// The attention word for a session row the host keeps an agent status
+  /// for (`needs_approval`, `failed`), or null for nothing waiting.
+  final String? Function(String sessionId)? attentionOf;
   final ScreenTranscripts transcripts;
   final DateTime Function() _now;
 
@@ -113,6 +119,7 @@ class SessionsAtRest {
       title: row.title,
       status: row.status.name,
       archived: row.isArchived,
+      attention: attentionOf?.call(row.id),
       repositoryId: row.repositoryId,
       repositoryName: place?.repositoryName,
       createdAt: row.createdAt.toUtc().toIso8601String(),

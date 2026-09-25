@@ -64,8 +64,9 @@ void main() {
     });
 
     test('the protocol version is pinned, so moving it is a decision', () {
-      // Protocol 6: an exit a close on request caused carries endedByClose.
-      expect(kProtocolVersion, 6);
+      // Protocol 7: the daemon keeps each hosted agent's status and answers
+      // its prompts (agentStatus, promptAnswer, promptAnswered).
+      expect(kProtocolVersion, 7);
     });
   });
 

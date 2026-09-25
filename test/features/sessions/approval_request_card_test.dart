@@ -1,4 +1,5 @@
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -6,7 +7,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
-import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -63,6 +63,7 @@ import '../terminal/fake_instance.dart';
       agentSessionStatusProvider.overrideWith(
         (ref, id) => Stream.value(report),
       ),
+      sessionStatusLookupProvider.overrideWithValue((_) => report),
       ...overrides,
     ],
   );
@@ -367,12 +368,12 @@ void main() {
     late int highlighted;
     const options = ['No, exit', 'Yes, I trust this folder'];
 
-    Override menuPane() {
+    List<Override> menuPane() {
       pressed = [];
       highlighted = 0;
-      return sessionMenuAnswererProvider.overrideWithValue(
-        SessionMenuAnswerer(
-          readScreen: (_) => [
+      return [
+        promptPaneScreenProvider.overrideWithValue(
+          (_) => [
             ' Accessing workspace:',
             ' Security guide',
             '',
@@ -381,23 +382,20 @@ void main() {
             '',
             ' Enter to confirm · Esc to cancel',
           ],
-          supportFor: (_) => const AgentMenuSupport(markers: ['❯']),
-          isAsking: (_) => true,
-          press: (_, keys) {
-            pressed.add(keys);
-            if (keys == '\x1b[B') highlighted++;
-            return true;
-          },
-          poll: const Duration(milliseconds: 1),
         ),
-      );
+        promptPanePressProvider.overrideWithValue((_, keys) {
+          pressed.add(keys);
+          if (keys == '\x1b[B') highlighted++;
+          return true;
+        }),
+      ];
     }
 
     testWidgets('its own options, and no Approve', (tester) async {
       final h = harness(
         agentId: AgentIds.claudeCode,
         report: report(agentId: AgentIds.claudeCode),
-        overrides: [menuPane()],
+        overrides: menuPane(),
       );
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
@@ -416,7 +414,7 @@ void main() {
       final h = harness(
         agentId: AgentIds.claudeCode,
         report: report(agentId: AgentIds.claudeCode),
-        overrides: [menuPane()],
+        overrides: menuPane(),
       );
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
@@ -427,7 +425,7 @@ void main() {
       await tester.pump();
       await tester.runAsync(() async {
         await tester.tap(find.widgetWithText(FilledButton, 'Choose'));
-        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
       });
       await tester.pump();
 

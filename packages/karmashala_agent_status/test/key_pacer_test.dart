@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/sessions/application/session_key_pacer.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 void main() {
   test('one keystroke per write, the longer pause after Enter', () async {

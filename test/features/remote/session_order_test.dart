@@ -7,6 +7,7 @@
 library;
 
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
@@ -48,7 +49,7 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(database: db),
         remoteDeliveryStageProvider.overrideWithValue((id) async => null),
-        remoteApprovalEvidenceProvider.overrideWithValue((id) async => null),
+        sessionStatusLookupProvider.overrideWithValue((_) => null),
         remoteSessionPresenceProvider.overrideWithValue(
           (id) => (note: null, lastSeen: activeAt[id]),
         ),
