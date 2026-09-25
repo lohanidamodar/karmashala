@@ -174,7 +174,7 @@ class _Source implements HostLifecycleSource {
   final List<String> events;
 
   @override
-  Future<HostLifecycleFeed?> open() async {
+  Future<HostLifecycleFeed?> open({List<String> runByClient = const []}) async {
     events.add('dial');
     return null;
   }

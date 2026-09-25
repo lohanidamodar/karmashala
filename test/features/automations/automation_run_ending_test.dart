@@ -72,7 +72,7 @@ void main() {
       ),
     );
     reports = StreamController<AgentStatusReport>.broadcast();
-    host = FakeHostLifecycle()
+    host = FakeHostLifecycle(db)
       ..snapshot = [hostFacts('s1', HostSessionState.running)];
     addTearDown(() async {
       await reports.close();

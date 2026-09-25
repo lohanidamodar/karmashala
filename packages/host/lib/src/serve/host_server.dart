@@ -265,7 +265,11 @@ class _ClientSession {
         await _onPair(message);
       case WatchMessage():
         await _lifecycleWatch?.cancel();
-        _lifecycleWatch = _server.lifecycle.watch(message.requestId, _send);
+        _lifecycleWatch = _server.lifecycle.watch(
+          message.requestId,
+          _send,
+          runByClient: message.runByClient,
+        );
       case HookReplyMessage():
         _server.lifecycle.replyHook(message.holdId);
       default:

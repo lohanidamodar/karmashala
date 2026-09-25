@@ -12,8 +12,10 @@ class HostLifecycleFeed {
     this.hookSnapshot = const [],
     Stream<RelayedAgentHook>? hooks,
     void Function(int holdId)? replyHook,
+    Stream<HostSessionChange>? sessionChanges,
   }) : hooks = hooks ?? const Stream.empty(),
-       replyHook = replyHook ?? _noReply;
+       replyHook = replyHook ?? _noReply,
+       sessionChanges = sessionChanges ?? const Stream.empty();
 
   static void _noReply(int holdId) {}
 
@@ -28,6 +30,9 @@ class HostLifecycleFeed {
   /// Every hook after [hookSnapshot].
   final Stream<RelayedAgentHook> hooks;
 
+  /// Each row the host wrote a lifecycle status to. The row is the record.
+  final Stream<HostSessionChange> sessionChanges;
+
   /// Lets the agent held under a hook's [RelayedAgentHook.holdId] go on.
   final void Function(int holdId) replyHook;
 
@@ -35,10 +40,14 @@ class HostLifecycleFeed {
   final Future<void> Function() close;
 }
 
+/// The host wrote [status] to the row [sessionId].
+typedef HostSessionChange = ({String sessionId, String status});
+
 /// Where one host's lifecycle is read from. Injectable so a test never reaches
 /// a real host.
 abstract interface class HostLifecycleSource {
   /// Null when no host is listening. Throws when one answers but refuses to be
-  /// watched.
-  Future<HostLifecycleFeed?> open();
+  /// watched. [runByClient]: rows this app runs in its own panes, which the
+  /// host must not mark as lost.
+  Future<HostLifecycleFeed?> open({List<String> runByClient = const []});
 }

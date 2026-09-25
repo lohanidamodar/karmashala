@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:path/path.dart' as p;
 
 import '../companion/companion_listener.dart';
 import '../companion/host_companion.dart';
@@ -18,15 +19,35 @@ import 'host_build.dart';
 import 'host_paths.dart';
 import 'host_server.dart';
 import 'lifecycle_feed.dart';
+import 'session_status_recording.dart';
 import 'session_store.dart';
 
 /// The daemon. Started detached — `setsid nohup … &` over SSH, or by the app on
 /// Windows — and ignores SIGHUP, so an SSH channel closing is not the end of
 /// every session on the machine.
-Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
+///
+/// `--data-dir=<dir>` is required: the store is `<dir>/karmashala.sqlite`, the
+/// app's own file. [paths] and [until] are for tests.
+Future<int> runServe(
+  List<String> args, {
+  IOSink? out,
+  IOSink? err,
+  HostPaths? paths,
+  Future<void>? until,
+}) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
-  final paths = HostPaths.resolve();
+  // Refused before anything is touched: every caller is ours and passes it,
+  // and a host run without it would record no session's status, silently.
+  final dataDirectory = dataDirectoryOf(args);
+  if (dataDirectory == null) {
+    errSink.writeln(
+      'karmashala_host: refusing to serve — `--data-dir=<dir>` is required; '
+      'the store is <dir>/karmashala.sqlite, the app\'s own database',
+    );
+    return 2;
+  }
+  paths ??= HostPaths.resolve();
   paths.ensureDirectory();
 
   // Before the lock: a socket anybody can traverse to is a socket anybody can
@@ -95,17 +116,14 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     ..ensureDirectory();
   final registry = SessionRegistry(launcher: pty.launcher, store: store);
 
-  // The companion half, and it is allowed to be absent. A machine whose SQLite
-  // will not load still owns every PTY on it, and taking panes away because a
-  // phone could not have been served would be the larger failure — so this is
-  // reported and stepped over, and `pair` refuses by name until it is fixed.
-  // `karmashala_host probe-store` says which of the four things is wrong.
-  final companion = await _openCompanion(
-    paths,
-    registry,
-    _companionPort(args),
-    errSink,
-  );
+  // The app's own database, shared: its pairings, its host id and the rows
+  // whose lifecycle status this daemon alone writes. Allowed to be absent — a
+  // machine whose SQLite will not load still owns every PTY on it — and then
+  // `pair` refuses by name and no status is recorded.
+  final database = _openStore(dataDirectory, errSink);
+  final companion = database == null
+      ? null
+      : await _openCompanion(database, registry, _companionPort(args), errSink);
 
   final server = HostServer(
     registry: registry,
@@ -113,6 +131,13 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     openPairing: companion?.openPairing,
     build: hostBuildOf(Platform.resolvedExecutable),
   );
+  final recording = database == null
+      ? null
+      : (SessionStatusRecording(
+          server.lifecycle,
+          database,
+          clock: () => DateTime.now().toUtc(),
+        )..start());
   final hookServer = await _openHookServer(paths, server.lifecycle, errSink);
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
@@ -127,6 +152,7 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
   // try/catch around `listen` can see it.
   final subscriptions = <StreamSubscription<void>>[
     server.listen(listener),
+    if (until != null) until.asStream().listen((_) => stop(0)),
     ProcessSignal.sigint.watch().listen((_) => stop(0)),
     if (!Platform.isWindows) ...[
       ProcessSignal.sigterm.watch().listen((_) => stop(0)),
@@ -142,6 +168,11 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
       hookServer == null
           ? 'agent hooks unavailable — the line above says why'
           : 'agent hooks on port ${hookServer.port}',
+    )
+    ..writeln(
+      database == null
+          ? 'no store — session status is not recorded; the line above says why'
+          : 'store ${p.join(dataDirectory, 'karmashala.sqlite')}',
     )
     ..writeln(
       companion == null
@@ -163,7 +194,9 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
   await listener.close();
   await hookServer?.close();
   await companion?.close();
+  await recording?.close();
   await registry.shutdown();
+  database?.close();
   lock.release();
   return code;
 }
@@ -193,31 +226,32 @@ Future<HookServer?> _openHookServer(
   }
 }
 
-/// The store, the pairing service and the phone listener, or null when this
-/// machine cannot hold a store. Every failure is reported and none is fatal:
-/// sessions do not need a store, and a host that refused to serve them because
-/// a phone could not be paired would be trading the larger thing for the
-/// smaller one.
-Future<_Companion?> _openCompanion(
-  HostPaths paths,
+/// The shared store at `<dataDirectory>/karmashala.sqlite`, or null, reported,
+/// when this machine cannot hold one: sessions do not need a store, and a host
+/// that refused to serve them for want of one would trade the larger thing for
+/// the smaller. `karmashala_host probe-store` says which of four things failed.
+AppDatabase? _openStore(String dataDirectory, IOSink errSink) {
+  try {
+    final directory = Directory(dataDirectory);
+    if (!directory.existsSync()) directory.createSync(recursive: true);
+    return AppDatabase.open(directory);
+  } on Object catch (error) {
+    errSink.writeln(
+      'karmashala_host: no store in $dataDirectory ($error) — run '
+      '`probe-store` here',
+    );
+    return null;
+  }
+}
+
+/// The pairing service and the phone listener on [database], or null. Every
+/// failure is reported and none is fatal.
+Future<HostCompanion?> _openCompanion(
+  AppDatabase database,
   SessionRegistry registry,
   int port,
   IOSink errSink,
 ) async {
-  // The store and the listener fail for unrelated reasons and want unrelated
-  // answers — `probe-store` for one, a busy port for the other — so they are
-  // never reported as each other. Saying "no store" about a machine whose
-  // SQLite opened perfectly is the confident false statement §19 is about.
-  final AppDatabase database;
-  try {
-    database = AppDatabase.open(paths.storeDirectory);
-  } on Object catch (error) {
-    errSink.writeln(
-      'karmashala_host: no companion store ($error) — run `probe-store` here',
-    );
-    return null;
-  }
-
   try {
     final name = Platform.localHostname;
     final pairing = HostPairingService(
@@ -241,9 +275,8 @@ Future<_Companion?> _openCompanion(
     // Phones paired through a relay are waited for there from the first moment,
     // not from the next pairing.
     await companion.start();
-    return _Companion(database, companion);
+    return companion;
   } on SocketException catch (error) {
-    database.close();
     errSink.writeln(
       'karmashala_host: the store is fine but port $port is not free '
       '(${error.osError?.message ?? error.message}). Another host is probably '
@@ -252,10 +285,20 @@ Future<_Companion?> _openCompanion(
     );
     return null;
   } on Object catch (error) {
-    database.close();
     errSink.writeln('karmashala_host: could not start the companion ($error)');
     return null;
   }
+}
+
+/// `--data-dir=<dir>`, absolute, or null when missing or empty.
+String? dataDirectoryOf(List<String> args) {
+  const flag = '--data-dir=';
+  for (final arg in args) {
+    if (!arg.startsWith(flag)) continue;
+    final value = arg.substring(flag.length).trim();
+    if (value.isNotEmpty) return p.absolute(value);
+  }
+  return null;
 }
 
 /// `--companion-port=<n>`, or the shared default. 0 asks the OS for a free one,
@@ -293,27 +336,4 @@ DeviceId _hostIdentity(AppDatabase database) {
   // never parse back, so every restart would look like a new machine.
   database.writeMetadata(key, minted.value);
   return minted;
-}
-
-/// The companion half of a serving host and the store under it, held together
-/// so they close together.
-class _Companion {
-  _Companion(this._database, this._companion);
-
-  final AppDatabase _database;
-  final HostCompanion _companion;
-
-  CompanionListener get listener => _companion.listener;
-
-  int paired() => _companion.paired();
-
-  Future<({String code, DateTime expiresAt})> openPairing(
-    int capabilities,
-    String relay,
-  ) => _companion.openPairing(capabilities, relay);
-
-  Future<void> close() async {
-    await _companion.close();
-    _database.close();
-  }
 }

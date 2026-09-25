@@ -34,7 +34,12 @@ printf '%s\\n' '#!/bin/sh' 'unset XDG_RUNTIME_DIR' 'export HOME=$root' \\
 chmod +x $root/kh
 test -x $root/.karmashala/bin/karmashala_host
 ''');
-    serving = await harness.start(['sh', '$root/kh', 'serve']);
+    serving = await harness.start([
+      'sh',
+      '$root/kh',
+      'serve',
+      '--data-dir=$root/.karmashala',
+    ]);
     // Started, not slept for: the daemon says where it bound. If it exits
     // first the failure quotes it, because "already running" costs an hour.
     final banner = Completer<String>();

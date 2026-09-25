@@ -15,6 +15,8 @@ const _usage =
 karmashala_host $kHostVersion — Karmashala's session host.
 
   karmashala_host serve         own sessions on this machine until told to stop
+                                --data-dir=<dir> (required): the store is
+                                  <dir>/karmashala.sqlite, the app's database
                                 --companion-port=<n> to move the phone listener
   karmashala_host attach        proxy stdio to the running host's socket
   karmashala_host list          what this machine's host is holding

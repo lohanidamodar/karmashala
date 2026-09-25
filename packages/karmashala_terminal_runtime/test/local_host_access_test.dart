@@ -33,6 +33,21 @@ void main() {
     }
   });
 
+  test('serve is started with the app\'s data directory, and without one it '
+      'is started bare, which serve refuses in words', () async {
+    final told = LocalHostSessionAccess(
+      paths: paths,
+      dataDirectory: () async => '${home.path}/data',
+    );
+    expect(await told.serveArguments(), [
+      'serve',
+      '--data-dir=${home.path}/data',
+    ]);
+    expect(await LocalHostSessionAccess(paths: paths).serveArguments(), [
+      'serve',
+    ]);
+  });
+
   /// The binary this app would start. Written once: its size and time are the
   /// build a host is compared against, so rewriting it would change the build.
   File anExecutable() {

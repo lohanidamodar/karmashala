@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_terminal_runtime/instances.dart'
     show kHostRedialDelays;
@@ -9,16 +8,16 @@ import 'package:karmashala_terminal_runtime/instances.dart'
 import 'host_lifecycle_source.dart';
 import 'relayed_agent_hook.dart';
 
-/// The one link to a host's lifecycle feed: records its snapshot and every
-/// event after it through [recorder], hands each relayed agent hook to
-/// [onHook], and dials again when the host goes away.
+/// The one link to a host's lifecycle feed. The host writes its sessions'
+/// lifecycle status itself; this follows what it holds, hands each row it
+/// wrote to [onStatusChanged] and each relayed agent hook to [onHook], and
+/// dials again when the host goes away.
 class HostLifecycleSubscriber {
   HostLifecycleSubscriber({
     required this.source,
-    required this.recorder,
     required this.sessionDao,
-    required this.runsOnThisMachine,
     required this.hasLivePane,
+    required this.onStatusChanged,
     this.onHook,
     this.onAttached,
     this.retryDelays = kHostRedialDelays,
@@ -27,14 +26,15 @@ class HostLifecycleSubscriber {
   }) : _log = logger ?? AppLogger.named('sessions.host_lifecycle');
 
   final HostLifecycleSource source;
-  final SessionLifecycleRecorder recorder;
   final SessionDao sessionDao;
 
-  /// Rows this host can speak for; the rest are left to their own host.
-  final bool Function(Session session) runsOnThisMachine;
-
-  /// A live pane runs its row whatever the host says, so it is never unseen.
+  /// A live pane of this app's own runs its row, so the host is told to leave
+  /// that row alone.
   final bool Function(String paneId) hasLivePane;
+
+  /// A row the host wrote; null when it may have written any, while no link
+  /// was open.
+  final void Function(String? sessionId) onStatusChanged;
 
   /// Each hook once: a snapshot hook already applied on an earlier link is not
   /// applied again. A held hook is replied to when this completes, or fails.
@@ -53,12 +53,12 @@ class HostLifecycleSubscriber {
   HostLifecycleFeed? _feed;
   StreamSubscription<SessionLifecycleEvent>? _events;
   StreamSubscription<RelayedAgentHook>? _hooks;
+  StreamSubscription<HostSessionChange>? _statusChanges;
 
   /// When the latest hook applied per [RelayedAgentHook.sessionKey] arrived.
   final Map<String, DateTime> _hookApplied = {};
   Timer? _retry;
   var _attempt = 0;
-  var _answered = false;
   var _dialing = false;
   var _disposed = false;
   String? _lastRefusal;
@@ -86,7 +86,7 @@ class HostLifecycleSubscriber {
     _dialing = true;
     HostLifecycleFeed? feed;
     try {
-      feed = await source.open();
+      feed = await source.open(runByClient: _runByThisApp());
     } on Object catch (error) {
       _dialing = false;
       // Same build as the app, so a refusal is a fault to see, not a fallback.
@@ -103,7 +103,9 @@ class HostLifecycleSubscriber {
       return;
     }
     if (feed == null) {
-      _nobodyListening();
+      // Nothing written here: the host is the only writer, and the next one
+      // to start marks what it does not hold.
+      _known.clear();
       _scheduleRetry();
       return;
     }
@@ -113,22 +115,19 @@ class HostLifecycleSubscriber {
   void _attach(HostLifecycleFeed feed) {
     _attempt = 0;
     _lastRefusal = null;
-    final before = _runningHostIds();
     _known
       ..clear()
       ..addEntries([
         for (final facts in feed.snapshot)
           MapEntry(facts.hostSessionId, facts.state),
       ]);
-    final candidates = _candidates();
-    recorder.applySnapshot(
-      feed.snapshot,
-      sessionIdOf: (hostId) => sessionIdForHostId(hostId, candidates),
-    );
-    _recordGone(before.where((hostId) => !_known.containsKey(hostId)));
-    _firstAnswer();
     _feed = feed;
     _events = feed.events.listen(_onEvent, onDone: _lost);
+    _statusChanges = feed.sessionChanges.listen(
+      (change) => onStatusChanged(change.sessionId),
+    );
+    // A host that started while no link was open wrote its snapshot then.
+    onStatusChanged(null);
     onAttached?.call();
     // A session the host no longer holds a hook for is forgotten here too.
     final held = {for (final hook in feed.hookSnapshot) hook.sessionKey};
@@ -159,11 +158,6 @@ class HostLifecycleSubscriber {
 
   void _onEvent(SessionLifecycleEvent event) {
     _known[event.hostSessionId] = event.facts.state;
-    final candidates = _candidates();
-    recorder.applyEvent(
-      event,
-      sessionIdOf: (hostId) => sessionIdForHostId(hostId, candidates),
-    );
   }
 
   void _lost() {
@@ -172,52 +166,19 @@ class HostLifecycleSubscriber {
     _events = null;
     unawaited(_hooks?.cancel());
     _hooks = null;
+    unawaited(_statusChanges?.cancel());
+    _statusChanges = null;
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
     _scheduleRetry();
   }
 
-  /// No host here, so none of the sessions it ran is running.
-  void _nobodyListening() {
-    final before = _runningHostIds();
-    _known.clear();
-    _recordGone(before);
-    _firstAnswer();
-  }
-
-  /// Once per run: a row still claiming to run that no host knows was lost
-  /// while the app was away. Replaces the blanket launch pass for this machine.
-  void _firstAnswer() {
-    if (_answered) return;
-    _answered = true;
-    for (final session in sessionDao.getClaimingLive()) {
-      if (session.isArchived || knows(session.id)) continue;
-      final paneId = session.paneId;
-      if (paneId != null && hasLivePane(paneId)) continue;
-      if (!runsOnThisMachine(session)) continue;
-      recorder.recordUnseen(session.id);
-    }
-  }
-
-  void _recordGone(Iterable<String> hostIds) {
-    final ids = hostIds.toList();
-    if (ids.isEmpty) return;
-    final candidates = _candidates();
-    for (final hostId in ids) {
-      final sessionId = sessionIdForHostId(hostId, candidates);
-      if (sessionId != null) recorder.recordUnseen(sessionId);
-    }
-  }
-
-  Set<String> _runningHostIds() => {
-    for (final entry in _known.entries)
-      if (entry.value == HostSessionState.running) entry.key,
-  };
-
-  List<String> _candidates() => [
-    for (final session in sessionDao.getAll())
-      if (!session.isArchived) session.id,
+  /// Rows still claiming to run whose pane is live in this app.
+  List<String> _runByThisApp() => [
+    for (final session in sessionDao.getClaimingLive())
+      if (session.paneId case final paneId? when hasLivePane(paneId))
+        session.id,
   ];
 
   void _scheduleRetry() {
@@ -237,6 +198,8 @@ class HostLifecycleSubscriber {
     _events = null;
     await _hooks?.cancel();
     _hooks = null;
+    await _statusChanges?.cancel();
+    _statusChanges = null;
     final feed = _feed;
     _feed = null;
     await feed?.close();

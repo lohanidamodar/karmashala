@@ -2,9 +2,10 @@ import 'dart:io';
 
 import 'package:karmashala_local_ipc/socket_location.dart';
 
-/// Names the host's whole directory — socket, lock, log, sessions and store —
-/// in place of the per-user default. Set by a probe of the desktop app when it
-/// starts its own `serve`, so the probe's host never meets the owner's (§23).
+/// Names the host's directory — socket, lock, log and sessions — in place of
+/// the per-user default. The store is not here: it is the app's, named by
+/// `serve --data-dir`. Set by a probe of the desktop app when it starts its own
+/// `serve`, so the probe's host never meets the owner's (§23).
 const String kHostDirectoryEnvironmentVariable = 'KARMASHALA_HOST_DIR';
 
 /// [kHostDirectoryEnvironmentVariable] when it is set, else
@@ -59,11 +60,6 @@ class HostPaths {
   /// Each session's output and metadata, inside the same owner-only directory
   /// as the socket — scrollback is as sensitive as the channel carrying it.
   String get sessionsDirectory => '${directory.path}/sessions';
-
-  /// Where the store lives: this host's own pairings, and the schema it shares
-  /// with the desktop. A directory rather than a file, because `AppDatabase`
-  /// names the file inside one.
-  Directory get storeDirectory => directory;
 
   void ensureDirectory() {
     if (!directory.existsSync()) directory.createSync(recursive: true);

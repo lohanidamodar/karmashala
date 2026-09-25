@@ -67,7 +67,6 @@ void main() {
         expect(scoped.directory.path, r'C:\probe-data\host');
         expect(scoped.lockPath, startsWith(r'C:\probe-data\host'));
         expect(scoped.sessionsDirectory, startsWith(r'C:\probe-data\host'));
-        expect(scoped.storeDirectory.path, r'C:\probe-data\host');
       },
     );
 

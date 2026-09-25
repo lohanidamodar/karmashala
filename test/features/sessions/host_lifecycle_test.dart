@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
-import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_source.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_subscriber.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/relayed_agent_hook.dart';
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
@@ -21,77 +21,12 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// A host that answers from memory: each [open] is one link, whose events the
-/// test pushes and whose end is the host going away.
-class _FakeHost implements HostLifecycleSource {
-  bool listening = true;
-  List<SessionFacts> snapshot = const [];
-  List<RelayedAgentHook> hookSnapshot = const [];
-  final links = <StreamController<SessionLifecycleEvent>>[];
-  final hookLinks = <StreamController<RelayedAgentHook>>[];
-
-  /// The hold ids this app released, in order.
-  final replies = <int>[];
-
-  StreamController<SessionLifecycleEvent> get link => links.last;
-  StreamController<RelayedAgentHook> get hookLink => hookLinks.last;
-
-  @override
-  Future<HostLifecycleFeed?> open() async {
-    if (!listening) return null;
-    final link = StreamController<SessionLifecycleEvent>();
-    final hooks = StreamController<RelayedAgentHook>();
-    links.add(link);
-    hookLinks.add(hooks);
-    return HostLifecycleFeed(
-      snapshot: List.of(snapshot),
-      events: link.stream,
-      hookSnapshot: List.of(hookSnapshot),
-      hooks: hooks.stream,
-      replyHook: replies.add,
-      close: () async {
-        if (!link.isClosed) await link.close();
-        if (!hooks.isClosed) await hooks.close();
-      },
-    );
-  }
-}
-
 DateTime _at(int second) => testTime.add(Duration(seconds: second));
-
-SessionFacts _facts(
-  String sessionId,
-  HostSessionState state, {
-  int? exitCode,
-  String? reason,
-  int second = 1,
-}) => SessionFacts(
-  hostSessionId: hostSessionIdOf(sessionId),
-  state: state,
-  exitCode: exitCode,
-  reason: reason,
-  observedAt: _at(second),
-);
-
-SessionLifecycleEvent _event(
-  String sessionId,
-  SessionLifecycleKind kind, {
-  int? exitCode,
-  String? reason,
-  bool endedByClose = false,
-  required int second,
-}) => SessionLifecycleEvent(
-  hostSessionId: hostSessionIdOf(sessionId),
-  kind: kind,
-  exitCode: exitCode,
-  reason: reason,
-  endedByClose: endedByClose,
-  observedAt: _at(second),
-);
 
 /// The checkpoint recorder as a hook's hold sees it: [settled] waits on
 /// [capture] while one is set, and the unheld / expired marks are recorded.
@@ -123,7 +58,7 @@ Future<void> _settle() async {
 void main() {
   late AppDatabase db;
   late SessionDao dao;
-  late _FakeHost host;
+  late FakeHostLifecycle host;
   late ProviderContainer container;
   late _RecordingRecorder recorder;
 
@@ -140,7 +75,9 @@ void main() {
       );
     AgentInstallationDao(db).insert(agentInstallation());
     dao = SessionDao(db);
-    host = _FakeHost();
+    // Also the daemon writing to the store, as `serve` does: these groups
+    // follow a row end to end, host write to app signal.
+    host = FakeHostLifecycle(db);
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
@@ -187,10 +124,90 @@ void main() {
         }),
       );
 
+  group('the app is a client of the host\'s record', () {
+    late FakeHostLifecycle feedOnly;
+    late ProviderContainer client;
+
+    setUp(() {
+      feedOnly = FakeHostLifecycle();
+      client = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          hostLifecycleSourceProvider.overrideWithValue(feedOnly),
+        ],
+      );
+      addTearDown(client.dispose);
+    });
+
+    Future<void> watch() async {
+      client.listen(hostLifecycleSubscriberProvider, (_, _) {});
+      await _settle();
+    }
+
+    int signal(String id) => client.read(sessionSignalsProvider).forSession(id);
+
+    test('a lifecycle event, and a live claim no host knows, write nothing '
+        'here', () async {
+      row('s1');
+      row('lost');
+      feedOnly.snapshot = [hostFacts('s1', HostSessionState.running)];
+      await watch();
+      feedOnly.link.add(
+        hostEvent('s1', SessionLifecycleKind.exited, exitCode: 0, second: 2),
+      );
+      await _settle();
+
+      expect(statusOf('s1'), SessionStatus.running);
+      expect(statusOf('lost'), SessionStatus.running);
+      expect(client.read(hostLifecycleSubscriberProvider)!.knows('s1'), isTrue);
+    });
+
+    test('a sessionChanged is a status change for that row, and the row is '
+        'not written', () async {
+      row('s1');
+      await watch();
+      final before = signal('s1');
+      final other = signal('s2');
+
+      feedOnly.changeLink.add((sessionId: 's1', status: 'completed'));
+      await _settle();
+
+      expect(signal('s1'), greaterThan(before));
+      expect(signal('s2'), other);
+      expect(statusOf('s1'), SessionStatus.running);
+    });
+
+    test('attaching wakes every status watcher: the host may have written '
+        'while no link was open', () async {
+      final before = signal('any');
+      await watch();
+      expect(signal('any'), greaterThan(before));
+    });
+
+    test('the rows this app runs in its own live panes are named on each '
+        'watch', () async {
+      row('in-app');
+      dao.updatePaneId('in-app', 'pane-1');
+      row('hosted');
+      dao.updatePaneId('hosted', 'pane-2');
+      final subscriber = HostLifecycleSubscriber(
+        source: feedOnly,
+        sessionDao: dao,
+        hasLivePane: (paneId) => paneId == 'pane-1',
+        onStatusChanged: (_) {},
+      );
+      addTearDown(subscriber.dispose);
+      subscriber.start();
+      await _settle();
+      expect(feedOnly.runByClient.single, ['in-app']);
+    });
+  });
+
   group('restarting the app', () {
     test('a row the host still runs is running, never unknown', () async {
       row('s1');
-      host.snapshot = [_facts('s1', HostSessionState.running)];
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
       // The launch pass leaves this machine's rows to the feed.
       final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
       expect(markSessionsLostOnLaunch(dao, where: (s) => !onThisMachine(s)), 0);
@@ -203,7 +220,7 @@ void main() {
 
     test('a row the host knows as running comes back from unknown', () async {
       row('s1', status: SessionStatus.unknown);
-      host.snapshot = [_facts('s1', HostSessionState.running)];
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
       final before = container.read(sessionSignalsProvider).forSession('s1');
 
       await startWatching();
@@ -221,11 +238,12 @@ void main() {
       expect(statusOf('lost'), SessionStatus.unknown);
     });
 
-    test('with no host listening, a live claim is unknown too', () async {
+    test('with no host listening, the app writes nothing: the next host to '
+        'start marks what it does not hold', () async {
       row('lost');
       host.listening = false;
       await startWatching();
-      expect(statusOf('lost'), SessionStatus.unknown);
+      expect(statusOf('lost'), SessionStatus.running);
     });
 
     test('a session on an SSH host is not this host\'s to call lost', () async {
@@ -244,11 +262,11 @@ void main() {
     test('an exit with no code, then the pane starting it again, is running; '
         'Claude\'s SessionEnd in between settles nothing', () async {
       row('s1');
-      host.snapshot = [_facts('s1', HostSessionState.running)];
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
       await startWatching();
 
       host.link.add(
-        _event(
+        hostEvent(
           's1',
           SessionLifecycleKind.exited,
           reason: 'host stopped while running',
@@ -267,7 +285,7 @@ void main() {
       // The host goes away and comes back holding the ended session.
       await host.link.close();
       host.snapshot = [
-        _facts(
+        hostFacts(
           's1',
           HostSessionState.exited,
           reason: 'host stopped while running',
@@ -279,21 +297,30 @@ void main() {
       expect(host.links, hasLength(2));
       expect(statusOf('s1'), SessionStatus.unknown);
 
-      host.link.add(_event('s1', SessionLifecycleKind.started, second: 4));
+      host.link.add(hostEvent('s1', SessionLifecycleKind.started, second: 4));
       await _settle();
       expect(statusOf('s1'), SessionStatus.running);
     });
 
-    test('a host that stops answering takes its running sessions', () async {
+    test('a host that stops answering is only forgotten, not written for; the '
+        'one that replaces it marks what it lost', () async {
       row('s1');
-      host.snapshot = [_facts('s1', HostSessionState.running)];
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
       await startWatching();
+      final subscriber = container.read(hostLifecycleSubscriberProvider)!;
 
       host.listening = false;
       await host.link.close();
-      container.read(hostLifecycleSubscriberProvider)!.nudge();
+      subscriber.nudge();
       await _settle();
+      expect(statusOf('s1'), SessionStatus.running);
+      expect(subscriber.isRunning('s1'), isFalse);
 
+      host
+        ..listening = true
+        ..snapshot = const [];
+      subscriber.nudge();
+      await _settle();
       expect(statusOf('s1'), SessionStatus.unknown);
     });
   });
@@ -306,7 +333,7 @@ void main() {
       bool endedByClose = false,
     }) async {
       host.link.add(
-        _event(
+        hostEvent(
           id,
           kind,
           exitCode: exitCode,
@@ -323,7 +350,7 @@ void main() {
       }
       host.snapshot = [
         for (final id in ['closed', 'zero', 'one'])
-          _facts(id, HostSessionState.running),
+          hostFacts(id, HostSessionState.running),
       ];
     });
 
@@ -340,7 +367,7 @@ void main() {
       () async {
         await startWatching();
         host.link.add(
-          _event(
+          hostEvent(
             'zero',
             SessionLifecycleKind.exited,
             reason: 'host stopped while running',
@@ -348,7 +375,7 @@ void main() {
           ),
         );
         host.link.add(
-          _event(
+          hostEvent(
             'zero',
             SessionLifecycleKind.closed,
             reason: 'host stopped while running',

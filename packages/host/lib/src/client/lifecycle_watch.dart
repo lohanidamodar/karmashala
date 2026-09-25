@@ -19,6 +19,7 @@ class HostLifecycleWatch {
   final _parser = FrameParser();
   final _events = StreamController<LifecycleEvent>();
   final _hooks = StreamController<AgentHookEvent>();
+  final _sessionChanges = StreamController<SessionChangedMessage>();
   final _done = Completer<void>();
   StreamSubscription<List<int>>? _incoming;
   Completer<HostMessage>? _awaiting;
@@ -41,6 +42,10 @@ class HostLifecycleWatch {
   /// [AgentHookEvent.holdId] keeps its agent waiting until [replyHook].
   Stream<AgentHookEvent> get hooks => _hooks.stream;
 
+  /// Each session row the host wrote a lifecycle status to, buffered like
+  /// [events].
+  Stream<SessionChangedMessage> get sessionChanges => _sessionChanges.stream;
+
   /// Releases the agent held under [holdId]. Nothing when the link is gone:
   /// the host then releases it at its bound.
   void replyHook(int holdId) {
@@ -58,14 +63,16 @@ class HostLifecycleWatch {
   /// Says hello, asks to watch, and waits for the snapshot. Throws
   /// [HostLifecycleWatchRefused] when the host refuses either — a host that
   /// predates the feed refuses `watch` — or does not answer in [answerWithin].
+  /// [runByClient] names the session rows this client runs in its own panes.
   static Future<HostLifecycleWatch> over(
     HostConnection connection, {
     String clientId = 'karmashala-lifecycle',
     Duration answerWithin = const Duration(seconds: 10),
+    List<String> runByClient = const [],
   }) async {
     final watch = HostLifecycleWatch._(connection);
     try {
-      await watch._start(clientId, answerWithin);
+      await watch._start(clientId, answerWithin, runByClient);
     } on Object {
       await watch.close();
       rethrow;
@@ -78,6 +85,7 @@ class HostLifecycleWatch {
     String socketPath, {
     String clientId = 'karmashala-lifecycle',
     Duration answerWithin = const Duration(seconds: 10),
+    List<String> runByClient = const [],
   }) async {
     final Socket socket;
     try {
@@ -92,10 +100,15 @@ class HostLifecycleWatch {
       SocketHostConnection(socket, socketPath),
       clientId: clientId,
       answerWithin: answerWithin,
+      runByClient: runByClient,
     );
   }
 
-  Future<void> _start(String clientId, Duration answerWithin) async {
+  Future<void> _start(
+    String clientId,
+    Duration answerWithin,
+    List<String> runByClient,
+  ) async {
     _incoming = _connection.incoming.listen(
       _onBytes,
       onError: (Object error) => _end(error),
@@ -106,7 +119,9 @@ class HostLifecycleWatch {
       HelloMessage(requestId: 1, clientId: clientId).toFrame().encode(),
     );
     welcome = await _expect<WelcomeMessage>(answerWithin);
-    _connection.add(const WatchMessage(2).toFrame().encode());
+    _connection.add(
+      WatchMessage(2, runByClient: runByClient).toFrame().encode(),
+    );
     final watching = await _expect<WatchingMessage>(answerWithin);
     snapshot = List.unmodifiable(watching.sessions);
     hookSnapshot = List.unmodifiable(watching.hooks);
@@ -162,6 +177,10 @@ class HostLifecycleWatch {
       if (!_hooks.isClosed) _hooks.add(message.hook);
       return;
     }
+    if (message is SessionChangedMessage) {
+      if (!_sessionChanges.isClosed) _sessionChanges.add(message);
+      return;
+    }
     if (awaiting != null &&
         !awaiting.isCompleted &&
         (message is WelcomeMessage ||
@@ -182,6 +201,7 @@ class HostLifecycleWatch {
     }
     if (!_events.isClosed) unawaited(_events.close());
     if (!_hooks.isClosed) unawaited(_hooks.close());
+    if (!_sessionChanges.isClosed) unawaited(_sessionChanges.close());
     if (!_done.isCompleted) _done.complete();
   }
 

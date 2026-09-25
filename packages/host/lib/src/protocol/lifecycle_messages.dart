@@ -138,15 +138,27 @@ class HostSessionFacts {
 
 /// client → host: send me every session's facts, then every change to them.
 class WatchMessage extends HostMessage {
-  const WatchMessage(this.requestId);
+  const WatchMessage(this.requestId, {this.runByClient = const []});
   final int requestId;
 
-  @override
-  Frame toFrame() =>
-      Frame(MessageType.watch, 0, (WireWriter()..u32(requestId)).take());
+  /// Session rows the client runs in its own panes, which no host holds: the
+  /// daemon leaves them alone when it marks the rows it does not hold.
+  final List<String> runByClient;
 
-  static WatchMessage decode(Frame frame) =>
-      WatchMessage(WireReader(frame.payload).u32());
+  @override
+  Frame toFrame() => Frame(
+    MessageType.watch,
+    0,
+    (WireWriter()
+          ..u32(requestId)
+          ..strings(runByClient))
+        .take(),
+  );
+
+  static WatchMessage decode(Frame frame) {
+    final r = WireReader(frame.payload);
+    return WatchMessage(r.u32(), runByClient: r.strings());
+  }
 }
 
 /// host → client: the answer to `watch`. Events follow it on the same link.
@@ -210,6 +222,36 @@ class LifecycleMessage extends HostMessage {
   static LifecycleMessage decode(Frame frame) => LifecycleMessage(
     LifecycleEvent.fromJson(_decodeJson(WireReader(frame.payload).str())),
   );
+}
+
+/// host → client: the daemon wrote [status] to the row [sessionId]; the row
+/// is the record, this only says to read it again.
+class SessionChangedMessage extends HostMessage {
+  const SessionChangedMessage({required this.sessionId, required this.status});
+
+  final String sessionId;
+
+  /// The status's name as the store keeps it, e.g. `completed`.
+  final String status;
+
+  @override
+  Frame toFrame() => Frame(
+    MessageType.sessionChanged,
+    0,
+    (WireWriter()..str(jsonEncode({'sessionId': sessionId, 'status': status})))
+        .take(),
+  );
+
+  static SessionChangedMessage decode(Frame frame) {
+    final map = _object(
+      _decodeJson(WireReader(frame.payload).str()),
+      'session changed',
+    );
+    return SessionChangedMessage(
+      sessionId: _required<String>(map, 'sessionId'),
+      status: _required<String>(map, 'status'),
+    );
+  }
 }
 
 Object? _decodeJson(String text) {

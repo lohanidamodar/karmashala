@@ -15,7 +15,7 @@ import '../../features/ssh/fake_host_box.dart';
 
 /// A probe never meets the owner's session host (PROJECT.md §23).
 ///
-/// The local host's socket, lock, sessions and store are per *user*, not per
+/// The local host's socket, lock and sessions are per *user*, not per
 /// data folder, so a probe with host-backed panes would have attached to the
 /// owner's host: its sessions in the probe's lists, and one click from ending
 /// them. A probe runs a host of its own under its data folder instead, started
@@ -57,7 +57,6 @@ void main() {
       access.paths.lockPath,
       access.paths.logPath,
       access.paths.sessionsDirectory,
-      access.paths.storeDirectory.path,
     ]) {
       expect(p.isWithin(data.path, path), isTrue, reason: path);
     }
@@ -79,6 +78,20 @@ void main() {
       home,
     );
   }, skip: desktop ? null : 'no local host off the desktop');
+
+  test(
+    "a probe's host opens the probe's own database, not the owner's",
+    () async {
+      final access = containerFor(
+        ProbeMode(enabled: true, dataDirectory: data.path),
+      ).read(localHostSessionAccessProvider)!;
+      expect(await access.serveArguments(), [
+        'serve',
+        '--data-dir=${p.absolute(data.path)}',
+      ]);
+    },
+    skip: desktop ? null : 'no local host off the desktop',
+  );
 
   test('a probe never looks at the socket the real app uses', () {
     final real = containerFor(

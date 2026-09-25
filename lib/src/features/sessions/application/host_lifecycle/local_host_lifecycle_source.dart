@@ -13,8 +13,11 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
   final String socketPath;
 
   @override
-  Future<HostLifecycleFeed?> open() async {
-    final watch = await wire.HostLifecycleWatch.connect(socketPath);
+  Future<HostLifecycleFeed?> open({List<String> runByClient = const []}) async {
+    final watch = await wire.HostLifecycleWatch.connect(
+      socketPath,
+      runByClient: runByClient,
+    );
     if (watch == null) return null;
     final observedAt = watch.snapshotObservedAt.toUtc();
     return HostLifecycleFeed(
@@ -26,6 +29,9 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       hookSnapshot: [for (final hook in watch.hookSnapshot) _hookOf(hook)],
       hooks: watch.hooks.map(_hookOf),
       replyHook: watch.replyHook,
+      sessionChanges: watch.sessionChanges.map(
+        (change) => (sessionId: change.sessionId, status: change.status),
+      ),
     );
   }
 

@@ -63,13 +63,18 @@ class LifecycleFeed {
       if (_registry.find(facts.sessionId) == null) facts,
   ];
 
+  /// Called once a watcher is subscribed, with the sessions it runs itself;
+  /// what it writes reaches that watcher too.
+  void Function(Set<String> runByClient)? onWatched;
+
   /// Sends the snapshot, then every event and hook, through [send]; cancel to
   /// stop. Subscribed in the same turn the snapshot is taken, so nothing falls
   /// between the two.
   StreamSubscription<HostMessage> watch(
     int requestId,
-    void Function(HostMessage) send,
-  ) {
+    void Function(HostMessage) send, {
+    Iterable<String> runByClient = const [],
+  }) {
     send(
       WatchingMessage(
         requestId: requestId,
@@ -78,8 +83,14 @@ class LifecycleFeed {
         hooks: hooks.latest(),
       ),
     );
-    return _out.stream.listen(send);
+    final subscription = _out.stream.listen(send);
+    onWatched?.call(runByClient.toSet());
+    return subscription;
   }
+
+  /// Tells every watcher the daemon wrote [status] to the row [sessionId].
+  void publishSessionChanged(String sessionId, String status) =>
+      _out.add(SessionChangedMessage(sessionId: sessionId, status: status));
 
   /// Keeps [hook] for the snapshot and relays it to every watcher. Completes
   /// when the agent may be answered: at once, unless [hook] is a kind that is
@@ -100,9 +111,10 @@ class LifecycleFeed {
   /// A watcher is done with the hold [holdId]; false when it was over already.
   bool replyHook(int holdId) => holds.release(holdId);
 
+  /// Watchers get the event before any row change it causes.
   void _emit(LifecycleEvent event) {
-    _events.add(event);
     _out.add(LifecycleMessage(event));
+    _events.add(event);
   }
 
   void _onChange(RegistryChange change) {

@@ -578,11 +578,16 @@ class HostDeployer {
     return result.stdout;
   }
 
+  /// The store is `~/.karmashala/karmashala.sqlite`, never the runtime dir
+  /// (tmpfs): it holds this box's phone pairings. No app writes rows there, so
+  /// its lifecycle recording has nothing to write — the feed is what counts.
   Future<RemoteRun> _startServe(String home, String remotePath) {
     final directory = '$home/$remoteHomeSubdirectory';
+    final serve =
+        '${_quote(remotePath)} serve ${_quote('--data-dir=$directory')}';
     return target.run(
       'mkdir -p ${_quote(directory)} && '
-      '${detachedStart('${_quote(remotePath)} serve', _quote('$directory/host.log'))}; '
+      '${detachedStart(serve, _quote('$directory/host.log'))}; '
       'echo started',
     );
   }

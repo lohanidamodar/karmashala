@@ -39,8 +39,13 @@ dependencies:
   # hook, and it imports nothing of ours — the dependency runs one way.
   karmashala_relay:
     path: ../relay
+  # The recorder that writes a hosted row's lifecycle status: the daemon is
+  # its only caller, against the store the app passes with `--data-dir`.
+  karmashala_session_engine:
+    path: ../karmashala_session_engine
   karmashala_store:
     path: ../karmashala_store
+  path: ^1.9.1
   xterm2:
     git:
       url: https://github.com/lohanidamodar/xterm2.git

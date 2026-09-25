@@ -663,6 +663,8 @@ void main() {
           (c) => c.contains('setsid nohup'),
         );
         expect(start, contains('serve'));
+        // The store off tmpfs, beside the binaries: this box's pairings.
+        expect(start, contains("'--data-dir=/home/fake/.karmashala'"));
         expect(
           start,
           contains('< /dev/null'),

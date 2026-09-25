@@ -21,6 +21,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
     this.helloBound = const Duration(seconds: 5),
     this.serveEnvironment,
     this.stopServe,
+    this.dataDirectory,
   }) : _paths = paths ?? HostPaths.resolve(),
        _logger = logger ?? AppLogger.named('host.local');
 
@@ -47,6 +48,17 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// socket and keeps *its* sessions — [HostPaths.resolve] reads the same name
   /// in `serve`, `attach` and `list`. Null for the real app: nothing changes.
   final Map<String, String>? serveEnvironment;
+
+  /// The app's data directory, whose `karmashala.sqlite` the `serve` it starts
+  /// opens as its store. Asked at start, since resolving it is async.
+  final Future<String> Function()? dataDirectory;
+
+  /// What `serve` is started with. Without [dataDirectory] it has no
+  /// `--data-dir`, and `serve` refuses in words.
+  Future<List<String>> serveArguments() async {
+    final directory = await dataDirectory?.call();
+    return ['serve', if (directory != null) '--data-dir=$directory'];
+  }
 
   /// Where this access looks for its host — its socket, lock and sessions.
   HostPaths get paths => _paths;
@@ -500,7 +512,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
           await (startServe?.call(binary.path) ??
               Process.start(
                 binary.path,
-                const ['serve'],
+                await serveArguments(),
                 environment: serveEnvironment,
                 // Detached, so it outlives this app — which is the entire
                 // point — but with stdio, so the banner is readable.

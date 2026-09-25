@@ -11,8 +11,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../agents/application/agent_hook_intake.dart';
 import '../../../agents/application/agent_hook_sweep.dart';
-import '../../../environments/application/environment_providers.dart';
-import '../../../repositories/application/repository_providers.dart';
+import '../../../../core/database/database_providers.dart';
 import '../../../terminal/application/local_host_providers.dart';
 import '../../../terminal/application/local_host_startup.dart';
 import '../../../terminal/application/terminal_sessions_controller.dart';
@@ -22,7 +21,6 @@ import '../session_signals.dart';
 import 'host_lifecycle_source.dart';
 import 'host_lifecycle_subscriber.dart';
 import 'local_host_lifecycle_source.dart';
-import 'session_on_this_machine.dart';
 
 /// This machine's host feed, or null when local panes are not host-backed or
 /// no host may be reached — never under `flutter test`, which a test overrides.
@@ -32,32 +30,12 @@ final hostLifecycleSourceProvider = Provider<HostLifecycleSource?>((ref) {
   return access == null ? null : LocalHostLifecycleSource(access.socketPath);
 });
 
-/// The one writer of a hosted row's lifecycle status; each write is published.
-final sessionLifecycleRecorderProvider = Provider<SessionLifecycleRecorder>((
-  ref,
-) {
-  final recorder = SessionLifecycleRecorder(ref.watch(sessionDaoProvider));
-  final changes = recorder.changes.listen(
-    (change) =>
-        ref.publishSessionChange(SessionChange.statusChanged(change.sessionId)),
-  );
-  ref.onDispose(() {
-    unawaited(changes.cancel());
-    unawaited(recorder.dispose());
-  });
-  return recorder;
-});
-
+/// Whether a row runs on this machine, under this machine's host.
 final sessionRunsOnThisMachineProvider = Provider<bool Function(Session)>((
   ref,
 ) {
-  final repositories = ref.watch(repositoryDaoProvider);
-  final environments = ref.watch(executionEnvironmentDaoProvider);
-  return (session) => sessionRunsOnThisMachine(
-    session,
-    repositories: repositories,
-    environments: environments,
-  );
+  final database = ref.watch(databaseProvider);
+  return (session) => sessionRunsOnThisMachine(database, session);
 });
 
 /// The subscriber to this machine's host, or null without a source. **Watched
@@ -70,9 +48,13 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
   final hookLog = AppLogger.named('agent-hooks');
   final subscriber = HostLifecycleSubscriber(
     source: source,
-    recorder: ref.watch(sessionLifecycleRecorderProvider),
     sessionDao: ref.watch(sessionDaoProvider),
-    runsOnThisMachine: ref.watch(sessionRunsOnThisMachineProvider),
+    // The host wrote the row; this only says to read it again.
+    onStatusChanged: (sessionId) => ref.publishSessionChange(
+      sessionId == null
+          ? const SessionChange(kinds: {SessionChangeKind.status})
+          : SessionChange.statusChanged(sessionId),
+    ),
     hasLivePane: (paneId) =>
         ref.exists(terminalSessionsControllerProvider) &&
         (ref
