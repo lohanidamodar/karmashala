@@ -9,11 +9,17 @@ export 'src/mcp/mcp_credentials.dart' show McpCredentials;
 export 'src/protocol/messages.dart'
     show
         AgentHookEvent,
+        CompanionCallMessage,
+        CompanionEventKind,
+        CompanionEventMessage,
+        CompanionNoticeKind,
+        CompanionNoticeMessage,
         HostSessionFacts,
         HostSessionState,
         LifecycleEvent,
         LifecycleEventKind,
         McpCallMessage,
+        PairedMessage,
         SessionChangedMessage,
         WelcomeMessage;
 export 'src/transport/socket_transport.dart' show SocketHostConnection;

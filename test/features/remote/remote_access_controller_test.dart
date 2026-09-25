@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -112,7 +112,7 @@ void main() {
       await controller.sync();
 
       expect(controller.service, isNot(same(first)));
-      expect(controller.service!.relay.port, second.port);
+      expect(controller.service!.relay!.port, second.port);
       expect(first.isRunning, isFalse, reason: 'the old service was stopped');
     });
 

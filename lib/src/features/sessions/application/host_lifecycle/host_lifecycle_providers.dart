@@ -13,6 +13,7 @@ import '../../../agents/application/agent_hook_intake.dart';
 import '../../../agents/application/agent_hook_sweep.dart';
 import '../../../../core/database/database_providers.dart';
 import '../../../mcp/mcp_tool_dispatcher.dart';
+import '../../../remote/application/host_companion_providers.dart';
 import '../../../terminal/application/local_host_providers.dart';
 import '../../../terminal/application/local_host_startup.dart';
 import '../../../terminal/application/terminal_sessions_controller.dart';
@@ -78,6 +79,8 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
     onAttached: () => unawaited(sweepHostHooks(ref.container, logger: hookLog)),
     // The host serves agents' MCP; this app runs the tools it forwards.
     mcpTools: ref.read(mcpToolDispatcherProvider),
+    // The host serves the phone companion; this app answers what only it can.
+    companion: ref.read(hostCompanionLinkProvider),
   );
   // A pane starting on the host may have just started the host itself: the
   // launch's start failed, or the host went away since.

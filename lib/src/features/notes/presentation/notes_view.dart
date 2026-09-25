@@ -11,7 +11,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../todos/presentation/project_menu.dart';
 import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
-import '../domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import 'note_delete.dart';
 import '../../../app/shell/workbench_tabs.dart';
 import 'note_provenance.dart';

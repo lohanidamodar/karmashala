@@ -30,6 +30,14 @@ dependencies:
   # same wire the desktop does instead of inventing a second one.
   karmashala_remote:
     path: ../karmashala_remote
+  # The companion server itself — the same one the app runs where there is no
+  # host — the forwarded-call codec, and the answers given from the store while
+  # no app is connected. Pure Dart.
+  karmashala_companion_server:
+    path: ../karmashala_companion_server
+  # The notes and todos a phone's `notes.get` reads.
+  karmashala_notes:
+    path: ../karmashala_notes
   # Where a unix socket can actually be bound. Pure `dart:io`, and the app uses
   # the same rule for the host's socket, so the two cannot disagree about it.
   karmashala_local_ipc:
@@ -60,5 +68,8 @@ dev_dependencies:
   # the production key builder. Never a runtime dependency of the host.
   agent_cli:
     path: ../agent_cli
+  # The session rows a companion test seeds the store with.
+  karmashala_session:
+    path: ../karmashala_session
   lints: ^6.0.0
   test: ^1.25.0

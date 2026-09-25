@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
+import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -32,7 +33,7 @@ class _FakeAccess extends RemoteAccessController {
   }
 
   @override
-  Future<HostPairingSession> beginPairing({
+  Future<PairingInProgress> beginPairing({
     required CapabilitySet capabilities,
     // Signature keeps up with the controller (loop 76's endpoint tabs,
     // loop 80's per-device relay).
@@ -50,7 +51,7 @@ class _FakeAccess extends RemoteAccessController {
       persist: (_) async {},
     );
     lastPairing = session;
-    return session;
+    return PairingInProgress.of(session);
   }
 
   @override

@@ -31,12 +31,14 @@ workspace:
   - packages/karmashala_automations
   - packages/karmashala_browser
   - packages/karmashala_companion
+  - packages/karmashala_companion_server
   - packages/karmashala_core
   - packages/karmashala_devices
   - packages/karmashala_flutter_apps
   - packages/karmashala_git
   - packages/karmashala_mcp
   - packages/karmashala_media
+  - packages/karmashala_notes
   - packages/karmashala_notifications
   - packages/karmashala_remote
   - packages/karmashala_session
@@ -88,6 +90,16 @@ dependencies:
     path: packages/karmashala_flutter_apps
   karmashala_remote:
     path: packages/karmashala_remote
+  # The desk end of a phone's link: the companion server (pairing, sealed
+  # channels, LAN and relay listeners, push), the forwarded-call codec both the
+  # session host and this app speak, and the answers the host gives from the
+  # store while this app is closed. Pure Dart.
+  karmashala_companion_server:
+    path: packages/karmashala_companion_server
+  # Notes and the todo list: the values and their DAOs, read by the panels
+  # here and by the session host for a phone. Pure Dart.
+  karmashala_notes:
+    path: packages/karmashala_notes
   # What a session is, as values: the record and its states, what a launch asks
   # for, the resume rules, lineage and handoff, the event and decision
   # vocabulary, the transcript readings and the delivery ladder. Pure Dart

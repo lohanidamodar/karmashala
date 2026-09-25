@@ -4,7 +4,7 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import 'note_drafts.dart';
 import 'notes_providers.dart';
 

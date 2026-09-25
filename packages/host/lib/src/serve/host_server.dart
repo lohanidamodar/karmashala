@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../companion/companion_handler.dart';
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
@@ -24,7 +25,7 @@ class HostServer {
     required this.ptyLibrary,
     DateTime Function()? clock,
     this.hostVersion = kHostVersion,
-    this.openPairing,
+    this.companion,
     this.build,
     this.mcpTools,
     HookHolds? holds,
@@ -40,16 +41,13 @@ class HostServer {
   final LifecycleFeed lifecycle;
   final String ptyLibrary;
 
-  /// Opens a pairing window and answers the typed code and its deadline.
+  /// The phone companion: pairing windows, the app's Remote access settings,
+  /// and the calls forwarded to the app.
   ///
-  /// Injected rather than built here, because pairing needs a store and a
-  /// listener and this class needs neither — and a `serve` that was started
-  /// without them must refuse rather than pretend. Null is that refusal.
-  final Future<({String code, DateTime expiresAt})> Function(
-    int capabilities,
-    String relay,
-  )?
-  openPairing;
+  /// Injected rather than built here, because it needs a store and listeners
+  /// and this class needs neither — and a `serve` that was started without a
+  /// store must refuse rather than pretend. Null is that refusal.
+  final CompanionHandler? companion;
   final String hostVersion;
 
   /// Where agents' tool calls go to the app that runs them; null serves none.
@@ -140,6 +138,7 @@ class _ClientSession {
     _exitWatches.clear();
     await _lifecycleWatch?.cancel();
     _server.mcpTools?.detach(this);
+    await _server.companion?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
     await _connection.close();
@@ -282,6 +281,12 @@ class _ClientSession {
         _server.mcpTools?.adopt(this, message.tools, _send);
       case McpResultMessage():
         _server.mcpTools?.answer(this, message);
+      case CompanionConfigMessage():
+        await _server.companion?.adopt(this, message.config, _send);
+      case CompanionResultMessage():
+        _server.companion?.answer(this, message);
+      case CompanionNoticeMessage():
+        await _server.companion?.notice(this, message);
       default:
         _send(
           ErrorMessage(
@@ -294,8 +299,8 @@ class _ClientSession {
   }
 
   Future<void> _onPair(PairMessage message) async {
-    final open = _server.openPairing;
-    if (open == null) {
+    final companion = _server.companion;
+    if (companion == null) {
       _send(
         ErrorMessage(
           message.requestId,
@@ -307,12 +312,37 @@ class _ClientSession {
       return;
     }
     try {
-      final window = await open(message.capabilities, message.relay);
+      final window = await companion.openPairing(
+        capabilities: message.capabilities,
+        relay: message.relay,
+        relayIsLocal: message.relayIsLocal,
+      );
       _send(
         PairedMessage(
           requestId: message.requestId,
           code: window.code,
           expiresAt: window.expiresAt,
+          payload: window.payload,
+        ),
+      );
+      // Told to whoever asked, if they are still here: the desktop's dialog
+      // waits on it, and `pair` over SSH has long since hung up.
+      unawaited(
+        window.paired.then(
+          (deviceId) => _send(
+            CompanionEventMessage(
+              CompanionEventKind.pairingEnded,
+              requestId: message.requestId,
+              deviceId: deviceId,
+            ),
+          ),
+          onError: (Object error) => _send(
+            CompanionEventMessage(
+              CompanionEventKind.pairingEnded,
+              requestId: message.requestId,
+              error: _pairingError(error),
+            ),
+          ),
         ),
       );
     } on Object catch (error) {
@@ -326,6 +356,12 @@ class _ClientSession {
         ),
       );
     }
+  }
+
+  static String _pairingError(Object error) {
+    final text = '$error';
+    const prefix = 'PairingException: ';
+    return text.startsWith(prefix) ? text.substring(prefix.length) : text;
   }
 
   void _onHello(HelloMessage message) {

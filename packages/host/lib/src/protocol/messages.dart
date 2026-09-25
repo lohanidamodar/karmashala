@@ -8,11 +8,12 @@ import 'wire.dart';
 
 part 'hook_messages.dart';
 part 'lifecycle_messages.dart';
+part 'companion_messages.dart';
 part 'mcp_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 3;
+const int kProtocolVersion = 4;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -723,6 +724,7 @@ class PairMessage extends HostMessage {
     required this.requestId,
     required this.capabilities,
     this.relay = '',
+    this.relayIsLocal = false,
   });
 
   final int requestId;
@@ -735,6 +737,10 @@ class PairMessage extends HostMessage {
   /// Empty for a box with an address of its own, which is most of them.
   final String relay;
 
+  /// Whether [relay] is the desktop app's own embedded relay, which the row
+  /// then names by its marker rather than a LAN address that will change.
+  final bool relayIsLocal;
+
   @override
   Frame toFrame() => Frame(
     MessageType.pair,
@@ -742,7 +748,8 @@ class PairMessage extends HostMessage {
     (WireWriter()
           ..u32(requestId)
           ..u32(capabilities)
-          ..str(relay))
+          ..str(relay)
+          ..u8(relayIsLocal ? 1 : 0))
         .take(),
   );
 
@@ -752,20 +759,24 @@ class PairMessage extends HostMessage {
       requestId: r.u32(),
       capabilities: r.u32(),
       relay: r.str(),
+      relayIsLocal: r.u8() == 1,
     );
   }
 }
 
-/// The open window: what to type into the phone, and how long it lasts.
+/// The open window: what to type into the phone, how long it lasts, and the
+/// whole pairing payload a QR code shows.
 ///
-/// Only the typed code, because it carries the whole secret — the rendezvous
-/// and the keys are derived from it — so there is nothing else for the host to
-/// explain and nothing else to keep in step.
+/// The typed code carries the whole secret — the rendezvous and the keys are
+/// derived from it. [payload] is the same secret with the relays spelled out,
+/// for the desktop's dialog to draw as a QR; it crosses only the owner-only
+/// socket, as the code does.
 class PairedMessage extends HostMessage {
   const PairedMessage({
     required this.requestId,
     required this.code,
     required this.expiresAt,
+    this.payload = '',
   });
 
   final int requestId;
@@ -775,6 +786,9 @@ class PairedMessage extends HostMessage {
 
   final DateTime expiresAt;
 
+  /// `PairingPayload.encode()` of the window.
+  final String payload;
+
   @override
   Frame toFrame() => Frame(
     MessageType.paired,
@@ -782,7 +796,8 @@ class PairedMessage extends HostMessage {
     (WireWriter()
           ..u32(requestId)
           ..str(code)
-          ..str(expiresAt.toUtc().toIso8601String()))
+          ..str(expiresAt.toUtc().toIso8601String())
+          ..str(payload))
         .take(),
   );
 
@@ -792,6 +807,7 @@ class PairedMessage extends HostMessage {
       requestId: r.u32(),
       code: r.str(),
       expiresAt: DateTime.parse(r.str()),
+      payload: r.str(),
     );
   }
 }
@@ -865,4 +881,9 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.mcpTools => McpToolsMessage.decode(frame),
   MessageType.mcpCall => McpCallMessage.decode(frame),
   MessageType.mcpResult => McpResultMessage.decode(frame),
+  MessageType.companionConfig => CompanionConfigMessage.decode(frame),
+  MessageType.companionCall => CompanionCallMessage.decode(frame),
+  MessageType.companionResult => CompanionResultMessage.decode(frame),
+  MessageType.companionNotice => CompanionNoticeMessage.decode(frame),
+  MessageType.companionEvent => CompanionEventMessage.decode(frame),
 };

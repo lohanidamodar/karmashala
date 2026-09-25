@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../repositories/application/repository_providers.dart';
 import '../sessions/application/session_providers.dart';
 import '../todos/application/todos_providers.dart';
-import '../todos/domain/todo.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 
 /// The list a person and an agent both write to, where `projectId: 'none'` is a
 /// real value — a string cannot carry "not given" against "explicitly nothing".

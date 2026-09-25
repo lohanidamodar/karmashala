@@ -10,7 +10,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/push.dart';

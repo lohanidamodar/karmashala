@@ -50,6 +50,7 @@ import 'package:path/path.dart' as ph;
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart';
 import '../../support/fakes.dart';
+import '../../support/sync_bindings.dart';
 import '../../support/temp_directory.dart';
 
 /// The store scan, answered from a map, so nothing here walks the owner's own
@@ -339,7 +340,7 @@ void main() {
     ]);
 
     final bindings = container.read(remoteHostBindingsProvider);
-    final sessions = bindings.listSessions();
+    final sessions = bindings.listNow();
 
     expect(sessions, hasLength(1));
     expect(sessions.single.title, 'Fix the build');
@@ -352,8 +353,8 @@ void main() {
     expect(sessions.single.whereabouts, 'running here');
     expect(sessions.single.lastActivityAt, '2026-08-31T09:00:00.000Z');
     expect(sessions.single.imported, isFalse);
-    expect(bindings.sessionById('s1'), isNotNull);
-    expect(bindings.sessionById('nope'), isNull);
+    expect(bindings.byIdNow('s1'), isNotNull);
+    expect(bindings.byIdNow('nope'), isNull);
   });
 
   group('what a file sent to one session may be', () {
@@ -378,7 +379,7 @@ void main() {
 
     RemoteAttachmentSupport? supportFor(String sessionId) => container
         .read(remoteHostBindingsProvider)
-        .sessionById(sessionId)
+        .byIdNow(sessionId)
         ?.attachments;
 
     test('a Claude Code session on this machine takes a picture', () {
@@ -498,7 +499,7 @@ void main() {
     ]);
 
     final bindings = container.read(remoteHostBindingsProvider);
-    final sessions = bindings.listSessions();
+    final sessions = bindings.listNow();
 
     expect(sessions, hasLength(2));
     final imported = sessions.singleWhere((s) => s.imported);
@@ -516,7 +517,7 @@ void main() {
     expect(sessions.singleWhere((s) => !s.imported).attention, isNull);
 
     // Listed and subscribable, but never steerable.
-    expect(bindings.sessionById('imp1')?.imported, isTrue);
+    expect(bindings.byIdNow('imp1')?.imported, isTrue);
     await expectLater(
       bindings.sendPrompt('imp1', 'hi'),
       throwsA(
@@ -1142,7 +1143,7 @@ void main() {
       seedSession('s1', title: 'Old CLI chat');
       attribute('s1', 'x1');
 
-      final rows = container.read(remoteHostBindingsProvider).listSessions();
+      final rows = container.read(remoteHostBindingsProvider).listNow();
 
       expect(rows, hasLength(1));
       expect(rows.single.sessionId, 's1');
@@ -1163,7 +1164,7 @@ void main() {
         final bindings = container.read(remoteHostBindingsProvider);
 
         // The stale id the phone is holding resolves to the running session.
-        final snapshot = bindings.sessionById('imp1');
+        final snapshot = bindings.byIdNow('imp1');
         expect(snapshot, isNotNull);
         expect(snapshot!.sessionId, 's1');
         expect(snapshot.imported, isFalse);
@@ -1195,12 +1196,12 @@ void main() {
         seedImported('imp2', externalId: 'x2');
 
         final bindings = container.read(remoteHostBindingsProvider);
-        final rows = bindings.listSessions();
+        final rows = bindings.listNow();
 
         expect(rows, hasLength(1));
         expect(rows.single.sessionId, 'imp2');
         expect(rows.single.imported, isTrue);
-        expect(bindings.sessionById('imp2')?.imported, isTrue);
+        expect(bindings.byIdNow('imp2')?.imported, isTrue);
         await expectLater(
           bindings.answerApproval('imp2', 'approve'),
           throwsA(
@@ -1223,12 +1224,12 @@ void main() {
       seedSession('s1');
 
       final bindings = container.read(remoteHostBindingsProvider);
-      final rows = bindings.listSessions();
+      final rows = bindings.listNow();
 
       expect([
         for (final row in rows) row.sessionId,
       ], containsAll(<String>['s1', 'imp3']));
-      expect(bindings.sessionById('imp3')?.imported, isTrue);
+      expect(bindings.byIdNow('imp3')?.imported, isTrue);
     });
   });
 
@@ -1469,9 +1470,7 @@ void main() {
       ),
     );
 
-    final snapshot = container
-        .read(remoteHostBindingsProvider)
-        .sessionById('mod1');
+    final snapshot = container.read(remoteHostBindingsProvider).byIdNow('mod1');
 
     expect(snapshot?.model, 'opus');
   });

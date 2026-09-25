@@ -7,6 +7,7 @@ import 'package:xterm2/core.dart';
 import '../pty/pty.dart';
 import 'output_backlog.dart';
 import 'screen_snapshot.dart';
+import 'screen_text.dart';
 import 'session_lifecycle.dart';
 import 'session_recorder.dart';
 import 'write_token.dart';
@@ -219,6 +220,13 @@ class HostSession {
     final screen = _screen;
     if (screen == null) return null;
     return (screenSnapshot(screen), backlog.totalBytes);
+  }
+
+  /// The visible screen as plain text, or null when there is no screen — a
+  /// session read back from disk.
+  String? screenText() {
+    final screen = _screen;
+    return screen == null ? null : screenTextOf(screen);
   }
 
   ClaimRefusal? _requireToken(String clientId, DateTime now) {

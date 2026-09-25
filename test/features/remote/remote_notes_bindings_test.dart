@@ -3,12 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
-import 'package:karmashala/src/features/notes/data/note_dao.dart';
-import 'package:karmashala/src/features/notes/domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/remote/application/remote_notes_bindings.dart';
-import 'package:karmashala/src/features/todos/data/todo_dao.dart';
-import 'package:karmashala/src/features/todos/domain/todo.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 

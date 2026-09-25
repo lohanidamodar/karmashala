@@ -3,6 +3,7 @@
 /// none of which start a service or open a socket here.
 library;
 
+import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
@@ -25,7 +26,7 @@ class _FakeAccess extends RemoteAccessController {
   HostPairingSession? lastPairing;
 
   @override
-  Future<HostPairingSession> beginPairing({
+  Future<PairingInProgress> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
     bool relayIsLocal = false,
@@ -42,7 +43,7 @@ class _FakeAccess extends RemoteAccessController {
       persist: (_) async {},
     );
     lastPairing = session;
-    return session;
+    return PairingInProgress.of(session);
   }
 
   @override

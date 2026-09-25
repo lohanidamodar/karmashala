@@ -1,6 +1,6 @@
 part of 'messages.dart';
 
-// The MCP relay (protocol 3): the daemon takes agents' tool calls and the app
+// The MCP relay (since protocol 3): the daemon takes agents' tool calls and the app
 // runs them. JSON inside a length-prefixed string, like the lifecycle feed.
 
 /// client → host: the tools this client runs, as `tools/list` serves them. The

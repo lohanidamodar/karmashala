@@ -1,5 +1,6 @@
-/// The host side of remote access: per device, a sealed channel bound to its
-/// rendezvous generation, heard over relay and LAN. OFF until the toggle asks.
+/// The companion server: per device, a sealed channel bound to its rendezvous
+/// generation, heard over relay and LAN. Run by the session host whenever there
+/// is one, and by the desktop app only where there is none.
 library;
 
 import 'dart:async';
@@ -62,8 +63,11 @@ class RemoteHostService {
   final RemoteHostBindings bindings;
 
   /// The configured hosted relay: the fallback for a device row whose stored
-  /// relay is absent or unreadable, and the default pairing relay.
-  final Uri relay;
+  /// relay is absent or unreadable, and the default pairing relay. Null on a
+  /// machine that meets phones only where each row says — a box: a phone
+  /// paired straight to its address then costs no outbound connection, and a
+  /// pairing with no relay named is a direct one.
+  final Uri? relay;
 
   /// Where the embedded local relay can be dialled right now, or null while
   /// it is stopped — local-relay devices are parked then.
@@ -160,7 +164,8 @@ class RemoteHostService {
       // still finds somebody listening.
       final own = device.hostedRelayUri;
       if (own != null) urls[own.toString()] = own;
-      urls[relay.toString()] = relay;
+      final fallback = relay;
+      if (fallback != null) urls[fallback.toString()] = fallback;
     }
     return List.unmodifiable(urls.values);
   }
@@ -289,6 +294,10 @@ class RemoteHostService {
 
   /// Shows a new QR and persists the device once the sealed round-trip proves
   /// its key. [relayIsLocal] stores [kLocalRelayMarker], not a LAN URL.
+  ///
+  /// With no [relay] and no configured one the pairing is **direct**: the
+  /// phone dials this machine's LAN listener, nothing waits at any relay, and
+  /// the row names none — so no relay is ever dialled for that phone.
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
@@ -299,8 +308,10 @@ class RemoteHostService {
     }
     await cancelPairing();
     final pairingRelay = relay ?? this.relay;
+    final fallback = this.relay;
     final payload = await PairingPayload.generateWithCode(
-      relay: pairingRelay,
+      // The payload carries a relay either way; a direct pairing names nowhere.
+      relay: pairingRelay ?? Uri.parse('https://invalid.local'),
       hostId: hostId,
       capabilities: capabilities,
       // The tab's relay stays the payload's `relay` — an older companion reads
@@ -308,7 +319,7 @@ class RemoteHostService {
       relays: [
         ?_localRelayUrl,
         ..._extraRelays,
-        if (_hostedEnabled) this.relay,
+        if (_hostedEnabled && fallback != null) fallback,
       ],
     );
     final session = HostPairingSession(
@@ -317,7 +328,7 @@ class RemoteHostService {
       now: _now,
       persist: (device) async {
         final stamped = device.copyWith(
-          relayUrl: relayIsLocal ? kLocalRelayMarker : pairingRelay.toString(),
+          relayUrl: relayIsLocal ? kLocalRelayMarker : pairingRelay?.toString(),
         );
         devices.insert(stamped);
         onDevicesChanged?.call();
@@ -325,9 +336,11 @@ class RemoteHostService {
       },
     );
     _pairing = session;
-    final transport = _relayFactory(pairingRelay, payload.rendezvous);
-    _pairingTransport = transport;
-    session.attach(transport);
+    if (pairingRelay != null) {
+      final transport = _relayFactory(pairingRelay, payload.rendezvous);
+      _pairingTransport = transport;
+      session.attach(transport);
+    }
     unawaited(
       session.done
           .then((_) {}, onError: (_) {})
@@ -385,6 +398,51 @@ class RemoteHostService {
     }
     _lanRoutes.removeWhere((_, route) => route.deviceId == deviceId);
     onDevicesChanged?.call();
+  }
+
+  /// Brings every live runtime in line with rows another process changed — a
+  /// grant edited, a phone revoked or re-paired in the desktop's settings while
+  /// this process serves it. A revoked row is told, then torn down, exactly as
+  /// [revoke] does it; a changed grant is applied on the link it holds.
+  Future<void> reconcileDevices() async {
+    if (!_started) return;
+    final rows = {for (final row in devices.getAll()) row.id: row};
+    for (final entry in _runtimes.entries.toList()) {
+      final row = rows[entry.key];
+      final runtime = entry.value;
+      final gone =
+          row == null ||
+          row.revoked ||
+          row.deviceKey.isEmpty ||
+          !_sameKey(row.deviceKey, runtime.device.deviceKey);
+      if (gone) {
+        _runtimes.remove(entry.key);
+        if (row == null || row.revoked || row.deviceKey.isEmpty) {
+          try {
+            await runtime.run((api) => api.sendPairingRevoked());
+          } on Object catch (error) {
+            onLog?.call('could not tell the device it was revoked: $error');
+          }
+        }
+        await runtime.close();
+        _lanRoutes.removeWhere((_, route) => route.deviceId == entry.key);
+        continue;
+      }
+      if (row.capabilities.bits != runtime.device.capabilities.bits) {
+        await runtime.applyGrant(row);
+      }
+    }
+    for (final row in rows.values) {
+      await _ensureRuntime(row);
+    }
+  }
+
+  static bool _sameKey(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// Something about sessions moved; every connected device re-evaluates its

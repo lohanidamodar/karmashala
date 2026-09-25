@@ -16,6 +16,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
+import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
@@ -817,7 +818,7 @@ class _PairingAccess extends RemoteAccessController {
   HostPairingSession? _last;
 
   @override
-  Future<HostPairingSession> beginPairing({
+  Future<PairingInProgress> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
     bool relayIsLocal = false,
@@ -831,7 +832,7 @@ class _PairingAccess extends RemoteAccessController {
       hostName: 'Desk',
       persist: (_) async {},
     );
-    return _last = session;
+    return PairingInProgress.of(_last = session);
   }
 
   @override

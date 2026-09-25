@@ -17,7 +17,7 @@ import 'dart:async';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
-import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';

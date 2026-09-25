@@ -42,6 +42,12 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       ),
       offerMcpTools: watch.offerMcpTools,
       answerMcpCall: watch.answerMcpCall,
+      companionCalls: watch.companionCalls,
+      companionEvents: watch.companionEvents,
+      configureCompanion: watch.configureCompanion,
+      answerCompanionCall: watch.answerCompanionCall,
+      noticeCompanion: watch.noticeCompanion,
+      pairCompanion: watch.pairCompanion,
     );
   }
 

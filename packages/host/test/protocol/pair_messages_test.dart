@@ -22,6 +22,21 @@ void main() {
         isEmpty,
         reason: 'a box with its own address needs none',
       );
+      expect(back.relayIsLocal, isFalse);
+    });
+
+    test('a request says when its relay is the app\'s own', () {
+      const sent = PairMessage(
+        requestId: 8,
+        capabilities: 1,
+        relay: 'ws://192.168.1.4:8787',
+        relayIsLocal: true,
+      );
+
+      final back = roundTrip(sent);
+
+      expect(back.relay, sent.relay);
+      expect(back.relayIsLocal, isTrue);
     });
 
     test('an answer carries the code and when it stops working', () {
@@ -29,31 +44,28 @@ void main() {
         requestId: 7,
         code: 'K7QM-3X2W-ABCD-EFGH-2345-6789-JKLM-NPQR',
         expiresAt: DateTime.utc(2026, 9, 16, 12, 30),
+        payload: '{"v":1}',
       );
 
       final back = roundTrip(sent);
 
       expect(back.code, sent.code);
       expect(back.expiresAt, sent.expiresAt);
+      expect(back.payload, sent.payload, reason: 'what the dialog draws');
     });
   });
 
-  group('an older host refuses them cleanly', () {
-    test('the codes are new, so nothing that existed changed meaning', () {
-      // Adding types is backward-safe *because* of this: `fromCode` answers
-      // null for one it does not know and the server replies `badRequest`. A
-      // version bump would instead make every deployed host a mismatch until
-      // something replaced it, which nothing does yet (BACKLOG §1).
+  group('the codes', () {
+    test('keep their numbers', () {
       expect(MessageType.pair.code, 0x12);
       expect(MessageType.paired.code, 0x13);
       expect(MessageType.fromCode(0x12), MessageType.pair);
       expect(MessageType.fromCode(0x99), isNull);
     });
 
-    test('the protocol version did not move', () {
-      // If this ever has to change, every already-deployed host stops
-      // answering until it is replaced. Pinned so that is a decision.
-      expect(kProtocolVersion, 3);
+    test('the protocol version is pinned, so moving it is a decision', () {
+      // Protocol 4: the companion in the daemon, and the pair messages grew.
+      expect(kProtocolVersion, 4);
     });
   });
 
@@ -61,15 +73,15 @@ void main() {
     test(
       'refuses to pair by name rather than failing at the ceremony',
       () async {
-        // `openPairing` null is a `serve` whose SQLite would not load. It still
-        // owns every PTY on the machine, so it serves sessions and says plainly
+        // No companion is a `serve` whose SQLite would not load. It still owns
+        // every PTY on the machine, so it serves sessions and says plainly
         // that this one thing is unavailable.
         final server = HostServer(
           registry: SessionRegistry(launcher: FakePtyLauncher()),
           ptyLibrary: 'fake',
         );
 
-        expect(server.openPairing, isNull);
+        expect(server.companion, isNull);
       },
     );
   });

@@ -56,7 +56,17 @@ enum MessageType {
   // host: its answer.
   mcpTools(0x1d),
   mcpCall(0x1e),
-  mcpResult(0x1f);
+  mcpResult(0x1f),
+  // Protocol 4: the daemon serves the phone companion and the app answers
+  // what only it can. client → host: the Remote access settings (and "I am
+  // the app"); host → client: one forwarded call; client → host: its answer;
+  // client → host: news from the desktop; host → client: news from the
+  // companion (device rows moved, a pairing window ended).
+  companionConfig(0x20),
+  companionCall(0x21),
+  companionResult(0x22),
+  companionNotice(0x23),
+  companionEvent(0x24);
 
   const MessageType(this.code);
   final int code;

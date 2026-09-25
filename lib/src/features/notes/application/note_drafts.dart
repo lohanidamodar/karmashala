@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/lifecycle/before_quit.dart';
-import '../domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import '../domain/note_draft.dart';
 import 'notes_providers.dart';
 

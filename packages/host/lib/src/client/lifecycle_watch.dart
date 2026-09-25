@@ -21,6 +21,10 @@ class HostLifecycleWatch {
   final _hooks = StreamController<AgentHookEvent>();
   final _sessionChanges = StreamController<SessionChangedMessage>();
   final _mcpCalls = StreamController<McpCallMessage>();
+  final _companionCalls = StreamController<CompanionCallMessage>();
+  final _companionEvents = StreamController<CompanionEventMessage>();
+  final _pairings = <int, Completer<PairedMessage>>{};
+  var _lastRequestId = 2;
   final _done = Completer<void>();
   StreamSubscription<List<int>>? _incoming;
   Completer<HostMessage>? _awaiting;
@@ -62,6 +66,66 @@ class HostLifecycleWatch {
         ? McpResultMessage.success(callId, result)
         : McpResultMessage.failure(callId, error),
   );
+
+  /// Each companion call the host forwards, once this client has sent its
+  /// config with [configureCompanion]; answer each with [answerCompanionCall].
+  Stream<CompanionCallMessage> get companionCalls => _companionCalls.stream;
+
+  /// What the host's companion tells this client: device rows moved, a
+  /// pairing window this client opened ended.
+  Stream<CompanionEventMessage> get companionEvents => _companionEvents.stream;
+
+  /// Makes this client the app the host forwards companion calls to, serving
+  /// by [config] — `CompanionConfig.toJson`, kept by the host for when this
+  /// client is gone.
+  void configureCompanion(Map<String, Object?> config) =>
+      _write(CompanionConfigMessage(config));
+
+  /// How the companion call [callId] ended: [result], or the companion error
+  /// [code] and [message] the phone is refused with.
+  void answerCompanionCall(
+    int callId, {
+    Map<String, Object?>? result,
+    String? code,
+    String? message,
+  }) => _write(
+    code == null
+        ? CompanionResultMessage.success(callId, result ?? const {})
+        : CompanionResultMessage.failure(
+            callId,
+            code: code,
+            message: message ?? code,
+          ),
+  );
+
+  /// News from the desktop for the host's companion.
+  void noticeCompanion(CompanionNoticeMessage notice) => _write(notice);
+
+  /// Opens a pairing window at the host. Its end arrives on [companionEvents]
+  /// under the answer's `requestId`. Throws [HostLifecycleWatchRefused] with
+  /// the host's reason when it will not open one.
+  Future<PairedMessage> pairCompanion({
+    required int capabilities,
+    String relay = '',
+    bool relayIsLocal = false,
+  }) {
+    if (_done.isCompleted) {
+      return Future.error(
+        const HostLifecycleWatchRefused('the host link is closed'),
+      );
+    }
+    final requestId = ++_lastRequestId;
+    final answer = _pairings[requestId] = Completer<PairedMessage>();
+    _write(
+      PairMessage(
+        requestId: requestId,
+        capabilities: capabilities,
+        relay: relay,
+        relayIsLocal: relayIsLocal,
+      ),
+    );
+    return answer.future;
+  }
 
   /// Throws when [message] cannot be encoded — a result that is not JSON —
   /// so the caller can answer with that instead of leaving the call open.
@@ -207,6 +271,25 @@ class HostLifecycleWatch {
       if (!_mcpCalls.isClosed) _mcpCalls.add(message);
       return;
     }
+    if (message is CompanionCallMessage) {
+      if (!_companionCalls.isClosed) _companionCalls.add(message);
+      return;
+    }
+    if (message is CompanionEventMessage) {
+      if (!_companionEvents.isClosed) _companionEvents.add(message);
+      return;
+    }
+    if (message is PairedMessage) {
+      _pairings.remove(message.requestId)?.complete(message);
+      return;
+    }
+    if (message is ErrorMessage) {
+      final pairing = _pairings.remove(message.requestId);
+      if (pairing != null) {
+        pairing.completeError(HostLifecycleWatchRefused(message.message));
+        return;
+      }
+    }
     if (awaiting != null &&
         !awaiting.isCompleted &&
         (message is WelcomeMessage ||
@@ -229,6 +312,14 @@ class HostLifecycleWatch {
     if (!_hooks.isClosed) unawaited(_hooks.close());
     if (!_sessionChanges.isClosed) unawaited(_sessionChanges.close());
     if (!_mcpCalls.isClosed) unawaited(_mcpCalls.close());
+    if (!_companionCalls.isClosed) unawaited(_companionCalls.close());
+    if (!_companionEvents.isClosed) unawaited(_companionEvents.close());
+    for (final pairing in _pairings.values) {
+      pairing.completeError(
+        const HostLifecycleWatchRefused('the host link closed'),
+      );
+    }
+    _pairings.clear();
     if (!_done.isCompleted) _done.complete();
   }
 

@@ -8,7 +8,7 @@ import 'package:karmashala_ui/transcript.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../todos/presentation/project_menu.dart';
 import '../application/notes_providers.dart';
-import '../domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import '../domain/note_draft.dart';
 import 'note_provenance.dart';
 

@@ -7,7 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../todos/presentation/project_menu.dart';
 import '../application/notes_providers.dart';
-import '../domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 
 /// Keeps text captured from somewhere else as a note, in a dialog so the
 /// capture does not take the user away from what they were reading. Writing a

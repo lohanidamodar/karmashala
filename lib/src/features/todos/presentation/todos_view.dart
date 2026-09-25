@@ -13,7 +13,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
-import '../domain/todo.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import 'project_menu.dart';
 import 'package:karmashala_ui/primitives.dart';
 

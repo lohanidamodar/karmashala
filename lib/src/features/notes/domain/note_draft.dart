@@ -1,4 +1,4 @@
-import 'note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 
 /// What a note tab's buffer says about itself, in the order it matters.
 enum NoteSaveState {

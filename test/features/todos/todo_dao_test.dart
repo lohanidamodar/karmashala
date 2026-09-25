@@ -2,8 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/todos/data/todo_dao.dart';
-import 'package:karmashala/src/features/todos/domain/todo.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 
 import '../../support/fixtures.dart';
 

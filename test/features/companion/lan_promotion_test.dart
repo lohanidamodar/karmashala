@@ -22,7 +22,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
-import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_store/devices.dart';

@@ -5,7 +5,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/todos_providers.dart';
-import '../domain/todo.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import 'project_menu.dart';
 
 /// The most the field grows to before it scrolls inside itself. The same cap

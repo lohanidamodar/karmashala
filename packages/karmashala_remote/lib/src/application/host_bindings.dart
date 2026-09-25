@@ -4,6 +4,8 @@
 /// screen; tests hand in closures over plain maps.
 library;
 
+import 'dart:async';
+
 import '../domain/companion_presence.dart';
 import '../domain/remote_notes.dart';
 import '../domain/remote_payloads.dart';
@@ -92,9 +94,12 @@ class RemoteHostBindings {
   /// Every session the desktop would list, imported CLI history included,
   /// already shaped for the wire. Stage is deliberately absent — it costs a
   /// git/gh probe per session — and [HostSessionApi] folds it in later.
-  final List<RemoteSessionSnapshot> Function() listSessions;
+  ///
+  /// `FutureOr` because the session host answers it by asking the app, while
+  /// the app answers from memory.
+  final FutureOr<List<RemoteSessionSnapshot>> Function() listSessions;
 
-  final RemoteSessionSnapshot? Function(String sessionId) sessionById;
+  final FutureOr<RemoteSessionSnapshot?> Function(String sessionId) sessionById;
 
   /// The delivery stage of one *subscribed* session, or null for "could not
   /// tell". Production reads `sessionDeliveryProvider` — the same probe the
@@ -146,9 +151,9 @@ class RemoteHostBindings {
 
   /// What could be started here: the desktop's projects, their checkouts and
   /// the agents installed where each lives. Reported from the same DAOs the
-  /// Explorer draws, and synchronous, so it starts no process per repository.
-  final List<RemoteWorkspaceProject> Function() listWorkspace;
-  final List<RemoteWorkspaceProject> Function() listProjects;
+  /// Explorer draws, starting no process per repository.
+  final FutureOr<List<RemoteWorkspaceProject>> Function() listWorkspace;
+  final FutureOr<List<RemoteWorkspaceProject>> Function() listProjects;
 
   /// Starts a new session, through the one write path the desktop's New session
   /// dialog uses. Everything the launcher decides stays the launcher's; this

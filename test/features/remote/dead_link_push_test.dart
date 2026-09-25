@@ -15,7 +15,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -151,11 +151,17 @@ void main() {
     await client.connect(helloTimeout: const Duration(seconds: 5));
     expect((await client.listSessions()).single.sessionId, 's1');
     await client.subscribeSession('s1');
-    await until('saw the link go live', () => service.hasLiveLink(_deviceId.value));
+    await until(
+      'saw the link go live',
+      () => service.hasLiveLink(_deviceId.value),
+    );
 
     // And then it is gone — backgrounded, out of range, killed.
     await client.close();
-    await until('noticed the phone left', () => !service.hasLiveLink(_deviceId.value));
+    await until(
+      'noticed the phone left',
+      () => !service.hasLiveLink(_deviceId.value),
+    );
 
     // Somebody is at the rendezvous — the host's own listener redialled, and
     // this is whatever the relay pairs it with next. It never speaks, so

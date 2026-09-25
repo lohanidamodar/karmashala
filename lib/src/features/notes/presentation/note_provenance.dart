@@ -1,4 +1,4 @@
-import '../domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 
 /// Where [note] came from, in the words of what is still true: a session that
 /// has since been deleted is said to be gone rather than dropped.

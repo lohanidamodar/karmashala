@@ -210,13 +210,13 @@ class HostSessionApi {
         case FrameType.sessionsList:
           final rows = <Map<String, Object?>>[];
           final shown = _shown ??= <String>{};
-          for (final snapshot in bindings.listSessions()) {
+          for (final snapshot in await bindings.listSessions()) {
             rows.add((await _withStage(snapshot)).toJson());
             shown.add(snapshot.sessionId);
           }
           await _result(envelope.id, {'sessions': rows});
         case FrameType.sessionSubscribe:
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           _subscribed.add(sessionId);
           _shown?.add(sessionId);
           // **Nothing here reads the transcript.** It used to, to prime the
@@ -227,7 +227,7 @@ class HostSessionApi {
           // `approval.requested` goes out once, as a session starts waiting. A
           // phone that was asleep then — or is on a link that replaced the one
           // it went out on — would read "needs you" with nothing to act on.
-          if (_awaitingApproval(sessionId) &&
+          if (await _awaitingApproval(sessionId) &&
               !_announcedApprovals.contains(sessionId)) {
             await pushApprovalRequested(sessionId);
           }
@@ -241,7 +241,7 @@ class HostSessionApi {
           _lastActivity.remove(sessionId);
           await _result(envelope.id, const {});
         case FrameType.transcriptGet:
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           final after = envelope.payload['after'];
           final from = after is int && after > 0 ? after : 0;
           final page = (await bindings.transcriptFor(sessionId)).page;
@@ -282,12 +282,12 @@ class HostSessionApi {
         case FrameType.sessionActivity:
           // The phone asking outright, on opening a session and after a
           // reconnect, where the frames it missed cannot be replayed.
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           final activity = (await bindings.transcriptFor(sessionId)).activity;
           _lastActivity[sessionId] = _activityKey(activity);
           await _result(envelope.id, activity.toJson());
         case FrameType.promptSend:
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           final text = _requireString(envelope, 'text');
           final attachmentId = _optionalString(envelope, 'attachment');
           // Belt and braces on the bit: a prompt naming an attachment is the
@@ -329,12 +329,12 @@ class HostSessionApi {
         case FrameType.attachmentBegin:
           // Re-read here rather than trusted from the row the phone last saw:
           // a row can be minutes old, and the agent behind it swapped since.
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           final request = RemoteAttachmentBegin.fromJson({
             ...envelope.payload,
             'sessionId': sessionId,
           });
-          _checkAcceptable(sessionId, request);
+          await _checkAcceptable(sessionId, request);
           await _result(
             envelope.id,
             (await bindings.beginAttachment(device.id, request)).toJson(),
@@ -363,7 +363,7 @@ class HostSessionApi {
           // next: the outbound queue drops its oldest frame under pressure.
           await _result(envelope.id, const {});
         case FrameType.approvalAnswer:
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           final decision = _requireString(envelope, 'decision');
           if (decision != 'approve' && decision != 'deny') {
             throw const RemoteApiRefusal(
@@ -374,7 +374,7 @@ class HostSessionApi {
           // The reverse race: the desktop answered a moment ago and applying
           // this would type a key into whatever prompt is there NOW. Refused on
           // the session's attention, the fact the desktop's own card is drawn from.
-          if (!_awaitingApproval(sessionId)) {
+          if (!await _awaitingApproval(sessionId)) {
             throw const RemoteApiRefusal(
               // Not a new error code: `tryParse` on an older companion answers
               // null for a wire word it has never seen.
@@ -402,7 +402,7 @@ class HostSessionApi {
           // The same race the approval refuses: the question may have been
           // answered at the desk a moment ago, and these keys would land in
           // whatever is on screen now.
-          if (!_awaitingApproval(request.sessionId)) {
+          if (!await _awaitingApproval(request.sessionId)) {
             throw const RemoteApiRefusal(
               ErrorCode.badRequest,
               'this question has already been answered',
@@ -423,7 +423,7 @@ class HostSessionApi {
           } on ProtocolException catch (error) {
             throw RemoteApiRefusal(ErrorCode.badRequest, error.message);
           }
-          if (!_awaitingApproval(request.sessionId)) {
+          if (!await _awaitingApproval(request.sessionId)) {
             throw const RemoteApiRefusal(
               ErrorCode.badRequest,
               'this prompt has already been answered',
@@ -454,7 +454,8 @@ class HostSessionApi {
         case FrameType.workspaceList:
           await _result(envelope.id, {
             'projects': [
-              for (final project in bindings.listWorkspace()) project.toJson(),
+              for (final project in await bindings.listWorkspace())
+                project.toJson(),
             ],
           });
         case FrameType.projectsList:
@@ -465,7 +466,7 @@ class HostSessionApi {
               // `environmentId` and `environmentKind` when they were added —
               // the phone then keyed projects by badge and sessions by id, and
               // drew one machine as two.
-              for (final project in bindings.listProjects())
+              for (final project in await bindings.listProjects())
                 project.toJson()..remove('checkouts'),
             ],
           });
@@ -533,13 +534,13 @@ class HostSessionApi {
             if (replayed) 'replayed': true,
           });
         case FrameType.sessionOptions:
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           await _result(
             envelope.id,
             (await bindings.sessionOptions(sessionId)).toJson(),
           );
         case FrameType.sessionConfigure:
-          final sessionId = _requireSession(envelope);
+          final sessionId = await _requireSession(envelope);
           ({String? id})? field(String key) {
             if (!envelope.payload.containsKey(key)) return null;
             final value = envelope.payload[key];
@@ -612,7 +613,7 @@ class HostSessionApi {
     final shown = _shown;
     if (shown == null) return;
     if (!device.capabilities.has(Capability.viewSessions)) return;
-    for (final snapshot in bindings.listSessions()) {
+    for (final snapshot in await bindings.listSessions()) {
       if (shown.contains(snapshot.sessionId)) continue;
       final full = await _withStage(snapshot);
       // Written down only once it went out, so a dropped one is tried again.
@@ -648,7 +649,7 @@ class HostSessionApi {
     // Before the dedupe and the early return: retiring a card the phone still
     // shows must not depend on the snapshot having changed shape.
     await reconcileApproval(sessionId);
-    final base = bindings.sessionById(sessionId);
+    final base = await bindings.sessionById(sessionId);
     if (base == null) return;
     final snapshot = await _withStage(base);
     final encoded = jsonEncode(snapshot.toJson());
@@ -815,7 +816,8 @@ class HostSessionApi {
   /// external imports) while the session never stops waiting.
   Future<void> recheckApproval(String sessionId) async {
     if (!device.capabilities.has(Capability.approve)) return;
-    if (!_subscribed.contains(sessionId) || !_awaitingApproval(sessionId)) {
+    if (!_subscribed.contains(sessionId) ||
+        !await _awaitingApproval(sessionId)) {
       return;
     }
     final RemoteApprovalRequest request;
@@ -848,14 +850,15 @@ class HostSessionApi {
   /// route lands here; nothing can say *which*, and it does not pretend to.
   Future<void> reconcileApproval(String sessionId) async {
     if (!_announcedApprovals.contains(sessionId)) return;
-    if (_awaitingApproval(sessionId)) return;
+    if (await _awaitingApproval(sessionId)) return;
     await _sendApprovalResolved(sessionId, RemoteApprovalOutcome.elsewhere);
   }
 
   /// Whether the desktop would draw its own card for this session right now,
   /// read from the snapshot this api already serves so there is one source.
-  bool _awaitingApproval(String sessionId) =>
-      bindings.sessionById(sessionId)?.attention == kAttentionNeedsApproval;
+  Future<bool> _awaitingApproval(String sessionId) async =>
+      (await bindings.sessionById(sessionId))?.attention ==
+      kAttentionNeedsApproval;
 
   Future<void> _sendApprovalResolved(
     String sessionId,
@@ -879,8 +882,11 @@ class HostSessionApi {
   /// Refuses a file this session's agent would not be able to look at. Matches
   /// the media type literally rather than by pattern, because a pattern is a
   /// thing two builds can disagree about.
-  void _checkAcceptable(String sessionId, RemoteAttachmentBegin request) {
-    final support = bindings.sessionById(sessionId)?.attachments;
+  Future<void> _checkAcceptable(
+    String sessionId,
+    RemoteAttachmentBegin request,
+  ) async {
+    final support = (await bindings.sessionById(sessionId))?.attachments;
     if (support == null || !support.allowsAnything) {
       throw RemoteApiRefusal(
         ErrorCode.badRequest,
@@ -918,9 +924,9 @@ class HostSessionApi {
     return text.isEmpty ? null : text;
   }
 
-  String _requireSession(Envelope envelope) {
+  Future<String> _requireSession(Envelope envelope) async {
     final sessionId = _requireString(envelope, 'sessionId');
-    if (bindings.sessionById(sessionId) == null) {
+    if (await bindings.sessionById(sessionId) == null) {
       throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
     }
     return sessionId;

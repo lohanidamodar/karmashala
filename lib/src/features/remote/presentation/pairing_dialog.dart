@@ -7,6 +7,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../ssh/application/ssh_failure.dart';
+import '../application/pairing_in_progress.dart';
 import '../application/remote_access_controller.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
@@ -33,7 +34,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
   /// Saved in [initState]: `ref` is unusable inside [dispose].
   late final RemoteAccessController _access;
 
-  HostPairingSession? _session;
+  PairingInProgress? _session;
   PairedDevice? _paired;
   String? _error;
   bool _copied = false;
@@ -214,7 +215,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
                   padding: EdgeInsets.all(Insets.xl),
                   child: InlineSpinner(size: InlineSpinnerSize.large),
                 ),
-                (_, _, final HostPairingSession session) => _PairingCodeView(
+                (_, _, final PairingInProgress session) => _PairingCodeView(
                   payload: session.payload,
                   showPayload: _showCode,
                   copied: _copied,

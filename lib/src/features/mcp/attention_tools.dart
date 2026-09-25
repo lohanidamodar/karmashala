@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../notes/application/notes_providers.dart';
-import '../notes/domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import '../notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/attention.dart';
 import '../sessions/application/session_providers.dart';

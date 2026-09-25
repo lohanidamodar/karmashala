@@ -7,9 +7,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart'
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
-import '../companion/companion_listener.dart';
-import '../companion/host_companion.dart';
-import '../companion/host_pairing_service.dart';
+import '../companion/daemon_companion.dart';
 import '../domain/session_registry.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
@@ -128,13 +126,19 @@ Future<int> runServe(
   final database = _openStore(dataDirectory, errSink);
   final companion = database == null
       ? null
-      : await _openCompanion(database, registry, _companionPort(args), errSink);
+      : DaemonCompanion(
+          database: database,
+          registry: registry,
+          hostName: Platform.localHostname,
+          lanPort: _companionPort(args),
+          onLog: (message) => errSink.writeln('karmashala_host: $message'),
+        );
 
   final mcpTools = McpToolRelay(cachePath: paths.mcpToolsPath);
   final server = HostServer(
     registry: registry,
     ptyLibrary: pty.library,
-    openPairing: companion?.openPairing,
+    companion: companion,
     build: hostBuildOf(Platform.resolvedExecutable),
     mcpTools: mcpTools,
   );
@@ -145,6 +149,9 @@ Future<int> runServe(
           database,
           clock: () => DateTime.now().toUtc(),
         )..start());
+  final companionServing =
+      companion != null &&
+      await _startCompanion(companion, server.lifecycle, errSink);
   final hookServer = await _openHookServer(paths, server.lifecycle, errSink);
   final mcp = await _openMcp(
     paths,
@@ -197,9 +204,12 @@ Future<int> runServe(
           : 'store ${p.join(dataDirectory, 'karmashala.sqlite')}',
     )
     ..writeln(
-      companion == null
+      companion == null || !companionServing
           ? 'companion unavailable — the line above says why'
-          : 'companion on port ${companion.listener.port}, '
+          : companion.service == null
+          ? 'companion off — remote access is switched off in the app, '
+                '${companion.paired()} phone(s) paired'
+          : 'companion on port ${companion.port}, '
                 '${companion.paired()} phone(s) paired',
     )
     // Said out loud: coming back with nothing and coming back with four dead
@@ -296,49 +306,19 @@ AppDatabase? _openStore(String dataDirectory, IOSink errSink) {
   }
 }
 
-/// The pairing service and the phone listener on [database], or null. Every
-/// failure is reported and none is fatal.
-Future<HostCompanion?> _openCompanion(
-  AppDatabase database,
-  SessionRegistry registry,
-  int port,
+/// Starts serving phones. False, reported, when it cannot: sessions do not
+/// need a companion.
+Future<bool> _startCompanion(
+  DaemonCompanion companion,
+  LifecycleFeed lifecycle,
   IOSink errSink,
 ) async {
   try {
-    final name = Platform.localHostname;
-    final pairing = HostPairingService(
-      database: database,
-      hostName: name,
-      hostId: _hostIdentity(database),
-    );
-    final listener = CompanionListener(
-      registry: registry,
-      hostName: name,
-      devices: pairing.paired,
-      onGeneration: pairing.advance,
-      onLog: (message) => errSink.writeln('karmashala_host: $message'),
-    );
-    await listener.start(port: port);
-    final companion = HostCompanion(
-      pairing: pairing,
-      listener: listener,
-      onLog: (message) => errSink.writeln('karmashala_host: $message'),
-    );
-    // Phones paired through a relay are waited for there from the first moment,
-    // not from the next pairing.
-    await companion.start();
-    return companion;
-  } on SocketException catch (error) {
-    errSink.writeln(
-      'karmashala_host: the store is fine but port $port is not free '
-      '(${error.osError?.message ?? error.message}). Another host is probably '
-      'already serving phones here; `--companion-port=<n>` picks another, and 0 '
-      'asks the OS for a free one.',
-    );
-    return null;
+    await companion.start(sessionEvents: lifecycle.events);
+    return true;
   } on Object catch (error) {
     errSink.writeln('karmashala_host: could not start the companion ($error)');
-    return null;
+    return false;
   }
 }
 
@@ -376,28 +356,4 @@ int _companionPort(List<String> args) {
     if (parsed != null && parsed >= 0 && parsed <= 65535) return parsed;
   }
   return kHostCompanionPort;
-}
-
-/// This host's own id, minted once and kept.
-///
-/// A phone pins it, so a host that minted a fresh one each start would look
-/// like a different machine every morning and every pairing would be stale. It
-/// lives in `app_metadata`, which is the store's own table for exactly this.
-DeviceId _hostIdentity(AppDatabase database) {
-  const key = 'companion.host_id';
-  final stored = database.readMetadata(key);
-  if (stored != null) {
-    try {
-      return DeviceId.parse(stored);
-    } on Object {
-      // A value that will not parse is worse than none: it would refuse every
-      // pairing forever. Replaced, and the old pairings go with it — which is
-      // honest, because they were pinned to an id nothing can read.
-    }
-  }
-  final minted = DeviceId.generate();
-  // `value`, not `toString()`: that one is decorated `DeviceId(…)` and would
-  // never parse back, so every restart would look like a new machine.
-  database.writeMetadata(key, minted.value);
-  return minted;
 }

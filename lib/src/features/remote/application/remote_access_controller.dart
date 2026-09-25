@@ -1,13 +1,20 @@
-/// Starts and stops [RemoteHostService] to match the settings. The two relays
-/// are independent: turning one off *parks* its devices, restarting nothing.
+/// Brings the phone companion in line with the settings. Where this machine
+/// has a session host, the host serves the phones and this sends it the
+/// settings; only where there is none does this app run [RemoteHostService]
+/// itself. The two relays are independent: turning one off *parks* its
+/// devices, restarting nothing.
 library;
 
 import 'dart:async';
 
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_host/lifecycle_client.dart'
+    show CompanionNoticeKind, CompanionNoticeMessage;
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../../core/probe/probe_mode.dart';
+import '../../notes/application/notes_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -15,12 +22,13 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/settings.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_remote/pairing.dart';
 import '../relay_local/local_relay_providers.dart';
+import 'host_companion_link.dart';
+import 'host_companion_providers.dart';
+import 'pairing_in_progress.dart';
 import 'relay_prefs.dart';
 import 'ssh_relays.dart';
 import 'remote_bindings.dart';
-import 'remote_host_service.dart';
 import 'remote_providers.dart';
 
 /// The relay PopupBits runs, used until the user points at their own.
@@ -53,7 +61,8 @@ class RemoteAccessController {
   /// Serialises start/stop so a fast toggle cannot overlap them.
   Future<void> _chain = Future<void>.value();
 
-  /// The running service, or null while remote access is off.
+  /// This app's own running server, or null while remote access is off — and
+  /// always where the session host serves the phones.
   RemoteHostService? get service => _service;
 
   bool get isRunning => _service?.isRunning ?? false;
@@ -61,8 +70,14 @@ class RemoteAccessController {
   /// Whether this instance is a probe, where remote access never starts.
   bool get isDisabledByProbe => _ref.read(probeModeProvider).enabled;
 
+  /// The link to the host's companion, when the host serves the phones.
+  HostCompanionLink? get _host => _ref.read(companionAtHostProvider)
+      ? _ref.read(hostCompanionLinkProvider)
+      : null;
+
   /// Brings the service in line with the settings: started when enabled (and
-  /// restarted when the relay URL moved), stopped when disabled.
+  /// restarted when the relay URL moved), stopped when disabled — or, where the
+  /// session host serves the phones, the host told what the settings say.
   Future<void> sync() {
     _chain = _chain.then((_) => _sync()).catchError((
       Object error,
@@ -82,11 +97,18 @@ class RemoteAccessController {
 
   Future<void> _sync() async {
     final settings = _ref.read(settingsControllerProvider);
+    final host = _host;
     // A probe binds no relay port, opens no firewall rule and dials no relay:
     // the phone is paired to the real app, and 8787 is its port.
     if (!settings.remoteAccessEnabled || isDisabledByProbe) {
       await _stopService();
       await _stopLocalRelay();
+      host?.configure(
+        CompanionConfig(
+          enabled: false,
+          notesEnabled: _ref.read(notesEnabledProvider),
+        ),
+      );
       return;
     }
     final prefs = _ref.read(relayPrefsProvider);
@@ -94,6 +116,24 @@ class RemoteAccessController {
     final localUrl = await _syncLocalRelay(settings, prefs);
     final hosted = resolveRelayUri(settings.remoteRelayUrl);
     final sshRelays = _ref.read(activeSshRelayUrlsProvider);
+
+    if (host != null) {
+      // One server per machine: the host's. The embedded relay stays this
+      // app's, and the host is told where it is while it runs.
+      await _stopService();
+      host.configure(
+        CompanionConfig(
+          enabled: true,
+          relay: hosted,
+          hostedEnabled: prefs.hostedEnabled,
+          localRelayUrl: localUrl,
+          extraRelays: sshRelays,
+          notesEnabled: _ref.read(notesEnabledProvider),
+          advertise: true,
+        ),
+      );
+      return;
+    }
 
     final service = _service;
     if (service != null && service.relay == hosted) {
@@ -159,26 +199,40 @@ class RemoteAccessController {
 
   /// Shows a new pairing code; throws [StateError] while remote access is off.
   /// [relayIsLocal] is what the device row remembers.
-  Future<HostPairingSession> beginPairing({
+  Future<PairingInProgress> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
     bool relayIsLocal = false,
-  }) {
+  }) async {
     if (isDisabledByProbe) {
       throw StateError('Remote access is disabled in a probe instance.');
+    }
+    final host = _host;
+    if (host != null) {
+      if (!_ref.read(settingsControllerProvider).remoteAccessEnabled) {
+        throw StateError('Turn on remote access first.');
+      }
+      return host.pair(
+        capabilities: capabilities,
+        relay: relay,
+        relayIsLocal: relayIsLocal,
+      );
     }
     final service = _service;
     if (service == null || !service.isRunning) {
       throw StateError('Turn on remote access first.');
     }
-    return service.beginPairing(
-      capabilities: capabilities,
-      relay: relay,
-      relayIsLocal: relayIsLocal,
+    return PairingInProgress.of(
+      await service.beginPairing(
+        capabilities: capabilities,
+        relay: relay,
+        relayIsLocal: relayIsLocal,
+      ),
     );
   }
 
   Future<void> cancelPairing() async {
+    _host?.cancelPairing();
     await _service?.cancelPairing();
   }
 
@@ -204,6 +258,10 @@ class RemoteAccessController {
       _ref
           .read(pairedDeviceDaoProvider)
           .updateCapabilities(device.id, capabilities);
+      // The host applies it on the link the phone already holds.
+      _host?.notice(
+        const CompanionNoticeMessage(CompanionNoticeKind.devicesChanged),
+      );
     }
     _ref.read(pairedDevicesRevisionProvider.notifier).bump();
   }
@@ -216,6 +274,10 @@ class RemoteAccessController {
       await service.revoke(device.id);
     } else {
       _ref.read(pairedDeviceDaoProvider).revoke(device.id);
+      // The host tells the phone, then takes its link down.
+      _host?.notice(
+        const CompanionNoticeMessage(CompanionNoticeKind.devicesChanged),
+      );
     }
     _ref.read(pairedDevicesRevisionProvider.notifier).bump();
   }
@@ -226,19 +288,23 @@ class RemoteAccessController {
     return _chain;
   }
 
-  void onSessionsMoved() {
+  /// Where the desktop's news goes: this app's own server, or the host's.
+  _CompanionNews? get _news {
     final service = _service;
-    if (service == null) return;
-    unawaited(service.notifySessionsChanged());
+    if (service != null) return _ServiceNews(service);
+    final host = _host;
+    return host == null ? null : _HostNews(host);
   }
+
+  void onSessionsMoved() => _news?.sessionsMoved();
 
   void onAttention(
     List<SessionAttention>? previous,
     List<SessionAttention> next,
   ) {
-    final service = _service;
-    if (service == null) return;
-    unawaited(service.notifySessionsChanged());
+    final news = _news;
+    if (news == null) return;
+    news.sessionsMoved();
     final before = {
       for (final attention in previous ?? const <SessionAttention>[])
         if (attention.kind == AttentionKind.needsInput)
@@ -248,15 +314,15 @@ class RemoteAccessController {
       if (attention.kind != AttentionKind.needsInput) continue;
       if (attention.session.imported) continue;
       if (before.contains(attention.session.openId)) continue;
-      unawaited(service.notifyApprovalRequested(attention.session.openId));
+      news.approvalRequested(attention.session.openId);
     }
   }
 
   /// New attention-inbox items become sealed pushes for paired phones with no
   /// live link; connected phones already heard it as `session.changed`.
   void onInboxChanged(AttentionInbox? previous, AttentionInbox next) {
-    final service = _service;
-    if (service == null) return;
+    final news = _news;
+    if (news == null) return;
     final before = {
       for (final item in previous?.items ?? const <InboxItem>[]) item.id,
     };
@@ -278,20 +344,93 @@ class RemoteAccessController {
       };
       if (kind == null) continue;
       if (item.kind == InboxItemKind.usageLimit) limitFiled = true;
-      unawaited(
-        service.pushAttentionNews(
-          sessionId: item.session.openId,
-          title: item.session.label,
-          kind: kind,
-          // "Codex hit its 5-hour limit. Resets 14:05." — the reset is the news.
-          detail: item.kind == InboxItemKind.usageLimit ? item.detail : null,
-        ),
+      news.attention(
+        sessionId: item.session.openId,
+        title: item.session.label,
+        kind: kind,
+        // "Codex hit its 5-hour limit. Resets 14:05." — the reset is the news.
+        detail: item.kind == InboxItemKind.usageLimit ? item.detail : null,
       );
     }
     // A limit is carried on the session's snapshot, which nothing else moves
     // when it is filed; a connected phone hears it from this sweep.
-    if (limitFiled) unawaited(service.notifySessionsChanged());
+    if (limitFiled) news.sessionsMoved();
   }
+}
+
+/// The desktop's news for phones, whichever server carries it.
+abstract interface class _CompanionNews {
+  void sessionsMoved();
+  void approvalRequested(String sessionId);
+  void attention({
+    required String sessionId,
+    required String title,
+    required String kind,
+    String? detail,
+  });
+}
+
+/// This app's own server, where there is no session host.
+class _ServiceNews implements _CompanionNews {
+  _ServiceNews(this._service);
+  final RemoteHostService _service;
+
+  @override
+  void sessionsMoved() => unawaited(_service.notifySessionsChanged());
+
+  @override
+  void approvalRequested(String sessionId) =>
+      unawaited(_service.notifyApprovalRequested(sessionId));
+
+  @override
+  void attention({
+    required String sessionId,
+    required String title,
+    required String kind,
+    String? detail,
+  }) => unawaited(
+    _service.pushAttentionNews(
+      sessionId: sessionId,
+      title: title,
+      kind: kind,
+      detail: detail,
+    ),
+  );
+}
+
+/// The session host's server, told over the lifecycle link.
+class _HostNews implements _CompanionNews {
+  _HostNews(this._host);
+  final HostCompanionLink _host;
+
+  @override
+  void sessionsMoved() => _host.notice(
+    const CompanionNoticeMessage(CompanionNoticeKind.sessionsMoved),
+  );
+
+  @override
+  void approvalRequested(String sessionId) => _host.notice(
+    CompanionNoticeMessage(
+      CompanionNoticeKind.approvalRequested,
+      sessionId: sessionId,
+    ),
+  );
+
+  @override
+  void attention({
+    required String sessionId,
+    required String title,
+    required String kind,
+    String? detail,
+  }) => _host.notice(
+    CompanionNoticeMessage(
+      CompanionNoticeKind.attention,
+      sessionId: sessionId,
+      title: title,
+      attention: kind,
+      detail: detail,
+    ),
+  );
 }
 
 /// The one controller. Read it once at bootstrap so an enabled setting starts
@@ -308,6 +447,8 @@ final remoteAccessControllerProvider = Provider<RemoteAccessController>((ref) {
     attentionInboxProvider,
     (previous, next) => controller.onInboxChanged(previous, next),
   );
+  // The host answers `notes.get` itself, by the switch it was last sent.
+  ref.listen(notesEnabledProvider, (_, _) => unawaited(controller.sync()));
   ref.onDispose(() {
     unawaited(controller.shutdown());
   });

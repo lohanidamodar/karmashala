@@ -21,6 +21,7 @@ class HostLifecycleSubscriber {
     this.onHook,
     this.onAttached,
     this.mcpTools,
+    this.companion,
     this.retryDelays = kHostRedialDelays,
     this.idleRetry = const Duration(seconds: 30),
     AppLogger? logger,
@@ -47,6 +48,10 @@ class HostLifecycleSubscriber {
   /// Runs agents' tool calls the host forwards; offered on every link. Null
   /// runs none, and the host tells agents the app is not running.
   final HostMcpTools? mcpTools;
+
+  /// This app's half of the phone companion the host serves; told of every
+  /// link and every loss. Null leaves the host serving phones on its own.
+  final HostCompanionPeer? companion;
 
   /// Waits before each dial after the link is lost, then [idleRetry] between
   /// dials; a pane starting on the host dials at once through [nudge].
@@ -152,6 +157,7 @@ class HostLifecycleSubscriber {
       );
       feed.offerMcpTools(tools.catalogue());
     }
+    companion?.attached(feed);
   }
 
   /// Runs one forwarded call and answers it; a failure is the text the agent
@@ -209,6 +215,7 @@ class HostLifecycleSubscriber {
     _statusChanges = null;
     unawaited(_mcpCalls?.cancel());
     _mcpCalls = null;
+    companion?.detached();
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
@@ -243,10 +250,21 @@ class HostLifecycleSubscriber {
     _statusChanges = null;
     await _mcpCalls?.cancel();
     _mcpCalls = null;
+    if (_feed != null) companion?.detached();
     final feed = _feed;
     _feed = null;
     await feed?.close();
   }
+}
+
+/// This app's half of the phone companion when the session host serves it.
+abstract interface class HostCompanionPeer {
+  /// A link opened: [feed] carries the host's companion calls and events, and
+  /// takes this app's config, answers and notices.
+  void attached(HostLifecycleFeed feed);
+
+  /// The link is gone; the host serves phones on its own until the next one.
+  void detached();
 }
 
 /// This app's agent tools, as the session host forwards calls to them.

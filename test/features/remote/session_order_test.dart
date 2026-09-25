@@ -25,6 +25,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/sync_bindings.dart';
 import '../terminal/fake_instance.dart';
 
 void main() {
@@ -130,7 +131,7 @@ void main() {
   }
 
   List<String> listedIds() => [
-    for (final row in container.read(remoteHostBindingsProvider).listSessions())
+    for (final row in container.read(remoteHostBindingsProvider).listNow())
       row.sessionId,
   ];
 
@@ -224,10 +225,7 @@ void main() {
         .read(settingsControllerProvider.notifier)
         .togglePinnedSession('s1');
 
-    final row = container
-        .read(remoteHostBindingsProvider)
-        .listSessions()
-        .single;
+    final row = container.read(remoteHostBindingsProvider).listNow().single;
 
     expect(row.projectId, 'p');
     expect(row.projectName, 'p');
@@ -245,17 +243,14 @@ void main() {
     seedSession('s1', repositoryId: 'r', worktree: r'C:\work\p\wt-thing');
     missing.add(r'C:\work\p\wt-thing');
 
-    final row = container
-        .read(remoteHostBindingsProvider)
-        .listSessions()
-        .single;
+    final row = container.read(remoteHostBindingsProvider).listNow().single;
 
     expect(row.worktree, r'C:\work\p\wt-thing');
     expect(row.subPath, 'wt-thing');
     expect(row.folderMissing, isTrue);
     // The single-session lookup answers with the same facts.
     expect(
-      container.read(remoteHostBindingsProvider).sessionById('s1')?.worktree,
+      container.read(remoteHostBindingsProvider).byIdNow('s1')?.worktree,
       r'C:\work\p\wt-thing',
     );
   });
@@ -277,7 +272,7 @@ void main() {
     // Placed rows first, then whatever the walk could not reach.
     expect(listedIds(), ['found', 'lost']);
     expect(
-      container.read(remoteHostBindingsProvider).listSessions().last.projectId,
+      container.read(remoteHostBindingsProvider).listNow().last.projectId,
       isNull,
       reason: 'an unknown project is named as unknown, never invented',
     );
@@ -333,10 +328,7 @@ void main() {
     seedSession('s1', repositoryId: 'r', createdAt: DateTime.utc(2026, 1));
     activeAt['s1'] = DateTime.utc(2026, 8, 31, 9);
 
-    final row = container
-        .read(remoteHostBindingsProvider)
-        .listSessions()
-        .single;
+    final row = container.read(remoteHostBindingsProvider).listNow().single;
 
     // `lastActivityAt` is what the phone draws its age from, and it is the same
     // value the walk sorted by — a phone can never be handed a list ordered by
@@ -351,10 +343,7 @@ void main() {
     seedRepository('r', 'p', r'C:\work\p\repo');
     seedSession('s1', repositoryId: 'r', createdAt: DateTime.utc(2026, 1, 2));
 
-    final row = container
-        .read(remoteHostBindingsProvider)
-        .listSessions()
-        .single;
+    final row = container.read(remoteHostBindingsProvider).listNow().single;
 
     expect(row.lastActivityAt, '2026-01-02T00:00:00.000Z');
     expect(row.createdAt, '2026-01-02T00:00:00.000Z');
@@ -379,10 +368,7 @@ void main() {
       ),
     );
 
-    final row = container
-        .read(remoteHostBindingsProvider)
-        .listSessions()
-        .single;
+    final row = container.read(remoteHostBindingsProvider).listNow().single;
 
     // §19: a file we could not date is sent as nothing, never as its import
     // time dressed up as activity.

@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
-import '../data/todo_dao.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import '../domain/project_scope.dart';
-import '../domain/todo.dart';
 
 final todoDaoProvider = Provider<TodoDao>(
   (ref) => TodoDao(ref.watch(databaseProvider)),

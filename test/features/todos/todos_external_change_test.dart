@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
-import 'package:karmashala/src/features/todos/data/todo_dao.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 
 import '../../support/fixtures.dart';

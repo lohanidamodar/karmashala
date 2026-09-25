@@ -5,8 +5,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../todos/domain/project_scope.dart';
-import '../data/note_dao.dart';
-import '../domain/note.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
 
 final noteDaoProvider = Provider<NoteDao>(
   (ref) => NoteDao(ref.watch(databaseProvider)),
