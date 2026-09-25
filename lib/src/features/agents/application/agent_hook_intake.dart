@@ -37,7 +37,7 @@ final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
       // Where the HTTP route holds the tool, this route can only say it did
       // not: a spool write has no reply to wait on.
       try {
-        noteSpooledToolUnheld(
+        noteToolUnheld(
           ref.container,
           agentSessionId: report.sessionId,
           event: event.event,
@@ -50,6 +50,34 @@ final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
   ref.onDispose(drainer.dispose);
   return drainer;
 });
+
+/// A hook the session host took and relayed, applied as the HTTP route applied
+/// one — at the time the host received it. The host answered the agent already,
+/// so a `PreToolUse` was not held for its checkpoint, as with the spool.
+void applyHostRelayedAgentHook(
+  ProviderContainer container, {
+  required String agentId,
+  required String event,
+  required String body,
+  required DateTime receivedAt,
+  String? paneSessionId,
+  AppLogger? logger,
+}) {
+  final report = applyAgentHookCallback(
+    container,
+    agentId: agentId,
+    event: event,
+    body: body,
+    observedAt: receivedAt,
+    paneSessionId: paneSessionId,
+    logger: logger,
+  );
+  try {
+    noteToolUnheld(container, agentSessionId: report.sessionId, event: event);
+  } on Object catch (error) {
+    logger?.warning('Marking a relayed tool as unheld failed: $error');
+  }
+}
 
 /// Everything one hook callback does, whichever transport carried it — a second
 /// copy of these steps is how the two would come to disagree. **Never throws.**

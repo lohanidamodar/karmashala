@@ -133,6 +133,49 @@ void main() {
     expect(decoded.sessions[1].endedAt, t0);
     expect(decoded.sessions[2].exitCode, 143);
     expect(decoded.sessions[2].startedAt, isNull);
+    expect(decoded.hooks, isEmpty);
+  });
+
+  test('a hook round-trips with its body, alone and in the snapshot', () {
+    expect(MessageType.hook.code, 0x1a);
+    final hook = AgentHookEvent(
+      agent: 'claude-code',
+      event: 'Stop',
+      sessionHeader: 'pane-1',
+      receivedAt: t0,
+      body: const {
+        'session_id': 'c1',
+        'nested': {
+          'list': [1, 2],
+        },
+      },
+    );
+    final alone = roundTrip(HookMessage(hook)).hook;
+    expect(alone.agent, 'claude-code');
+    expect(alone.event, 'Stop');
+    expect(alone.sessionHeader, 'pane-1');
+    expect(alone.receivedAt, t0);
+    expect(alone.body, hook.body);
+
+    final unnamed = AgentHookEvent(
+      agent: 'codex',
+      event: 'Stop',
+      receivedAt: t0,
+      body: const {},
+    );
+    expect(unnamed.toJson().containsKey('sessionHeader'), isFalse);
+    final snapshot = roundTrip(
+      WatchingMessage(
+        requestId: 1,
+        observedAt: t0,
+        sessions: const [],
+        hooks: [hook, unnamed],
+      ),
+    );
+    expect(snapshot.hooks.map((h) => (h.agent, h.sessionHeader)), [
+      ('claude-code', 'pane-1'),
+      ('codex', null),
+    ]);
   });
 
   group('tolerant parsing', () {
@@ -161,6 +204,7 @@ void main() {
                     {'sessionId': 'a', 'state': 'running'},
                     {'sessionId': 'b', 'state': 'hibernating'},
                   ],
+                  'hooks': [],
                   'hostNote': 'ignored',
                 }),
               )

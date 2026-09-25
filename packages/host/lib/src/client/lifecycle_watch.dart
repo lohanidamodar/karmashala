@@ -7,7 +7,8 @@ import '../protocol/wire.dart';
 import '../transport/socket_transport.dart';
 import '../transport/transport.dart';
 
-/// One host's lifecycle feed: the facts it holds now, then each change.
+/// One host's lifecycle feed: the facts it holds now, then each change — and
+/// the agent hooks it took, the latest per session, then each one.
 ///
 /// Built over any [HostConnection] — a unix socket, an SSH channel, a pipe —
 /// with [over], or on a local socket with [connect].
@@ -17,6 +18,7 @@ class HostLifecycleWatch {
   final HostConnection _connection;
   final _parser = FrameParser();
   final _events = StreamController<LifecycleEvent>();
+  final _hooks = StreamController<AgentHookEvent>();
   final _done = Completer<void>();
   StreamSubscription<List<int>>? _incoming;
   Completer<HostMessage>? _awaiting;
@@ -28,9 +30,15 @@ class HostLifecycleWatch {
   late final List<HostSessionFacts> snapshot;
   late final DateTime snapshotObservedAt;
 
+  /// The latest hook per agent session when the host answered, oldest first.
+  late final List<AgentHookEvent> hookSnapshot;
+
   /// Every event after [snapshot], in order. Single-subscription, so events
   /// arriving before anyone listens are buffered, not lost.
   Stream<LifecycleEvent> get events => _events.stream;
+
+  /// Every hook after [hookSnapshot], buffered like [events].
+  Stream<AgentHookEvent> get hooks => _hooks.stream;
 
   /// Completes when the link ends, from either side.
   Future<void> get done => _done.future;
@@ -89,6 +97,7 @@ class HostLifecycleWatch {
     _connection.add(const WatchMessage(2).toFrame().encode());
     final watching = await _expect<WatchingMessage>(answerWithin);
     snapshot = List.unmodifiable(watching.sessions);
+    hookSnapshot = List.unmodifiable(watching.hooks);
     snapshotObservedAt = watching.observedAt;
   }
 
@@ -137,6 +146,10 @@ class HostLifecycleWatch {
       if (!_events.isClosed) _events.add(message.event);
       return;
     }
+    if (message is HookMessage) {
+      if (!_hooks.isClosed) _hooks.add(message.hook);
+      return;
+    }
     if (awaiting != null &&
         !awaiting.isCompleted &&
         (message is WelcomeMessage ||
@@ -156,6 +169,7 @@ class HostLifecycleWatch {
       );
     }
     if (!_events.isClosed) unawaited(_events.close());
+    if (!_hooks.isClosed) unawaited(_hooks.close());
     if (!_done.isCompleted) _done.complete();
   }
 

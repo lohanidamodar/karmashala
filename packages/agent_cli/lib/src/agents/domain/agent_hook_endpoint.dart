@@ -20,7 +20,8 @@ const int kAgentHookPayloadLimitBytes = 1024 * 1024;
 
 /// Where an agent's installed hooks report to, and how.
 ///
-/// The endpoint is hosted by `LauncherControlServer`'s `/agent-hook` route;
+/// The endpoint is the session host's (`<hostDir>/hook.endpoint`) when local
+/// panes are host-backed, else `LauncherControlServer`'s `/agent-hook` route;
 /// this type is in `agents/domain` because the hook *installer* is what writes
 /// it into an agent's own config, and `agents/` must not depend on `mcp/`.
 ///
@@ -53,10 +54,21 @@ const int kAgentHookPayloadLimitBytes = 1024 * 1024;
 /// An SSH host is another machine entirely and still gets nothing, because the
 /// only way to reach it would be to bind an interface the network can see.
 class AgentHookEndpoint {
-  const AgentHookEndpoint({required this.port, required this.token});
+  const AgentHookEndpoint({required this.port, required this.token})
+    : _http = true;
+
+  /// Only the spool: nothing local to post to yet — the session host that takes
+  /// local hooks has not published its address.
+  const AgentHookEndpoint.spoolOnly() : port = 0, token = '', _http = false;
 
   final int port;
   final String token;
+  final bool _http;
+
+  /// Whether both name the same address and token; a sweep with an unchanged
+  /// endpoint rewrites nothing.
+  bool sameAs(AgentHookEndpoint other) =>
+      other._http == _http && other.port == port && other.token == token;
 
   /// How a hook installed in [environment] delivers, or `null` when nothing
   /// this app offers can be reached from there.
@@ -68,8 +80,10 @@ class AgentHookEndpoint {
       switch (environment) {
         // Both local kinds dial this very process's loopback listener: the
         // agent is a child process on this machine, whatever OS it is.
-        EnvironmentKind.windowsNative || EnvironmentKind.localPosix =>
+        EnvironmentKind.windowsNative || EnvironmentKind.localPosix
+            when _http =>
           AgentHookHttpTransport(host: '127.0.0.1', port: port, token: token),
+        EnvironmentKind.windowsNative || EnvironmentKind.localPosix => null,
         // A separate VM. It shares a filesystem with us and not a loopback, so
         // the file is the channel.
         EnvironmentKind.wsl => const AgentHookSpoolTransport(),

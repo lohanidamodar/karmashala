@@ -8,6 +8,9 @@ import '../companion/companion_listener.dart';
 import '../companion/host_companion.dart';
 import '../companion/host_pairing_service.dart';
 import '../domain/session_registry.dart';
+import '../hooks/hook_endpoint_file.dart';
+import '../hooks/hook_server.dart';
+import '../hooks/recent_hooks.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../transport/socket_transport.dart';
@@ -104,11 +107,15 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     errSink,
   );
 
+  final hooks = RecentHooks();
+  final hookServer = await _openHookServer(paths, hooks, errSink);
+
   final server = HostServer(
     registry: registry,
     ptyLibrary: pty.library,
     openPairing: companion?.openPairing,
     build: hostBuildOf(Platform.resolvedExecutable),
+    hooks: hooks,
   );
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
@@ -135,6 +142,11 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     ..writeln('karmashala_host serving on ${listener.address}')
     ..writeln('pty library ${pty.library}')
     ..writeln(
+      hookServer == null
+          ? 'agent hooks unavailable — the line above says why'
+          : 'agent hooks on port ${hookServer.port}',
+    )
+    ..writeln(
       companion == null
           ? 'companion unavailable — the line above says why'
           : 'companion on port ${companion.listener.port}, '
@@ -152,10 +164,36 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     await subscription.cancel();
   }
   await listener.close();
+  await hookServer?.close();
   await companion?.close();
   await registry.shutdown();
   lock.release();
   return code;
+}
+
+/// The loopback hook listener, on the last run's port and token when that port
+/// is still free, with [HostPaths.hookEndpointPath] written for the app. Null,
+/// reported, when either fails: sessions do not need hooks.
+Future<HookServer?> _openHookServer(
+  HostPaths paths,
+  RecentHooks hooks,
+  IOSink errSink,
+) async {
+  final previous = HookEndpoint.read(paths.hookEndpointPath);
+  HookServer? server;
+  try {
+    server = await HookServer.bind(
+      onHook: hooks.record,
+      port: previous?.port ?? 0,
+      token: previous?.token,
+    );
+    await server.endpoint.write(paths.hookEndpointPath);
+    return server;
+  } on Object catch (error) {
+    await server?.close();
+    errSink.writeln('karmashala_host: no agent hook endpoint ($error)');
+    return null;
+  }
 }
 
 /// The store, the pairing service and the phone listener, or null when this

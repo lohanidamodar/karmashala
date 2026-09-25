@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
@@ -8,6 +9,8 @@ import 'package:karmashala_terminal_runtime/instances.dart'
     show HostTerminalInstance;
 import 'package:riverpod/riverpod.dart';
 
+import '../../../agents/application/agent_hook_intake.dart';
+import '../../../agents/application/agent_hook_sweep.dart';
 import '../../../environments/application/environment_providers.dart';
 import '../../../repositories/application/repository_providers.dart';
 import '../../../terminal/application/local_host_providers.dart';
@@ -63,6 +66,7 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
 ) {
   final source = ref.watch(hostLifecycleSourceProvider);
   if (source == null) return null;
+  final hookLog = AppLogger.named('agent-hooks');
   final subscriber = HostLifecycleSubscriber(
     source: source,
     recorder: ref.watch(sessionLifecycleRecorderProvider),
@@ -77,6 +81,16 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
                 .value
                 .isLive ??
             false),
+    onHook: (hook) => applyHostRelayedAgentHook(
+      ref.container,
+      agentId: hook.agentId,
+      event: hook.event,
+      body: hook.body,
+      receivedAt: hook.receivedAt,
+      paneSessionId: hook.paneSessionId,
+      logger: hookLog,
+    ),
+    onAttached: () => unawaited(sweepHostHooks(ref.container, logger: hookLog)),
   );
   // A pane starting on the host may have just started the host itself.
   ref.listen(terminalSessionsControllerProvider, (previous, next) {

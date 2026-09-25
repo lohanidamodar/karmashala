@@ -43,7 +43,9 @@ enum MessageType {
   // left alone: skipped for a reason nobody wrote down.
   watch(0x17),
   watching(0x18),
-  lifecycle(0x19);
+  lifecycle(0x19),
+  // An agent hook the host's loopback endpoint received, pushed to watchers.
+  hook(0x1a);
 
   const MessageType(this.code);
   final int code;

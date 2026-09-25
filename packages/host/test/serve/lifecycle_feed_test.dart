@@ -193,6 +193,58 @@ void main() {
     await feed.close();
   });
 
+  AgentHookEvent hook(String event, {String? pane, int second = 0}) =>
+      AgentHookEvent(
+        agent: 'claude-code',
+        event: event,
+        sessionHeader: pane,
+        receivedAt: clock.add(Duration(seconds: second)),
+        body: {'session_id': 'c-$event', 'hook_event_name': event},
+      );
+
+  test('a hook reaches a watching client as it arrives', () async {
+    final feed = await watch(server);
+    expect(feed.hookSnapshot, isEmpty);
+    final hooks = <AgentHookEvent>[];
+    feed.hooks.listen(hooks.add);
+
+    server.lifecycle.hooks.record(hook('PreToolUse', pane: 'p1'));
+    await pump();
+
+    expect(hooks.single.event, 'PreToolUse');
+    expect(hooks.single.sessionHeader, 'p1');
+    expect(hooks.single.body['session_id'], 'c-PreToolUse');
+    await feed.close();
+  });
+
+  test('the snapshot carries the latest hook per session, so a client that '
+      'connects later catches up', () async {
+    final hooks = server.lifecycle.hooks;
+    hooks
+      ..record(hook('UserPromptSubmit', pane: 'p1', second: 1))
+      ..record(hook('Notification', pane: 'p2', second: 2))
+      ..record(hook('Stop', pane: 'p1', second: 3))
+      ..record(hook('SessionStart', second: 4));
+
+    final feed = await watch(server);
+    expect(feed.hookSnapshot.map((h) => (h.sessionHeader, h.event)), [
+      ('p2', 'Notification'),
+      ('p1', 'Stop'),
+      (null, 'SessionStart'),
+    ]);
+    expect(feed.hookSnapshot[1].receivedAt, clock.add(Duration(seconds: 3)));
+    await feed.close();
+  });
+
+  test('the hooks kept are bounded, the longest-quiet session going first', () {
+    final hooks = RecentHooks(capacity: 2)
+      ..record(hook('A', pane: 'p1'))
+      ..record(hook('B', pane: 'p2'))
+      ..record(hook('C', pane: 'p1'))
+      ..record(hook('D', pane: 'p3'));
+    expect(hooks.latest().map((h) => h.event), ['C', 'D']);
+  });
+
   test('a watcher that hangs up is unsubscribed and ends nothing', () async {
     registry.open('pane', request);
     final feed = await watch(server);

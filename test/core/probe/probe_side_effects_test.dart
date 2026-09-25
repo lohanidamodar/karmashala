@@ -71,7 +71,9 @@ class _RecordingHookService extends AgentHookInstallationService {
   }
 
   @override
-  Future<List<AgentHookInstallation>> retireEndpoints() async {
+  Future<List<AgentHookInstallation>> retireEndpoints({
+    bool keepLocal = false,
+  }) async {
     calls.add('retireEndpoints');
     return const [];
   }

@@ -7,9 +7,11 @@ import 'package:karmashala_terminal_runtime/instances.dart'
     show kHostRedialDelays;
 
 import 'host_lifecycle_source.dart';
+import 'relayed_agent_hook.dart';
 
 /// The one link to a host's lifecycle feed: records its snapshot and every
-/// event after it through [recorder], and dials again when the host goes away.
+/// event after it through [recorder], hands each relayed agent hook to
+/// [onHook], and dials again when the host goes away.
 class HostLifecycleSubscriber {
   HostLifecycleSubscriber({
     required this.source,
@@ -17,6 +19,8 @@ class HostLifecycleSubscriber {
     required this.sessionDao,
     required this.runsOnThisMachine,
     required this.hasLivePane,
+    this.onHook,
+    this.onAttached,
     this.retryDelays = kHostRedialDelays,
     this.idleRetry = const Duration(seconds: 30),
     AppLogger? logger,
@@ -32,6 +36,13 @@ class HostLifecycleSubscriber {
   /// A live pane runs its row whatever the host says, so it is never unseen.
   final bool Function(String paneId) hasLivePane;
 
+  /// Each hook once: a snapshot hook already applied on an earlier link is not
+  /// applied again.
+  final void Function(RelayedAgentHook hook)? onHook;
+
+  /// Each time a link opens — the host may be a new one, on a new endpoint.
+  final void Function()? onAttached;
+
   /// Waits before each dial after the link is lost, then [idleRetry] between
   /// dials; a pane starting on the host dials at once through [nudge].
   final List<Duration> retryDelays;
@@ -41,6 +52,10 @@ class HostLifecycleSubscriber {
   final Map<String, HostSessionState> _known = {};
   HostLifecycleFeed? _feed;
   StreamSubscription<SessionLifecycleEvent>? _events;
+  StreamSubscription<RelayedAgentHook>? _hooks;
+
+  /// When the latest hook applied per [RelayedAgentHook.sessionKey] arrived.
+  final Map<String, DateTime> _hookApplied = {};
   Timer? _retry;
   var _attempt = 0;
   var _answered = false;
@@ -114,6 +129,26 @@ class HostLifecycleSubscriber {
     _firstAnswer();
     _feed = feed;
     _events = feed.events.listen(_onEvent, onDone: _lost);
+    onAttached?.call();
+    // A session the host no longer holds a hook for is forgotten here too.
+    final held = {for (final hook in feed.hookSnapshot) hook.sessionKey};
+    _hookApplied.removeWhere((key, _) => !held.contains(key));
+    for (final hook in feed.hookSnapshot) {
+      final applied = _hookApplied[hook.sessionKey];
+      if (applied == null || hook.receivedAt.isAfter(applied)) _applyHook(hook);
+    }
+    _hooks = feed.hooks.listen(_applyHook);
+  }
+
+  void _applyHook(RelayedAgentHook hook) {
+    _hookApplied[hook.sessionKey] = hook.receivedAt;
+    final onHook = this.onHook;
+    if (onHook == null) return;
+    try {
+      onHook(hook);
+    } on Object catch (error) {
+      _log.warning('Applying a relayed agent hook failed: $error');
+    }
   }
 
   void _onEvent(SessionLifecycleEvent event) {
@@ -129,6 +164,8 @@ class HostLifecycleSubscriber {
     final feed = _feed;
     _feed = null;
     _events = null;
+    unawaited(_hooks?.cancel());
+    _hooks = null;
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
@@ -192,6 +229,8 @@ class HostLifecycleSubscriber {
     _retry?.cancel();
     await _events?.cancel();
     _events = null;
+    await _hooks?.cancel();
+    _hooks = null;
     final feed = _feed;
     _feed = null;
     await feed?.close();

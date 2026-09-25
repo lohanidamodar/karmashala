@@ -6,6 +6,7 @@ import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_skill_installation_service.dart';
 import '../../features/agents/application/agent_hook_intake.dart';
 import '../../features/agents/application/agent_hook_sweep.dart';
+import '../../features/agents/application/host_hook_endpoint.dart';
 import '../../features/mcp/control_server_restart.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
@@ -212,7 +213,10 @@ class AppLifecycle {
     LauncherControlServer server, {
     Future<void> Function()? gate,
   }) {
-    final endpoint = server.hookEndpoint;
+    final endpoint = installableHookEndpoint(
+      _container,
+      appRoute: server.hookEndpoint,
+    );
     if (endpoint == null) return;
     _hookInstallation = _sweepAgentHooks(endpoint, gate);
   }
@@ -467,9 +471,12 @@ class AppLifecycle {
       if (_container.exists(agentHookSpoolDrainerProvider)) {
         _container.read(agentHookSpoolDrainerProvider).dispose();
       }
+      // Hooks posting to the session host keep going to it with the app shut.
       await _container
           .read(agentHookInstallationServiceProvider)
-          .retireEndpoints();
+          .retireEndpoints(
+            keepLocal: _container.read(agentHooksAtHostProvider),
+          );
     }, cap: _kHookStepBudget);
 
     // 2. Watchers, so nothing new arrives while the rest closes.

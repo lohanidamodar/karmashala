@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
+import '../hooks/recent_hooks.dart';
 import '../host_version.dart';
 import '../protocol/frame.dart';
 import '../protocol/messages.dart';
@@ -24,9 +25,14 @@ class HostServer {
     this.hostVersion = kHostVersion,
     this.openPairing,
     this.build,
+    RecentHooks? hooks,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
-       lifecycle = LifecycleFeed(registry, clock: clock ?? _utcNow);
+       lifecycle = LifecycleFeed(
+         registry,
+         clock: clock ?? _utcNow,
+         hooks: hooks,
+       );
 
   final SessionRegistry registry;
   final LifecycleFeed lifecycle;
@@ -89,7 +95,7 @@ class _ClientSession {
   final _byRef = <int, HostSession>{};
   final _subscriptions = <int, StreamSubscription<OutputChunk>>{};
   final _exitWatches = <int, StreamSubscription<void>>{};
-  StreamSubscription<LifecycleEvent>? _lifecycleWatch;
+  StreamSubscription<HostMessage>? _lifecycleWatch;
 
   Future<void> run() async {
     final parser = FrameParser();

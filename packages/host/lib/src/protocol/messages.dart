@@ -6,6 +6,7 @@ import '../domain/session_registry.dart';
 import 'frame.dart';
 import 'wire.dart';
 
+part 'hook_messages.dart';
 part 'lifecycle_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
@@ -857,4 +858,5 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.watch => WatchMessage.decode(frame),
   MessageType.watching => WatchingMessage.decode(frame),
   MessageType.lifecycle => LifecycleMessage.decode(frame),
+  MessageType.hook => HookMessage.decode(frame),
 };

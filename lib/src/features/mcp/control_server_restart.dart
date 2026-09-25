@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 
 import '../agents/application/agent_hook_sweep.dart';
+import '../agents/application/host_hook_endpoint.dart';
 import 'control_server_status.dart';
 import 'launcher_control_server.dart';
 
@@ -81,7 +82,10 @@ Future<ControlServerRestart> restartControlServer(
     await server.stop();
     await server.start();
     final status = container.read(controlServerStatusProvider);
-    final endpoint = server.hookEndpoint;
+    final endpoint = installableHookEndpoint(
+      container,
+      appRoute: server.hookEndpoint,
+    );
     if (endpoint == null) {
       return ControlServerRestart(
         ok: false,

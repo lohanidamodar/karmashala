@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
+import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_source.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/relayed_agent_hook.dart';
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala_session/session.dart';
@@ -27,20 +29,28 @@ import '../terminal/fake_instance.dart';
 class _FakeHost implements HostLifecycleSource {
   bool listening = true;
   List<SessionFacts> snapshot = const [];
+  List<RelayedAgentHook> hookSnapshot = const [];
   final links = <StreamController<SessionLifecycleEvent>>[];
+  final hookLinks = <StreamController<RelayedAgentHook>>[];
 
   StreamController<SessionLifecycleEvent> get link => links.last;
+  StreamController<RelayedAgentHook> get hookLink => hookLinks.last;
 
   @override
   Future<HostLifecycleFeed?> open() async {
     if (!listening) return null;
     final link = StreamController<SessionLifecycleEvent>();
+    final hooks = StreamController<RelayedAgentHook>();
     links.add(link);
+    hookLinks.add(hooks);
     return HostLifecycleFeed(
       snapshot: List.of(snapshot),
       events: link.stream,
+      hookSnapshot: List.of(hookSnapshot),
+      hooks: hooks.stream,
       close: () async {
         if (!link.isClosed) await link.close();
+        if (!hooks.isClosed) await hooks.close();
       },
     );
   }
@@ -333,6 +343,84 @@ void main() {
       sessionEnd('zero', 'prompt_input_exit');
       expect(statusOf('zero'), SessionStatus.running);
     });
+  });
+
+  group('agent hooks the host relayed', () {
+    RelayedAgentHook stop(String id, {required int second, String? pane}) =>
+        RelayedAgentHook(
+          agentId: AgentIds.claudeCode,
+          event: 'Stop',
+          body: jsonEncode({
+            'session_id': 'cli-$id',
+            'hook_event_name': 'Stop',
+            'stop_hook_active': false,
+          }),
+          receivedAt: _at(second),
+          paneSessionId: pane,
+        );
+
+    AgentStatusReport? reported(String id) => container
+        .read(agentHookReportsProvider)
+        .latest(AgentIds.claudeCode, 'cli-$id');
+
+    test('a live one runs the same intake as the HTTP route, at the time the '
+        'host received it', () async {
+      row('s1');
+      // What the HTTP route would have made of the same callback.
+      final direct = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          hostLifecycleSourceProvider.overrideWithValue(null),
+        ],
+      );
+      addTearDown(direct.dispose);
+      final hook = stop('s1', second: 7, pane: 's1');
+      final expected = applyAgentHookCallback(
+        direct,
+        agentId: hook.agentId,
+        event: hook.event,
+        body: hook.body,
+        paneSessionId: hook.paneSessionId,
+      );
+
+      await startWatching();
+      host.hookLink.add(hook);
+      await _settle();
+
+      final report = reported('s1')!;
+      expect(report.status, expected.status);
+      expect(report.status, isNot(AgentActivityStatus.unknown));
+      expect(report.detail, expected.detail);
+      expect(report.observedAt, _at(7));
+    });
+
+    test(
+      'the snapshot catches up an app that was closed, once per hook',
+      () async {
+        row('s1');
+        host.hookSnapshot = [stop('s1', second: 3, pane: 's1')];
+        await startWatching();
+        expect(reported('s1')!.observedAt, _at(3));
+
+        // The link drops and comes back holding the same hook: not applied again.
+        container.read(agentHookReportsProvider).clear();
+        await host.link.close();
+        await _settle();
+        container.read(hostLifecycleSubscriberProvider)!.nudge();
+        await _settle();
+        expect(host.links, hasLength(2));
+        expect(reported('s1'), isNull);
+
+        // A newer one that arrived while the app was away is.
+        host.hookSnapshot = [stop('s1', second: 9, pane: 's1')];
+        await host.link.close();
+        await _settle();
+        container.read(hostLifecycleSubscriberProvider)!.nudge();
+        await _settle();
+        expect(reported('s1')!.observedAt, _at(9));
+      },
+    );
   });
 
   test('without a feed, a hook ending still settles the row', () {

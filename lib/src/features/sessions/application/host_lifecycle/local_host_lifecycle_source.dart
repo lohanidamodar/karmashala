@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:karmashala_host/lifecycle_client.dart' as wire;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import 'host_lifecycle_source.dart';
+import 'relayed_agent_hook.dart';
 
 /// The lifecycle feed of the session host on this machine, over its socket.
 class LocalHostLifecycleSource implements HostLifecycleSource {
@@ -20,8 +23,18 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       ],
       events: watch.events.map(_eventOf),
       close: watch.close,
+      hookSnapshot: [for (final hook in watch.hookSnapshot) _hookOf(hook)],
+      hooks: watch.hooks.map(_hookOf),
     );
   }
+
+  static RelayedAgentHook _hookOf(wire.AgentHookEvent hook) => RelayedAgentHook(
+    agentId: hook.agent,
+    event: hook.event,
+    body: jsonEncode(hook.body),
+    receivedAt: hook.receivedAt.toUtc(),
+    paneSessionId: hook.sessionHeader,
+  );
 
   static SessionFacts _factsOf(
     wire.HostSessionFacts session,

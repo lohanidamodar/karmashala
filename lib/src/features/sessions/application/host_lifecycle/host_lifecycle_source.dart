@@ -1,18 +1,28 @@
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
+import 'relayed_agent_hook.dart';
+
 /// One open link to a host's lifecycle feed: what it held when it answered,
-/// then every change until the link ends.
+/// then every change until the link ends — and the same for agent hooks.
 class HostLifecycleFeed {
   HostLifecycleFeed({
     required this.snapshot,
     required this.events,
     required this.close,
-  });
+    this.hookSnapshot = const [],
+    Stream<RelayedAgentHook>? hooks,
+  }) : hooks = hooks ?? const Stream.empty();
 
   final List<SessionFacts> snapshot;
 
   /// Ends when the link does, from either side.
   final Stream<SessionLifecycleEvent> events;
+
+  /// The latest hook per agent session when the host answered, oldest first.
+  final List<RelayedAgentHook> hookSnapshot;
+
+  /// Every hook after [hookSnapshot].
+  final Stream<RelayedAgentHook> hooks;
 
   /// Hangs up; the host's sessions are untouched.
   final Future<void> Function() close;

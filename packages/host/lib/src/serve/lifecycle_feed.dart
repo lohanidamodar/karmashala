@@ -4,17 +4,24 @@ import '../domain/host_session.dart';
 import '../domain/registry_change.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
+import '../hooks/recent_hooks.dart';
 import '../protocol/messages.dart';
 
 /// The host as the recorder of each session's lifecycle: started, exited with
-/// the code it collected or none, closed on request. Any connection can watch.
+/// the code it collected or none, closed on request — and the relay of every
+/// agent hook it takes. Any connection can watch.
 class LifecycleFeed {
-  LifecycleFeed(this._registry, {required DateTime Function() clock})
-    : _now = clock {
+  LifecycleFeed(
+    this._registry, {
+    required DateTime Function() clock,
+    RecentHooks? hooks,
+  }) : _now = clock,
+       hooks = hooks ?? RecentHooks() {
     for (final session in _registry.sessions) {
       _watchExit(session);
     }
     _registry.changes.listen(_onChange);
+    this.hooks.received.listen((hook) => _out.add(HookMessage(hook)));
   }
 
   static const closedReason = 'closed on request';
@@ -24,8 +31,13 @@ class LifecycleFeed {
   static const keepClosed = 64;
 
   final SessionRegistry _registry;
+  final RecentHooks hooks;
   final DateTime Function() _now;
   final _events = StreamController<LifecycleEvent>.broadcast(sync: true);
+
+  /// What a watcher is sent after its snapshot: lifecycle events and hooks, in
+  /// the one order they happened.
+  final _out = StreamController<HostMessage>.broadcast(sync: true);
   final _closed = <String, HostSessionFacts>{};
 
   /// Keyed by the session object, so a reopened id is a new session and a
@@ -35,7 +47,7 @@ class LifecycleFeed {
   Stream<LifecycleEvent> get events => _events.stream;
 
   /// Whether any connection is watching; a hung-up one is not.
-  bool get hasWatchers => _events.hasListener;
+  bool get hasWatchers => _out.hasListener;
 
   /// Every session this host knows, running, ended or recently closed.
   List<HostSessionFacts> snapshot() => [
@@ -44,10 +56,10 @@ class LifecycleFeed {
       if (_registry.find(facts.sessionId) == null) facts,
   ];
 
-  /// Sends the snapshot, then every event, through [send]; cancel to stop.
-  /// Subscribed in the same turn the snapshot is taken, so nothing falls
+  /// Sends the snapshot, then every event and hook, through [send]; cancel to
+  /// stop. Subscribed in the same turn the snapshot is taken, so nothing falls
   /// between the two.
-  StreamSubscription<LifecycleEvent> watch(
+  StreamSubscription<HostMessage> watch(
     int requestId,
     void Function(HostMessage) send,
   ) {
@@ -56,16 +68,22 @@ class LifecycleFeed {
         requestId: requestId,
         observedAt: _now(),
         sessions: snapshot(),
+        hooks: hooks.latest(),
       ),
     );
-    return events.listen((event) => send(LifecycleMessage(event)));
+    return _out.stream.listen(send);
+  }
+
+  void _emit(LifecycleEvent event) {
+    _events.add(event);
+    _out.add(LifecycleMessage(event));
   }
 
   void _onChange(RegistryChange change) {
     switch (change) {
       case SessionOpened(:final session):
         _closed.remove(session.id);
-        _events.add(
+        _emit(
           LifecycleEvent(
             sessionId: session.id,
             kind: LifecycleEventKind.started,
@@ -91,7 +109,7 @@ class LifecycleFeed {
         _closed.remove(session.id);
         _closed[session.id] = facts;
         if (_closed.length > keepClosed) _closed.remove(_closed.keys.first);
-        _events.add(
+        _emit(
           LifecycleEvent(
             sessionId: session.id,
             kind: LifecycleEventKind.closed,
@@ -117,7 +135,7 @@ class LifecycleFeed {
     if (_exitReported[session] == true) return;
     _exitReported[session] = true;
     final end = session.lifecycle;
-    _events.add(
+    _emit(
       LifecycleEvent(
         sessionId: session.id,
         kind: LifecycleEventKind.exited,

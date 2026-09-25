@@ -11,6 +11,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../core/util/clock_provider.dart';
 import '../automations/application/project_check_tools.dart';
 import '../agents/application/agent_hook_intake.dart';
+import '../agents/application/host_hook_endpoint.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../browser/application/browser_consent_providers.dart';
 import '../browser/application/browser_providers.dart';
@@ -266,7 +267,7 @@ class LauncherControlServer implements SessionMcp {
       'has not measured is reported as "not recorded" rather than guessed.';
 
   /// Where agents' installed hooks post to, once [start] has bound the port;
-  /// `null` before that.
+  /// `null` before that, and when the session host takes them instead.
   AgentHookEndpoint? get hookEndpoint => _hookEndpoint;
 
   /// Where the bridge reads the port + token from.
@@ -299,10 +300,10 @@ class LauncherControlServer implements SessionMcp {
     if (await _abandonedMidStart()) return;
     // A *separate* token for /agent-hook: it is pasted verbatim into a curl
     // command in the agent's own config, so it shows up in command lines too.
-    _hookEndpoint = AgentHookEndpoint(
-      port: server.port,
-      token: _generateToken(),
-    );
+    // None when the session host takes hooks: the route then answers nobody.
+    _hookEndpoint = _container.read(agentHooksAtHostProvider)
+        ? null
+        : AgentHookEndpoint(port: server.port, token: _generateToken());
     _mcpEndpoint = McpHttpEndpoint(
       server: McpServer(
         name: 'karmashala',
@@ -665,7 +666,7 @@ class LauncherControlServer implements SessionMcp {
       jsonEncode({
         'port': port,
         'pid': pid,
-        'hookToken': _hookEndpoint!.token,
+        'hookToken': ?_hookEndpoint?.token,
         'token': ?_token,
         if (_socketServer case final socket?) 'socketPath': socket.path,
         // Present only when a credential for it actually exists.

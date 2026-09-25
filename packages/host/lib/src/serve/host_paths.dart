@@ -52,6 +52,10 @@ class HostPaths {
   String get logPath => '${directory.path}/host.log';
   String get binDirectory => '${directory.path}/bin';
 
+  /// Where agent hooks are taken and with which token; kept across restarts so
+  /// hooks keep reaching a host restarted with the app closed.
+  String get hookEndpointPath => '${directory.path}/hook.endpoint';
+
   /// Each session's output and metadata, inside the same owner-only directory
   /// as the socket — scrollback is as sensitive as the channel carrying it.
   String get sessionsDirectory => '${directory.path}/sessions';

@@ -3,8 +3,11 @@
 library;
 
 export 'src/client/lifecycle_watch.dart';
+export 'src/hooks/hook_endpoint_file.dart';
+export 'src/hooks/hook_server.dart' show kHookSessionHeader;
 export 'src/protocol/messages.dart'
     show
+        AgentHookEvent,
         HostSessionFacts,
         HostSessionState,
         LifecycleEvent,

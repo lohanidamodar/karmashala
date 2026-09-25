@@ -155,17 +155,22 @@ class WatchingMessage extends HostMessage {
     required this.requestId,
     required this.observedAt,
     required this.sessions,
+    this.hooks = const [],
   });
 
   final int requestId;
   final DateTime observedAt;
   final List<HostSessionFacts> sessions;
 
+  /// The latest hook per agent session, so a watcher that was away catches up.
+  final List<AgentHookEvent> hooks;
+
   @override
   Frame toFrame() {
     final body = {
       'observedAt': observedAt.toUtc().toIso8601String(),
       'sessions': [for (final s in sessions) s.toJson()],
+      'hooks': [for (final h in hooks) h.toJson()],
     };
     final w = WireWriter()
       ..u32(requestId)
@@ -179,10 +184,13 @@ class WatchingMessage extends HostMessage {
     final map = _object(_decodeJson(r.str()), 'watching');
     final rows = map['sessions'];
     if (rows is! List) throw const WireFormatException('watching: no sessions');
+    final hooks = map['hooks'];
+    if (hooks is! List) throw const WireFormatException('watching: no hooks');
     return WatchingMessage(
       requestId: requestId,
       observedAt: _time(map, 'observedAt') ?? _missing('observedAt'),
       sessions: [for (final row in rows) ?HostSessionFacts.fromJson(row)],
+      hooks: [for (final hook in hooks) AgentHookEvent.fromJson(hook)],
     );
   }
 }
