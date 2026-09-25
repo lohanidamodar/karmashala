@@ -151,6 +151,7 @@ void main() {
     expect(events[1].exitCode, 143);
     expect(events[2].exitCode, 143);
     expect(events[2].reason, 'closed on request');
+    expect(events[2].endedByClose, isTrue);
 
     // A watcher arriving later still learns it was closed, not that it vanished.
     final later = await watch(server);
@@ -165,6 +166,31 @@ void main() {
     expect(server.lifecycle.snapshot().single.state, HostSessionState.running);
     await feed.close();
     await later.close();
+  });
+
+  // Found running the app: after a host crash, a pane lets go of the dead
+  // session's record. That close ended nothing, and must not say it did.
+  test('closing a session that had already ended says the close ended '
+      'nothing, and keeps the end it had', () async {
+    final feed = await watch(server);
+    final events = <LifecycleEvent>[];
+    feed.events.listen(events.add);
+
+    registry.open('leftover', request);
+    launcher.handles.last.finish(-1);
+    await pump();
+    await registry.close('leftover');
+    await pump();
+
+    final closed = events.last;
+    expect(closed.kind, LifecycleEventKind.closed);
+    expect(closed.endedByClose, isFalse);
+    expect(closed.exitCode, isNull);
+    expect(closed.reason, isNot('closed on request'));
+
+    final row = server.lifecycle.snapshot().single;
+    expect(row.endedByClose, isFalse);
+    await feed.close();
   });
 
   test('a watcher that hangs up is unsubscribed and ends nothing', () async {

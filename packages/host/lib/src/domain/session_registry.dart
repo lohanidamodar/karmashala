@@ -214,11 +214,14 @@ class SessionRegistry {
   /// Ends a session and drops it. Explicit, never a side effect of a disconnect.
   Future<SessionLifecycle> close(String id, {int signal = 15}) async {
     final session = require(id);
+    // Taken before the terminate: whether this close is what ended the process,
+    // or only lets go of the record of one that had already ended.
+    final endedByClose = !session.lifecycle.hasEnded;
     final end = await session.terminate(signal: signal);
     _sessions.remove(id);
     // Closed on purpose, so the record goes too; a disconnect never reaches here.
     store?.forget(id);
-    _changes.add(SessionClosed(session, end));
+    _changes.add(SessionClosed(session, end, endedByClose: endedByClose));
     return end;
   }
 

@@ -52,15 +52,40 @@ void main() {
       );
     });
 
-    test('closed on request: cancelled, whatever code it left', () {
-      expect(
-        lifecycleStatusFrom(_facts(HostSessionState.closed)),
-        SessionStatus.cancelled,
+    test(
+      'closed, and the close ended it: cancelled, whatever code it left',
+      () {
+        SessionFacts closed({int? exitCode}) => SessionFacts(
+          hostSessionId: 'h',
+          state: HostSessionState.closed,
+          observedAt: DateTime.utc(2026),
+          exitCode: exitCode,
+          endedByClose: true,
+        );
+        expect(lifecycleStatusFrom(closed()), SessionStatus.cancelled);
+        expect(
+          lifecycleStatusFrom(closed(exitCode: 0)),
+          SessionStatus.cancelled,
+        );
+      },
+    );
+
+    // Found running the app: after a host crash the pane lets go of the dead
+    // session's record, and that close read as the person stopping it.
+    test('closed after it had already ended: what its exit says', () {
+      SessionFacts released({int? exitCode}) => SessionFacts(
+        hostSessionId: 'h',
+        state: HostSessionState.closed,
+        observedAt: DateTime.utc(2026),
+        exitCode: exitCode,
+        reason: 'host stopped while running',
       );
+      expect(lifecycleStatusFrom(released()), SessionStatus.unknown);
       expect(
-        lifecycleStatusFrom(_facts(HostSessionState.closed, exitCode: 0)),
-        SessionStatus.cancelled,
+        lifecycleStatusFrom(released(exitCode: 0)),
+        SessionStatus.completed,
       );
+      expect(lifecycleStatusFrom(released(exitCode: 2)), SessionStatus.failed);
     });
   });
 

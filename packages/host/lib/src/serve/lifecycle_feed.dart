@@ -74,7 +74,7 @@ class LifecycleFeed {
           ),
         );
         _watchExit(session);
-      case SessionClosed(:final session, :final end):
+      case SessionClosed(:final session, :final end, :final endedByClose):
         // The close can resume before the exit's own callback does; the exit
         // is still told first, and only once.
         _reportExit(session);
@@ -82,9 +82,11 @@ class LifecycleFeed {
           sessionId: session.id,
           state: HostSessionState.closed,
           exitCode: end.exitCode,
-          reason: closedReason,
+          // A leftover let go keeps the reason it ended with.
+          reason: endedByClose ? closedReason : reasonOf(end),
           startedAt: session.startedAt,
           endedAt: end.endedAt,
+          endedByClose: endedByClose,
         );
         _closed.remove(session.id);
         _closed[session.id] = facts;
@@ -95,7 +97,8 @@ class LifecycleFeed {
             kind: LifecycleEventKind.closed,
             observedAt: _now(),
             exitCode: end.exitCode,
-            reason: closedReason,
+            reason: endedByClose ? closedReason : reasonOf(end),
+            endedByClose: endedByClose,
           ),
         );
     }

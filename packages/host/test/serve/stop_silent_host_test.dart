@@ -51,12 +51,15 @@ void main() {
     );
   }
 
-  test('without --force it refuses, because what it holds is unknown', () async {
-    expect(await stop(const []), 3);
-    expect(err.toString(), contains('would not answer'));
-    expect(err.toString(), contains('--force'));
-    expect(Process.killPid(wedged.pid, ProcessSignal.sigcont), isTrue);
-  });
+  test(
+    'without --force it refuses, because what it holds is unknown',
+    () async {
+      expect(await stop(const []), 3);
+      expect(err.toString(), contains('would not answer'));
+      expect(err.toString(), contains('--force'));
+      expect(Process.killPid(wedged.pid, ProcessSignal.sigcont), isTrue);
+    },
+  );
 
   test('--force stops it by the pid in its lock', () async {
     expect(await stop(const ['--force']), 0, reason: '$err');

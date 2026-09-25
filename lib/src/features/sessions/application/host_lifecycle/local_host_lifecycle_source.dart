@@ -35,6 +35,7 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
     },
     exitCode: session.exitCode,
     reason: session.reason,
+    endedByClose: session.endedByClose,
     observedAt: observedAt,
   );
 
@@ -48,6 +49,7 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
         },
         exitCode: event.exitCode,
         reason: event.reason,
+        endedByClose: event.endedByClose,
         observedAt: event.observedAt.toUtc(),
       );
 }

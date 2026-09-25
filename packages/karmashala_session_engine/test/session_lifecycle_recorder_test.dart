@@ -41,12 +41,14 @@ void main() {
     HostSessionState state, {
     int? exitCode,
     String? reason,
+    bool endedByClose = false,
     Duration after = Duration.zero,
   }) => SessionFacts(
     hostSessionId: hostSessionIdOf(sessionId),
     state: state,
     exitCode: exitCode,
     reason: reason,
+    endedByClose: endedByClose,
     observedAt: _t0.add(after),
   );
 
@@ -112,7 +114,7 @@ void main() {
 
   test('closed on request is cancelled, and a later exit keeps it', () {
     insert('s1', SessionStatus.running);
-    apply(facts('s1', HostSessionState.closed));
+    apply(facts('s1', HostSessionState.closed, endedByClose: true));
     expect(statusOf('s1'), SessionStatus.cancelled);
 
     apply(facts('s1', HostSessionState.exited, exitCode: 143, after: _second));

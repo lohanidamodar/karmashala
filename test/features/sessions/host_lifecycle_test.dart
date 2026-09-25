@@ -67,12 +67,14 @@ SessionLifecycleEvent _event(
   SessionLifecycleKind kind, {
   int? exitCode,
   String? reason,
+  bool endedByClose = false,
   required int second,
 }) => SessionLifecycleEvent(
   hostSessionId: hostSessionIdOf(sessionId),
   kind: kind,
   exitCode: exitCode,
   reason: reason,
+  endedByClose: endedByClose,
   observedAt: _at(second),
 );
 
@@ -261,8 +263,17 @@ void main() {
       String id,
       SessionLifecycleKind kind, {
       int? exitCode,
+      bool endedByClose = false,
     }) async {
-      host.link.add(_event(id, kind, exitCode: exitCode, second: 5));
+      host.link.add(
+        _event(
+          id,
+          kind,
+          exitCode: exitCode,
+          endedByClose: endedByClose,
+          second: 5,
+        ),
+      );
       await _settle();
     }
 
@@ -278,9 +289,36 @@ void main() {
 
     test('closed on request is cancelled', () async {
       await startWatching();
-      await endWith('closed', SessionLifecycleKind.closed);
+      await endWith('closed', SessionLifecycleKind.closed, endedByClose: true);
       expect(statusOf('closed'), SessionStatus.cancelled);
     });
+
+    // Found running the app: a host crash, then the pane letting go of the
+    // dead session's record, read as the person stopping it.
+    test(
+      'a crash, then its record let go, is unknown, not cancelled',
+      () async {
+        await startWatching();
+        host.link.add(
+          _event(
+            'zero',
+            SessionLifecycleKind.exited,
+            reason: 'host stopped while running',
+            second: 5,
+          ),
+        );
+        host.link.add(
+          _event(
+            'zero',
+            SessionLifecycleKind.closed,
+            reason: 'host stopped while running',
+            second: 6,
+          ),
+        );
+        await _settle();
+        expect(statusOf('zero'), SessionStatus.unknown);
+      },
+    );
 
     test('exit 0 is completed, exit 1 is failed', () async {
       await startWatching();

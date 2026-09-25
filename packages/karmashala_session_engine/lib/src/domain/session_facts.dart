@@ -14,6 +14,7 @@ class SessionFacts {
     required this.observedAt,
     this.exitCode,
     this.reason,
+    this.endedByClose = false,
   });
 
   final String hostSessionId;
@@ -26,12 +27,17 @@ class SessionFacts {
   /// The host's words for why it ended, e.g. `host stopped while running`.
   final String? reason;
 
+  /// On `closed`: the close is what ended the process. False when a client
+  /// only let go of the record of a session that had already ended.
+  final bool endedByClose;
+
   /// UTC.
   final DateTime observedAt;
 
   @override
   bool operator ==(Object other) =>
       other is SessionFacts &&
+      other.endedByClose == endedByClose &&
       other.hostSessionId == hostSessionId &&
       other.state == state &&
       other.exitCode == exitCode &&
@@ -39,8 +45,14 @@ class SessionFacts {
       other.observedAt == observedAt;
 
   @override
-  int get hashCode =>
-      Object.hash(hostSessionId, state, exitCode, reason, observedAt);
+  int get hashCode => Object.hash(
+    hostSessionId,
+    state,
+    exitCode,
+    reason,
+    endedByClose,
+    observedAt,
+  );
 
   @override
   String toString() =>
@@ -56,12 +68,16 @@ class SessionLifecycleEvent {
     required this.observedAt,
     this.exitCode,
     this.reason,
+    this.endedByClose = false,
   });
 
   final String hostSessionId;
   final SessionLifecycleKind kind;
   final int? exitCode;
   final String? reason;
+
+  /// As on [SessionFacts.endedByClose].
+  final bool endedByClose;
 
   /// UTC.
   final DateTime observedAt;
@@ -76,6 +92,7 @@ class SessionLifecycleEvent {
     },
     exitCode: exitCode,
     reason: reason,
+    endedByClose: endedByClose,
     observedAt: observedAt,
   );
 

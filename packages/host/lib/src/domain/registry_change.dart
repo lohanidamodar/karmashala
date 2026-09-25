@@ -14,7 +14,12 @@ class SessionOpened extends RegistryChange {
 
 /// Ended and dropped because somebody asked, never because a client left.
 class SessionClosed extends RegistryChange {
-  const SessionClosed(this.session, this.end);
+  const SessionClosed(this.session, this.end, {required this.endedByClose});
   final HostSession session;
   final SessionLifecycle end;
+
+  /// Whether the close ended a running process. False when a client only let
+  /// go of the record of a session that had already ended — a pane clearing
+  /// away a leftover is not the person stopping it.
+  final bool endedByClose;
 }

@@ -14,6 +14,7 @@ class LifecycleEvent {
     this.exitCode,
     this.reason,
     this.pid,
+    this.endedByClose = false,
   });
 
   final String sessionId;
@@ -29,6 +30,10 @@ class LifecycleEvent {
   /// On `started`.
   final int? pid;
 
+  /// On `closed`: the close ended a running process. False when it only let
+  /// go of the record of a session that had already ended.
+  final bool endedByClose;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'kind': kind.name,
@@ -36,6 +41,7 @@ class LifecycleEvent {
     if (exitCode != null) 'exitCode': exitCode,
     if (reason != null) 'reason': reason,
     if (pid != null) 'pid': pid,
+    if (endedByClose) 'endedByClose': true,
   };
 
   /// Throws [WireFormatException] on a malformed event, and on a kind this
@@ -56,6 +62,7 @@ class LifecycleEvent {
       exitCode: _optional<int>(map, 'exitCode'),
       reason: _optional<String>(map, 'reason'),
       pid: _optional<int>(map, 'pid'),
+      endedByClose: _optional<bool>(map, 'endedByClose') ?? false,
     );
   }
 
@@ -77,6 +84,7 @@ class HostSessionFacts {
     this.reason,
     this.startedAt,
     this.endedAt,
+    this.endedByClose = false,
   });
 
   final String sessionId;
@@ -88,6 +96,9 @@ class HostSessionFacts {
   final DateTime? startedAt;
   final DateTime? endedAt;
 
+  /// As on [LifecycleEvent.endedByClose], for a `closed` row.
+  final bool endedByClose;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'state': state.name,
@@ -95,6 +106,7 @@ class HostSessionFacts {
     if (reason != null) 'reason': reason,
     if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
     if (endedAt != null) 'endedAt': endedAt!.toUtc().toIso8601String(),
+    if (endedByClose) 'endedByClose': true,
   };
 
   /// Null for a state this build does not know, so a newer host's snapshot
@@ -110,6 +122,7 @@ class HostSessionFacts {
     final reason = _optional<String>(map, 'reason');
     final startedAt = _time(map, 'startedAt');
     final endedAt = _time(map, 'endedAt');
+    final endedByClose = _optional<bool>(map, 'endedByClose') ?? false;
     if (state == null) return null;
     return HostSessionFacts(
       sessionId: sessionId,
@@ -118,6 +131,7 @@ class HostSessionFacts {
       reason: reason,
       startedAt: startedAt,
       endedAt: endedAt,
+      endedByClose: endedByClose,
     );
   }
 }

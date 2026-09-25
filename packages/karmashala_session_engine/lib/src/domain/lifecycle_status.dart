@@ -11,21 +11,26 @@ import 'session_facts.dart';
 /// | exited, code 0                 | `completed` |
 /// | exited, non-zero code          | `failed`    |
 /// | exited, no code                | `unknown`   |
-/// | closed on request              | `cancelled` |
+/// | closed, the close ended it     | `cancelled` |
+/// | closed, it had already ended   | as its exit |
 ///
-/// An exit with no code is one nobody watched, so it is never a success.
+/// An exit with no code is one nobody watched, so it is never a success. A
+/// close that only let go of a dead session's record — a pane clearing away a
+/// leftover after a host crash — is not the person stopping it.
 SessionStatus lifecycleStatusFrom(SessionFacts? facts) {
   if (facts == null) return SessionStatus.unknown;
   return switch (facts.state) {
     HostSessionState.running => SessionStatus.running,
-    HostSessionState.closed => SessionStatus.cancelled,
-    HostSessionState.exited => switch (facts.exitCode) {
-      null => SessionStatus.unknown,
-      0 => SessionStatus.completed,
-      _ => SessionStatus.failed,
-    },
+    HostSessionState.closed when facts.endedByClose => SessionStatus.cancelled,
+    HostSessionState.closed || HostSessionState.exited => _fromExit(facts),
   };
 }
+
+SessionStatus _fromExit(SessionFacts facts) => switch (facts.exitCode) {
+  null => SessionStatus.unknown,
+  0 => SessionStatus.completed,
+  _ => SessionStatus.failed,
+};
 
 final RegExp _outsideHostIdAlphabet = RegExp(r'[^a-zA-Z0-9_-]');
 
