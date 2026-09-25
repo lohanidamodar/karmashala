@@ -10,6 +10,7 @@ import '../../checkpoints/application/checkpoint_providers.dart';
 import '../../checkpoints/domain/checkpoint.dart';
 import '../../follow_ups/domain/session_ending.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -165,8 +166,16 @@ class AutomationRunObserver extends Notifier<int> {
       SessionChangeKind.status,
     });
 
-    // The clean finish, which neither other signal carries: the row never says
-    // `completed` for a pane-hosted session.
+    // A hosted session ends only when the recorder writes its row, which the
+    // sweep reads; a pane exit or a live status there may be a host restart.
+    final sessions = ref.read(sessionDaoProvider);
+    final followsHost = ref.watch(sessionFollowsHostFactsProvider);
+    bool inferred(String sessionId) {
+      final row = sessions.getById(sessionId);
+      return row == null || !followsHost(row);
+    }
+
+    // The clean finish of a session without host facts.
     ref.listen(paneExitProvider, (_, exit) {
       if (exit == null) return;
       // Read first, because a project check's pane is not a session's and its
@@ -175,15 +184,13 @@ class AutomationRunObserver extends Notifier<int> {
           .read(automationCheckRunnerProvider)
           .noteExit(exit.paneId, exit.exitCode);
       final sessionId = exit.sessionId;
-      if (sessionId == null) return;
+      if (sessionId == null || !inferred(sessionId)) return;
       final ending = endingOfPaneExit(exit.exitCode);
       if (ending == null) return;
       _settle(sessionId, ending);
     });
 
-    // The live one, the only thing that ever reports a crash for a pane-hosted
-    // agent. Subscribing is not a write, so it happens here.
-    final sessions = ref.read(sessionDaoProvider);
+    // The only crash report for a session without host facts.
     for (final run in ref.read(automationDaoProvider).liveRuns()) {
       if (run.state != AutomationRunState.running) continue;
       final sessionId = run.sessionId;
@@ -193,7 +200,7 @@ class AutomationRunObserver extends Notifier<int> {
       }
       ref.listen(agentSessionStatusProvider(sessionId), (previous, next) {
         final to = next.value?.status;
-        if (to == null) return;
+        if (to == null || !inferred(sessionId)) return;
         final transition = endingOfTransition(
           from: previous?.value?.status,
           to: to,

@@ -68,8 +68,8 @@ SessionEnding? endingOfTransition({
   };
 }
 
-/// The ending a pane's own process exit amounts to — the only signal that ever
-/// says `completed`. Only exit **0**: a non-zero code cannot tell a crash from
-/// a Ctrl-C from a wrapper that fell over, and `failed` already arrives.
+/// The ending a pane's own process exit amounts to, for a session without host
+/// facts. Only exit **0**: a non-zero code cannot tell a crash from a Ctrl-C
+/// from a wrapper that fell over, and `failed` already arrives.
 SessionEnding? endingOfPaneExit(int? exitCode) =>
     exitCode == 0 ? SessionEnding.completed : null;
