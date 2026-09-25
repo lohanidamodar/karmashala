@@ -226,6 +226,13 @@ Future<void> _bootstrap(AppLogger logger) async {
     ),
   );
 
+  // This machine's session host, now rather than on the first host-backed pane:
+  // it owns the agents' hook endpoint and the lifecycle feed, so the first
+  // session's first turn is heard only if it is already up. Started after
+  // `runApp` so it never delays the window; the hook sweep below and the
+  // lifecycle subscriber both wait for it.
+  lifecycle.startLocalHost();
+
   // The agents' status hooks, **after the first frame** rather than before the
   // window. The gate's timeout is load-bearing: a tray launch may never paint.
   Future<void> afterFirstFrame() => WidgetsBinding.instance.endOfFrame.timeout(

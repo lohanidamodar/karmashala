@@ -16,7 +16,9 @@ import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
+import 'package:karmashala/src/features/terminal/application/local_host_startup.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_ssh/host.dart' show HostDeployment;
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -893,6 +895,33 @@ void main() {
       );
       await pumpEventQueue();
 
+      expect(sweeps, [1]);
+    });
+
+    test('the sweep waits for the session host\'s start, too', () async {
+      // Local agents are given the host's endpoint, which does not exist until
+      // the host is up: a sweep before that would install the spool alone.
+      final sweeps = <int>[];
+      final starting = Completer<HostDeployment?>();
+      final scoped = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          agentHookInstallationServiceProvider.overrideWith(
+            (ref) => _RecordingHookService(ref, sweeps),
+          ),
+          localHostStartupProvider.overrideWithValue(starting.future),
+        ],
+      );
+      addTearDown(scoped.dispose);
+
+      AppLifecycle(
+        scoped,
+      ).installAgentHooks(serverFor(scoped), afterFirstFrame: () async {});
+      await pumpEventQueue();
+      expect(sweeps, isEmpty, reason: 'the host has not started yet');
+
+      starting.complete(null);
+      await pumpEventQueue();
       expect(sweeps, [1]);
     });
 

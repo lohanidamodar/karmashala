@@ -14,6 +14,7 @@ import '../../../agents/application/agent_hook_sweep.dart';
 import '../../../environments/application/environment_providers.dart';
 import '../../../repositories/application/repository_providers.dart';
 import '../../../terminal/application/local_host_providers.dart';
+import '../../../terminal/application/local_host_startup.dart';
 import '../../../terminal/application/terminal_sessions_controller.dart';
 import '../session_liveness_reconciler.dart' show panesThatStartedRunning;
 import '../session_providers.dart';
@@ -93,7 +94,8 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
     ),
     onAttached: () => unawaited(sweepHostHooks(ref.container, logger: hookLog)),
   );
-  // A pane starting on the host may have just started the host itself.
+  // A pane starting on the host may have just started the host itself: the
+  // launch's start failed, or the host went away since.
   ref.listen(terminalSessionsControllerProvider, (previous, next) {
     if (subscriber.isWatching) return;
     final started = panesThatStartedRunning(previous?.liveness, next.liveness);
@@ -102,7 +104,14 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
     }
   });
   ref.onDispose(() => unawaited(subscriber.dispose()));
-  subscriber.start();
+  // The first dial waits for the launch's start of this machine's host (and the
+  // hook sweep after it) rather than racing it. It never fails.
+  final starting = ref.watch(localHostStartupProvider);
+  if (starting == null) {
+    subscriber.start();
+  } else {
+    unawaited(starting.then((_) => subscriber.start()));
+  }
   return subscriber;
 });
 

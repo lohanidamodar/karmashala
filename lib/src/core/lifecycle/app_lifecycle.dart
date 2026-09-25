@@ -10,7 +10,6 @@ import '../../features/agents/application/host_hook_endpoint.dart';
 import '../../features/mcp/control_server_restart.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
-import 'package:agent_cli/descriptors.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
@@ -21,6 +20,7 @@ import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
+import '../../features/terminal/application/local_host_startup.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../database/database_providers.dart';
 import '../logging/memory_census_source.dart';
@@ -174,8 +174,14 @@ class AppLifecycle {
       _logger.info('The WSL switch is up; installing hooks for it now.');
       _installAgentHooksNow(server);
     };
-    _installAgentHooksNow(server, gate: afterFirstFrame);
+    // Skipped when the host's start has already swept the same endpoint.
+    _installAgentHooksNow(server, gate: afterFirstFrame, unlessCurrent: true);
   }
+
+  /// Starts, or adopts, this machine's session host now rather than on the
+  /// first host-backed pane — see [localHostStartupProvider]. Nothing when local
+  /// panes are not host-backed or no host may be reached; never throws.
+  void startLocalHost() => _container.read(localHostStartupProvider);
 
   /// The one CLI-session import of this run, behind [afterFirstFrame] — the walk
   /// is one WSL round trip per entry. Nothing waits on it, a throwing gate least.
@@ -212,20 +218,18 @@ class AppLifecycle {
   void _installAgentHooksNow(
     LauncherControlServer server, {
     Future<void> Function()? gate,
+    bool unlessCurrent = false,
   }) {
-    final endpoint = installableHookEndpoint(
-      _container,
-      appRoute: server.hookEndpoint,
-    );
-    if (endpoint == null) return;
-    _hookInstallation = _sweepAgentHooks(endpoint, gate);
+    _hookInstallation = _sweepAgentHooks(server, gate, unlessCurrent);
   }
 
-  /// One sweep, behind [gate], with everything it reports published. Retained so
-  /// shutdown can wait for a config rewrite instead of cutting it off.
+  /// One sweep, behind [gate] and the session host's start, with everything it
+  /// reports published. Retained so shutdown can wait for a config rewrite
+  /// instead of cutting it off.
   Future<void> _sweepAgentHooks(
-    AgentHookEndpoint endpoint,
+    LauncherControlServer server,
     Future<void> Function()? gate,
+    bool unlessCurrent,
   ) async {
     if (gate != null) {
       try {
@@ -241,7 +245,20 @@ class AppLifecycle {
         );
       }
     }
-    await sweepAgentHooks(_container, endpoint, logger: _logger);
+    // The host first: while hooks go there, its endpoint is what agents are
+    // given, and before it has started there is none to give.
+    await _container.read(localHostStartupProvider);
+    final endpoint = installableHookEndpoint(
+      _container,
+      appRoute: server.hookEndpoint,
+    );
+    if (endpoint == null) return;
+    await sweepAgentHooks(
+      _container,
+      endpoint,
+      logger: _logger,
+      unlessCurrent: unlessCurrent,
+    );
   }
 
   /// Installs Karmashala's skills into every agent CLI that declares a root,
