@@ -131,8 +131,33 @@ void main() {
 
     final second = SessionRegistry(launcher: launcher, store: store());
     final restored = second.require('pane-e');
-    expect(restored.lifecycle.exitCode, 143);
+    // The signal's 143 was the host's doing, not the agent's: no code, and
+    // the reason — which reads `unknown`, never `failed`.
+    expect(restored.lifecycle.exitCode, isNull);
+    expect(
+      restored.lifecycle.describe(),
+      contains(SessionEndedWithoutCode.hostStopped),
+    );
+    final facts = LifecycleFeed(second, clock: DateTime.now).snapshot().single;
+    expect(facts.exitCode, isNull);
+    expect(facts.reason, 'the session host stopped');
+    expect(facts.endedByClose, isFalse);
     expect(utf8.decode(restored.backlog.since(0).bytes), 'work');
+  });
+
+  test('a session that stopped on its own before the shutdown keeps its '
+      'code', () async {
+    final first = SessionRegistry(launcher: launcher, store: store());
+    final session = first.open('pane-g', request);
+    launcher.handles.last.finish(1);
+    await session.ended;
+    await first.shutdown();
+
+    final restored = SessionRegistry(
+      launcher: launcher,
+      store: store(),
+    ).require('pane-g');
+    expect(restored.lifecycle.exitCode, 1, reason: 'the agent\'s own crash');
   });
 
   test('closing a session on purpose forgets it, across a restart', () async {

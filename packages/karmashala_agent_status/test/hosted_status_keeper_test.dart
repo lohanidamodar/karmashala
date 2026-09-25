@@ -217,6 +217,20 @@ void main() {
       expect(stale.report.source, AgentStatusSource.terminalGrid);
     });
 
+    test('a stale hook is still the word when the screen says nothing', () {
+      keeper.track('row-1', agentId: claude.id);
+      final idle = hook('Stop');
+      expect(idle!.report.status, AgentActivityStatus.idle);
+
+      // Nobody looks for a while; the screen holds nothing the grid reads.
+      clock.now = clock.now.add(const Duration(minutes: 30));
+      keeper.screen('row-1', const ['', 'some output the grid cannot read']);
+      final kept = keeper.statusOf('row-1')!.report;
+      expect(kept.status, AgentActivityStatus.idle);
+      expect(kept.source, AgentStatusSource.hook);
+      expect(kept.observedAt, clock.now.subtract(const Duration(minutes: 30)));
+    });
+
     test(
       'a fresh working hook outranks a modal until the prompt\'s own hook',
       () {

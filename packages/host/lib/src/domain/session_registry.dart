@@ -231,8 +231,7 @@ class SessionRegistry {
   Future<void> shutdown() async {
     // Together, or sixteen stubborn shells cost sixteen reap bounds in a row.
     await Future.wait([
-      for (final session in _sessions.values.toList())
-        session.terminate(signal: 15),
+      for (final session in _sessions.values.toList()) session.stopWithHost(),
     ]);
   }
 }

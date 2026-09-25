@@ -97,6 +97,12 @@ class HostSessionApi {
   /// What each announced approval asked — see [recheckApproval].
   final Map<String, String> _announcedAsks = <String, String>{};
 
+  /// Sessions whose `approval.requested` went out on the link carrying this
+  /// api **now**. Emptied by [linkReplaced]: an announcement a transport took
+  /// just before it dropped may never have reached the phone, so a subscribe
+  /// on the socket that replaced it announces the open prompt again.
+  final Set<String> _announcedOnLink = <String>{};
+
   /// When each watched session may next be read, on [_uptime]'s scale. The next
   /// poll waits [_pollBackoffFactor] times what the last read cost, so an
   /// expensive transcript is read less often instead of starving the link.
@@ -226,9 +232,10 @@ class HostSessionApi {
           await _pushSnapshot(sessionId);
           // `approval.requested` goes out once, as a session starts waiting. A
           // phone that was asleep then — or is on a link that replaced the one
-          // it went out on — would read "needs you" with nothing to act on.
+          // it went out on — would read "needs you" with nothing to act on, so
+          // a subscriber is told of the open prompt once per link.
           if (await _awaitingApproval(sessionId) &&
-              !_announcedApprovals.contains(sessionId)) {
+              !_announcedOnLink.contains(sessionId)) {
             await pushApprovalRequested(sessionId);
           }
         case FrameType.sessionUnsubscribe:
@@ -807,9 +814,15 @@ class HostSessionApi {
     // one this api will later try to retire.
     if (await _send(FrameType.approvalRequested, payload: request.toJson())) {
       _announcedApprovals.add(sessionId);
+      _announcedOnLink.add(sessionId);
       _announcedAsks[sessionId] = _askOf(request);
     }
   }
+
+  /// The phone's link moved to another transport (it redialled inside the
+  /// same generation, or fell back to another relay). What went out on the old
+  /// one may not have arrived, so nothing counts as announced on this one.
+  void linkReplaced() => _announcedOnLink.clear();
 
   /// Announces what a waiting session asks now, when it is not what this
   /// device was last shown: one menu can replace another (folder trust, then
@@ -833,6 +846,7 @@ class HostSessionApi {
     }
     if (await _send(FrameType.approvalRequested, payload: request.toJson())) {
       _announcedApprovals.add(sessionId);
+      _announcedOnLink.add(sessionId);
       _announcedAsks[sessionId] = ask;
     }
   }
@@ -875,6 +889,7 @@ class HostSessionApi {
       ).toJson(),
     )) {
       _announcedApprovals.remove(sessionId);
+      _announcedOnLink.remove(sessionId);
       _announcedAsks.remove(sessionId);
     }
   }

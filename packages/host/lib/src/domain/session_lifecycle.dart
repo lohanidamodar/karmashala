@@ -43,6 +43,11 @@ class SessionEndedWithoutCode extends SessionLifecycle {
   /// died with its host, so there is no code to report.
   static const hostStoppedWhileRunning = 'host stopped while running';
 
+  /// The reason a session its host ended on the way out (SIGTERM, a
+  /// supervisor's restart, the person stopping the host) is recorded with:
+  /// the signal's code is the host's doing, so none is kept.
+  static const hostStopped = 'the session host stopped';
+
   final DateTime at;
   final String reason;
 }

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
 import 'package:karmashala_host/src/status/daemon_prompt_answers.dart';
@@ -18,6 +19,13 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:test/test.dart';
+
+class _Clock implements Clock {
+  _Clock(this.now);
+  DateTime now;
+  @override
+  DateTime nowUtc() => now;
+}
 
 /// What the agent in a hosted session is doing, kept by the daemon from the
 /// hooks it takes and the screen it holds — and its prompts answered there,
@@ -208,6 +216,76 @@ void main() {
       expect(change.sessionId, 's1');
       expect(HostedAgentStatus.fromJson(change.status)!.sessionId, 's1');
     });
+  });
+
+  group('with nobody watching', () {
+    // Found live: an agent at its folder-trust question with the app open;
+    // the app quits, the question is answered, the agent replies and stops;
+    // the app, reopened, read `unknown` with no evidence, and kept reading it.
+    test(
+      'a status that moved while no watcher was connected is the one the '
+      'next watcher\'s snapshot carries, however long ago it moved',
+      () async {
+        final clock = _Clock(t0);
+        final kept = DaemonAgentStatus(
+          registry: registry,
+          database: database,
+          publish: (_, _) {},
+          clock: clock,
+          interval: const Duration(hours: 1),
+        );
+        addTearDown(kept.close);
+        final feed = LifecycleFeed(registry, clock: () => clock.now)
+          ..statusSnapshot = kept.snapshot;
+        final agent = openAgent('karmashala_s1')
+          ..emit(fixture('claude-code-trust-prompt'));
+        await pumpEventQueue();
+        kept.tick();
+
+        // The app is open and sees the folder-trust question, then quits.
+        final first = <HostMessage>[];
+        final app = feed.watch(1, first.add);
+        final opened = HostedAgentStatus.fromJson(
+          (first.first as WatchingMessage).statuses.single,
+        )!;
+        expect(opened.report.status, AgentActivityStatus.awaitingApproval);
+        expect(opened.report.source, AgentStatusSource.terminalGrid);
+        await app.cancel();
+        expect(feed.hasWatchers, isFalse);
+
+        // Answered here (the answer itself is tested below), the agent carries
+        // on, replies and stops, on a screen the grid finds nothing on.
+        agent.emit(utf8.encode('\x1b[2J\x1b[H\u25cf PONG\r\n'));
+        await pumpEventQueue();
+        for (final event in ['SessionStart', 'UserPromptSubmit', 'Stop']) {
+          clock.now = clock.now.add(const Duration(seconds: 2));
+          final fired = AgentHookEvent(
+            agent: AgentIds.claudeCode,
+            event: event,
+            sessionHeader: 's1',
+            receivedAt: clock.now,
+            body: {'session_id': 'conv-1', 'hook_event_name': event},
+          );
+          kept.hook(fired);
+          await feed.relayHook(fired);
+          kept.tick();
+        }
+
+        // The app comes back well after the hook's freshness.
+        clock.now = clock.now.add(const Duration(minutes: 20));
+        kept.tick();
+        final second = <HostMessage>[];
+        final back = feed.watch(2, second.add);
+        addTearDown(back.cancel);
+        final latest = HostedAgentStatus.fromJson(
+          (second.first as WatchingMessage).statuses.single,
+        )!;
+        expect(latest.sessionId, 's1');
+        expect(latest.report.status, AgentActivityStatus.idle);
+        expect(latest.report.source, AgentStatusSource.hook);
+        expect(latest.report.detail, 'Stop');
+      },
+    );
   });
 
   group('answers', () {

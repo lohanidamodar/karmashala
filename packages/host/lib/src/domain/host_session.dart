@@ -132,6 +132,17 @@ class HostSession {
     return _closeRequested = true;
   }
 
+  /// The host is shutting down and ends this session on its way out. Unlike a
+  /// close, nobody asked for this session to stop, and unlike a crash, the
+  /// agent did nothing wrong: the end is recorded as
+  /// [SessionEndedWithoutCode.hostStopped], whatever code the signal leaves.
+  Future<SessionLifecycle> stopWithHost() {
+    if (!_lifecycle.hasEnded) _stoppingWithHost = true;
+    return terminate(signal: 15);
+  }
+
+  var _stoppingWithHost = false;
+
   int get pid => _pty.pid;
   Future<SessionLifecycle> get ended => _ended.future;
 
@@ -158,6 +169,15 @@ class HostSession {
 
   void _finish(SessionLifecycle end) {
     if (_lifecycle.hasEnded) return;
+    // Killed by its own host going away: the signal's code is the host's
+    // doing, not the agent's, so it is recorded as an end with no code and
+    // the reason — never read later as the program failing.
+    if (_stoppingWithHost && !_closeRequested) {
+      end = SessionEndedWithoutCode(
+        end.endedAt ?? DateTime.now(),
+        SessionEndedWithoutCode.hostStopped,
+      );
+    }
     _lifecycle = end;
     recorder?.ended(end);
     if (!_ended.isCompleted) _ended.complete(end);

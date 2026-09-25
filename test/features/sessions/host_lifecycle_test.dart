@@ -609,6 +609,80 @@ void main() {
       expect(registry.reportForOpenId('s1')!.status, AgentActivityStatus.idle);
     });
 
+    test('a status that moved while the app was closed is what the reopened '
+        'app renders', () async {
+      row('s1');
+      host.snapshot = [hostFacts('s1', HostSessionState.running)];
+      host.statusSnapshot = [
+        said(
+          's1',
+          AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.approval,
+          evidence: const ['Yes, I trust this folder'],
+        ),
+      ];
+      await startWatching();
+      await container.read(sessionStatusRegistryProvider).cycle();
+      expect(
+        container
+            .read(sessionStatusRegistryProvider)
+            .reportForOpenId('s1')!
+            .status,
+        AgentActivityStatus.awaitingApproval,
+      );
+
+      // The app quits. The host answers the question, the agent replies and
+      // stops; nobody is watching, so all of it is in the next snapshot.
+      container.dispose();
+      final idle = HostedAgentStatus(
+        sessionId: 's1',
+        report: AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: 'cli-s1',
+          status: AgentActivityStatus.idle,
+          source: AgentStatusSource.hook,
+          observedAt: _at(9),
+        ),
+      );
+      host
+        ..statusSnapshot = [idle]
+        ..hookSnapshot = [
+          for (final (i, event) in [
+            'SessionStart',
+            'UserPromptSubmit',
+            'Stop',
+          ].indexed)
+            RelayedAgentHook(
+              agentId: AgentIds.claudeCode,
+              event: event,
+              body: jsonEncode({
+                'session_id': 'cli-s1',
+                'hook_event_name': event,
+              }),
+              receivedAt: _at(6 + i),
+              paneSessionId: 's1',
+            ),
+        ];
+
+      // The app opens again.
+      container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          hostLifecycleSourceProvider.overrideWithValue(host),
+        ],
+      );
+      await startWatching();
+      final registry = container.read(sessionStatusRegistryProvider);
+      await registry.cycle();
+      await _settle();
+
+      expect(container.read(hostAgentStatusesProvider).of('s1'), isNotNull);
+      final report = registry.reportForOpenId('s1')!;
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.source, AgentStatusSource.hook);
+    });
+
     test('a link lost leaves none of it standing', () async {
       row('s1');
       host.snapshot = [hostFacts('s1', HostSessionState.running)];

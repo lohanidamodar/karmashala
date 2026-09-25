@@ -1552,6 +1552,49 @@ void main() {
       expect(resolutions(harness), hasLength(1));
     });
 
+    List<SentFrame> requests(Harness harness) => [
+      for (final frame in harness.sent)
+        if (frame.type == FrameType.approvalRequested) frame,
+    ];
+
+    test(
+      'a phone that subscribes on the same link is not told twice',
+      () async {
+        final harness = await waiting();
+        await harness.request(
+          FrameType.sessionSubscribe,
+          payload: const {'sessionId': 's1'},
+        );
+        expect(requests(harness), hasLength(1));
+      },
+    );
+
+    test('a phone that subscribes on a link that replaced the one the prompt '
+        'was announced on is told of it, once', () async {
+      // Announced as it opened, on a socket that was already going: the
+      // transport took the frame, the phone never read it.
+      final harness = await waiting();
+      expect(requests(harness), hasLength(1));
+
+      harness.api.linkReplaced();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+        id: 'q2',
+      );
+
+      expect(requests(harness), hasLength(2));
+      final again = RemoteApprovalRequest.fromJson(
+        requests(harness).last.payload,
+      );
+      expect(again.sessionId, 's1');
+      expect(again.evidence, ['Allow Bash? (y/n)']);
+    });
+
     test('a phone that was away is told when it subscribes again', () async {
       final harness = await waiting();
       // Off the link for the whole of it: the answer happens, and the frame

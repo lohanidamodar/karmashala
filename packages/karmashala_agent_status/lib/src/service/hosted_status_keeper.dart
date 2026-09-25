@@ -11,7 +11,8 @@ import '../domain/status_evidence.dart';
 /// **What the agent in each session a host holds is doing**, kept from the two
 /// things the host sees for itself: every hook the agent fires, and the screen
 /// it draws. The precedence is the status service's — a fresh hook, then a
-/// screen showing a prompt or a failure, then the rest of the screen — with
+/// screen showing a prompt or a failure, then the rest of the screen, then
+/// the last hook however old (standing in for the transcript) — with
 /// every agent-specific word read from the agent's adapter, never its id.
 ///
 /// No transcript: a host holds the process and its screen, and a hook says
@@ -168,7 +169,20 @@ class HostedStatusKeeper {
     } else {
       final hook = _service.hookReport(query, now);
       final grid = hook == null ? _service.gridReport(query, now) : null;
-      next = _service.compose(query: query, now: now, hook: hook, grid: grid);
+      final composed = _service.compose(
+        query: query,
+        now: now,
+        hook: hook,
+        grid: grid,
+      );
+      // The last hook, however old, before "nothing is known": the app's
+      // transcript fallback is not here, and an agent that stopped says so
+      // once. Without this a Stop fired while nobody watched lapsed to
+      // `unknown` five minutes later on any screen the grid cannot read, and
+      // stayed there until the agent's next hook.
+      next = composed.source == AgentStatusSource.none
+          ? _reports.latest(query.agentId, query.sessionId) ?? composed
+          : composed;
     }
     // A question travels only while the hook that opened it is the word.
     final hookQuestion =

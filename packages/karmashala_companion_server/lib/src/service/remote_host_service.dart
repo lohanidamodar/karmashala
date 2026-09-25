@@ -1121,14 +1121,24 @@ class _ActiveLink {
     this.generation,
     this.channel,
     this.api,
-    this.transport,
+    this._transport,
     this.flow,
   );
 
   final int generation;
   final SealedChannel channel;
   final HostSessionApi api;
-  RemoteTransport transport;
+  RemoteTransport _transport;
+
+  RemoteTransport get transport => _transport;
+
+  /// Another socket for the same generation: what the api announced on the
+  /// last one may never have arrived.
+  set transport(RemoteTransport next) {
+    if (identical(next, _transport)) return;
+    _transport = next;
+    api.linkReplaced();
+  }
 
   /// Per generation, like the sequences it counts.
   final StreamFlow flow;

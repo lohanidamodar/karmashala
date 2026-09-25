@@ -6,9 +6,10 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_session/session.dart' show SessionEnding;
+import 'package:karmashala_session/session.dart'
+    show SessionEnding, SessionStatus;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
-    show hostSessionIdOf;
+    show SessionDao, hostSessionIdOf;
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
@@ -318,6 +319,43 @@ void main() {
       expect(settled.reason, contains('was stopped by you'));
       expect(settled.reason, isNot(contains('stopped in error')));
       expect(statuses, ['cancelled'], reason: 'never failed on the way');
+      final automation = automationDao().getById('auto-r1')!;
+      expect(automation.consecutiveFailures, 0);
+      expect(automation.enabled, isTrue);
+    });
+
+    // Found live: SIGTERM to the host killed its sessions on the way out, and
+    // each exit (143) was written as the agent failing.
+    test('its session ended by the host shutting down is never failed, and '
+        'spends no budget', () async {
+      nightly();
+      await startDaemon();
+      final run = runs().single;
+      final statuses = <String>[];
+      final watching = recording.changes.listen(
+        (change) => statuses.add(change.to.name),
+      );
+      addTearDown(watching.cancel);
+
+      final stopping = registry.shutdown();
+      await pump();
+      launcher.handles.first.finish(143);
+      await stopping;
+      await pump();
+
+      final session = registry.find(hostSessionIdOf(run.sessionId!))!;
+      expect(session.lifecycle.exitCode, isNull);
+      expect(
+        session.lifecycle.describe(),
+        contains(SessionEndedWithoutCode.hostStopped),
+      );
+      expect(statuses, ['unknown'], reason: 'never failed on the way');
+      expect(
+        SessionDao(db).getById(run.sessionId!)!.status,
+        SessionStatus.unknown,
+      );
+      // Losing the process with its host is no verdict on the automation.
+      expect(runs().single.state, AutomationRunState.running);
       final automation = automationDao().getById('auto-r1')!;
       expect(automation.consecutiveFailures, 0);
       expect(automation.enabled, isTrue);

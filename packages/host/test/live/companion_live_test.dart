@@ -311,16 +311,17 @@ void main() {
     }
 
     test('the phone sees it waiting, reads the menu and approves', () async {
+      // The prompt opens with no phone there; the phone dials in after it.
+      await startAgent();
       final client = await dial(phone);
-      // Live and watching the row before the prompt opens, so the news of it
-      // opening reaches this link.
-      await client.listSessions();
+      // Listening from the moment it is connected, as the phone's gateway
+      // does: the news may come on this link before the session is opened,
+      // and a stream nobody listens to yet keeps nothing (the order this test
+      // once had to be turned round for).
       final asked = client.events
           .where((e) => e is ApprovalRequestedEvent)
           .cast<ApprovalRequestedEvent>()
           .first;
-      await client.subscribeSession(seededAgentSessionId);
-      await startAgent();
 
       final listed = await readUntil(
         client.listSessions,
@@ -338,6 +339,9 @@ void main() {
         reason: 'read off the screen by the daemon, with no app',
       );
 
+      // Opening the session: a prompt already open when the phone came is
+      // announced now, if it was not on this link already.
+      await client.subscribeSession(seededAgentSessionId);
       final request = (await asked.timeout(
         const Duration(seconds: 20),
       )).request;

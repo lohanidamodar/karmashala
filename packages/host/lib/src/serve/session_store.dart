@@ -108,7 +108,8 @@ class SessionStore implements SessionBacklogStore {
 
       final wasRunning =
           meta['state'] == 'running' ||
-          meta['reason'] == SessionEndedWithoutCode.hostStoppedWhileRunning;
+          meta['reason'] == SessionEndedWithoutCode.hostStoppedWhileRunning ||
+          meta['reason'] == SessionEndedWithoutCode.hostStopped;
       final lifecycle = _lifecycleFrom(meta);
       if (meta['state'] == 'running') _recordLost(dir, meta, lifecycle);
       return RestoredSession(
