@@ -30,5 +30,6 @@ export 'src/agents/domain/agent_skill_support.dart';
 export 'src/agents/domain/agent_status.dart';
 export 'src/agents/domain/built_in_agents.dart';
 export 'src/agents/domain/karmashala_skill.dart';
+export 'src/agents/domain/parent_session_environment.dart';
 export 'src/agents/domain/permission_carry.dart';
 export 'src/permissions/permission_risk.dart';

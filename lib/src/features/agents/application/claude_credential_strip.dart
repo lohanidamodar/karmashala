@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
@@ -7,12 +6,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/launch.dart';
 import '../../environments/application/environment_providers.dart';
 import 'claude_accounts_controller.dart';
-
-/// The environment a locally launched pane inherits. A provider so a test can
-/// say what the user's shell exports without touching the real process.
-final hostEnvironmentProvider = Provider<Map<String, String>>(
-  (ref) => Platform.environment,
-);
+import 'agent_providers.dart';
 
 /// Whether an interactive Claude login exists for [installation] — presence and
 /// expiry, never the token. `false` for anything that could not be read, so a

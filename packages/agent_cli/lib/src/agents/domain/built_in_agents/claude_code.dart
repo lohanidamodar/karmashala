@@ -15,6 +15,21 @@ const _claudeCode = AgentDescriptor(
     windowsInstallPaths: [r'%USERPROFILE%\.local\bin\claude.exe'],
   ),
   launch: AgentLaunchSpec(
+    // Set by a running Claude Code for its children (observed 2.1.282). One
+    // inherited by a pane Karmashala launches makes that Claude a child
+    // session: `CLAUDE_CODE_CHILD_SESSION` turns transcript saving off, so the
+    // conversation can never be resumed.
+    parentSessionEnvironment: {
+      'CLAUDECODE',
+      'CLAUDE_CODE_ENTRYPOINT',
+      'CLAUDE_CODE_EXECPATH',
+      'CLAUDE_CODE_SESSION_ID',
+      'CLAUDE_CODE_CHILD_SESSION',
+      'CLAUDE_CODE_SESSION_ATTENDED',
+      'CLAUDE_CODE_MESSAGING_SOCKET',
+      'CLAUDE_CODE_MESSAGING_TOKEN',
+      'CLAUDE_PID',
+    },
     baseArguments: [
       '--input-format',
       'stream-json',

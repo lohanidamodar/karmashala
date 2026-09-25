@@ -41,14 +41,17 @@ void main() {
       expect(carry.carried.risk, PermissionRisk.acceptEdits);
     });
 
-    test('the cap is applied before the carry, so Codex falls to its sandbox', () {
-      final carry = _spawn(
-        PermissionRisk.bypass,
-        PermissionRisk.bypass,
-        AgentIds.codex,
-      );
-      expect(carry.carried.risk, PermissionRisk.acceptEdits);
-      expect(carry.selection.values['sandbox'], 'workspace-write');
-    });
+    test(
+      'the cap is applied before the carry, so Codex falls to its sandbox',
+      () {
+        final carry = _spawn(
+          PermissionRisk.bypass,
+          PermissionRisk.bypass,
+          AgentIds.codex,
+        );
+        expect(carry.carried.risk, PermissionRisk.acceptEdits);
+        expect(carry.selection.values['sandbox'], 'workspace-write');
+      },
+    );
   });
 }

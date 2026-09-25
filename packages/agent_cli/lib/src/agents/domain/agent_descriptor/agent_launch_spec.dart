@@ -106,9 +106,17 @@ class AgentLaunchSpec {
     this.model = const AgentModelSupport.unsupported(),
     this.recap = const AgentRecapSupport.unchecked(),
     this.selfUpdate = const AgentSelfUpdate.unknown(),
+    this.parentSessionEnvironment = const {},
   });
 
   final List<String> baseArguments;
+
+  /// Variables a running session of this CLI sets for its own children. Any of
+  /// them in Karmashala's environment — it was started from inside such a
+  /// session — are withheld from the agents it launches, or each would think
+  /// it was a child of that session. Only session-bound names: a variable a
+  /// person sets on purpose to configure the CLI stays.
+  final Set<String> parentSessionEnvironment;
 
   /// How this agent updates itself, and how Karmashala turns that off for the
   /// processes it launches. See [AgentSelfUpdate]. Defaults to "nobody

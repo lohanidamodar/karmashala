@@ -65,7 +65,16 @@ extension SessionSurfaceStarters on SessionLauncher {
       environment: suppressUpdate
           ? descriptor.launch.selfUpdate.disableEnvironment
           : const {},
-      removedEnvironment: credentials.removed,
+      removedEnvironment: {
+        ...credentials.removed,
+        // Only a pane that inherits this process's environment carries them.
+        if (environment.wslDistribution == null &&
+            environment.sshHostId == null)
+          ...inheritedParentSession(
+            descriptor,
+            _ref.read(hostEnvironmentProvider),
+          ),
+      },
       workingDirectory: workingDirectory.path,
       wslDistribution: environment.wslDistribution,
       sshHostId: environment.sshHostId,
