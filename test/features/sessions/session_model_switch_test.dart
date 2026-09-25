@@ -16,7 +16,7 @@ import 'package:karmashala/src/features/sessions/application/pending_live_switch
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';

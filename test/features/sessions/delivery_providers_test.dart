@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

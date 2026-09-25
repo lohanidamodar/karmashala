@@ -15,7 +15,7 @@ import 'package:karmashala/src/features/cli_detection/data/conversation_index_da
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';

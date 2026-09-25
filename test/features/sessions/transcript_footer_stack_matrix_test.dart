@@ -15,7 +15,7 @@ import 'package:karmashala/src/features/sessions/application/session_handoff_ser
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/data/session_recap_dao.dart';
 import 'package:karmashala/src/features/sessions/presentation/agent_status_badge.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';

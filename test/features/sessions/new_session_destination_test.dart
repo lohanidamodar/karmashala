@@ -12,7 +12,7 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';

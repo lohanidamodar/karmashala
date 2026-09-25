@@ -2,7 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
-import '../data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'session_launch_refusal.dart';
 import 'session_providers.dart';

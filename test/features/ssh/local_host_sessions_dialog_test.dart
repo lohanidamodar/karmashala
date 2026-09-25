@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host/host_paths.dart';

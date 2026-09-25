@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/remote/application/remote_approval_bindi
 import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';

@@ -10,7 +10,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';

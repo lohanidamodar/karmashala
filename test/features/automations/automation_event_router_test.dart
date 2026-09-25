@@ -6,7 +6,7 @@ import 'package:karmashala/src/features/automations/application/automation_event
 import 'package:karmashala/src/features/automations/application/automation_scheduler.dart';
 import 'package:karmashala/src/features/automations/application/usage_limit_watcher.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/events.dart';
 import 'package:karmashala_automations/persistence.dart';

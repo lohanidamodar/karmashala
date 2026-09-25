@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fixtures.dart';

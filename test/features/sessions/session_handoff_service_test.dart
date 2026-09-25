@@ -22,7 +22,7 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';

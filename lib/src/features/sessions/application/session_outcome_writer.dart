@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/descriptors.dart';
-import '../data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';

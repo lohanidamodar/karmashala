@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/database/database_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import 'session_repositories_service.dart';
-import '../data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import '../data/decision_record_dao.dart';
 import '../data/session_event_dao.dart';
 import '../data/session_recap_dao.dart';

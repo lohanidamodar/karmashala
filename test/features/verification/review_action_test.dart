@@ -1,7 +1,7 @@
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:karmashala/src/features/verification/presentation/review_action.dart';

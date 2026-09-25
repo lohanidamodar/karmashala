@@ -7,7 +7,7 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../cli_detection/data/imported_session_dao.dart';
-import '../../sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_notifications/watched.dart';

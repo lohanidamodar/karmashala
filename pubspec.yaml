@@ -40,6 +40,7 @@ workspace:
   - packages/karmashala_notifications
   - packages/karmashala_remote
   - packages/karmashala_session
+  - packages/karmashala_session_engine
   - packages/karmashala_ssh
   - packages/karmashala_store
   - packages/karmashala_terminal_core
@@ -114,6 +115,10 @@ dependencies:
     path: packages/karmashala_notifications
   karmashala_session:
     path: packages/karmashala_session
+  # Session lifecycle recorded from host facts: the status derived from them,
+  # the `SessionDao` and the recorder that writes hosted rows. Pure Dart.
+  karmashala_session_engine:
+    path: packages/karmashala_session_engine
   # Reaching a machine over SSH and running the session host on it: the
   # connection and its pool, the host key policy, the SSH command runner, the
   # deployer and the remote file browser. Not the DAOs — the package takes a

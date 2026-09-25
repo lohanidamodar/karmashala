@@ -3,7 +3,7 @@ import '../../agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../repositories/data/repository_dao.dart';
-import '../../sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';

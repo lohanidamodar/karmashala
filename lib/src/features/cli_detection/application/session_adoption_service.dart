@@ -9,7 +9,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
-import '../../sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import '../../sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';

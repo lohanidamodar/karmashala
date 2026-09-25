@@ -11,7 +11,7 @@ import 'package:karmashala/src/features/automations/presentation/automations_pag
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_store/database.dart';

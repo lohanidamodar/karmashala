@@ -6,7 +6,7 @@ import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:karmashala/src/features/verification/presentation/attribution_mark.dart';
 import 'package:flutter/material.dart';

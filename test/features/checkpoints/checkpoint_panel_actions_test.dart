@@ -17,7 +17,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

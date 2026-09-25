@@ -68,7 +68,7 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/handoff_packet_files.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
