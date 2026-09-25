@@ -145,7 +145,26 @@ void main() {
       expect(dao.getById('hosted')!.status, SessionStatus.running);
     });
 
-    test('a pane running somebody else, or an ended row, is left alone', () {
+    // The owner's case: the host was restarted, the old agent process exited
+    // and the row was settled `completed`, and the pane started the same
+    // conversation again. The agent is running; the row must say so.
+    test('a completed row whose pane runs its agent again is running', () {
+      dao.insert(
+        session(
+          id: 'resumed',
+          status: SessionStatus.completed,
+        ).copyWith(paneId: 'pane-1'),
+      );
+
+      final moved = SessionLivenessReconciler(
+        sessionDao: dao,
+      ).panesStarted({'pane-1'}, sessionOfPane: (_) => 'resumed');
+
+      expect(moved, 1);
+      expect(dao.getById('resumed')!.status, SessionStatus.running);
+    });
+
+    test('a pane running somebody else, or an archived row, is left alone', () {
       dao.insert(
         session(
           id: 'old',
@@ -154,20 +173,20 @@ void main() {
       );
       dao.insert(
         session(
-          id: 'done',
+          id: 'shelved',
           status: SessionStatus.completed,
-        ).copyWith(paneId: 'pane-2'),
+        ).copyWith(paneId: 'pane-2', archivedAt: testTime),
       );
 
       final moved = SessionLivenessReconciler(sessionDao: dao).panesStarted(
         {'pane-1', 'pane-2'},
-        // pane-1 now runs a different session; pane-2's row already ended.
-        sessionOfPane: (paneId) => paneId == 'pane-1' ? 'newer' : 'done',
+        // pane-1 now runs a different session; pane-2's row was archived.
+        sessionOfPane: (paneId) => paneId == 'pane-1' ? 'newer' : 'shelved',
       );
 
       expect(moved, 0);
       expect(dao.getById('old')!.status, SessionStatus.unknown);
-      expect(dao.getById('done')!.status, SessionStatus.completed);
+      expect(dao.getById('shelved')!.status, SessionStatus.completed);
     });
 
     test('which panes started running, from one reading to the next', () {

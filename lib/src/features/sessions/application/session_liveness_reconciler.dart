@@ -48,18 +48,21 @@ class SessionLivenessReconciler {
   }
 
   /// The other edge: a pane of ours is running this row's agent again — a
-  /// hosted session the pane reattached to after a restart. The launch pass
-  /// had to call it `unknown` before any pane existed; this is the
-  /// observation that puts it back. Only `unknown` moves: an ended row stays
-  /// ended, and only the session the pane's own launch names is touched,
-  /// since a pane can later run somebody else.
+  /// hosted session the pane reattached to after a restart, which the launch
+  /// pass had to call `unknown`, or one started again in its pane after its
+  /// process exited and the row was settled `completed`. Either way the agent
+  /// is observed running, so the row says so. Only the session the pane's own
+  /// launch names is touched, since a pane can later run somebody else, and
+  /// an archived row is left where the user put it.
   int panesStarted(
     Iterable<String> paneIds, {
     required String? Function(String paneId) sessionOfPane,
   }) {
     var moved = 0;
     for (final session in sessionDao.getByPaneIds(paneIds)) {
-      if (session.status != SessionStatus.unknown) continue;
+      if (session.status == SessionStatus.running || session.isArchived) {
+        continue;
+      }
       final paneId = session.paneId;
       if (paneId == null || sessionOfPane(paneId) != session.id) continue;
       sessionDao.updateStatus(session.id, SessionStatus.running);
