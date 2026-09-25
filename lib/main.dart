@@ -32,6 +32,7 @@ import 'src/features/env_secrets/application/env_secrets_controller.dart';
 import 'src/features/env_secrets/data/env_vault.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
 import 'src/features/mcp/launcher_control_server.dart';
+import 'src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'src/features/settings/application/settings_controller.dart';
@@ -106,13 +107,6 @@ Future<void> _bootstrap(AppLogger logger) async {
   final database = AppDatabase.open(await appSupportDirectory());
   bootstrapMetadata(database, logger: logger);
 
-  // Nothing this process started is running yet, so no row may still claim to
-  // be — rows only ever moved *into* `running`. See `SessionLivenessReconciler`.
-  final lost = markSessionsLostOnLaunch(SessionDao(database));
-  if (lost > 0) {
-    logger.info('$lost session(s) were still marked live from a previous run.');
-  }
-
   // The verification artifact root, before the first frame: a Riverpod provider
   // that threw stays errored for the life of the process. Best-effort.
   try {
@@ -152,6 +146,18 @@ Future<void> _bootstrap(AppLogger logger) async {
       ...deviceBindings,
     ],
   );
+
+  // Before any pane exists: a row still claiming to run from a previous run is
+  // one we lost sight of — unless this machine's host feed will say otherwise.
+  final followsLocalHost = container.read(hostLifecycleSourceProvider) != null;
+  final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
+  final lost = markSessionsLostOnLaunch(
+    SessionDao(database),
+    where: followsLocalHost ? (session) => !onThisMachine(session) : null,
+  );
+  if (lost > 0) {
+    logger.info('$lost session(s) were still marked live from a previous run.');
+  }
 
   // The persisted diagnostics preferences: debug mode's root level, the buffer
   // bound, and whether the file is written at all.

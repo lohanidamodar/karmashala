@@ -123,7 +123,7 @@ void main() {
       }
     });
 
-    // Host mode: the launch pass had to call a hosted session `unknown` before
+    // A tmux session over SSH: the launch pass had to call it `unknown` before
     // any pane existed; its pane reattaching is the observation that undoes
     // that. Without it a rename in the CLI never reached the row, because the
     // title sync only follows a session that is running.
@@ -145,9 +145,8 @@ void main() {
       expect(dao.getById('hosted')!.status, SessionStatus.running);
     });
 
-    // The owner's case: the host was restarted, the old agent process exited
-    // and the row was settled `completed`, and the pane started the same
-    // conversation again. The agent is running; the row must say so.
+    // A pane with no host facts that starts the same conversation again after
+    // the row was settled `completed`: the agent is running again.
     test('a completed row whose pane runs its agent again is running', () {
       dao.insert(
         session(
@@ -187,6 +186,46 @@ void main() {
       expect(moved, 0);
       expect(dao.getById('old')!.status, SessionStatus.unknown);
       expect(dao.getById('shelved')!.status, SessionStatus.completed);
+    });
+
+    // A hosted row's status is its host's facts (host_lifecycle_test.dart):
+    // neither pane edge may guess over them.
+    test('a row that follows its host is moved by neither pane edge', () {
+      dao
+        ..insert(
+          session(
+            id: 'hosted',
+            status: SessionStatus.running,
+          ).copyWith(paneId: 'pane-1'),
+        )
+        ..insert(
+          session(
+            id: 'ended',
+            status: SessionStatus.completed,
+          ).copyWith(paneId: 'pane-2'),
+        );
+      final reconciler = SessionLivenessReconciler(
+        sessionDao: dao,
+        followsHost: (_) => true,
+      );
+
+      expect(reconciler.panesStopped(const ['pane-1']), 0);
+      expect(
+        reconciler.panesStarted({'pane-2'}, sessionOfPane: (_) => 'ended'),
+        0,
+      );
+      expect(dao.getById('hosted')!.status, SessionStatus.running);
+      expect(dao.getById('ended')!.status, SessionStatus.completed);
+    });
+
+    test('the launch pass can be narrowed to rows no host speaks for', () {
+      dao
+        ..insert(session(id: 'here', status: SessionStatus.running))
+        ..insert(session(id: 'there', status: SessionStatus.running));
+
+      expect(markSessionsLostOnLaunch(dao, where: (s) => s.id == 'there'), 1);
+      expect(dao.getById('here')!.status, SessionStatus.running);
+      expect(dao.getById('there')!.status, SessionStatus.unknown);
     });
 
     test('which panes started running, from one reading to the next', () {

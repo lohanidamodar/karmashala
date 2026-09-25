@@ -22,6 +22,7 @@ class WatchedSessionLoader {
     required this.hookReports,
     required this.clock,
     this.isPaneLive,
+    this.isRunningOnHost,
     this.transcriptPathFor,
     this.activeWindow = const Duration(minutes: 30),
     this.coldRecheck = const Duration(minutes: 1),
@@ -36,6 +37,10 @@ class WatchedSessionLoader {
   /// Whether a pane of this app instance is running a process. Null counts no
   /// pane as live — a row's `pane_id` outlives the pane it names.
   final bool Function(String paneId)? isPaneLive;
+
+  /// Whether a session host says it is running this row now. With a live pane,
+  /// what makes a row watched whatever its recorded status says.
+  final bool Function(String sessionId)? isRunningOnHost;
 
   /// The transcript the status registry resolved for a native row, while it
   /// watches it. Remembered here so a row that lost its pane is still watched
@@ -84,7 +89,7 @@ class WatchedSessionLoader {
     for (final session in sessionDao.getAll()) {
       final agentId = agentIdByInstallation[session.agentInstallationId];
       if (agentId == null) continue;
-      if (_isOver(session.status)) continue;
+      if (_isOver(session.status) && !_observedRunning(session)) continue;
       // The CLI's own id when it has announced one — the key hooks and state
       // files share — and our row id when it has not, which still has a screen.
       final externalId = session.externalSessionId;
@@ -169,8 +174,7 @@ class WatchedSessionLoader {
       modified = sample?.modified;
     }
 
-    final paneId = session.paneId;
-    if (paneId != null && (isPaneLive?.call(paneId) ?? false)) return true;
+    if (_observedRunning(session)) return true;
     if (hookReports.latest(key.agentId, key.sessionId) != null) return true;
     // Launched into a terminal we cannot see: its hooks or its transcript are
     // all it will ever show, and neither exists for its first moments.
@@ -181,7 +185,13 @@ class WatchedSessionLoader {
     return modified != null && now.difference(modified) <= activeWindow;
   }
 
-  /// A workspace session in a terminal state can no longer produce status.
+  bool _observedRunning(Session session) {
+    final paneId = session.paneId;
+    if (paneId != null && (isPaneLive?.call(paneId) ?? false)) return true;
+    return isRunningOnHost?.call(session.id) ?? false;
+  }
+
+  /// A recorded ending, which a row observed running overrides.
   bool _isOver(SessionStatus status) =>
       status == SessionStatus.completed ||
       status == SessionStatus.cancelled ||

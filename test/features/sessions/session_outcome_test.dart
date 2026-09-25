@@ -347,6 +347,24 @@ void main() {
       expect(statusOf('s1'), SessionStatus.completed);
     });
 
+    test('a hosted row is not settled by a hook', () {
+      // Claude says `SessionEnd reason=other` when a host restart kills it,
+      // and the pane then starts the same conversation again.
+      live('s1');
+      final hosted = SessionOutcomeWriter(
+        sessionDao: dao,
+        followsHost: (session) => session.id == 's1',
+      );
+      expect(
+        hosted.record(
+          agentSessionId: 'cli-s1',
+          ending: AgentSessionEnding.completed,
+        ),
+        isNull,
+      );
+      expect(statusOf('s1'), SessionStatus.running);
+    });
+
     test('a conversation-only ending writes nothing', () {
       live('s1');
       expect(

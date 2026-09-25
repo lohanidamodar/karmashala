@@ -3,15 +3,25 @@ import 'package:riverpod/riverpod.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
+import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
 /// **Writes a session row's ending from what the agent said, and nothing
 /// else** — never from a pane's exit code, and never over a terminal word.
+/// Not for a hosted row: a hook describes the conversation, and Claude says
+/// `SessionEnd` when a host restart kills a process its pane then restarts.
 class SessionOutcomeWriter {
-  SessionOutcomeWriter({required this.sessionDao, this.onChanged});
+  SessionOutcomeWriter({
+    required this.sessionDao,
+    this.onChanged,
+    this.followsHost,
+  });
 
   final SessionDao sessionDao;
+
+  /// Whether the row's status is its host's facts, which no hook may settle.
+  final bool Function(Session session)? followsHost;
 
   /// Called with each row this moved, so the workspace can redraw.
   final void Function(String sessionId)? onChanged;
@@ -30,6 +40,7 @@ class SessionOutcomeWriter {
     if (session == null) return null;
     // Already ended, by this or by the user. See the second refusal above.
     if (session.status.isEnded) return null;
+    if (followsHost?.call(session) ?? false) return null;
     final status = switch (ending) {
       AgentSessionEnding.completed => SessionStatus.completed,
       AgentSessionEnding.failed => SessionStatus.failed,
@@ -51,5 +62,6 @@ final sessionOutcomeWriterProvider = Provider<SessionOutcomeWriter>(
     onChanged: (sessionId) => ref
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.statusChanged(sessionId)),
+    followsHost: ref.watch(sessionFollowsHostFactsProvider),
   ),
 );

@@ -309,6 +309,43 @@ void main() {
     expect(await settled(loader()), isEmpty);
   });
 
+  test('an ended row observed running again is watched', () async {
+    // A host restart can leave a row `completed` while its pane has started
+    // the conversation again; what runs, not what was recorded, decides.
+    sessions
+      ..insert(
+        session(
+          id: 'hosted',
+          status: SessionStatus.completed,
+        ).copyWith(externalSessionId: 'cli-hosted'),
+      )
+      ..insert(
+        session(
+          id: 'paned',
+          status: SessionStatus.failed,
+        ).copyWith(externalSessionId: 'cli-paned', paneId: 'pane-1'),
+      )
+      ..insert(
+        session(
+          id: 'over',
+          status: SessionStatus.completed,
+        ).copyWith(externalSessionId: 'cli-over'),
+      );
+    livePanes.add('pane-1');
+    final subject = WatchedSessionLoader(
+      sessionDao: sessions,
+      importedSessionDao: imported,
+      installationDao: installations,
+      hookReports: reports,
+      clock: FixedClock(testTime),
+      isPaneLive: livePanes.contains,
+      isRunningOnHost: (id) => id == 'hosted',
+    );
+
+    final watched = await settled(subject);
+    expect(watched.map((w) => w.openId), unorderedEquals(['hosted', 'paned']));
+  });
+
   test(
     'a cold transcript is left alone until the recheck window passes',
     () async {

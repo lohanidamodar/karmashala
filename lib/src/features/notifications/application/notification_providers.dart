@@ -9,6 +9,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -161,6 +162,7 @@ watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
                 .value
                 .isLive ??
             false),
+    isRunningOnHost: ref.watch(sessionRunningOnHostProvider),
     transcriptPathFor: (sessionId) => ref.exists(sessionStatusRegistryProvider)
         ? ref
               .read(sessionStatusRegistryProvider)

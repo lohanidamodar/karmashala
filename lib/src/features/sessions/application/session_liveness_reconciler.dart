@@ -4,16 +4,25 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
+import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_launch_refusal.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
 /// **Takes a row out of `running` when nothing we can see is running it**: a
 /// live pane of ours, observed not inferred, and only ever moved to `unknown`.
+/// Rows whose host reports their lifecycle are left to it.
 class SessionLivenessReconciler {
-  SessionLivenessReconciler({required this.sessionDao, this.onChanged});
+  SessionLivenessReconciler({
+    required this.sessionDao,
+    this.onChanged,
+    this.followsHost,
+  });
 
   final SessionDao sessionDao;
+
+  /// Whether a row's status is its host's facts, so no pane edge may move it.
+  final bool Function(Session session)? followsHost;
 
   /// Called with each row this moved, so the workspace can redraw. Null in the
   /// launch sweep, which runs before any of it exists.
@@ -22,11 +31,12 @@ class SessionLivenessReconciler {
   /// Rows moved out of a live claim. Diagnostics, and what the tests count.
   int reconciled = 0;
 
-  /// Sweeps **every** row that claims to be live against [livePaneIds] — the
-  /// launch pass. Costs one indexed read of a set that is normally empty.
-  int sweep(Set<String> livePaneIds) {
+  /// Sweeps every row that claims to be live and passes [where] against
+  /// [livePaneIds] — the launch pass.
+  int sweep(Set<String> livePaneIds, {bool Function(Session session)? where}) {
     var moved = 0;
     for (final session in sessionDao.getClaimingLive()) {
+      if (where != null && !where(session)) continue;
       final paneId = session.paneId;
       if (paneId != null && livePaneIds.contains(paneId)) continue;
       _lose(session.id);
@@ -40,7 +50,7 @@ class SessionLivenessReconciler {
   int panesStopped(Iterable<String> paneIds) {
     var moved = 0;
     for (final session in sessionDao.getByPaneIds(paneIds)) {
-      if (!session.status.claimsLive) continue;
+      if (!session.status.claimsLive || _followsHost(session)) continue;
       _lose(session.id);
       moved++;
     }
@@ -48,19 +58,18 @@ class SessionLivenessReconciler {
   }
 
   /// The other edge: a pane of ours is running this row's agent again — a
-  /// hosted session the pane reattached to after a restart, which the launch
-  /// pass had to call `unknown`, or one started again in its pane after its
-  /// process exited and the row was settled `completed`. Either way the agent
-  /// is observed running, so the row says so. Only the session the pane's own
-  /// launch names is touched, since a pane can later run somebody else, and
-  /// an archived row is left where the user put it.
+  /// tmux session reattached after a restart, or one started again in its pane
+  /// after it ended. Only the session the pane's own launch names is touched,
+  /// and an archived row is left where the user put it.
   int panesStarted(
     Iterable<String> paneIds, {
     required String? Function(String paneId) sessionOfPane,
   }) {
     var moved = 0;
     for (final session in sessionDao.getByPaneIds(paneIds)) {
-      if (session.status == SessionStatus.running || session.isArchived) {
+      if (session.status == SessionStatus.running ||
+          session.isArchived ||
+          _followsHost(session)) {
         continue;
       }
       final paneId = session.paneId;
@@ -73,6 +82,8 @@ class SessionLivenessReconciler {
     return moved;
   }
 
+  bool _followsHost(Session session) => followsHost?.call(session) ?? false;
+
   void _lose(String sessionId) {
     sessionDao.updateStatus(sessionId, SessionStatus.unknown);
     reconciled++;
@@ -82,8 +93,11 @@ class SessionLivenessReconciler {
 
 /// The launch pass: a row that survived a restart still claiming to be live is
 /// one we lost sight of. Called before any pane exists, which is the point.
-int markSessionsLostOnLaunch(SessionDao dao) =>
-    SessionLivenessReconciler(sessionDao: dao).sweep(const {});
+/// [where] narrows it to the rows no host feed will speak for.
+int markSessionsLostOnLaunch(
+  SessionDao dao, {
+  bool Function(Session session)? where,
+}) => SessionLivenessReconciler(sessionDao: dao).sweep(const {}, where: where);
 
 /// Pane ids that were running in [previous] and are not in [next] — a pure
 /// function, so the listener touches the database only when one stopped.
@@ -121,6 +135,7 @@ final sessionLivenessReconcilerProvider = Provider<void>((ref) {
     onChanged: (sessionId) => ref
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.statusChanged(sessionId)),
+    followsHost: ref.watch(sessionFollowsHostFactsProvider),
   );
   ref.listen(terminalSessionsControllerProvider, (previous, next) {
     final started = panesThatStartedRunning(previous?.liveness, next.liveness);
