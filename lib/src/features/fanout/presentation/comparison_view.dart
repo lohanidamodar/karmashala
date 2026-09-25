@@ -259,10 +259,11 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
     await _diffs[candidate.id];
   }
 
-  void _openSession(ComparisonCandidate candidate) {
+  Future<void> _openSession(ComparisonCandidate candidate) async {
     final sessionId = candidate.sessionId;
     if (sessionId == null) return;
-    final revealed = ref.read(sessionLauncherProvider).reveal(sessionId);
+    final revealed = await ref.read(sessionLauncherProvider).show(sessionId);
+    if (!mounted) return;
     if (!revealed) {
       _say('That session is not running any more.');
       return;

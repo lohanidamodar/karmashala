@@ -38,17 +38,16 @@ extension SessionStartVerbs on SessionLauncher {
     // CLI that has moved would take the agent down and put nothing back.
     final startable = await usableInstallation(installation);
 
-    // Only now, once nothing above can refuse: ending is not undoable. No live
-    // pane is not an error — that session had already stopped.
-    final paneId = livePaneFor(sessionId);
-    if (paneId != null) {
-      _ref.read(terminalSessionsControllerProvider.notifier).endSession(paneId);
-    }
+    // Only now, once nothing above can refuse: ending is not undoable. Its
+    // pane, or the host's session when no pane shows it; neither is not an
+    // error — that session had already stopped.
+    final ended = await endRunning(sessionId);
     // After the kill, so the line records an agent that is actually gone;
     // [launch] logs the process that replaced it.
     _log.info(
       'Restarting $sessionId to apply its permission mode: '
-      'agent=${installation.agentId} ended=${paneId ?? 'nothing'} '
+      'agent=${installation.agentId} '
+      'ended=${ended == null ? 'nothing' : (ended.paneId ?? 'at the host')} '
       'conversation=$externalId',
     );
 
@@ -81,6 +80,15 @@ extension SessionStartVerbs on SessionLauncher {
         'A launch cannot restart a session and also resume or fork a '
         'conversation.',
       );
+    }
+
+    // The host is already running this row's conversation with no pane of
+    // ours on it — the daemon started it: open onto that, never a second
+    // process and never a resume of a conversation that may not be written yet.
+    final heldByHost = _hostHeldRowFor(request);
+    if (heldByHost != null) {
+      final attached = await attachHosted(heldByHost.id);
+      if (attached != null) return attached;
     }
 
     // A resume of a conversation we are still running would be a second agent
@@ -343,8 +351,11 @@ extension SessionStartVerbs on SessionLauncher {
       return result;
     } catch (error) {
       settleAgent?.call(error);
-      // The row must not outlive a launch that never happened.
-      dao.updateStatus(id, SessionStatus.failed);
+      // The row must not outlive a launch that never happened — unless the
+      // host knows it, whose status is the daemon's to write.
+      if (reused == null || _mayRecordLaunchFailure(reused)) {
+        dao.updateStatus(id, SessionStatus.failed);
+      }
       // The same word as the success path: the row still appeared, and a failed
       // launch must reach every list that draws it.
       _publish(_whatALaunchMoved(request, id, reused: reused != null));

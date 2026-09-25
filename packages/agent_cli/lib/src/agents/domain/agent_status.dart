@@ -765,6 +765,50 @@ class AgentMissingConversationRules {
   }
 }
 
+/// What an agent draws when it will not start work in a directory until a
+/// person answers a first-run question about it — Claude Code's "Is this a
+/// project you created or one you trust?", Codex's "Do you trust the contents
+/// of this directory?".
+///
+/// Read off the **live** screen, unlike the post-mortems beside it: the agent
+/// is running and waiting. A session somebody watches answers it (the approval
+/// and menu keys already cover it); an unattended launch has nobody to, so the
+/// daemon reads this to stop waiting and say why, never to answer it. Trusting
+/// a directory is the person's decision, and it is not made on their behalf.
+///
+/// Markers are matched with whitespace removed from both sides, as the
+/// post-mortems are: the question is prose that wraps at the pane width.
+class AgentFirstRunPromptRules {
+  const AgentFirstRunPromptRules({
+    this.markers = const [],
+    this.scanLines = 40,
+  });
+
+  /// Any one of them on screen is the question. Each is the agent's own words,
+  /// read off a captured screen.
+  final List<GridMatcher> markers;
+
+  /// How many rows up from the bottom to read: the whole modal, which is taller
+  /// than a footer.
+  final int scanLines;
+
+  bool get isEmpty => markers.isEmpty;
+
+  /// Whether [tailLines] show the question. False for an agent that declares
+  /// no marker: an undeclared prompt is one nobody has seen, not a guess.
+  bool matchedBy(List<String> tailLines) {
+    if (markers.isEmpty || tailLines.isEmpty) return false;
+    final lines = tailLines.length > scanLines
+        ? tailLines.sublist(tailLines.length - scanLines)
+        : tailLines;
+    final screen = _squeezed(lines.join(' '));
+    for (final marker in markers) {
+      if (screen.contains(_squeezed(marker.contains))) return true;
+    }
+    return false;
+  }
+}
+
 /// One flag value an installed CLI refused, and what it offered instead.
 ///
 /// Read off the agent's own refusal, so every field is the CLI's own word for

@@ -100,6 +100,7 @@ class AgentLaunchSpec {
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
     this.missingConversation = const AgentMissingConversationRules(),
+    this.firstRunPrompt = const AgentFirstRunPromptRules(),
     this.rejectedValue = const AgentRejectedValueRules.none(),
     this.fork = const AgentForkSupport.unsupported(),
     this.mcp = const AgentMcpSupport.unsupported(),
@@ -179,6 +180,12 @@ class AgentLaunchSpec {
   /// record of. Empty for an agent whose answer we have never seen, which
   /// resolves to "no explanation" rather than a guessed one.
   final AgentMissingConversationRules missingConversation;
+
+  /// What this agent draws when it will not start in a directory until a
+  /// person answers a first-run question about it (directory trust). Empty
+  /// for an agent whose question nobody has captured: an unattended launch of
+  /// it then waits for its run ceiling rather than being told why.
+  final AgentFirstRunPromptRules firstRunPrompt;
 
   /// What this agent prints when it is handed a flag value the **installed**
   /// build does not have — the one post-mortem whose cause is a claim of ours

@@ -13,7 +13,9 @@ class PtySpawnRequest {
     this.rows = 24,
   });
 
-  /// argv[0] is the executable; it is resolved on PATH by the launcher.
+  /// argv[0] is the executable: a path, or a bare name the launcher finds on
+  /// the child's `PATH` (`resolveExecutable` on POSIX; `CreateProcess`
+  /// searches on Windows).
   final List<String> argv;
   final String? workingDirectory;
 

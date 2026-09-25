@@ -29,8 +29,10 @@ extension SessionResumeGuards on SessionLauncher {
     return instance?.liveness.value == PaneLiveness.restored ? paneId : null;
   }
 
-  /// The session we are already running conversation [externalSessionId] in.
-  /// **Every** row with that id: `external_session_id` has no `UNIQUE` index.
+  /// The session we are already running conversation [externalSessionId] in:
+  /// in a pane of ours, or at this machine's host with no pane ([show] opens
+  /// either). **Every** row with that id: `external_session_id` has no
+  /// `UNIQUE` index.
   Session? runningSessionWithExternalId(String? externalSessionId) {
     if (externalSessionId == null || externalSessionId.isEmpty) return null;
     for (final candidate
@@ -38,6 +40,7 @@ extension SessionResumeGuards on SessionLauncher {
             .read(sessionDaoProvider)
             .getAllByExternalSessionId(externalSessionId)) {
       if (livePaneFor(candidate.id) != null) return candidate;
+      if (heldByHostOnly(candidate.id)) return candidate;
     }
     return null;
   }
@@ -98,6 +101,7 @@ extension SessionResumeGuards on SessionLauncher {
   /// are needed: a native Codex row often carries no CLI id at all.
   bool hostedLive({String? sessionId, String? externalSessionId}) =>
       livePaneFor(sessionId) != null ||
+      heldByHostOnly(sessionId) ||
       runningSessionWithExternalId(externalSessionId) != null;
 
   /// Throws the plain-words refusal for a handoff the agent forbids. Shared, so
@@ -118,7 +122,7 @@ extension SessionResumeGuards on SessionLauncher {
     if (action != ResumeAction.blocked) return;
     final running =
         runningSessionWithExternalId(externalSessionId) ??
-        (livePaneFor(sessionId) == null
+        (livePaneFor(sessionId) == null && !heldByHostOnly(sessionId)
             ? null
             : _ref.read(sessionDaoProvider).getById(sessionId!));
     throw SessionAlreadyRunning(
@@ -204,8 +208,12 @@ extension SessionResumeGuards on SessionLauncher {
         pointedElsewhere: true,
       );
     }
-    dao.updateStatus(minted.id, SessionStatus.failed);
-    _publish(SessionChange.statusChanged(minted.id));
+    // Not for a row the host knows: a conversation not written *yet* — its
+    // agent still at a first-run question, say — is no failed session.
+    if (_mayRecordLaunchFailure(minted)) {
+      dao.updateStatus(minted.id, SessionStatus.failed);
+      _publish(SessionChange.statusChanged(minted.id));
+    }
     throw SessionConversationMissing(
       agentName: agentDisplayName(request.installation.agentId),
       conversationId: externalId,

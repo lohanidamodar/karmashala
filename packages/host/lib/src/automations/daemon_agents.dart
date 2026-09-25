@@ -72,6 +72,25 @@ class DaemonAgents {
   /// one Karmashala reads, else the terminal.
   SessionView defaultView(String agentId) => defaultViewFor(adapterOf(agentId));
 
+  /// Why [agentId], shown [screen] (its rows as text, oldest first), is not
+  /// going to get on with the work until a person answers it — its first-run
+  /// question about [directory] — or null when the screen shows no such
+  /// question, or the agent declares none. Read, never answered.
+  String? firstRunPromptOn(
+    String agentId,
+    List<String> screen, {
+    required String directory,
+  }) {
+    final descriptor = descriptorOf(agentId);
+    if (descriptor == null) return null;
+    if (!descriptor.launch.firstRunPrompt.matchedBy(screen)) return null;
+    final name = descriptor.displayName;
+    return '$name is asking whether to trust $directory, and nobody is there '
+        'to answer. Open the session once and answer it, then the automation '
+        'can run unattended. Karmashala does not trust a folder on your '
+        'behalf; $name was left at that question.';
+  }
+
   /// Names a launched agent must not inherit from this process: a parent
   /// agent session's markers, which would make it believe it is nested.
   Set<String> withheldEnvironment(

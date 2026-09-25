@@ -40,6 +40,7 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
 import 'decision_recorder.dart';
+import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'handoff_packet_files.dart';
 import 'session_launch_exceptions.dart';
 import 'session_mcp_arguments.dart';
@@ -68,6 +69,7 @@ part 'session_launcher_resume_guards.dart';
 part 'session_launcher_policy.dart';
 part 'session_launcher_surfaces.dart';
 part 'session_launcher_input.dart';
+part 'session_launcher_hosted.dart';
 
 /// What a launch produced.
 class SessionLaunchResult {
@@ -97,6 +99,10 @@ class SessionLauncher {
   SessionLauncher(this._ref);
 
   final Ref _ref;
+
+  /// Sessions this launcher asked the host to end, not yet reported ended by
+  /// its feed: nothing attaches to one of them in the meantime.
+  final Set<String> _endingOnHost = {};
 
   /// The single default-installation resolution. Four variants of this existed,
   /// and only some of them consulted the user's configured default at all.

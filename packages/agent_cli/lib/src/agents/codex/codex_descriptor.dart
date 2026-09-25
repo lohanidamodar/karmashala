@@ -242,6 +242,14 @@ const codexDescriptor = AgentDescriptor(
     resumeConflict: AgentResumeConflictRules(
       markers: [GridMatcher('already has an active writer')],
     ),
+    // The directory-trust question Codex 0.146.0 would not start without,
+    // captured in `test/features/agents/fixtures/codex-approval-prompt.raw`:
+    // "Do you trust the contents of this directory? … › 1. Yes, continue
+    // 2. No, quit · Press enter to continue". `Press enter to continue` alone
+    // is not it — the update offer shares that footer.
+    firstRunPrompt: AgentFirstRunPromptRules(
+      markers: [GridMatcher('Do you trust the contents of this directory')],
+    ),
     // **The safety net for the axes above being wrong about this binary.**
     // Mode support is a property of the *installation*, and the two Codex
     // builds on this machine disagree: 0.145.0 offers `untrusted`, 0.151.0 does

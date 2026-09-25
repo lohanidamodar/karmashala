@@ -270,6 +270,24 @@ const claudeCodeDescriptor = AgentDescriptor(
     missingConversation: AgentMissingConversationRules(
       markers: [GridMatcher('No conversation found with session ID')],
     ),
+    // The folder-trust question a first launch in a directory stops at,
+    // captured whole in `test/features/agents/fixtures/
+    // claude-code-trust-prompt.raw` and seen again live on 2026-09-25 when an
+    // automation's Claude sat at it for minutes in a fresh checkout:
+    //
+    //   Quick safety check: Is this a project you created or one you trust?
+    //   ❯ 1. No, exit
+    //     2. Yes, I trust this folder
+    //   Enter to confirm · Esc to cancel
+    //
+    // Either line is the question; `Enter to confirm` alone is not, since the
+    // tool-permission modal shares it.
+    firstRunPrompt: AgentFirstRunPromptRules(
+      markers: [
+        GridMatcher('Is this a project you created or one you trust'),
+        GridMatcher('Yes, I trust this folder'),
+      ],
+    ),
     // `--fork-session` is a *modifier on a resume*, not a mode of its own, so
     // the arguments are `--resume <id> --fork-session`. The forked process
     // loads the original's history and writes its own session id from the first

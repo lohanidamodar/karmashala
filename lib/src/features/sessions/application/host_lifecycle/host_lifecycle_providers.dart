@@ -127,6 +127,17 @@ final sessionRunningOnHostProvider = Provider<bool Function(String)>(
           false,
 );
 
+/// Ends the session this machine's host runs for a row, when no pane of ours
+/// holds it; null where local panes are not host-backed or no host may be
+/// reached. The host records the ending; nothing here writes the row.
+final hostedSessionEnderProvider =
+    Provider<Future<void> Function(String sessionId)?>((ref) {
+      if (!ref.watch(hostBackedLocalPanesProvider)) return null;
+      final access = ref.watch(localHostSessionAccessProvider);
+      if (access == null) return null;
+      return (sessionId) => access.endSession(hostSessionIdOf(sessionId));
+    });
+
 bool _isLocalHostPane(Ref ref, String paneId) {
   if (!ref.exists(terminalSessionsControllerProvider)) return false;
   final instance = ref

@@ -430,26 +430,26 @@ class SessionControlTools {
     return <String, Object?>{'sessionId': sessionId, 'title': trimmed};
   }
 
-  /// Ends the agent process behind a session; the row and its transcript survive.
-  /// No live pane is reported as already stopped, never as a silent success.
-  Object? _end(String sessionId) {
+  /// Ends the agent process behind a session — its live pane, or the session
+  /// host's session when no pane shows it; the row and its transcript survive.
+  /// Nothing running is reported as already stopped, never as a silent success.
+  Future<Object?> _end(String sessionId) async {
     final session = _session(sessionId);
-    final paneId = _container
+    final ended = await _container
         .read(sessionLauncherProvider)
-        .livePaneFor(sessionId);
-    if (paneId == null) {
+        .endRunning(sessionId);
+    if (ended == null) {
       throw StateError(
-        'That session has no live pane; nothing is running to end.',
+        'Nothing is running that session: no pane shows it and the session '
+        'host is not running it, so there is nothing to end.',
       );
     }
-    _container
-        .read(terminalSessionsControllerProvider.notifier)
-        .endSession(paneId);
     return <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
       'ended': true,
-      'paneId': paneId,
+      'paneId': ?ended.paneId,
+      if (ended.atHost) 'endedAt': 'the session host (no pane showed it)',
     };
   }
 }

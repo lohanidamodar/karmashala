@@ -982,7 +982,7 @@ void main() {
     test('a session with nothing running is not reported as ended', () async {
       final result = await callTool('session_end', {'sessionId': 's1'});
       expect(result.isError, isTrue);
-      expect(result.text, contains('no live pane'));
+      expect(result.text, contains('nothing to end'));
     });
   });
 

@@ -38,6 +38,49 @@ Map<String, String> childEnvironment(
   caseInsensitive: false,
 );
 
+/// [program] as `execvp` would run it: a name with a `/` as given, a bare
+/// name found on the `PATH` of [environment] — the child's, not the host's.
+/// Throws [PtyException] naming what was searched when nothing there is an
+/// executable file, rather than leaving the child to fail as exit 127.
+///
+/// Every hosted launch comes through here: a pane's program (the app sends an
+/// absolute path), an automation's agent (its installation's absolute path)
+/// and a project check, whose command is whatever the project wrote — `test`,
+/// `flutter`, `npm`.
+String resolveExecutable(
+  String program,
+  Map<String, String> environment, {
+  bool Function(String path)? isExecutable,
+}) {
+  if (program.isEmpty) {
+    throw const PtyException('nothing to run: the command is empty');
+  }
+  if (program.contains('/')) return program;
+  final executable = isExecutable ?? _isExecutableFile;
+  final path = environment['PATH'] ?? '';
+  for (final directory in path.split(':')) {
+    // An empty entry is the working directory, as execvp reads it; a relative
+    // one would depend on it too, and neither is a place to look for a tool.
+    if (directory.isEmpty || !directory.startsWith('/')) continue;
+    final candidate = directory.endsWith('/')
+        ? '$directory$program'
+        : '$directory/$program';
+    if (executable(candidate)) return candidate;
+  }
+  throw PtyException(
+    path.isEmpty
+        ? '"$program" was not found: the session has no PATH to search'
+        : '"$program" was not found on PATH ($path)',
+  );
+}
+
+bool _isExecutableFile(String path) {
+  final stat = FileStat.statSync(path);
+  // Any execute bit: whether it is ours is the kernel's question, and the
+  // spawn that follows answers it with a real errno.
+  return stat.type == FileSystemEntityType.file && stat.mode & 0x49 != 0;
+}
+
 /// A pty pair from `openpty`, a child from `posix_spawn`, never `forkpty`: its
 /// child returns into Dart after a fork in a multithreaded VM, where a malloc
 /// lock held by another thread hangs it forever, intermittently.
@@ -149,10 +192,17 @@ class PosixPtyLauncher implements PtyLauncher {
         _check(addChdir(actions, cString(arena, cwd)), 'addchdir($cwd)');
       }
 
+      final environment = childEnvironment(
+        request.environment,
+        removed: request.removedEnvironment,
+      );
       final shim = _shim;
       final command = [
         if (shim != null) ...[shim, 'pty-exec', '--'],
-        ...request.argv,
+        // Found here, on the child's own PATH: neither `posix_spawn` nor the
+        // shim's `execv` searches, so a bare `test` ran as nothing, exit 127.
+        resolveExecutable(request.argv.first, environment),
+        ...request.argv.skip(1),
       ];
       final argv = arena<Pointer<Uint8>>(command.length + 1);
       for (var i = 0; i < command.length; i++) {
@@ -160,10 +210,7 @@ class PosixPtyLauncher implements PtyLauncher {
       }
       argv[command.length] = nullptr;
 
-      final entries = childEnvironment(
-        request.environment,
-        removed: request.removedEnvironment,
-      ).entries.toList();
+      final entries = environment.entries.toList();
       final envp = arena<Pointer<Uint8>>(entries.length + 1);
       for (var i = 0; i < entries.length; i++) {
         envp[i] = cString(arena, '${entries[i].key}=${entries[i].value}');

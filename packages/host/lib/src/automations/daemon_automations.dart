@@ -6,6 +6,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/check_runner.dart';
 import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/runner.dart';
+import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_core/util.dart';
@@ -25,6 +26,7 @@ import 'daemon_base_checkpoint.dart';
 import 'daemon_checkout_facts.dart';
 import 'daemon_resume_firing.dart';
 import 'daemon_run_checks.dart';
+import 'first_run_prompt_watch.dart';
 import 'hosted_agent_launcher.dart';
 import 'hosted_check_runner.dart';
 import 'session_mcp_access.dart';
@@ -46,6 +48,8 @@ class DaemonAutomations implements AutomationHandler {
     bool? windows,
     RunBaseCheckpoint? checkpoints,
     Map<String, String>? hostEnvironment,
+    Duration firstRunPromptInterval = const Duration(seconds: 2),
+    Duration firstRunPromptWithin = const Duration(minutes: 3),
     void Function(String message)? log,
   }) : _db = database,
        _announce = announce,
@@ -106,6 +110,11 @@ class DaemonAutomations implements AutomationHandler {
         now: now,
         newId: ids,
         hostEnvironment: hostEnvironment,
+        onLaunched: (sessionId, agentId, directory) => firstRunPrompts.follow(
+          sessionId: sessionId,
+          agentId: agentId,
+          directory: directory,
+        ),
       ),
       now: now,
       newId: ids,
@@ -152,6 +161,20 @@ class DaemonAutomations implements AutomationHandler {
       onChanged: _changed,
       log: _log,
     );
+    firstRunPrompts = FirstRunPromptWatch(
+      registry: registry,
+      interval: firstRunPromptInterval,
+      within: firstRunPromptWithin,
+      onBlocked: (sessionId, reason) {
+        final run = automations.runForSession(sessionId);
+        if (run == null) return false;
+        if (run.state == AutomationRunState.running) {
+          _log('automations: run ${run.id} is blocked: $reason');
+          settler.finish(run, AutomationRunState.failed, reason);
+        }
+        return true;
+      },
+    );
     relay.onConnected = () => unawaited(_reconcile());
   }
 
@@ -165,6 +188,10 @@ class DaemonAutomations implements AutomationHandler {
   late final AutomationScheduler scheduler;
   late final AutomationRunSettler settler;
   late final ProjectCheckRunner checks;
+
+  /// Each agent this host starts is watched, briefly, for a first-run
+  /// question nobody is there to answer; its run then fails with the reason.
+  late final FirstRunPromptWatch firstRunPrompts;
 
   StreamSubscription<SessionLifecycleChange>? _statusChanges;
   var _stopped = false;
@@ -184,6 +211,7 @@ class DaemonAutomations implements AutomationHandler {
 
   Future<void> close() async {
     _stopped = true;
+    firstRunPrompts.close();
     scheduler.stop();
     relay.close();
     await _statusChanges?.cancel();

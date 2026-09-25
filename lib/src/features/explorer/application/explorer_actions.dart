@@ -82,14 +82,15 @@ class ExplorerActions {
     selectNative(session);
 
     final launcher = _ref.read(sessionLauncherProvider);
-    if (launcher.reveal(sessionId)) {
+    // Its pane, or a pane attached to the host's session when none shows it.
+    if (await launcher.show(sessionId)) {
       return const ExplorerResult(ExplorerOutcome.reattached);
     }
 
     // A previous resume of this conversation left a second row behind and its
     // pane may be the live one; revealing it beats a third process.
     final twin = _liveTwinOf(session);
-    if (twin != null && launcher.reveal(twin.id)) {
+    if (twin != null && await launcher.show(twin.id)) {
       return ExplorerResult(
         ExplorerOutcome.reattached,
         message: '"${twin.title}" is already running this conversation.',

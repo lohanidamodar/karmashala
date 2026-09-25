@@ -321,7 +321,7 @@ class SessionActions {
     );
     final running = launcher.runningSessionWithExternalId(session.externalId);
     if (action == ResumeAction.reattach && running != null) {
-      launcher.reveal(running.id);
+      await launcher.show(running.id);
       // The imported row was only ever a second record of a session we own.
       _dropImported(session);
       _log.info(

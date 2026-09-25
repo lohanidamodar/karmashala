@@ -194,22 +194,23 @@ class TypedCommandRunner {
     }
   }
 
-  /// `session_end`'s path: the live pane, ended by the terminal controller.
-  void _end(EndCommand command) {
-    final paneId = _container
-        .read(sessionLauncherProvider)
-        .livePaneFor(command.sessionId);
-    if (paneId == null) {
-      say('That session has no live pane; nothing is running to end.');
-      return;
-    }
+  /// `session_end`'s path: the live pane, or the session host's session when
+  /// no pane shows it, ended through the launcher.
+  Future<void> _end(EndCommand command) async {
     if (_container.read(sessionDaoProvider).getById(command.sessionId) ==
         null) {
       say('That session no longer exists.');
       return;
     }
-    _container
-        .read(terminalSessionsControllerProvider.notifier)
-        .endSession(paneId);
+    try {
+      final ended = await _container
+          .read(sessionLauncherProvider)
+          .endRunning(command.sessionId);
+      if (ended == null) {
+        say('Nothing is running that session, so there is nothing to end.');
+      }
+    } on Object catch (error) {
+      say('Could not end that session: $error');
+    }
   }
 }

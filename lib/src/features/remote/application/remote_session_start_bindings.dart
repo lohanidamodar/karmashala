@@ -153,7 +153,7 @@ Future<RemoteSessionStarted> resumeRemoteSession(
   final native = ref.read(sessionDaoProvider).getById(sessionId);
   if (native != null) {
     final launcher = ref.read(sessionLauncherProvider);
-    if (launcher.reveal(native.id)) {
+    if (await launcher.show(native.id)) {
       return RemoteSessionStarted(
         sessionId: native.id,
         title: native.title,

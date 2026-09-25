@@ -27,6 +27,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required this.now,
     required this.newId,
     this.agents = const DaemonAgents(),
+    this.onLaunched,
     Map<String, String>? hostEnvironment,
   }) : _hostEnvironment = hostEnvironment ?? Platform.environment;
 
@@ -36,6 +37,12 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   final DateTime Function() now;
   final String Function() newId;
   final DaemonAgents agents;
+
+  /// Told of each agent started, with where: the daemon watches an unattended
+  /// start for a question nobody is there to answer.
+  final void Function(String sessionId, String agentId, String directory)?
+  onLaunched;
+
   final Map<String, String> _hostEnvironment;
 
   @override
@@ -97,6 +104,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       sessions.updateStatus(id, SessionStatus.failed);
       rethrow;
     }
+    onLaunched?.call(id, agentId, repository.path.path);
     return id;
   }
 }

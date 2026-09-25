@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -126,6 +127,7 @@ void main() {
       windows: false,
       checkpoints: checkpoints,
       hostEnvironment: const {'CLAUDECODE': '1', 'PATH': '/usr/bin'},
+      firstRunPromptInterval: const Duration(milliseconds: 5),
     );
     await automations.start(recording.changes);
     await pump();
@@ -289,6 +291,70 @@ void main() {
     });
   });
 
+  group('an agent stopped at its first-run question', () {
+    /// Claude Code's folder-trust question as it draws it — the wording of
+    /// `claude-code-trust-prompt.raw`, seen live under an unwatched run.
+    const trustQuestion =
+        ' Accessing workspace:\r\n\r\n /src/r1\r\n\r\n'
+        ' Quick safety check: Is this a project you created or one you trust?'
+        ' (Like your\r\n own code, a well-known open source project, or work '
+        'from your team).\r\n\r\n'
+        ' \u276f 1. No, exit\r\n   2. Yes, I trust this folder\r\n\r\n'
+        ' Enter to confirm \u00b7 Esc to cancel\r\n';
+
+    Future<void> waitFor(bool Function() done) async {
+      for (var i = 0; i < 200 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    }
+
+    test('fails the run with the reason, and leaves the agent at the '
+        'question', () async {
+      nightly();
+      await startDaemon();
+      final agent = launcher.handles.single;
+      agent.emit(_utf8(trustQuestion));
+
+      await waitFor(() => runs().single.state != AutomationRunState.running);
+
+      final run = runs().single;
+      expect(run.state, AutomationRunState.failed);
+      expect(
+        run.reason,
+        startsWith(
+          'Claude Code is asking whether to trust /src/r1, and nobody is '
+          'there to answer. Open the session once and answer it, then the '
+          'automation can run unattended.',
+        ),
+      );
+      // Never answered on the person's behalf, and never killed.
+      expect(agent.writes, isEmpty);
+      expect(agent.signals, isEmpty);
+      final row = db.query('SELECT status FROM sessions WHERE id = ?;', [
+        run.sessionId,
+      ]).single;
+      expect(row['status'], 'running');
+      expect(automations.firstRunPrompts.watching, isEmpty);
+      expect(automationDao().getById('auto-r1')!.consecutiveFailures, 1);
+    });
+
+    test('an agent getting on with it is left running', () async {
+      nightly();
+      await startDaemon();
+      launcher.handles.single.emit(
+        _utf8('\u23fa Reading the failing tests\r\n esc to interrupt\r\n'),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(runs().single.state, AutomationRunState.running);
+      expect(automations.firstRunPrompts.watching, hasLength(1));
+      // Its session ending stops the watch.
+      launcher.handles.single.finish(0);
+      await waitFor(() => automations.firstRunPrompts.watching.isEmpty);
+      expect(automations.firstRunPrompts.watching, isEmpty);
+    });
+  });
+
   group('a checkout only the app can start in', () {
     test('with no app it is missed, and says why', () async {
       nightly(repositoryId: 'r2');
@@ -407,6 +473,19 @@ void main() {
       },
     );
 
+    test('a command that cannot be found is said so, never an exit '
+        'nobody saw', () async {
+      session('s1', 'r1');
+      await startDaemon();
+      launcher.failWith = const PtyException(
+        '"make" was not found on PATH (/usr/bin:/bin)',
+      );
+      final text =
+          await automations.localTool('checks_run', const {}, 's1')! as String;
+      expect(text, contains('"make" was not found on PATH (/usr/bin:/bin)'));
+      expect(text, isNot(contains('exit 127')));
+    });
+
     test('checks_run for a checkout elsewhere is handed to the app', () async {
       session('s2', 'r2');
       await startDaemon();
@@ -437,3 +516,5 @@ void main() {
     });
   });
 }
+
+List<int> _utf8(String text) => utf8.encode(text);

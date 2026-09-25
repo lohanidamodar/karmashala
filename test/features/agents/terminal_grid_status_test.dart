@@ -30,7 +30,39 @@ AgentStatusReport? classify(String fixture, double fraction) {
   );
 }
 
+/// Whether [fraction] of a captured stream leaves the agent at its first-run
+/// question, as the daemon reads it: the declared markers over the screen.
+bool atFirstRunPrompt(String fixture, double fraction) {
+  final bytes = File(
+    'test/features/agents/fixtures/$fixture.raw',
+  ).readAsStringSync();
+  final terminal = Terminal(maxLines: 10000)..resize(120, 40);
+  terminal.write(bytes.substring(0, (bytes.length * fraction).round()));
+  final rules = AgentRegistry.builtIn
+      .byId(fixture.startsWith('codex') ? AgentIds.codex : AgentIds.claudeCode)!
+      .launch
+      .firstRunPrompt;
+  return rules.matchedBy(terminalTailLines(terminal, lines: rules.scanLines));
+}
+
 void main() {
+  group('the first-run question, from real PTY captures', () {
+    test('Claude Code at its folder-trust question', () {
+      expect(atFirstRunPrompt('claude-code-trust-prompt', 1.0), isTrue);
+    });
+
+    test('Codex at its directory-trust question', () {
+      expect(atFirstRunPrompt('codex-approval-prompt', 0.019), isTrue);
+    });
+
+    test('a working or idle Claude Code is not at it', () {
+      for (final fraction in [0.3, 0.5, 0.85]) {
+        expect(atFirstRunPrompt('claude-code-tui', fraction), isFalse);
+      }
+      expect(atFirstRunPrompt('claude-code-permission-modal', 1.0), isFalse);
+    });
+  });
+
   group('the raw byte stream is not classifiable', () {
     test('the marker only exists once a VT parser has laid out the screen', () {
       final bytes = File(

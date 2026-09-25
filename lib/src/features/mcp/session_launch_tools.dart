@@ -666,7 +666,7 @@ class SessionLaunchTools {
     // running: open that, rather than putting a second agent on it.
     final launcher = _container.read(sessionLauncherProvider);
     final running = launcher.runningSessionWithExternalId(session.externalId);
-    if (running != null && launcher.reveal(running.id)) {
+    if (running != null && await launcher.show(running.id)) {
       return {
         'opened': running.title,
         'sessionId': running.id,
@@ -726,7 +726,8 @@ class SessionLaunchTools {
   Future<Object?> _openNativeSession(Session session) async {
     // The launcher owns "is it already running, and where" for every surface —
     // every other resume path used to relaunch a session that never stopped.
-    if (_container.read(sessionLauncherProvider).reveal(session.id)) {
+    // Its pane, or a pane attached to the host's session when none shows it.
+    if (await _container.read(sessionLauncherProvider).show(session.id)) {
       return {
         'opened': session.title,
         'sessionId': session.id,
