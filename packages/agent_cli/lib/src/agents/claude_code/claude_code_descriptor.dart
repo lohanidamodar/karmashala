@@ -775,7 +775,28 @@ const claudeCodeDescriptor = AgentDescriptor(
   ),
   // Measured on 2.1.274 (folder trust, permission, MCP server): `❯ ` marks the
   // highlighted row, ↓/↑ move it, Enter confirms it.
-  menus: AgentMenuSupport(markers: ['❯']),
+  //
+  // Approve and deny on a menu pick an option by its words, because Enter
+  // alone confirms the highlight and folder trust highlights `No, exit`. The
+  // words, as drawn (packages/agent_cli/test/agents/screen_menu_test.dart and
+  // the captured fixtures): folder trust `No, exit` / `Yes, I trust this
+  // folder`; a tool permission `1. Yes` / `2. Yes, and …` / `3. No` (the plain
+  // `Yes` is first, so it is the one approve picks); a project MCP server
+  // `Use this MCP server` / `Use this and all future …` / `Continue without
+  // using this MCP server`. `^Continue` is deliberately NOT affirmative here:
+  // on that last menu it is the refusal.
+  //
+  // Esc on a tool permission (`Do you want to proceed?`, `Do you want to
+  // create note.txt?` — footer `Esc to cancel`) declines the tool call and
+  // leaves Claude running, so deny keeps pressing it there. On folder trust
+  // Esc exits Claude Code exactly as `No, exit` does, so deny picks the row
+  // and says so.
+  menus: AgentMenuSupport(
+    markers: ['❯'],
+    affirmative: [r'^Yes\b', r'^Use this MCP server$'],
+    negative: [r'^No\b', r'^Continue without using this MCP server\b'],
+    cancelDeclines: ['Do you want to'],
+  ),
   // Claude Code reads a picture off a path a prompt names — measured in this
   // repo rather than read off `--help`: `SessionMediaOrigin.read` exists
   // because real transcripts here carry `Read` tool calls whose input is an

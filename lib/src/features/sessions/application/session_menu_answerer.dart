@@ -11,9 +11,13 @@ import 'session_status_providers.dart';
 /// Why a menu or a question was not answered. Nothing was chosen when this is
 /// thrown — at worst the highlight was moved and left there.
 class SessionPromptRefusal implements Exception {
-  const SessionPromptRefusal(this.message);
+  const SessionPromptRefusal(this.message, {this.noTerminal = false});
 
   final String message;
+
+  /// The session has no live pane to press into — a refusal of where the
+  /// answer would go, not of the answer.
+  final bool noTerminal;
 
   @override
   String toString() => message;
@@ -58,6 +62,14 @@ class SessionMenuAnswerer {
   /// The menu open in [sessionId] now, or null.
   AgentScreenMenu? read(String sessionId) {
     if (!isAsking(sessionId)) return null;
+    return onScreen(sessionId);
+  }
+
+  /// The menu drawn on [sessionId]'s screen now, whatever its status says, or
+  /// null. For a caller that has already decided a prompt is being answered
+  /// and must not press Enter blind on a menu the status has not caught up
+  /// with; a surface offering a menu reads [read].
+  AgentScreenMenu? onScreen(String sessionId) {
     final support = supportFor(sessionId);
     final rows = readScreen(sessionId);
     if (support == null || rows == null) return null;
@@ -76,7 +88,9 @@ class SessionMenuAnswerer {
         "this agent's menus can only be answered in its terminal",
       );
     }
-    final menu = read(sessionId);
+    // The screen itself, not the status: [menuId] already names the menu the
+    // caller saw, and a status lagging the screen must not strand the answer.
+    final menu = onScreen(sessionId);
     if (menu == null) {
       throw const SessionPromptRefusal('no menu is open in this session now');
     }
@@ -95,13 +109,16 @@ class SessionMenuAnswerer {
     var at = menu.highlighted;
     while (at != option) {
       if (!press(sessionId, support.move(at, at < option ? at + 1 : at - 1))) {
-        throw const SessionPromptRefusal('this session has no live terminal');
+        throw const SessionPromptRefusal(
+          'this session has no live terminal',
+          noTerminal: true,
+        );
       }
       final before = at;
       final stepDeadline = DateTime.now().add(_step);
       while (at == before) {
         await Future<void>.delayed(poll);
-        final now = read(sessionId);
+        final now = onScreen(sessionId);
         if (now == null || now.id != menuId) {
           throw const SessionPromptRefusal(
             'the prompt changed while moving to that option, so nothing was '

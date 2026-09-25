@@ -35,6 +35,7 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../sessions/fixture_menu_screen.dart';
 import '../terminal/fake_instance.dart';
 
 /// The session-operating tools, called the way an agent calls them: over the
@@ -830,6 +831,66 @@ void main() {
       // Claude Code's own approve key, and nothing appended to it.
       expect(written, ['\r']);
       expect((result.structured! as Map)['answered'], 'Approve');
+    });
+
+    // Found live: approve on Claude Code's folder trust pressed a bare Enter,
+    // which confirmed the highlighted "No, exit", and Claude Code quit. The
+    // captured screen, in the pane's own grid, answered through the tool.
+    FixtureMenuScreen folderTrustIn(String sessionId) {
+      attachPane(sessionId);
+      final paneId = SessionDao(db).getById(sessionId)!.paneId!;
+      final terminal = container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId)!
+          .terminal;
+      final screen = FixtureMenuScreen.fixture(
+        'claude-code-trust-prompt',
+        marker: '❯',
+        into: terminal,
+      );
+      terminal.onOutput = screen.press;
+      statusLookup = (id) => report(
+        id,
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+      );
+      return screen;
+    }
+
+    test(
+      'on folder trust, approve chooses "Yes, I trust this folder"',
+      () async {
+        final screen = folderTrustIn('s1');
+
+        final result = await callTool('session_answer', {
+          'sessionId': 's1',
+          'decision': 'approve',
+        });
+
+        expect(result.isError, isFalse, reason: result.text);
+        expect(screen.sent, ['\x1b[B', '\r']);
+        expect(screen.confirmed, 'Yes, I trust this folder');
+        expect(
+          (result.structured! as Map)['answered'],
+          'Yes, I trust this folder',
+        );
+      },
+    );
+
+    test('on folder trust, deny names "No, exit" as what it chose', () async {
+      final screen = folderTrustIn('s1');
+
+      final result = await callTool('session_answer', {
+        'sessionId': 's1',
+        'decision': 'deny',
+      });
+
+      expect(result.isError, isFalse, reason: result.text);
+      expect(screen.sent, ['\r']);
+      expect(screen.confirmed, 'No, exit');
+      final structured = result.structured! as Map;
+      expect(structured['answered'], 'No, exit');
+      expect(structured['effect'], contains('"No, exit"'));
     });
 
     test('presses the deny key, which is a different key', () async {

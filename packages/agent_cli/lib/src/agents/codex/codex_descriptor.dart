@@ -639,7 +639,17 @@ const codexDescriptor = AgentDescriptor(
   ),
   // Measured on 0.153.4/0.154.0 (directory trust, update offer): `› ` marks the
   // highlighted row, ↓/↑ move it, Enter confirms it.
-  menus: AgentMenuSupport(markers: ['›']),
+  //
+  // Approve and deny on a menu pick an option by its words: directory trust
+  // is `› 1. Yes, continue` / `2. No, quit`. The update offer (`Update now` /
+  // `Skip` / `Skip until next version`) matches neither on purpose, so approve
+  // refuses rather than running an updater. No cancel is declared safe:
+  // Codex's prompts name no way to decline but their `No` row.
+  menus: AgentMenuSupport(
+    markers: ['›'],
+    affirmative: [r'^Yes\b'],
+    negative: [r'^No\b'],
+  ),
   // **Codex has images, and not through this door.** `codex --help` and
   // `codex exec --help` (codex-cli 0.153.4) both carry `-i, --image <FILE>...
   // Optional image(s) to attach to the initial prompt` — so pictures are

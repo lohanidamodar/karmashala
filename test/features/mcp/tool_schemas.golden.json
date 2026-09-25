@@ -885,7 +885,7 @@
     },
     {
       "name": "session_answer",
-      "description": "Answer a session's on-screen approval prompt by pressing the key that agent itself names for approve or deny. Fails, rather than guessing, when the agent names no key for the decision you asked for — many agents say how to approve and never say how to decline. Use session_transcript first to see what is being asked.",
+      "description": "Answer a session's on-screen approval prompt. When the prompt is a menu (folder trust, a tool permission), this chooses the option that agent is known to mean yes or no by — never whatever happens to be highlighted — and `answered` names it; otherwise it presses the key the agent itself names for approve or deny. Fails, rather than guessing, when no option or key for the decision you asked for can be named. Use session_transcript first to see what is being asked.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -914,7 +914,7 @@
           },
           "answered": {
             "type": "string",
-            "description": "The agent's own label for the key that was pressed."
+            "description": "The menu option chosen, in the agent's own words — or, for a prompt that is not a menu, the label of the key pressed."
           },
           "effect": {
             "type": "string"
@@ -4554,7 +4554,7 @@
     },
     "session_answer": {
       "category": "sessions",
-      "summary": "Press a session's own approve or deny key on its on-screen prompt."
+      "summary": "Approve or deny a session's on-screen prompt — a menu by its yes/no option."
     },
     "session_wait": {
       "category": "sessions",

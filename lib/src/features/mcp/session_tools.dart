@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'package:riverpod/riverpod.dart';
 
 import '../../core/util/clock_provider.dart';
-import '../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../sessions/application/session_actions.dart';
+import '../sessions/application/session_approval_answerer.dart';
+import '../sessions/application/session_menu_answerer.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_status_providers.dart';
@@ -286,46 +287,40 @@ class SessionControlTools {
           'to go on waiting.',
   };
 
-  /// Answers an approval prompt with the key the *agent* names for it. Nothing
-  /// invents a binding; an agent that names none is reported as such.
+  /// Answers an approval prompt: a menu by the option the *agent's* adapter
+  /// declares affirmative or negative, anything else with the key the agent
+  /// names for it. Nothing invents a binding; an agent that names none is
+  /// reported as such — see [SessionApprovalAnswerer].
   Future<Object?> _answer(String sessionId, String decision) async {
     if (decision != 'approve' && decision != 'deny') {
       throw ArgumentError("decision must be 'approve' or 'deny'.");
     }
-    final session = _session(sessionId);
-    final agentId = _container
-        .read(agentInstallationDaoProvider)
-        .getById(session.agentInstallationId)
-        ?.agentId;
-    final rules = agentId == null
-        ? const AgentApprovalRules()
-        : _container.read(agentRegistryProvider).byId(agentId)?.approval ??
-              const AgentApprovalRules();
-    final key = decision == 'approve' ? rules.approve : rules.deny;
-    if (key == null) {
+    _session(sessionId);
+    final SessionApprovalAnswer answer;
+    try {
+      answer = await _container
+          .read(sessionApprovalAnswererProvider)
+          .answer(
+            sessionId,
+            approve: decision == 'approve',
+            // Named rather than left to default to "the user": the decision
+            // record this lands in is read by somebody who was not there.
+            decidedBy: callerSessionId == null
+                ? 'an agent through the MCP bridge'
+                : 'an agent in session $callerSessionId',
+            decidedBySessionId: callerSessionId,
+          );
+    } on SessionPromptRefusal catch (refusal) {
+      final message = refusal.message;
       throw StateError(
-        'This agent names no way to $decision from outside its terminal, so '
-        'there is no key to press. Answer it in the pane.',
+        '${message[0].toUpperCase()}${message.substring(1)}'
+        '${message.endsWith('.') ? '' : '.'} Answer it in the pane.',
       );
-    }
-    // Named rather than left to default to "the user": the decision record this
-    // write lands in is read by somebody who was not there.
-    if (!_container
-        .read(sessionLauncherProvider)
-        .answerPrompt(
-          sessionId,
-          key.keys,
-          decidedBy: callerSessionId == null
-              ? 'an agent through the MCP bridge'
-              : 'an agent in session $callerSessionId',
-          decidedBySessionId: callerSessionId,
-        )) {
-      throw StateError('This session has no live terminal to answer in.');
     }
     return <String, Object?>{
       'sessionId': sessionId,
-      'answered': key.label,
-      'effect': key.effect,
+      'answered': answer.answered,
+      'effect': answer.effect,
     };
   }
 
@@ -522,11 +517,13 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
   {
     'name': 'session_answer',
     'description':
-        'Answer a session\'s on-screen approval prompt by pressing the key '
-        'that agent itself names for approve or deny. Fails, rather than '
-        'guessing, when the agent names no key for the decision you asked for '
-        '— many agents say how to approve and never say how to decline. Use '
-        'session_transcript first to see what is being asked.',
+        'Answer a session\'s on-screen approval prompt. When the prompt is a '
+        'menu (folder trust, a tool permission), this chooses the option that '
+        'agent is known to mean yes or no by — never whatever happens to be '
+        'highlighted — and `answered` names it; otherwise it presses the key '
+        'the agent itself names for approve or deny. Fails, rather than '
+        'guessing, when no option or key for the decision you asked for can '
+        'be named. Use session_transcript first to see what is being asked.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -548,7 +545,9 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
         'sessionId': {'type': 'string'},
         'answered': {
           'type': 'string',
-          'description': "The agent's own label for the key that was pressed.",
+          'description':
+              "The menu option chosen, in the agent's own words — or, for a "
+              "prompt that is not a menu, the label of the key pressed.",
         },
         'effect': {'type': 'string'},
       },

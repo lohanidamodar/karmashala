@@ -186,6 +186,75 @@ void main() {
     });
   });
 
+  // What approve and deny mean on each menu, by the adapters' own declarations:
+  // an option by its words, never the highlight.
+  group('the options approve and deny choose', () {
+    final claudeMenus = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!.menus!;
+    final codexMenus = AgentRegistry.builtIn.byId(AgentIds.codex)!.menus!;
+
+    AgentScreenMenu menu(List<String> options, {List<String>? prompt}) =>
+        AgentScreenMenu(
+          prompt: prompt ?? const ['Do you trust this?'],
+          options: options,
+          highlighted: 0,
+        );
+
+    test('Claude Code folder trust: yes is the second row', () {
+      final trust = menu(['No, exit', 'Yes, I trust this folder']);
+      expect(claudeMenus.affirmativeIn(trust), 1);
+      expect(claudeMenus.negativeIn(trust), 0);
+      expect(claudeMenus.cancelDeclinesIn(trust), isFalse);
+    });
+
+    test('Claude Code tool permission: the plain Yes, and Esc declines', () {
+      final permission = menu(
+        [
+          'Yes',
+          'Yes, and switch to accept edits for this session (shift+tab)',
+          'No',
+        ],
+        prompt: const ['Create file', 'Do you want to create note.txt?'],
+      );
+      expect(claudeMenus.affirmativeIn(permission), 0);
+      expect(claudeMenus.negativeIn(permission), 2);
+      expect(claudeMenus.cancelDeclinesIn(permission), isTrue);
+    });
+
+    test('Claude Code MCP server: "Continue without" is the refusal', () {
+      final server = menu([
+        'Use this MCP server',
+        'Use this and all future MCP servers in this project',
+        'Continue without using this MCP server',
+      ]);
+      expect(claudeMenus.affirmativeIn(server), 0);
+      expect(claudeMenus.negativeIn(server), 2);
+    });
+
+    test('Codex directory trust and update offer', () {
+      final trust = menu(['Yes, continue', 'No, quit']);
+      expect(codexMenus.affirmativeIn(trust), 0);
+      expect(codexMenus.negativeIn(trust), 1);
+      final update = menu(['Update now', 'Skip', 'Skip until next version']);
+      expect(codexMenus.affirmativeIn(update), isNull);
+      expect(codexMenus.negativeIn(update), isNull);
+    });
+
+    test('an option both lists claim answers neither', () {
+      const support = AgentMenuSupport(
+        markers: ['❯'],
+        affirmative: [r'^Yes\b'],
+        negative: [r'\bnot\b'],
+      );
+      final muddled = menu(['Yes, but not now', 'Later']);
+      expect(support.affirmativeIn(muddled), isNull);
+      expect(support.negativeIn(muddled), isNull);
+    });
+
+    test('nothing declared, nothing chosen', () {
+      expect(claude.affirmativeIn(menu(['Yes', 'No'])), isNull);
+    });
+  });
+
   test('moving the highlight', () {
     const support = AgentMenuSupport(markers: ['❯']);
     expect(support.move(0, 2), '\x1b[B\x1b[B');

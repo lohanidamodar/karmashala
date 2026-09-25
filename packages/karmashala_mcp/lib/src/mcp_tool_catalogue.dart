@@ -518,7 +518,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'session_answer': McpToolListing(
     McpToolCategory.sessions,
-    'Press a session\'s own approve or deny key on its on-screen prompt.',
+    'Approve or deny a session\'s on-screen prompt — a menu by its yes/no option.',
   ),
   'session_rename': McpToolListing(
     McpToolCategory.sessions,

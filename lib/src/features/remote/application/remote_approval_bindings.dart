@@ -9,8 +9,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
+import '../../sessions/application/session_approval_answerer.dart';
 import '../../sessions/application/session_key_pacer.dart';
-import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_menu_answerer.dart';
 import '../../sessions/application/session_question_typist.dart';
 import '../../sessions/application/session_providers.dart';
@@ -33,8 +33,9 @@ final remoteApprovalEvidenceProvider =
       };
     });
 
-/// The answer path: the key comes from [AgentApprovalRules] and is pressed by
-/// [SessionLauncher.answerPrompt] — nothing here invents a binding.
+/// The answer path: [SessionApprovalAnswerer], which answers a menu by the
+/// option the agent's adapter declares yes or no and anything else with the
+/// key from [AgentApprovalRules] — nothing here invents a binding.
 Future<String> answerRemoteApproval(
   Ref ref,
   String sessionId,
@@ -48,12 +49,13 @@ Future<String> answerRemoteApproval(
       .read(agentInstallationDaoProvider)
       .getById(session.agentInstallationId)
       ?.agentId;
-  final rules = agentId == null
-      ? const AgentApprovalRules()
-      : ref.read(agentRegistryProvider).byId(agentId)?.approval ??
-            const AgentApprovalRules();
+  final descriptor = agentId == null
+      ? null
+      : ref.read(agentRegistryProvider).byId(agentId);
+  final rules = descriptor?.approval ?? const AgentApprovalRules();
   final key = decision == 'approve' ? rules.approve : rules.deny;
-  if (key == null) {
+  // Neither a key nor a menu reader: nothing could answer this from here.
+  if (key == null && descriptor?.menus == null) {
     throw RemoteApiRefusal(
       ErrorCode.badRequest,
       'this agent names no way to $decision from outside its terminal',
@@ -69,13 +71,17 @@ Future<String> answerRemoteApproval(
       'this session has no prompt open to answer',
     );
   }
-  if (!ref.read(sessionLauncherProvider).answerPrompt(sessionId, key.keys)) {
-    throw const RemoteApiRefusal(
-      ErrorCode.notFound,
-      'this session has no live terminal to answer in',
+  try {
+    final answer = await ref
+        .read(sessionApprovalAnswererProvider)
+        .answer(sessionId, approve: decision == 'approve');
+    return answer.answered;
+  } on SessionPromptRefusal catch (refusal) {
+    throw RemoteApiRefusal(
+      refusal.noTerminal ? ErrorCode.notFound : ErrorCode.badRequest,
+      refusal.message,
     );
   }
-  return key.label;
 }
 
 /// The question [sessionId]'s agent has open in its transcript right now, or

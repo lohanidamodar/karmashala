@@ -36,6 +36,9 @@ class AgentMenuSupport {
     this.down = '\x1b[B',
     this.up = '\x1b[A',
     this.choose = '\r',
+    this.affirmative = const [],
+    this.negative = const [],
+    this.cancelDeclines = const [],
   });
 
   /// The glyph at the start of the highlighted row (`❯`, `›`), followed by one
@@ -48,9 +51,62 @@ class AgentMenuSupport {
   /// Confirms the highlighted option.
   final String choose;
 
+  /// **Which option "approve" means**, as regular expressions over an option's
+  /// words (case-insensitive, marker and number already stripped), in order of
+  /// preference. An approval that is a menu is answered by moving to the first
+  /// option one of these matches — never by Enter on whatever is highlighted,
+  /// which on Claude Code's folder trust is "No, exit". Empty: a menu from
+  /// this agent cannot be approved from outside its terminal.
+  final List<String> affirmative;
+
+  /// Which option "deny" means, the same way.
+  final List<String> negative;
+
+  /// Prompt rows (case-insensitive substrings) on which the agent's own deny
+  /// key — its cancel — declines **safely**, so deny presses that key rather
+  /// than moving to a [negative] option. Only where it was measured: on a
+  /// folder-trust menu the same cancel quits the agent.
+  final List<String> cancelDeclines;
+
   /// The keys that move the highlight from [from] to [to].
   String move(int from, int to) =>
       to >= from ? down * (to - from) : up * (from - to);
+
+  /// The option of [menu] that approves it, or null when none can be named.
+  int? affirmativeIn(AgentScreenMenu menu) =>
+      _optionIn(menu, affirmative, negative);
+
+  /// The option of [menu] that declines it, or null when none can be named.
+  int? negativeIn(AgentScreenMenu menu) =>
+      _optionIn(menu, negative, affirmative);
+
+  /// Whether [menu]'s prompt is one where this agent's cancel is a safe "no".
+  bool cancelDeclinesIn(AgentScreenMenu menu) => menu.prompt.any(
+    (row) => cancelDeclines.any(
+      (words) => row.toLowerCase().contains(words.toLowerCase()),
+    ),
+  );
+
+  /// The first option, by pattern preference, that [wanted] matches and
+  /// [opposite] does not: an option both would claim is no answer to either.
+  static int? _optionIn(
+    AgentScreenMenu menu,
+    List<String> wanted,
+    List<String> opposite,
+  ) {
+    bool matches(String pattern, String option) =>
+        RegExp(pattern, caseSensitive: false).hasMatch(option);
+    for (final pattern in wanted) {
+      for (var i = 0; i < menu.options.length; i++) {
+        final option = menu.options[i];
+        if (matches(pattern, option) &&
+            !opposite.any((other) => matches(other, option))) {
+          return i;
+        }
+      }
+    }
+    return null;
+  }
 }
 
 /// The menu at the bottom of [rows], or null when the screen shows none this
