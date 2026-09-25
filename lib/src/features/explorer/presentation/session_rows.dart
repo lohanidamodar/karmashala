@@ -131,15 +131,18 @@ class NativeSessionRow extends ConsumerWidget {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
-    final (statusIcon, statusColor) = _status(session.status, context);
+    // What the pane shows wins over what the row recorded: a session started
+    // again in its pane after the row settled is running, and says so.
+    final status = whereabouts.hostedLive
+        ? SessionStatus.running
+        : session.status;
+    final (statusIcon, statusColor) = _status(status, context);
     final attention = ref.watch(
       sessionRowAttentionProvider.select(
         (rows) => rows[session.id] ?? SessionRowAttention.none,
       ),
     );
-    final lifecycle = session.status.labelWhen(
-      hostedLive: whereabouts.hostedLive,
-    );
+    final lifecycle = status.labelWhen(hostedLive: whereabouts.hostedLive);
     // A list the user maintains by hand — five entries, not five hundred — so
     // this costs a rebuild when they add a section and nothing otherwise.
     final hasSections = SectionMembershipDialog.hasManualSections(ref);
@@ -165,18 +168,18 @@ class NativeSessionRow extends ConsumerWidget {
             : AgentRegistry.builtIn.displayNameFor(agentId),
         // The glyph says the lifecycle; a row claiming to be live with nothing
         // of ours running it still says so in words (`SessionStatus.labelWhen`).
-        if (lifecycle != session.status.name) lifecycle,
+        if (lifecycle != status.name) lifecycle,
       ].join('  ·  '),
       // One status glyph: what the agent is doing now while the session claims
       // to be live, its recorded lifecycle once it is not.
-      badge: session.status.claimsLive
+      badge: status.claimsLive
           ? AgentStatusBadge(sessionId: session.id, size: ExplorerRow.glyphSize)
           : null,
       unread: attention == SessionRowAttention.unread,
       needsYou: attention == SessionRowAttention.needsYou,
       settled:
-          session.status.isEnded &&
-          session.status != SessionStatus.failed &&
+          status.isEnded &&
+          status != SessionStatus.failed &&
           attention == SessionRowAttention.none,
       age: compactAge(now.difference(since)),
       // The corner has room for a number, not for how much to trust it; the

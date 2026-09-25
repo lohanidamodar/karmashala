@@ -15,6 +15,7 @@ class SessionTitleSyncService {
     required this.agents,
     required this.scanStores,
     this.onRenamed,
+    this.isRunningInPane = _nowhere,
   });
 
   final SessionDao sessionDao;
@@ -22,6 +23,10 @@ class SessionTitleSyncService {
 
   /// One pass over every CLI store — the same scan adoption uses.
   final Future<List<DetectedSession>> Function() scanStores;
+
+  /// Whether a pane of ours is running session [id]'s agent right now — the
+  /// observed answer, which a row's recorded status can lag behind.
+  final bool Function(String id) isRunningInPane;
 
   /// Called with each row this renamed, so the workspace can redraw.
   final void Function(String sessionId, String title)? onRenamed;
@@ -90,7 +95,11 @@ class SessionTitleSyncService {
       if (title == descriptor.displayName) return true;
     }
     // A CLI name stays the CLI's to change, but only while the session runs: a
-    // stopped one would buy a store scan on every slot for ever.
-    return row.status == SessionStatus.running;
+    // stopped one would buy a store scan on every slot for ever. Running is
+    // what a pane shows, not only what the row recorded: a session started
+    // again in its pane after the row settled still has its renames followed.
+    return row.status == SessionStatus.running || isRunningInPane(row.id);
   }
 }
+
+bool _nowhere(String _) => false;

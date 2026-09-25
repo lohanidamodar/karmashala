@@ -13,6 +13,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_chat_source.dart';
+import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -205,6 +206,8 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((
     sessionDao: ref.watch(sessionDaoProvider),
     agents: ref.watch(agentRegistryProvider),
     scanStores: () => ref.read(cliStoreScanPassProvider).read(),
+    isRunningInPane: (id) =>
+        ref.read(sessionLauncherProvider).livePaneFor(id) != null,
     // This fires on a timer, so it says only what it knows: a narrow rename
     // bump, not a wake of every watcher of the revision counter.
     onRenamed: (sessionId, _) {

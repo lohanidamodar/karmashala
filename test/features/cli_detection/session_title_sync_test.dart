@@ -81,11 +81,13 @@ void main() {
   SessionTitleSyncService service(
     List<DetectedSession> Function() detected, {
     void Function(String, String)? onRenamed,
+    bool Function(String id)? isRunningInPane,
   }) => SessionTitleSyncService(
     sessionDao: dao,
     agents: AgentRegistry.builtIn,
     scanStores: () async => detected(),
     onRenamed: onRenamed,
+    isRunningInPane: isRunningInPane ?? (_) => false,
   );
 
   group('a name the user typed into the CLI reaches the sidebar', () {
@@ -301,6 +303,38 @@ void main() {
 
       expect(sync.wantsStoreSweep, isFalse);
       expect(await sync.sync(), 0);
+    });
+  });
+
+  /// The owner's case: the host was restarted, the row was settled
+  /// `completed`, the pane started the same conversation again, and `/rename`
+  /// in the CLI never reached the tab. What a pane is running decides.
+  group('running is what a pane shows, not only what the row says', () {
+    test('a renamed session running in its pane is followed', () async {
+      dao.insert(
+        row(title: 'karmashala revisits', status: SessionStatus.completed),
+      );
+
+      final renamed = await service(
+        () => [found(title: 'karmashala enhanced')],
+        isRunningInPane: (id) => id == 's1',
+      ).sync();
+
+      expect(renamed, 1);
+      expect(dao.getById('s1')!.title, 'karmashala enhanced');
+    });
+
+    test('with nothing running it, a settled CLI name stays settled', () async {
+      dao.insert(
+        row(title: 'karmashala revisits', status: SessionStatus.completed),
+      );
+
+      final renamed = await service(
+        () => [found(title: 'karmashala enhanced')],
+      ).sync();
+
+      expect(renamed, 0);
+      expect(dao.getById('s1')!.title, 'karmashala revisits');
     });
   });
 }
