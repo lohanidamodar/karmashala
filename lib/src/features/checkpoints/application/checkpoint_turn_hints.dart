@@ -139,7 +139,8 @@ Future<void> holdToolForCheckpoint(
 }
 
 /// [holdToolForCheckpoint] for a transport with no reply to hold — the spool,
-/// or the session host relaying: the tool a `PreToolUse` announces has already
+/// or a hook the session host answered at once because no app was watching to
+/// hold it for (it reaches the app later, in the host's snapshot): the tool a `PreToolUse` announces has already
 /// run by the time it is read, so the turn's before-turn snapshots still to
 /// come are marked unverified. Called after the status step, so a turn this
 /// very hook starts has begun and does not clear the mark.

@@ -52,17 +52,21 @@ final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
 });
 
 /// A hook the session host took and relayed, applied as the HTTP route applied
-/// one — at the time the host received it. The host answered the agent already,
-/// so a `PreToolUse` was not held for its checkpoint, as with the spool.
-void applyHostRelayedAgentHook(
+/// one — at the time the host received it — and completing when the host may
+/// answer the agent. A [held] hook is one the host is keeping the agent waiting
+/// on, so a `PreToolUse` waits here for its checkpoint as the route's did; one
+/// not held had nobody to wait for, and its tool is marked unheld, as with the
+/// spool. **Never throws.**
+Future<void> applyHostRelayedAgentHook(
   ProviderContainer container, {
   required String agentId,
   required String event,
   required String body,
   required DateTime receivedAt,
+  required bool held,
   String? paneSessionId,
   AppLogger? logger,
-}) {
+}) async {
   final report = applyAgentHookCallback(
     container,
     agentId: agentId,
@@ -73,9 +77,17 @@ void applyHostRelayedAgentHook(
     logger: logger,
   );
   try {
-    noteToolUnheld(container, agentSessionId: report.sessionId, event: event);
+    if (held) {
+      await holdToolForCheckpoint(
+        container,
+        agentSessionId: report.sessionId,
+        event: event,
+      );
+    } else {
+      noteToolUnheld(container, agentSessionId: report.sessionId, event: event);
+    }
   } on Object catch (error) {
-    logger?.warning('Marking a relayed tool as unheld failed: $error');
+    logger?.warning('Holding a relayed tool for its checkpoint failed: $error');
   }
 }
 

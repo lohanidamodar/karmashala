@@ -87,6 +87,7 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
       event: hook.event,
       body: hook.body,
       receivedAt: hook.receivedAt,
+      held: hook.holdId != null,
       paneSessionId: hook.paneSessionId,
       logger: hookLog,
     ),

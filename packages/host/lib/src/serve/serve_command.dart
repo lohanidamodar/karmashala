@@ -10,7 +10,6 @@ import '../companion/host_pairing_service.dart';
 import '../domain/session_registry.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
-import '../hooks/recent_hooks.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../transport/socket_transport.dart';
@@ -18,6 +17,7 @@ import 'package:karmashala_local_ipc/socket_location.dart';
 import 'host_build.dart';
 import 'host_paths.dart';
 import 'host_server.dart';
+import 'lifecycle_feed.dart';
 import 'session_store.dart';
 
 /// The daemon. Started detached — `setsid nohup … &` over SSH, or by the app on
@@ -107,16 +107,13 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     errSink,
   );
 
-  final hooks = RecentHooks();
-  final hookServer = await _openHookServer(paths, hooks, errSink);
-
   final server = HostServer(
     registry: registry,
     ptyLibrary: pty.library,
     openPairing: companion?.openPairing,
     build: hostBuildOf(Platform.resolvedExecutable),
-    hooks: hooks,
   );
+  final hookServer = await _openHookServer(paths, server.lifecycle, errSink);
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
 
@@ -176,14 +173,14 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
 /// reported, when either fails: sessions do not need hooks.
 Future<HookServer?> _openHookServer(
   HostPaths paths,
-  RecentHooks hooks,
+  LifecycleFeed lifecycle,
   IOSink errSink,
 ) async {
   final previous = HookEndpoint.read(paths.hookEndpointPath);
   HookServer? server;
   try {
     server = await HookServer.bind(
-      onHook: hooks.record,
+      onHook: lifecycle.relayHook,
       port: previous?.port ?? 0,
       token: previous?.token,
     );

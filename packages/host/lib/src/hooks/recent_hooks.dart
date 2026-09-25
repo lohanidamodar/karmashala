@@ -1,10 +1,8 @@
-import 'dart:async';
-
 import '../protocol/messages.dart';
 
-/// The latest hook per agent session, in memory and bounded, and every hook as
-/// it arrives. A restarted host starts empty: hooks describe the conversation,
-/// and the next one an agent fires says where it is.
+/// The latest hook per agent session, in memory and bounded. A restarted host
+/// starts empty: hooks describe the conversation, and the next one an agent
+/// fires says where it is.
 class RecentHooks {
   RecentHooks({this.capacity = 256});
 
@@ -12,20 +10,17 @@ class RecentHooks {
   final int capacity;
 
   final _latest = <String, AgentHookEvent>{};
-  final _received = StreamController<AgentHookEvent>.broadcast(sync: true);
-
-  Stream<AgentHookEvent> get received => _received.stream;
 
   /// Oldest first, so a watcher replays them in the order they came.
   List<AgentHookEvent> latest() => List.unmodifiable(_latest.values);
 
+  /// Kept without a hold id: whoever reads the snapshot did not hold it.
   void record(AgentHookEvent hook) {
     final key = keyOf(hook);
     _latest
       ..remove(key)
-      ..[key] = hook;
+      ..[key] = hook.unheld;
     if (_latest.length > capacity) _latest.remove(_latest.keys.first);
-    _received.add(hook);
   }
 
   /// The pane's session id when the hook named one; otherwise every unnamed

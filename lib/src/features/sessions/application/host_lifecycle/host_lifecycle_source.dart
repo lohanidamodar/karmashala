@@ -11,7 +11,11 @@ class HostLifecycleFeed {
     required this.close,
     this.hookSnapshot = const [],
     Stream<RelayedAgentHook>? hooks,
-  }) : hooks = hooks ?? const Stream.empty();
+    void Function(int holdId)? replyHook,
+  }) : hooks = hooks ?? const Stream.empty(),
+       replyHook = replyHook ?? _noReply;
+
+  static void _noReply(int holdId) {}
 
   final List<SessionFacts> snapshot;
 
@@ -23,6 +27,9 @@ class HostLifecycleFeed {
 
   /// Every hook after [hookSnapshot].
   final Stream<RelayedAgentHook> hooks;
+
+  /// Lets the agent held under a hook's [RelayedAgentHook.holdId] go on.
+  final void Function(int holdId) replyHook;
 
   /// Hangs up; the host's sessions are untouched.
   final Future<void> Function() close;

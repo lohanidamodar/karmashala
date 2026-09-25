@@ -25,6 +25,7 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       close: watch.close,
       hookSnapshot: [for (final hook in watch.hookSnapshot) _hookOf(hook)],
       hooks: watch.hooks.map(_hookOf),
+      replyHook: watch.replyHook,
     );
   }
 
@@ -34,6 +35,7 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
     body: jsonEncode(hook.body),
     receivedAt: hook.receivedAt.toUtc(),
     paneSessionId: hook.sessionHeader,
+    holdId: hook.holdId,
   );
 
   static SessionFacts _factsOf(

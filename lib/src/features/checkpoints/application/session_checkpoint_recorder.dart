@@ -181,13 +181,16 @@ class SessionCheckpointRecorder extends Notifier<int> {
   void noteHoldExpired(String sessionId) =>
       _release(sessionId, 'its hold expired');
 
-  /// A `PreToolUse` came by spool, which has no reply to hold a tool with: the
-  /// hook script wrote a file and exited, so the tool ran before this was read.
-  /// The same mark as [noteHoldExpired], on every such hook — a before-turn
+  /// A `PreToolUse` came by spool, which has no reply to hold a tool with — the
+  /// hook script wrote a file and exited — or from a session host that
+  /// answered it at once with no app watching: either way the tool ran before
+  /// this was read. The same mark as [noteHoldExpired], on every such hook — a before-turn
   /// snapshot returning after it is unverified by construction, and one that
   /// returned before it was read is left alone.
-  void noteToolUnheld(String sessionId) =>
-      _release(sessionId, 'its hook came by spool, which cannot hold a tool');
+  void noteToolUnheld(String sessionId) => _release(
+    sessionId,
+    'its hook was answered before anything could hold it',
+  );
 
   void _release(String sessionId, String why) {
     if (!_released.add(sessionId)) return;

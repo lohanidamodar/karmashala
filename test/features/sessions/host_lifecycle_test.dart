@@ -8,6 +8,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -33,6 +34,9 @@ class _FakeHost implements HostLifecycleSource {
   final links = <StreamController<SessionLifecycleEvent>>[];
   final hookLinks = <StreamController<RelayedAgentHook>>[];
 
+  /// The hold ids this app released, in order.
+  final replies = <int>[];
+
   StreamController<SessionLifecycleEvent> get link => links.last;
   StreamController<RelayedAgentHook> get hookLink => hookLinks.last;
 
@@ -48,6 +52,7 @@ class _FakeHost implements HostLifecycleSource {
       events: link.stream,
       hookSnapshot: List.of(hookSnapshot),
       hooks: hooks.stream,
+      replyHook: replies.add,
       close: () async {
         if (!link.isClosed) await link.close();
         if (!hooks.isClosed) await hooks.close();
@@ -88,6 +93,27 @@ SessionLifecycleEvent _event(
   observedAt: _at(second),
 );
 
+/// The checkpoint recorder as a hook's hold sees it: [settled] waits on
+/// [capture] while one is set, and the unheld / expired marks are recorded.
+class _RecordingRecorder extends SessionCheckpointRecorder {
+  Completer<void>? capture;
+  var settledCalls = 0;
+  final unheld = <String>[];
+  final expired = <String>[];
+
+  @override
+  Future<void> settled(String sessionId) async {
+    settledCalls++;
+    await capture?.future;
+  }
+
+  @override
+  void noteToolUnheld(String sessionId) => unheld.add(sessionId);
+
+  @override
+  void noteHoldExpired(String sessionId) => expired.add(sessionId);
+}
+
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
     await Future<void>.delayed(Duration.zero);
@@ -99,6 +125,7 @@ void main() {
   late SessionDao dao;
   late _FakeHost host;
   late ProviderContainer container;
+  late _RecordingRecorder recorder;
 
   setUp(() {
     db = AppDatabase.memory();
@@ -119,6 +146,9 @@ void main() {
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
+        sessionCheckpointRecorderProvider.overrideWith(
+          () => recorder = _RecordingRecorder(),
+        ),
       ],
     );
     addTearDown(() {
@@ -421,6 +451,66 @@ void main() {
         expect(reported('s1')!.observedAt, _at(9));
       },
     );
+  });
+
+  group('a PreToolUse the host relayed', () {
+    RelayedAgentHook preToolUse({int? holdId, int second = 5}) =>
+        RelayedAgentHook(
+          agentId: AgentIds.claudeCode,
+          event: 'PreToolUse',
+          body: jsonEncode({
+            'session_id': 'cli-s1',
+            'hook_event_name': 'PreToolUse',
+            'tool_name': 'Edit',
+            'tool_input': {'file_path': '/repo/main.txt'},
+          }),
+          receivedAt: _at(second),
+          paneSessionId: 's1',
+          holdId: holdId,
+        );
+
+    test('held, it is replied to only once its checkpoint work is done, and '
+        'its tool is not marked unheld', () async {
+      row('s1');
+      await startWatching();
+      container.read(sessionCheckpointRecorderProvider);
+      final capture = recorder.capture = Completer<void>();
+
+      host.hookLink.add(preToolUse(holdId: 7));
+      await _settle();
+      expect(recorder.settledCalls, 1, reason: 'the hold waits on the queue');
+      expect(host.replies, isEmpty, reason: 'the capture is still running');
+
+      capture.complete();
+      await _settle();
+      expect(host.replies, [7]);
+      expect(recorder.unheld, isEmpty);
+      expect(recorder.expired, isEmpty);
+    });
+
+    test('held, for a session this app does not know, it is replied to at '
+        'once', () async {
+      await startWatching();
+      container.read(sessionCheckpointRecorderProvider);
+      recorder.capture = Completer<void>();
+
+      host.hookLink.add(preToolUse(holdId: 3));
+      await _settle();
+      expect(host.replies, [3]);
+      expect(recorder.settledCalls, 0);
+    });
+
+    test('not held — the host had nobody watching — it is marked unheld and '
+        'nothing is replied', () async {
+      row('s1');
+      host.hookSnapshot = [preToolUse()];
+      await startWatching();
+      container.read(sessionCheckpointRecorderProvider);
+
+      expect(recorder.unheld, ['s1']);
+      expect(recorder.settledCalls, 0);
+      expect(host.replies, isEmpty);
+    });
   });
 
   test('without a feed, a hook ending still settles the row', () {

@@ -37,8 +37,8 @@ class HostLifecycleSubscriber {
   final bool Function(String paneId) hasLivePane;
 
   /// Each hook once: a snapshot hook already applied on an earlier link is not
-  /// applied again.
-  final void Function(RelayedAgentHook hook)? onHook;
+  /// applied again. A held hook is replied to when this completes, or fails.
+  final FutureOr<void> Function(RelayedAgentHook hook)? onHook;
 
   /// Each time a link opens — the host may be a new one, on a new endpoint.
   final void Function()? onAttached;
@@ -135,19 +135,25 @@ class HostLifecycleSubscriber {
     _hookApplied.removeWhere((key, _) => !held.contains(key));
     for (final hook in feed.hookSnapshot) {
       final applied = _hookApplied[hook.sessionKey];
-      if (applied == null || hook.receivedAt.isAfter(applied)) _applyHook(hook);
+      if (applied == null || hook.receivedAt.isAfter(applied)) {
+        unawaited(_applyHook(hook, feed));
+      }
     }
-    _hooks = feed.hooks.listen(_applyHook);
+    _hooks = feed.hooks.listen((hook) => unawaited(_applyHook(hook, feed)));
   }
 
-  void _applyHook(RelayedAgentHook hook) {
+  /// Applies [hook], then releases the agent when [feed] holds it for us. The
+  /// synchronous part of [onHook] runs before this returns, so hooks are
+  /// applied in the order they came even while one waits.
+  Future<void> _applyHook(RelayedAgentHook hook, HostLifecycleFeed feed) async {
     _hookApplied[hook.sessionKey] = hook.receivedAt;
-    final onHook = this.onHook;
-    if (onHook == null) return;
     try {
-      onHook(hook);
+      await onHook?.call(hook);
     } on Object catch (error) {
       _log.warning('Applying a relayed agent hook failed: $error');
+    } finally {
+      final holdId = hook.holdId;
+      if (holdId != null) feed.replyHook(holdId);
     }
   }
 

@@ -859,4 +859,5 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.watching => WatchingMessage.decode(frame),
   MessageType.lifecycle => LifecycleMessage.decode(frame),
   MessageType.hook => HookMessage.decode(frame),
+  MessageType.hookReply => HookReplyMessage.decode(frame),
 };

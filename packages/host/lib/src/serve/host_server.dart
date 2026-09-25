@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
-import '../hooks/recent_hooks.dart';
+import '../hooks/hook_holds.dart';
 import '../host_version.dart';
 import '../protocol/frame.dart';
 import '../protocol/messages.dart';
@@ -25,13 +25,13 @@ class HostServer {
     this.hostVersion = kHostVersion,
     this.openPairing,
     this.build,
-    RecentHooks? hooks,
+    HookHolds? holds,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
        lifecycle = LifecycleFeed(
          registry,
          clock: clock ?? _utcNow,
-         hooks: hooks,
+         holds: holds,
        );
 
   final SessionRegistry registry;
@@ -266,6 +266,8 @@ class _ClientSession {
       case WatchMessage():
         await _lifecycleWatch?.cancel();
         _lifecycleWatch = _server.lifecycle.watch(message.requestId, _send);
+      case HookReplyMessage():
+        _server.lifecycle.replyHook(message.holdId);
       default:
         _send(
           ErrorMessage(

@@ -1,54 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:test/test.dart';
 
-/// One end of an in-memory link: what one side adds, the other receives.
-class PipeEnd implements HostConnection {
-  PipeEnd(this.description);
-
-  static (PipeEnd, PipeEnd) pair() {
-    final client = PipeEnd('client');
-    final host = PipeEnd('host');
-    client._peer = host;
-    host._peer = client;
-    return (client, host);
-  }
-
-  @override
-  final String description;
-  late final PipeEnd _peer;
-  final _in = StreamController<Uint8List>();
-  final _closed = Completer<void>();
-
-  @override
-  Stream<Uint8List> get incoming => _in.stream;
-
-  @override
-  void add(Uint8List bytes) {
-    if (_peer._in.isClosed) throw StateError('StreamSink is closed');
-    _peer._in.add(bytes);
-  }
-
-  @override
-  Future<void> flush() async {}
-
-  @override
-  Future<void> close() async {
-    // Like a socket: hanging up ends both directions.
-    for (final end in [_in, _peer._in]) {
-      if (!end.isClosed) unawaited(end.close());
-    }
-    if (!_closed.isCompleted) _closed.complete();
-  }
-
-  @override
-  Future<void> get done => _closed.future;
-}
+import 'pipe_connection.dart';
 
 Future<void> pump() async {
   for (var i = 0; i < 12; i++) {
@@ -208,12 +166,13 @@ void main() {
     final hooks = <AgentHookEvent>[];
     feed.hooks.listen(hooks.add);
 
-    server.lifecycle.hooks.record(hook('PreToolUse', pane: 'p1'));
+    await server.lifecycle.relayHook(hook('Stop', pane: 'p1'));
     await pump();
 
-    expect(hooks.single.event, 'PreToolUse');
+    expect(hooks.single.event, 'Stop');
     expect(hooks.single.sessionHeader, 'p1');
-    expect(hooks.single.body['session_id'], 'c-PreToolUse');
+    expect(hooks.single.body['session_id'], 'c-Stop');
+    expect(hooks.single.holdId, isNull, reason: 'a Stop is never held');
     await feed.close();
   });
 

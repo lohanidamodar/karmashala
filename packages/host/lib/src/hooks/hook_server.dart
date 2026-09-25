@@ -15,7 +15,8 @@ const int kHookPayloadLimitBytes = 1024 * 1024;
 
 /// A loopback HTTP listener taking `POST /agent-hook?agent=<id>&event=<name>`
 /// with a bearer token. Answers exactly as the app's route did, so a script's
-/// unauthenticated probe still reads `401` and proves the port is ours.
+/// unauthenticated probe still reads `401` and proves the port is ours — and,
+/// like it, not before `onHook` completes: that is how a tool is held.
 class HookServer {
   HookServer._(this._server, this.token, this._onHook, this._now) {
     _server.listen((request) => unawaited(_handle(request)));
@@ -24,7 +25,7 @@ class HookServer {
   /// Binds [port] (0 for any), falling back to any free port when [port] is
   /// taken. The token is reused when given, else minted.
   static Future<HookServer> bind({
-    required void Function(AgentHookEvent hook) onHook,
+    required FutureOr<void> Function(AgentHookEvent hook) onHook,
     int port = 0,
     String? token,
     DateTime Function()? clock,
@@ -46,7 +47,7 @@ class HookServer {
 
   final HttpServer _server;
   final String token;
-  final void Function(AgentHookEvent hook) _onHook;
+  final FutureOr<void> Function(AgentHookEvent hook) _onHook;
   final DateTime Function() _now;
 
   int get port => _server.port;
@@ -79,7 +80,7 @@ class HookServer {
       // hook must never fail the agent that fired it.
       if (decoded != null) {
         final pane = request.headers.value(kHookSessionHeader)?.trim();
-        _onHook(
+        await _onHook(
           AgentHookEvent(
             agent: request.uri.queryParameters['agent'] ?? '',
             event: request.uri.queryParameters['event'] ?? '',

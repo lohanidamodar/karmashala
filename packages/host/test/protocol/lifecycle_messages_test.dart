@@ -156,6 +156,8 @@ void main() {
     expect(alone.sessionHeader, 'pane-1');
     expect(alone.receivedAt, t0);
     expect(alone.body, hook.body);
+    expect(alone.holdId, isNull);
+    expect(hook.toJson().containsKey('holdId'), isFalse);
 
     final unnamed = AgentHookEvent(
       agent: 'codex',
@@ -266,5 +268,18 @@ void main() {
         throwsA(isA<WireFormatException>()),
       );
     });
+  });
+
+  test('a held hook carries its hold id, and the reply names it', () {
+    expect(MessageType.hookReply.code, 0x1b);
+    final held = AgentHookEvent(
+      agent: 'claude-code',
+      event: 'PreToolUse',
+      receivedAt: t0,
+      body: const {},
+    ).heldAs(42);
+    expect(roundTrip(HookMessage(held)).hook.holdId, 42);
+    expect(held.unheld.holdId, isNull);
+    expect(roundTrip(const HookReplyMessage(42)).holdId, 42);
   });
 }

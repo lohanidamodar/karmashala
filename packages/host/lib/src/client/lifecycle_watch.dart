@@ -37,8 +37,20 @@ class HostLifecycleWatch {
   /// arriving before anyone listens are buffered, not lost.
   Stream<LifecycleEvent> get events => _events.stream;
 
-  /// Every hook after [hookSnapshot], buffered like [events].
+  /// Every hook after [hookSnapshot], buffered like [events]. One with an
+  /// [AgentHookEvent.holdId] keeps its agent waiting until [replyHook].
   Stream<AgentHookEvent> get hooks => _hooks.stream;
+
+  /// Releases the agent held under [holdId]. Nothing when the link is gone:
+  /// the host then releases it at its bound.
+  void replyHook(int holdId) {
+    if (_done.isCompleted) return;
+    try {
+      _connection.add(HookReplyMessage(holdId).toFrame().encode());
+    } on Object {
+      // The link went down between the check and the write.
+    }
+  }
 
   /// Completes when the link ends, from either side.
   Future<void> get done => _done.future;

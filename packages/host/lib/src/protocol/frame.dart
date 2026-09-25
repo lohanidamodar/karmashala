@@ -45,7 +45,10 @@ enum MessageType {
   watching(0x18),
   lifecycle(0x19),
   // An agent hook the host's loopback endpoint received, pushed to watchers.
-  hook(0x1a);
+  hook(0x1a),
+  // client → host: the app has done what a held hook waited for (its
+  // checkpoint); the agent's request is answered.
+  hookReply(0x1b);
 
   const MessageType(this.code);
   final int code;

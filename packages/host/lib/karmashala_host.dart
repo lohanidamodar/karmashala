@@ -22,6 +22,7 @@ export 'src/serve/client_command.dart';
 export 'src/serve/host_server.dart';
 export 'src/serve/lifecycle_feed.dart';
 export 'src/hooks/hook_endpoint_file.dart';
+export 'src/hooks/hook_holds.dart';
 export 'src/hooks/hook_server.dart';
 export 'src/hooks/recent_hooks.dart';
 export 'src/serve/session_store.dart';
