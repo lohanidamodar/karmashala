@@ -171,12 +171,22 @@ class DaemonCompanion implements CompanionHandler {
   Future<void> notice(Object owner, CompanionNoticeMessage notice) async {
     final service = _service;
     if (service == null) return;
+    // The two fan-outs that ask the app — its session list, its approval
+    // evidence — are not awaited: the app answers on the very link this
+    // notice came in on, whose next frame is read only once this returns.
     switch (notice.kind) {
       case CompanionNoticeKind.sessionsMoved:
-        await service.notifySessionsChanged();
+        _sessionsMoved();
       case CompanionNoticeKind.approvalRequested:
         final sessionId = notice.sessionId;
-        if (sessionId != null) await service.notifyApprovalRequested(sessionId);
+        if (sessionId == null) return;
+        unawaited(
+          service
+              .notifyApprovalRequested(sessionId)
+              .catchError(
+                (Object error) => onLog?.call('approval news failed: $error'),
+              ),
+        );
       case CompanionNoticeKind.attention:
         final sessionId = notice.sessionId;
         final kind = notice.attention;

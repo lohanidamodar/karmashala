@@ -292,6 +292,39 @@ void main() {
       );
     });
 
+    test(
+      'the app arriving and leaving mid-sweep fails the sweep quietly',
+      () async {
+        insertRow('s1');
+        final client = await dial();
+        // A request makes the phone live, so the app's arrival re-sweeps it.
+        await client.listSessions();
+
+        final app = Object();
+        final calls = <CompanionCallMessage>[];
+        await companion.adopt(
+          app,
+          const CompanionConfig(enabled: true).toJson(),
+          (message) {
+            if (message is CompanionCallMessage) calls.add(message);
+          },
+        );
+        while (calls.isEmpty) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+        expect(calls.single.method, CompanionMethod.listSessions.wire);
+
+        // Unanswered, then gone: the sweep's call fails. Escaping, that error
+        // is uncaught — which fails this test, and in the daemon ends the
+        // process with every session it holds.
+        await companion.detach(app);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        final after = await client.listSessions();
+        expect(after.single.sessionId, 's1', reason: 'from the store again');
+      },
+    );
+
     test('a push token is kept in the store', () async {
       final client = await dial();
       await client.registerNotifications(token: 'fcm-1', platform: 'android');
@@ -376,6 +409,43 @@ void main() {
         ),
       );
     });
+
+    test(
+      'news from the app returns before the app answers what it asks',
+      () async {
+        final client = await dial();
+        // A phone that listed sessions, and so is swept for new ones.
+        final listing = client.listSessions();
+        while (calls.isEmpty) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+        companion.answer(
+          app,
+          CompanionResultMessage.success(calls.first.callId, {'sessions': []}),
+        );
+        await listing;
+        calls.clear();
+
+        // The host server reads the app's next frame — the answer the re-sweep
+        // waits for — only once this returns; awaiting the sweep here is a
+        // link that never reads again.
+        await companion
+            .notice(
+              app,
+              const CompanionNoticeMessage(CompanionNoticeKind.sessionsMoved),
+            )
+            .timeout(const Duration(seconds: 2));
+
+        while (calls.isEmpty) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+        expect(calls.first.method, CompanionMethod.listSessions.wire);
+        companion.answer(
+          app,
+          CompanionResultMessage.success(calls.first.callId, {'sessions': []}),
+        );
+      },
+    );
 
     test(
       'the app leaving mid-call fails that call, and the host answers after',

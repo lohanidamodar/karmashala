@@ -58,7 +58,13 @@ Future<String> _buildHost() async {
 /// a host a person is using. Started rather than slept for: [start] waits on the
 /// line the daemon prints, and quotes it if the daemon exits instead.
 class LocalHost {
-  LocalHost._(this.process, this.paths, this.greeting, {this.detached = false});
+  LocalHost._(
+    this.process,
+    this.paths,
+    this.greeting,
+    this._said, {
+    this.detached = false,
+  });
 
   /// Started the way the app starts it — detached, in a session with no
   /// terminal — rather than as this test's child.
@@ -69,6 +75,11 @@ class LocalHost {
 
   /// Everything the daemon printed before it was ready.
   final String greeting;
+
+  final StringBuffer _said;
+
+  /// Everything the daemon has printed so far, on either stream — its log.
+  String get output => _said.toString();
 
   String get socketPath => paths.socketPath;
 
@@ -118,6 +129,7 @@ class LocalHost {
       process,
       HostPaths(Directory('${home.path}/.karmashala')),
       greeting,
+      said,
       detached: detached,
     );
   }

@@ -719,6 +719,11 @@ class _DeviceRuntime {
         // subscription covers yet.
         if (!_closed && watching) await push((api) => api.pushNewSessions());
       } while (_pushAgain && !_closed && watching);
+    } on Object catch (error) {
+      // News nobody asked for, and every caller fires and forgets it. Asking
+      // a forwarded binding fails whenever the app hangs up mid-call, and in
+      // the daemon an escaped error ends the process and every PTY it holds.
+      service.onLog?.call('session news failed: $error');
     } finally {
       _pushing = false;
       _pushAgain = false;
