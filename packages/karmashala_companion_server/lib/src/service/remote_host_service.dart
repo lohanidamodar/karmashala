@@ -34,6 +34,7 @@ class RemoteHostService {
     bool hostedEnabled = true,
     List<Uri> extraRelays = const [],
     this.lanPort = kDefaultLanPort,
+    this.lanAddress = '0.0.0.0',
     this.advertise = true,
     this.transcriptPollInterval = const Duration(seconds: 2),
     this.newStreamFlow = StreamFlow.new,
@@ -84,6 +85,12 @@ class RemoteHostService {
   List<Uri> get extraRelays => _extraRelays;
 
   final int lanPort;
+
+  /// The address the LAN listener binds: every interface by default (a
+  /// desktop's phones on its network), loopback or one interface when a
+  /// standalone server's config says so. The listener carries only the sealed
+  /// protocol; this narrows who can knock, not what they can do.
+  final Object lanAddress;
 
   /// Whether to run the multicast beacon. Off in tests — the LAN listener
   /// itself is plain loopback-friendly TCP.
@@ -250,10 +257,18 @@ class RemoteHostService {
     if (_started) return;
     _started = true;
     try {
-      _lanServer = await LanTransportServer.bind(port: lanPort, onLog: onLog);
+      _lanServer = await LanTransportServer.bind(
+        address: lanAddress,
+        port: lanPort,
+        onLog: onLog,
+      );
     } on SocketException {
       // The preferred port is taken; any port works — the beacon carries it.
-      _lanServer = await LanTransportServer.bind(port: 0, onLog: onLog);
+      _lanServer = await LanTransportServer.bind(
+        address: lanAddress,
+        port: 0,
+        onLog: onLog,
+      );
     }
     _lanConnections = _lanServer!.connections.listen(_acceptLanLink);
     if (advertise) {

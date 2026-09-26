@@ -8,6 +8,9 @@ import 'relay/relay_command.dart';
 import 'serve/attach_command.dart';
 import 'serve/client_command.dart';
 import 'serve/serve_command.dart';
+import 'server/admin_commands.dart';
+import 'server/init_command.dart';
+import 'server/pair_command.dart';
 import 'store/store_probe.dart';
 
 const _usage =
@@ -15,9 +18,28 @@ const _usage =
 karmashala_host $kHostVersion — Karmashala's session host.
 
   karmashala_host serve         own sessions on this machine until told to stop
-                                --data-dir=<dir> (required): the store is
-                                  <dir>/karmashala.sqlite, the app's database
-                                --companion-port=<n> to move the phone listener
+                                --data-dir=<dir>: the store is
+                                  <dir>/karmashala.sqlite and the config
+                                  <dir>/server.json (required unless
+                                  --standalone)
+                                --standalone: a server on its own — data in
+                                  ~/.karmashala unless --data-dir says, phone
+                                  listener on loopback unless --bind says,
+                                  agent CLIs found at start
+                                --name=<n> --bind=<ip> --companion-port=<n>
+                                --relay=<url> --relay-token=<t>
+                                --extra-relay=<url> --[no-]beacon --no-notes
+                                --no-companion --mcp-port=<n>: override
+                                  server.json, field by field
+  karmashala_host init          write server.json from the flags above;
+                                  --force replaces one that is there
+  karmashala_host pair          open a pairing window and print its code and QR
+                                --capabilities=<list|all> --relay=<url>
+                                --name=<label> --address=<host[:port]>
+  karmashala_host devices       the phones paired with this server
+  karmashala_host revoke <id>   revoke one (see `devices` for ids)
+  karmashala_host agents        the agent CLIs this server found; --refresh
+                                  probes again
   karmashala_host attach        proxy stdio to the running host's socket
   karmashala_host list          what this machine's host is holding
   karmashala_host end <id>      end one session (see `list` for ids)
@@ -45,6 +67,16 @@ Future<int> runHostCli(List<String> args, {IOSink? out, IOSink? err}) async {
       return runStop(args.skip(1).toList(), out: sink, err: errSink);
     case 'relay':
       return runRelay(args.skip(1).toList(), out: sink, err: errSink);
+    case 'init':
+      return runInit(args.skip(1).toList(), out: sink, err: errSink);
+    case 'pair':
+      return runPair(args.skip(1).toList(), out: sink, err: errSink);
+    case 'devices':
+      return runDevices(args.skip(1).toList(), out: sink, err: errSink);
+    case 'revoke':
+      return runRevoke(args.skip(1).toList(), out: sink, err: errSink);
+    case 'agents':
+      return runAgents(args.skip(1).toList(), out: sink, err: errSink);
     case 'probe-pty':
       return runPtyProbe(out: sink);
     case 'probe-store':

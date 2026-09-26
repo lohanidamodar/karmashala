@@ -35,6 +35,8 @@ class DaemonCompanion implements CompanionHandler {
     required this.registry,
     required this.hostName,
     this.lanPort = kHostCompanionPort,
+    this.lanAddress = '0.0.0.0',
+    this.ownConfig,
     this.transcriptPollInterval = const Duration(seconds: 2),
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
@@ -57,6 +59,16 @@ class DaemonCompanion implements CompanionHandler {
   /// Where the LAN listener binds first; another port when it is taken, which
   /// the beacon and `host.status` carry.
   final int lanPort;
+
+  /// The address the LAN listener binds (`server.json`'s `companion.bind`).
+  final String lanAddress;
+
+  /// How a standalone server's own config (`server.json`) says to serve, or
+  /// null when it says nothing. When set it is what this host serves by
+  /// whenever no app is connected — at start and after the app hangs up —
+  /// and the config an app last sent is kept but not served then. An app
+  /// that connects is the authority while connected, as always.
+  final CompanionConfig? ownConfig;
   final Duration transcriptPollInterval;
   final CompanionScreens screens;
 
@@ -137,7 +149,7 @@ class DaemonCompanion implements CompanionHandler {
     app.onChanged = (_) => _sessionsMoved();
     _events = sessionEvents.listen(_onLifecycle);
     _statuses = statusChanges?.listen(_onStatus);
-    await _serialised(() => _apply(_configs.read() ?? _config));
+    await _serialised(() => _apply(ownConfig ?? _configs.read() ?? _config));
   }
 
   @override
@@ -145,6 +157,7 @@ class DaemonCompanion implements CompanionHandler {
     required int capabilities,
     required String relay,
     required bool relayIsLocal,
+    String label = '',
   }) async {
     final service = _service;
     if (service == null || !service.isRunning) {
@@ -160,12 +173,38 @@ class DaemonCompanion implements CompanionHandler {
       relay: via,
       relayIsLocal: relayIsLocal,
     );
+    final name = label.trim();
     return (
       code: PairingCode.encode(session.payload.typedSecret!),
       expiresAt: session.deadline,
       payload: session.payload.encode(),
-      paired: session.done.then((device) => device.id),
+      paired: session.done.then((device) {
+        // The name the person gave the window, over the one the phone sent:
+        // `pair --name` is how a server's owner tells two phones apart.
+        if (name.isNotEmpty) {
+          _devices.rename(device.id, name);
+          _devicesChanged();
+        }
+        return device.id;
+      }),
     );
+  }
+
+  /// Every pairing on record, revoked ones included, oldest first.
+  List<PairedDevice> devices() => _devices.getAll();
+
+  /// Revokes [deviceId] and drops its live links; the device row stays, marked
+  /// revoked, as the app's own revoke leaves it. Throws [StateError] when no
+  /// such device is paired.
+  Future<PairedDevice> revokeDevice(String deviceId) async {
+    final device = _devices.getById(deviceId);
+    if (device == null) {
+      throw StateError('no paired device has the id "$deviceId"');
+    }
+    _devices.revoke(deviceId);
+    await _service?.reconcileDevices();
+    _devicesChanged();
+    return device;
   }
 
   @override
@@ -228,6 +267,13 @@ class DaemonCompanion implements CompanionHandler {
     app.detach(owner);
     if (!wasApp) return;
     _appSend = null;
+    // A server with its own config goes back to it: the app was the
+    // authority only while it was connected.
+    final own = ownConfig;
+    if (own != null) {
+      await _serialised(() => _apply(own));
+      return;
+    }
     // The app's embedded relay closed with it; nothing waits there any more.
     if (_config.localRelayUrl != null) {
       await _serialised(() => _apply(_config.withoutLocalRelay()));
@@ -278,6 +324,7 @@ class DaemonCompanion implements CompanionHandler {
       hostedEnabled: next.hostedEnabled,
       extraRelays: next.extraRelays,
       lanPort: lanPort,
+      lanAddress: lanAddress,
       advertise: next.advertise,
       transcriptPollInterval: transcriptPollInterval,
       now: _now,

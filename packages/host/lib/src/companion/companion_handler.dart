@@ -15,11 +15,13 @@ typedef CompanionPairingWindow = ({
 /// a test hands in a fake.
 abstract interface class CompanionHandler {
   /// Opens a pairing window granting [capabilities], met at [relay] — empty
-  /// for this host's default, or a direct pairing where it has none.
+  /// for this host's default, or a direct pairing where it has none. A
+  /// non-empty [label] names the device that pairs through it.
   Future<CompanionPairingWindow> openPairing({
     required int capabilities,
     required String relay,
     required bool relayIsLocal,
+    String label = '',
   });
 
   /// [owner] is the desktop app from now on, with its Remote access settings

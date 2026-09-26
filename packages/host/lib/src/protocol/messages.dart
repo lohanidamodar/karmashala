@@ -12,10 +12,11 @@ part 'automation_messages.dart';
 part 'companion_messages.dart';
 part 'mcp_messages.dart';
 part 'status_messages.dart';
+part 'server_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 7;
+const int kProtocolVersion = 8;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -727,6 +728,7 @@ class PairMessage extends HostMessage {
     required this.capabilities,
     this.relay = '',
     this.relayIsLocal = false,
+    this.label = '',
   });
 
   final int requestId;
@@ -743,6 +745,11 @@ class PairMessage extends HostMessage {
   /// then names by its marker rather than a LAN address that will change.
   final bool relayIsLocal;
 
+  /// What the device that pairs through this window is called on this host,
+  /// over the name it sends itself. Empty keeps the phone's own (protocol 8:
+  /// `karmashala_host pair --name`).
+  final String label;
+
   @override
   Frame toFrame() => Frame(
     MessageType.pair,
@@ -751,7 +758,8 @@ class PairMessage extends HostMessage {
           ..u32(requestId)
           ..u32(capabilities)
           ..str(relay)
-          ..u8(relayIsLocal ? 1 : 0))
+          ..u8(relayIsLocal ? 1 : 0)
+          ..str(label))
         .take(),
   );
 
@@ -762,6 +770,7 @@ class PairMessage extends HostMessage {
       capabilities: r.u32(),
       relay: r.str(),
       relayIsLocal: r.u8() == 1,
+      label: r.str(),
     );
   }
 }
@@ -897,4 +906,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.agentStatus => AgentStatusMessage.decode(frame),
   MessageType.promptAnswer => PromptAnswerMessage.decode(frame),
   MessageType.promptAnswered => PromptAnsweredMessage.decode(frame),
+  MessageType.serverCall => ServerCallMessage.decode(frame),
+  MessageType.serverResult => ServerResultMessage.decode(frame),
 };

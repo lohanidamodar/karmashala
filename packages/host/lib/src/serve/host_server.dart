@@ -15,6 +15,7 @@ import '../protocol/frame.dart';
 import '../protocol/messages.dart';
 import '../protocol/wire.dart';
 import '../pty/pty.dart';
+import '../server/server_admin.dart';
 import '../status/daemon_prompt_answers.dart';
 import '../transport/transport.dart';
 import 'lifecycle_feed.dart';
@@ -64,6 +65,10 @@ class HostServer {
   /// store to keep their status by. Set after construction, like
   /// [automations].
   DaemonPromptAnswers? prompts;
+
+  /// Answers `serverCall` — devices, revoke, agents; null refuses each with
+  /// the reason (no store).
+  ServerAdmin? admin;
 
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
@@ -308,6 +313,8 @@ class _ClientSession {
         _onChecksRun(message);
       case PromptAnswerMessage():
         _onPromptAnswer(message);
+      case ServerCallMessage():
+        _onServerCall(message);
       default:
         _send(
           ErrorMessage(
@@ -335,6 +342,37 @@ class _ClientSession {
     }
     unawaited(
       prompts.answerFrame(message.requestId, message.request).then(_send),
+    );
+  }
+
+  /// Not awaited: an agent probe runs processes, and this client's other
+  /// frames must not wait behind it.
+  void _onServerCall(ServerCallMessage message) {
+    final admin = _server.admin;
+    if (admin == null) {
+      _send(
+        ServerResultMessage.failure(
+          message.requestId,
+          'this host keeps no devices or agents: it has no store',
+        ),
+      );
+      return;
+    }
+    unawaited(
+      admin
+          .call(message.method, message.arguments)
+          .then(
+            (result) =>
+                _send(ServerResultMessage.success(message.requestId, result)),
+            onError: (Object error) => _send(
+              ServerResultMessage.failure(
+                message.requestId,
+                error is ServerCallRefused
+                    ? error.message
+                    : '${message.method} failed: $error',
+              ),
+            ),
+          ),
     );
   }
 
@@ -373,6 +411,7 @@ class _ClientSession {
         capabilities: message.capabilities,
         relay: message.relay,
         relayIsLocal: message.relayIsLocal,
+        label: message.label,
       );
       _send(
         PairedMessage(

@@ -82,7 +82,12 @@ enum MessageType {
   // answer a prompt; host → client: how that ended.
   agentStatus(0x2b),
   promptAnswer(0x2c),
-  promptAnswered(0x2d);
+  promptAnswered(0x2d),
+  // Protocol 8: a standalone server administered from its own machine.
+  // client → host: one question (devices, revoke, agents); host → client:
+  // its answer. 0x2e and 0x2f are left for the companion's own frames.
+  serverCall(0x30),
+  serverResult(0x31);
 
   const MessageType(this.code);
   final int code;

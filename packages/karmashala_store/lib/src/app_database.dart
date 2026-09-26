@@ -10,10 +10,42 @@ import 'migrations.dart';
 /// the app can be carrying different ones.
 String get sqliteLibraryVersion => sqlite3.version.libVersion;
 
+/// The store's file name inside its data directory.
+const String kStoreFileName = 'karmashala.sqlite';
+
+/// A store migrated by a newer build than this one: its `user_version` is past
+/// the highest step this build carries.
+class StoreSchemaTooNew implements Exception {
+  const StoreSchemaTooNew({required this.stored, required this.known});
+
+  /// The file's `PRAGMA user_version`.
+  final int stored;
+
+  /// The newest schema this build knows.
+  final int known;
+
+  @override
+  String toString() =>
+      'the store is at schema v$stored and this build knows only v$known — '
+      'a newer Karmashala migrated it; install a matching build';
+}
+
 /// The app's SQLite database: hand-written SQL, no code generation. Owns the
 /// connection and the typed helpers, so `sqlite3` never leaks into features.
 class AppDatabase {
-  AppDatabase(this._db) {
+  /// [refuseNewerSchema] throws [StoreSchemaTooNew] — before any statement
+  /// that writes — when the file was migrated past what this build carries.
+  /// The session host passes it: a daemon older than the app that migrated its
+  /// store would otherwise read and write tables it does not know the shape
+  /// of. The app does not: it is the newest writer by construction.
+  AppDatabase(this._db, {bool refuseNewerSchema = false}) {
+    if (refuseNewerSchema) {
+      final stored = _userVersion;
+      if (stored > schemaVersion) {
+        _db.close();
+        throw StoreSchemaTooNew(stored: stored, known: schemaVersion);
+      }
+    }
     _configure();
     _migrate();
   }
@@ -27,8 +59,13 @@ class AppDatabase {
 
   /// Opens the database backed by a file in [directory]. The caller supplies it
   /// so `path_provider`, and with it Flutter, stays out of this file.
-  static AppDatabase open(Directory directory) =>
-      AppDatabase(sqlite3.open(p.join(directory.path, 'karmashala.sqlite')));
+  static AppDatabase open(
+    Directory directory, {
+    bool refuseNewerSchema = false,
+  }) => AppDatabase(
+    sqlite3.open(p.join(directory.path, kStoreFileName)),
+    refuseNewerSchema: refuseNewerSchema,
+  );
 
   /// Opens an ephemeral in-memory database, for tests.
   factory AppDatabase.memory() => AppDatabase(sqlite3.openInMemory());

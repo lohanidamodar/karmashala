@@ -96,9 +96,12 @@ class LocalHost {
 
   String get socketPath => paths.socketPath;
 
+  /// [serveArguments] replaces the app's way of starting it (`--data-dir`
+  /// under [home]) — a standalone server's, say. Keep the ports at 0.
   static Future<LocalHost> start(
     Directory home, {
     bool detached = false,
+    List<String>? serveArguments,
   }) async {
     final process = await Process.start(
       await _host,
@@ -106,9 +109,12 @@ class LocalHost {
       // port, so they would fight over it and each blame the other.
       [
         'serve',
-        '--companion-port=0',
-        '--mcp-port=0',
-        '--data-dir=${home.path}/data',
+        ...serveArguments ??
+            [
+              '--companion-port=0',
+              '--mcp-port=0',
+              '--data-dir=${home.path}/data',
+            ],
       ],
       environment: {'USERPROFILE': home.path, 'HOME': home.path},
       workingDirectory: Directory.current.path,

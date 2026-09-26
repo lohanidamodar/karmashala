@@ -39,6 +39,18 @@ void main() {
       expect(back.relayIsLocal, isTrue);
     });
 
+    test('a request carries the name the paired device is given '
+        '(protocol 8)', () {
+      final back = roundTrip(
+        const PairMessage(requestId: 9, capabilities: 1, label: 'Work phone'),
+      );
+      expect(back.label, 'Work phone');
+      expect(
+        roundTrip(const PairMessage(requestId: 9, capabilities: 1)).label,
+        isEmpty,
+      );
+    });
+
     test('an answer carries the code and when it stops working', () {
       final sent = PairedMessage(
         requestId: 7,
@@ -64,9 +76,9 @@ void main() {
     });
 
     test('the protocol version is pinned, so moving it is a decision', () {
-      // Protocol 7: the daemon keeps each hosted agent's status and answers
-      // its prompts (agentStatus, promptAnswer, promptAnswered).
-      expect(kProtocolVersion, 7);
+      // Protocol 8: a standalone server administered from its own machine
+      // (serverCall, serverResult) and `pair` carrying a label.
+      expect(kProtocolVersion, 8);
     });
   });
 

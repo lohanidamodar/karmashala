@@ -55,17 +55,19 @@ class HostClient {
 
   void _send(HostMessage message) => _socket.add(message.toFrame().encode());
 
-  /// The next message of this type, or the host's refusal, or a bound. A
-  /// hand-run command must not sit on a socket that stopped answering.
+  /// The next message of this type — that [where] accepts, when given — or
+  /// the host's refusal, or a bound. A hand-run command must not sit on a
+  /// socket that stopped answering.
   Future<T> _expect<T extends HostMessage>({
     Duration within = const Duration(seconds: 10),
+    bool Function(T message)? where,
   }) {
     final answer = Completer<T>();
     late StreamSubscription<HostMessage> subscription;
     subscription = _messages.listen(
       (message) {
         if (answer.isCompleted) return;
-        if (message is T) {
+        if (message is T && (where == null || where(message))) {
           answer.complete(message);
         } else if (message is ErrorMessage) {
           answer.completeError(HostClientRefusal(message.message));
@@ -99,6 +101,70 @@ class HostClient {
   Future<int?> end(String sessionId) async {
     _send(CloseMessage(3, sessionId));
     return (await _expect<ClosedMessage>()).exitCode;
+  }
+
+  var _lastRequestId = 10;
+
+  /// Opens a pairing window at the host, as the desktop's dialog does.
+  /// Throws [HostClientRefusal] with the host's reason when it will not.
+  Future<PairedMessage> pair({
+    required int capabilities,
+    String relay = '',
+    String label = '',
+  }) {
+    final requestId = ++_lastRequestId;
+    // Listening before sending: the answer can come back before `_expect`
+    // would otherwise subscribe.
+    final answer = _expect<PairedMessage>(
+      where: (message) => message.requestId == requestId,
+    );
+    _send(
+      PairMessage(
+        requestId: requestId,
+        capabilities: capabilities,
+        relay: relay,
+        label: label,
+      ),
+    );
+    return answer;
+  }
+
+  /// How the window [pair] opened under [requestId] ended: a device id, or
+  /// the host's reason. Throws [HostClientRefusal] when nothing is said
+  /// [within].
+  Future<CompanionEventMessage> pairingEnded(
+    int requestId, {
+    required Duration within,
+  }) => _expect<CompanionEventMessage>(
+    within: within,
+    where: (message) =>
+        message.kind == CompanionEventKind.pairingEnded &&
+        message.requestId == requestId,
+  );
+
+  /// Asks the host one administrative question (`ServerMethod`). Throws
+  /// [HostClientRefusal] with its answer when it refuses.
+  Future<Map<String, Object?>> call(
+    String method, {
+    Map<String, Object?> arguments = const {},
+    Duration within = const Duration(seconds: 10),
+  }) async {
+    final requestId = ++_lastRequestId;
+    final answer = _expect<ServerResultMessage>(
+      within: within,
+      where: (message) => message.requestId == requestId,
+    );
+    _send(
+      ServerCallMessage(
+        requestId: requestId,
+        method: method,
+        arguments: arguments,
+      ),
+    );
+    final result = await answer;
+    final refused = result.message;
+    if (refused != null) throw HostClientRefusal(refused);
+    return result.result ?? const {};
   }
 
   Future<void> close() async => _socket.destroy();

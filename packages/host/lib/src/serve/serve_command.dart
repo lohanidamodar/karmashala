@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
+import '../agents/server_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/session_mcp_access.dart';
 import '../companion/daemon_companion.dart';
@@ -14,10 +14,12 @@ import '../domain/session_registry.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
 import '../mcp/daemon_mcp.dart';
-import '../mcp/mcp_endpoint_server.dart';
 import '../mcp/mcp_tool_relay.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
+import '../server/server_administration.dart';
+import '../server/server_config.dart';
+import '../server/server_data_directory.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
 import '../status/session_answer_tool.dart';
@@ -35,28 +37,71 @@ import 'surviving_sink.dart';
 /// Windows — and ignores SIGHUP, so an SSH channel closing is not the end of
 /// every session on the machine.
 ///
-/// `--data-dir=<dir>` is required: the store is `<dir>/karmashala.sqlite`, the
-/// app's own file. [paths] and [until] are for tests.
+/// `--data-dir=<dir>` is required, except with `--standalone`, where it
+/// defaults to [defaultServerDataDirectory]: the store is
+/// `<dir>/karmashala.sqlite` — the app's own file when the app starts it — and
+/// `<dir>/server.json` is the server's own config (`ServerConfig`), each field
+/// overridden by its flag. A standalone server creates and migrates its store
+/// itself, finds the agent CLIs on its machine, serves phones by its own
+/// config while no app is connected, and binds the phone listener to
+/// loopback unless told otherwise. [paths], [until] and [agentsFor] are for
+/// tests.
 Future<int> runServe(
   List<String> args, {
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
   Future<void>? until,
+  ServerAgents Function(AppDatabase database)? agentsFor,
 }) async {
   // Nobody may be reading either once the app that started this has quit;
   // a write that fails must cost the line, never the daemon.
   final sink = SurvivingSink(out ?? stdout);
   final errSink = SurvivingSink(err ?? stderr);
+  final standalone = args.contains('--standalone');
   // Refused before anything is touched: every caller is ours and passes it,
-  // and a host run without it would record no session's status, silently.
-  final dataDirectory = dataDirectoryOf(args);
+  // and a host run without it would record no session's status, silently. A
+  // standalone server has a home of its own.
+  String? dataDirectory;
+  try {
+    dataDirectory =
+        dataDirectoryOf(args) ??
+        (standalone ? defaultServerDataDirectory() : null);
+  } on StateError catch (error) {
+    errSink.writeln('karmashala_host: refusing to serve — ${error.message}');
+    return 2;
+  }
   if (dataDirectory == null) {
     errSink.writeln(
-      'karmashala_host: refusing to serve — `--data-dir=<dir>` is required; '
-      'the store is <dir>/karmashala.sqlite, the app\'s own database',
+      'karmashala_host: refusing to serve — `--data-dir=<dir>` is required '
+      '(the store is <dir>/karmashala.sqlite, the app\'s own database), or '
+      '`--standalone` to serve from a home of its own',
     );
     return 2;
+  }
+  // The config is read, and refused, before anything binds: a server told
+  // to bind somewhere it cannot parse must not bind somewhere else.
+  final ServerSettings settings;
+  try {
+    if (standalone) await _ensurePrivateDirectory(dataDirectory);
+    settings = ServerSettings.resolve(
+      file: await ServerConfig.read(
+        dataDirectory,
+        log: (message) => errSink.writeln('karmashala_host: $message'),
+      ),
+      flags: ServerConfig.fromFlags(args),
+      standalone: standalone,
+      hostName: Platform.localHostname,
+    );
+  } on ServerConfigError catch (error) {
+    errSink.writeln('karmashala_host: refusing to serve — $error');
+    return 2;
+  } on FileSystemException catch (error) {
+    errSink.writeln(
+      'karmashala_host: refusing to serve — $dataDirectory could not be made '
+      'owner-only (${error.message})',
+    );
+    return 6;
   }
   paths ??= HostPaths.resolve();
   paths.ensureDirectory();
@@ -132,6 +177,16 @@ Future<int> runServe(
   // machine whose SQLite will not load still owns every PTY on it — and then
   // `pair` refuses by name and no status is recorded.
   final database = _openStore(dataDirectory, errSink);
+  // A standalone server with no store has nothing to pair into and no rows
+  // to launch from: it is refused rather than half there.
+  if (standalone && database == null) {
+    errSink.writeln(
+      'karmashala_host: refusing to serve standalone without a store — the '
+      'line above says why',
+    );
+    lock.release();
+    return 7;
+  }
   // What each hosted agent is doing, from the hooks and screens this host
   // holds, and the answers to what they ask. Needs the rows to know which
   // agent a session runs, so there is none without a store.
@@ -152,8 +207,10 @@ Future<int> runServe(
       : DaemonCompanion(
           database: database,
           registry: registry,
-          hostName: Platform.localHostname,
-          lanPort: _companionPort(args),
+          hostName: settings.name,
+          lanPort: settings.companionPort,
+          lanAddress: settings.bind,
+          ownConfig: settings.ownCompanion,
           prompts: prompts,
           onLog: (message) => errSink.writeln('karmashala_host: $message'),
         );
@@ -189,7 +246,7 @@ Future<int> runServe(
     dataDirectory,
     mcpTools,
     database,
-    _mcpPort(args),
+    settings.mcpPort,
     errSink,
   );
   final automations = await _startAutomations(
@@ -210,6 +267,30 @@ Future<int> runServe(
     mcpTools.local = (tool, arguments, caller) =>
         sessionAnswerTool(prompts, tool, arguments, caller) ??
         automationsTool?.call(tool, arguments, caller);
+  }
+  // Devices, revoke and agents from `karmashala_host` on this machine; a
+  // standalone server also looks for its agent CLIs now, since no app will.
+  final agents = database == null
+      ? null
+      : (agentsFor ?? (database) => ServerAgents(database: database))(database);
+  if (agents != null) {
+    server.admin = ServerAdministration(
+      companion: companionServing ? companion : null,
+      agents: agents,
+      name: settings.name,
+      bind: settings.bind,
+      standalone: standalone,
+    );
+  }
+  final agentScan = standalone ? agents?.refresh() : null;
+  if (agentScan != null) {
+    unawaited(
+      agentScan.then(
+        (scan) => sink.writeln('agents: ${scan.summary}'),
+        onError: (Object error) =>
+            errSink.writeln('karmashala_host: agent probe failed ($error)'),
+      ),
+    );
   }
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
@@ -235,6 +316,11 @@ Future<int> runServe(
 
   sink
     ..writeln('karmashala_host serving on ${listener.address}')
+    ..writeln(
+      standalone
+          ? 'standalone server "${settings.name}", data in $dataDirectory'
+          : 'server "${settings.name}", data in $dataDirectory',
+    )
     ..writeln('pty library ${pty.library}')
     ..writeln(
       hookServer == null
@@ -264,7 +350,7 @@ Future<int> runServe(
           : companion.service == null
           ? 'companion off — remote access is switched off in the app, '
                 '${companion.paired()} phone(s) paired'
-          : 'companion on port ${companion.port}, '
+          : 'companion on port ${companion.port} (bound to ${settings.bind}), '
                 '${companion.paired()} phone(s) paired',
     )
     // Said out loud: coming back with nothing and coming back with four dead
@@ -365,7 +451,9 @@ AppDatabase? _openStore(String dataDirectory, IOSink errSink) {
   try {
     final directory = Directory(dataDirectory);
     if (!directory.existsSync()) directory.createSync(recursive: true);
-    return AppDatabase.open(directory);
+    // Refused when a newer build migrated it: this one would write tables
+    // it does not know the shape of.
+    return AppDatabase.open(directory, refuseNewerSchema: true);
   } on Object catch (error) {
     errSink.writeln(
       'karmashala_host: no store in $dataDirectory ($error) — run '
@@ -448,27 +536,11 @@ String? dataDirectoryOf(List<String> args) {
   return null;
 }
 
-/// `--mcp-port=<n>`, asked for when no earlier port is remembered. A probe's
-/// host passes 0, so it never takes the real one's port.
-int _mcpPort(List<String> args) {
-  const flag = '--mcp-port=';
-  for (final arg in args) {
-    if (!arg.startsWith(flag)) continue;
-    final parsed = int.tryParse(arg.substring(flag.length));
-    if (parsed != null && parsed >= 0 && parsed <= 65535) return parsed;
-  }
-  return kPreferredMcpPort;
-}
-
-/// `--companion-port=<n>`, or the shared default. 0 asks the OS for a free one,
-/// which is what a second host on the same machine wants — a phone is told a
-/// port, so the real one never wanders.
-int _companionPort(List<String> args) {
-  const flag = '--companion-port=';
-  for (final arg in args) {
-    if (!arg.startsWith(flag)) continue;
-    final parsed = int.tryParse(arg.substring(flag.length));
-    if (parsed != null && parsed >= 0 && parsed <= 65535) return parsed;
-  }
-  return kHostCompanionPort;
+/// Creates [directory] if it is not there and makes it owner-only: a
+/// standalone server's store holds every phone's pairing key.
+Future<void> _ensurePrivateDirectory(String directory) async {
+  final dir = Directory(directory);
+  if (!dir.existsSync()) dir.createSync(recursive: true);
+  final refused = await HostPaths(dir).restrictToCurrentUser();
+  if (refused != null) throw FileSystemException(refused, directory);
 }

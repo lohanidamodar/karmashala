@@ -84,6 +84,9 @@ dependencies:
   karmashala_store:
     path: ../karmashala_store
   path: ^1.9.1
+  # `karmashala_host pair` draws the pairing QR in the terminal. Pure Dart,
+  # BSD-3-Clause, and already the app's encoder (karmashala_ui's QrPainter).
+  qr: ^4.0.0
   xterm2:
     git:
       url: https://github.com/lohanidamodar/xterm2.git

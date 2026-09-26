@@ -2,6 +2,8 @@
 // from a plain Dart program with no Flutter, no `flutter_tester` and no
 // Riverpod. What runs here is what the session host binary will run on a
 // machine with no GUI.
+import 'dart:io';
+
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
 import 'package:test/test.dart';
@@ -50,5 +52,35 @@ void main() {
     expect(dateFromIso(isoFromDate(when)), when);
     expect(boolFromInt(intFromBool(true)), isTrue);
     expect(boolFromInt(intFromBool(false)), isFalse);
+  });
+
+  group('a store a newer build migrated', () {
+    late Directory dir;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('karmashala-store-newer');
+      final db = AppDatabase.open(dir);
+      db.execute('PRAGMA user_version = ${db.schemaVersion + 1};');
+      db.close();
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('is refused by name when asked to refuse', () {
+      expect(
+        () => AppDatabase.open(dir, refuseNewerSchema: true),
+        throwsA(
+          isA<StoreSchemaTooNew>().having(
+            (e) => e.stored,
+            'stored',
+            schemaMigrations.keys.reduce((a, b) => a > b ? a : b) + 1,
+          ),
+        ),
+      );
+    });
+
+    test('is opened as before when not', () {
+      final db = AppDatabase.open(dir);
+      addTearDown(db.close);
+      expect(db.readMetadata('absent'), isNull);
+    });
   });
 }
