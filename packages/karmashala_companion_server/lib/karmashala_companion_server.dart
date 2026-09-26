@@ -22,7 +22,6 @@ export 'src/service/screen_transcripts.dart';
 export 'src/service/sessions_at_rest.dart';
 export 'src/service/usage_snapshot.dart';
 export 'src/store/companion_attachment_store.dart';
-export 'src/store/companion_config_store.dart';
 export 'src/store/host_identity.dart';
 export 'src/store/workspace_names.dart';
 export 'src/store/workspace_rows.dart';

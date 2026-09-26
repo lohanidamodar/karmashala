@@ -10,9 +10,9 @@ import 'package:karmashala/src/features/remote/application/remote_access_control
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/remote/relay_local/relay_endpoints.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../../support/memory_server_config.dart';
 
 const _running = LocalRelayStatus(
   state: LocalRelayState.running,
@@ -60,9 +60,7 @@ void main() {
 
   test('hosted mode offers the internet endpoint (default URL)', () {
     final container = containerWith(const LocalRelayStatus.stopped());
-    container
-        .read(settingsControllerProvider.notifier)
-        .setRemoteAccessEnabled(true);
+    setRemoteAccessNow(container, enabled: true);
 
     expect(container.read(relayEndpointsProvider), [
       RelayEndpointOption(
@@ -75,9 +73,11 @@ void main() {
 
   test('a self-hosted URL is the internet endpoint verbatim', () {
     final container = containerWith(const LocalRelayStatus.stopped());
-    container.read(settingsControllerProvider.notifier)
-      ..setRemoteAccessEnabled(true)
-      ..setRemoteRelayUrl('wss://relay.example.com:8443');
+    setRemoteAccessNow(
+      container,
+      enabled: true,
+      relayUrl: 'wss://relay.example.com:8443',
+    );
 
     expect(
       container.read(relayEndpointsProvider).single.url,
@@ -87,12 +87,9 @@ void main() {
 
   test('local mode with the relay running offers its primary LAN URL', () {
     final container = containerWith(_running);
-    container
-        .read(settingsControllerProvider.notifier)
-        .setRemoteAccessEnabled(true);
-    container.read(relayPrefsProvider.notifier)
-      ..setLocalEnabled(true)
-      ..setHostedEnabled(false);
+    setRemoteAccessNow(container, enabled: true);
+    container.read(relayPrefsProvider.notifier).setLocalEnabled(true);
+    setRemoteAccessNow(container, hostedEnabled: false);
 
     expect(container.read(relayEndpointsProvider), [
       RelayEndpointOption(
@@ -114,12 +111,9 @@ void main() {
       const LocalRelayStatus(state: LocalRelayState.running, boundPort: 8787),
     ]) {
       final container = containerWith(status);
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
-      container.read(relayPrefsProvider.notifier)
-        ..setLocalEnabled(true)
-        ..setHostedEnabled(false);
+      setRemoteAccessNow(container, enabled: true);
+      container.read(relayPrefsProvider.notifier).setLocalEnabled(true);
+      setRemoteAccessNow(container, hostedEnabled: false);
 
       expect(
         container.read(relayEndpointsProvider),
@@ -132,12 +126,9 @@ void main() {
   group('both relays at once (loop 80)', () {
     test('both switched on offers two endpoints, local first', () {
       final container = containerWith(_running);
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
-      container.read(relayPrefsProvider.notifier)
-        ..setLocalEnabled(true)
-        ..setHostedEnabled(true);
+      setRemoteAccessNow(container, enabled: true);
+      container.read(relayPrefsProvider.notifier).setLocalEnabled(true);
+      setRemoteAccessNow(container, hostedEnabled: true);
 
       final offered = container.read(relayEndpointsProvider);
 
@@ -152,12 +143,9 @@ void main() {
 
     test('only the local switch offers one local endpoint', () {
       final container = containerWith(_running);
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
-      container.read(relayPrefsProvider.notifier)
-        ..setLocalEnabled(true)
-        ..setHostedEnabled(false);
+      setRemoteAccessNow(container, enabled: true);
+      container.read(relayPrefsProvider.notifier).setLocalEnabled(true);
+      setRemoteAccessNow(container, hostedEnabled: false);
 
       expect(container.read(relayEndpointsProvider), [
         RelayEndpointOption(
@@ -170,12 +158,9 @@ void main() {
 
     test('both switched off offers nothing, however healthy the relay', () {
       final container = containerWith(_running);
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
-      container.read(relayPrefsProvider.notifier)
-        ..setLocalEnabled(false)
-        ..setHostedEnabled(false);
+      setRemoteAccessNow(container, enabled: true);
+      container.read(relayPrefsProvider.notifier).setLocalEnabled(false);
+      setRemoteAccessNow(container, hostedEnabled: false);
 
       expect(
         container.read(relayEndpointsProvider),
@@ -186,12 +171,9 @@ void main() {
 
     test('local on but not yet running offers only the hosted endpoint', () {
       final container = containerWith(const LocalRelayStatus.stopped());
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
-      container.read(relayPrefsProvider.notifier)
-        ..setLocalEnabled(true)
-        ..setHostedEnabled(true);
+      setRemoteAccessNow(container, enabled: true);
+      container.read(relayPrefsProvider.notifier).setLocalEnabled(true);
+      setRemoteAccessNow(container, hostedEnabled: true);
 
       final offered = container.read(relayEndpointsProvider);
 

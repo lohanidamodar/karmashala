@@ -19,8 +19,8 @@ services:
     stop_grace_period: 30s
     command:
       - serve
-      - --standalone
       - --data-dir=/data
+      - --companion
       - --bind=0.0.0.0
       - --name=karmashala-docker
     ports:

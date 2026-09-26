@@ -43,17 +43,19 @@ import 'registry_screens.dart';
 /// beacon, relay listeners, push — on the shared store's paired devices, with
 /// the bindings `hostCompanionBindings` composes: the store and this host's own
 /// screens while no app is connected, and calls forwarded to the app while one
-/// is. How it serves is the desktop's Remote access settings, sent by the app
-/// on each link and kept in the store for when it is closed.
+/// is. How it serves is the server's own config (`server.json`, [config]),
+/// which the desktop's Remote access settings write through
+/// `server.config.set` and [reconfigure] applies at once; the only thing an
+/// app adds is where its embedded relay listens, while it is connected.
 class DaemonCompanion implements CompanionHandler {
   DaemonCompanion({
     required this.database,
     required this.registry,
     required this.hostName,
     this.dataDirectory,
-    this.lanPort = kHostCompanionPort,
-    this.lanAddress = '0.0.0.0',
-    this.ownConfig,
+    int lanPort = kHostCompanionPort,
+    String lanAddress = '127.0.0.1',
+    CompanionConfig config = CompanionConfig.off,
     this.transcriptPollInterval = const Duration(seconds: 2),
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
@@ -65,12 +67,14 @@ class DaemonCompanion implements CompanionHandler {
     bool? windows,
     AgentUsageService? usageService,
     Map<String, String>? hostEnvironment,
-  }) : _relayFactory = relayFactory,
+  }) : _lanPort = lanPort,
+       _lanAddress = lanAddress,
+       _own = config,
+       _relayFactory = relayFactory,
        _pushPost = pushPost,
        _now = clock ?? DateTime.now,
        _newId = newId ?? newUuid,
        _devices = PairedDeviceDao(database),
-       _configs = CompanionConfigStore(database),
        _sessions = SessionDao(database),
        _rows = CheckoutRows(database),
        _hostEnvironment = hostEnvironment ?? Platform.environment,
@@ -98,17 +102,20 @@ class DaemonCompanion implements CompanionHandler {
 
   /// Where the LAN listener binds first; another port when it is taken, which
   /// the beacon and `host.status` carry.
-  final int lanPort;
+  int get lanPort => _lanPort;
+  int _lanPort;
 
   /// The address the LAN listener binds (`server.json`'s `companion.bind`).
-  final String lanAddress;
+  String get lanAddress => _lanAddress;
+  String _lanAddress;
 
-  /// How a standalone server's own config (`server.json`) says to serve, or
-  /// null when it says nothing. When set it is what this host serves by
-  /// whenever no app is connected — at start and after the app hangs up —
-  /// and the config an app last sent is kept but not served then. An app
-  /// that connects is the authority while connected, as always.
-  final CompanionConfig? ownConfig;
+  /// How the server's config says to serve, without the app's embedded relay.
+  CompanionConfig get ownConfig => _own;
+  CompanionConfig _own;
+
+  /// Where the connected app's embedded relay listens, or null — none, or no
+  /// app. Never kept: it closes with the app.
+  Uri? _localRelay;
   final Duration transcriptPollInterval;
   final CompanionScreens screens;
 
@@ -128,7 +135,6 @@ class DaemonCompanion implements CompanionHandler {
   final DateTime Function() _now;
   final String Function() _newId;
   final PairedDeviceDao _devices;
-  final CompanionConfigStore _configs;
   final SessionDao _sessions;
   final CheckoutRows _rows;
   final Map<String, String> _hostEnvironment;
@@ -189,7 +195,7 @@ class DaemonCompanion implements CompanionHandler {
     },
   );
 
-  CompanionConfig _config = CompanionConfig.unconfigured;
+  CompanionConfig _config = CompanionConfig.off;
   RemoteHostService? _service;
   void Function(HostMessage)? _appSend;
   Future<void> _chain = Future<void>.value();
@@ -345,10 +351,9 @@ class DaemonCompanion implements CompanionHandler {
     }
   }
 
-  /// Serves by the config the store kept, or a box's defaults when no app has
-  /// ever sent one, following [sessionEvents] — the host's lifecycle feed —
-  /// and [statusChanges], what the agents it holds are doing. Throws when the
-  /// LAN listener cannot bind at all.
+  /// Serves by the server's config, following [sessionEvents] — the host's
+  /// lifecycle feed — and [statusChanges], what the agents it holds are
+  /// doing. Throws when the LAN listener cannot bind at all.
   Future<void> start({
     required Stream<LifecycleEvent> sessionEvents,
     Stream<HostedAgentStatus>? statusChanges,
@@ -358,8 +363,28 @@ class DaemonCompanion implements CompanionHandler {
     await attachments?.sweep();
     _events = sessionEvents.listen(_onLifecycle);
     _statuses = statusChanges?.listen(_onStatus);
-    await _serialised(() => _apply(ownConfig ?? _configs.read() ?? _config));
+    await _serialised(() => _apply(_served()));
   }
+
+  /// Serves by [config] from now on, bound to [lanAddress] on [lanPort]: the
+  /// server's config changed (`server.config.set`). The listener restarts
+  /// only when what it was started with moved; relays are re-pointed in
+  /// place.
+  Future<void> reconfigure({
+    required CompanionConfig config,
+    required String lanAddress,
+    required int lanPort,
+  }) => _serialised(() async {
+    final moved = lanAddress != _lanAddress || lanPort != _lanPort;
+    _own = config;
+    _lanAddress = lanAddress;
+    _lanPort = lanPort;
+    if (moved) await _stopService();
+    await _apply(_served());
+  });
+
+  /// The server's config, with the connected app's embedded relay.
+  CompanionConfig _served() => _own.withLocalRelay(_localRelay);
 
   @override
   Future<CompanionPairingWindow> openPairing({
@@ -419,14 +444,15 @@ class DaemonCompanion implements CompanionHandler {
   @override
   Future<void> adopt(
     Object owner,
-    Map<String, Object?> config,
+    Uri? localRelay,
     void Function(HostMessage) send,
   ) {
-    final next = CompanionConfig.fromJson(config);
-    _configs.write(next);
     _appSend = send;
     app.adopt(owner, send);
-    return _serialised(() => _apply(next));
+    return _serialised(() {
+      _localRelay = localRelay;
+      return _apply(_served());
+    });
   }
 
   @override
@@ -476,17 +502,11 @@ class DaemonCompanion implements CompanionHandler {
     app.detach(owner);
     if (!wasApp) return;
     _appSend = null;
-    // A server with its own config goes back to it: the app was the
-    // authority only while it was connected.
-    final own = ownConfig;
-    if (own != null) {
-      await _serialised(() => _apply(own));
-      return;
-    }
     // The app's embedded relay closed with it; nothing waits there any more.
-    if (_config.localRelayUrl != null) {
-      await _serialised(() => _apply(_config.withoutLocalRelay()));
-    }
+    await _serialised(() {
+      _localRelay = null;
+      return _apply(_served());
+    });
   }
 
   Future<void> close() async {
@@ -532,8 +552,8 @@ class DaemonCompanion implements CompanionHandler {
       localRelayUrl: next.localRelayUrl,
       hostedEnabled: next.hostedEnabled,
       extraRelays: next.extraRelays,
-      lanPort: lanPort,
-      lanAddress: lanAddress,
+      lanPort: _lanPort,
+      lanAddress: _lanAddress,
       advertise: next.advertise,
       transcriptPollInterval: transcriptPollInterval,
       now: _now,

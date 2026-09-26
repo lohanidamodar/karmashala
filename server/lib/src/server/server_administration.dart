@@ -1,31 +1,34 @@
+import 'dart:io';
+
 import 'package:karmashala_remote/remote.dart';
 
 import '../agents/server_agents.dart';
 import '../companion/daemon_companion.dart';
 import '../protocol/messages.dart';
 import 'server_admin.dart';
+import 'server_config.dart';
+import 'server_config_service.dart';
 
 /// The daemon's answers to `serverCall`: its paired devices and revoking one
-/// (through the companion, so a revoked phone's links drop at once), and the
-/// agent CLIs on this machine.
+/// (through the companion, so a revoked phone's links drop at once), the
+/// agent CLIs on this machine, and its config.
 class ServerAdministration implements ServerAdmin {
   ServerAdministration({
     required this.companion,
     required this.agents,
-    required this.name,
-    required this.bind,
-    required this.standalone,
+    required this.config,
+    required this.dataDirectory,
   });
 
   /// Null when phones cannot be served (the companion did not start).
   final DaemonCompanion? companion;
   final ServerAgents agents;
 
-  /// What this server is called, where its phone listener binds, and whether
-  /// it runs on its own.
-  final String name;
-  final String bind;
-  final bool standalone;
+  /// `server.json` and what it decides.
+  final ServerConfigService config;
+
+  /// Where the server keeps its store and config.
+  final String dataDirectory;
 
   @override
   Future<Map<String, Object?>> call(
@@ -36,13 +39,14 @@ class ServerAdministration implements ServerAdmin {
       case ServerMethod.serverInfo:
         final serving = companion?.service;
         final relay = companion?.config.relay;
+        final settings = config.settings;
         return {
-          'name': name,
-          'standalone': standalone,
+          'name': settings.name,
+          'dataDirectory': dataDirectory,
           'companion': {
             'serving': serving != null && serving.isRunning,
             'port': ?companion?.port,
-            'bind': bind,
+            'bind': settings.bind,
             'relay': ?(relay == null ? null : scrubRelayLog('$relay')),
           },
         };
@@ -76,6 +80,24 @@ class ServerAdministration implements ServerAdmin {
           'agents': [for (final agent in scan.agents) agents.toJson(agent)],
           'summary': scan.summary,
         };
+      case ServerMethod.configGet:
+        return config.describe();
+      case ServerMethod.configSet:
+        final patch = arguments['patch'];
+        if (patch is! Map<String, Object?>) {
+          throw const ServerCallRefused(
+            'name the fields to change, shaped like server.json',
+          );
+        }
+        try {
+          return await config.set(patch);
+        } on ServerConfigError catch (error) {
+          throw ServerCallRefused('$error');
+        } on FileSystemException catch (error) {
+          throw ServerCallRefused(
+            'server.json could not be written (${error.message})',
+          );
+        }
       default:
         throw ServerCallRefused('this server does not answer "$method"');
     }

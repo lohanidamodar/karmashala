@@ -23,7 +23,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
     this.stopServe,
     this.dataDirectory,
     this.serveFlags = const [],
-  }) : _paths = paths ?? HostPaths.resolve(),
+  }) : _pathsNamed = paths != null,
+       _paths = paths ?? HostPaths.resolve(environment: Platform.environment),
        _logger = logger ?? AppLogger.named('host.local');
 
   /// How a running host is stopped: null when it went, else the sentence to
@@ -32,6 +33,10 @@ class LocalHostSessionAccess implements HostSessionAccess {
   final Future<String?> Function(String path, {required bool force})? stopServe;
 
   final HostPaths _paths;
+
+  /// Whether the caller named [paths], rather than taking this user's real
+  /// host directory. A test that did not may not stop the host there.
+  final bool _pathsNamed;
 
   /// Where to look for the binary. Injectable because a test cannot put an
   /// executable beside the test runner.
@@ -50,24 +55,19 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// in `serve`, `attach` and `list`. Null for the real app: nothing changes.
   final Map<String, String>? serveEnvironment;
 
-  /// The app's data directory, whose `karmashala.sqlite` the `serve` it starts
-  /// opens as its store. Asked at start, since resolving it is async.
+  /// Where this host keeps its data — its store, `server.json`, the MCP
+  /// handshake — for the readers beside it: the server's default folder
+  /// (`~/.karmashala`), or the one [serveFlags] names. Never passed to `serve`
+  /// on its own. Asked when needed, since resolving it is async.
   final Future<String> Function()? dataDirectory;
 
-  /// More `serve` flags: a probe's host asks for an ephemeral MCP port, so it
-  /// never takes the real host's.
+  /// The `serve` flags: none for the real app, whose server keeps its data in
+  /// its default folder; a probe's names its own `--data-dir` and asks for
+  /// ephemeral ports, so it never takes the real host's.
   final List<String> serveFlags;
 
-  /// What `serve` is started with. Without [dataDirectory] it has no
-  /// `--data-dir`, and `serve` refuses in words.
-  Future<List<String>> serveArguments() async {
-    final directory = await dataDirectory?.call();
-    return [
-      'serve',
-      if (directory != null) '--data-dir=$directory',
-      ...serveFlags,
-    ];
-  }
+  /// What `serve` is started with.
+  Future<List<String>> serveArguments() async => ['serve', ...serveFlags];
 
   /// Where this access looks for its host — its socket, lock and sessions.
   HostPaths get paths => _paths;
@@ -557,11 +557,39 @@ class LocalHostSessionAccess implements HostSessionAccess {
     }
   }
 
+  /// Why a real `serve` may not be started here, or null when it may. Under a
+  /// test runner (`FLUTTER_TEST`) a real `serve` would keep its data in the
+  /// owner's `~/.karmashala` and bind the owner's socket unless it is told
+  /// otherwise, so there it is started only with its own `--data-dir` and a
+  /// host directory or home of its own in [serveEnvironment]. The app, run
+  /// for real, is not a test and starts it bare.
+  static String? refusalUnderTest({
+    required List<String> arguments,
+    required Map<String, String>? serveEnvironment,
+    required Map<String, String> processEnvironment,
+  }) {
+    if (processEnvironment['FLUTTER_TEST'] != 'true') return null;
+    final ownData = arguments.any((a) => a.startsWith('--data-dir='));
+    final env = serveEnvironment ?? const {};
+    final ownHost =
+        env.containsKey(kHostDirectoryEnvironmentVariable) ||
+        env.containsKey('HOME') ||
+        env.containsKey('USERPROFILE');
+    if (ownData && ownHost) return null;
+    return 'a test may not start a real serve against the real home: give it '
+        '--data-dir and KARMASHALA_HOST_DIR (or HOME) of its own, or inject '
+        'startServe';
+  }
+
   /// `stop` from this app's own binary, pointed at [paths]: it ends the host
   /// there, whatever build that host is.
   Future<String?> _stop(File binary, {required bool force}) async {
     final custom = stopServe;
     if (custom != null) return custom(binary.path, force: force);
+    if (!_pathsNamed && Platform.environment['FLUTTER_TEST'] == 'true') {
+      return 'a test may not stop the host in the real host directory: name '
+          'paths of its own, or inject stopServe';
+    }
     try {
       final result = await Process.run(
         binary.path,
@@ -630,13 +658,23 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// daemon prints one line when the socket is up, and that line is the event.
   /// Returns null on success, or the sentence to refuse with.
   Future<String?> _start(File binary) async {
+    final custom = startServe;
+    final arguments = await serveArguments();
+    if (custom == null) {
+      final refused = refusalUnderTest(
+        arguments: arguments,
+        serveEnvironment: serveEnvironment,
+        processEnvironment: Platform.environment,
+      );
+      if (refused != null) return refused;
+    }
     final Process process;
     try {
       process =
-          await (startServe?.call(binary.path) ??
+          await (custom?.call(binary.path) ??
               Process.start(
                 binary.path,
-                await serveArguments(),
+                arguments,
                 environment: serveEnvironment,
                 // Detached, so it outlives this app — which is the entire
                 // point — but with stdio, so the banner is readable.

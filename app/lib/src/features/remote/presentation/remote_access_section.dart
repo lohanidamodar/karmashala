@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,8 +7,11 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_section.dart';
+import 'package:karmashala_core/logging.dart';
+
 import '../application/relay_prefs.dart';
 import '../application/remote_access_controller.dart';
+import '../application/remote_access_settings.dart';
 import '../application/remote_providers.dart';
 import '../application/ssh_relays.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -21,7 +26,9 @@ import '../../settings/presentation/settings_row.dart';
 
 /// Settings → Remote access: the enable switch, the local and hosted relays,
 /// the relays on SSH hosts, the paired devices with last-seen and revoke, and
-/// the pairing button.
+/// the pairing button. The switch, the internet relay and its URL are this
+/// machine's server config (`server.json`), read and written through the
+/// server; the local relay is this app's own listener.
 class RemoteAccessSection extends ConsumerStatefulWidget {
   const RemoteAccessSection({super.key});
 
@@ -34,12 +41,39 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
   final _relay = TextEditingController();
   final _port = TextEditingController();
 
+  static final _log = AppLogger.named('remote.settings');
+
   @override
   void initState() {
     super.initState();
-    final settings = ref.read(settingsControllerProvider);
-    _relay.text = settings.remoteRelayUrl ?? '';
-    _port.text = '${settings.localRelayPort}';
+    _relay.text = _relayText(ref.read(remoteAccessSettingsProvider));
+    _port.text = '${ref.read(settingsControllerProvider).localRelayPort}';
+  }
+
+  /// The URL field's text: empty for the PopupBits relay, as its hint says.
+  static String _relayText(RemoteAccessSettings access) {
+    final relay = access.relay?.toString();
+    return relay == null || relay == kDefaultRelayUrl ? '' : relay;
+  }
+
+  /// Writes to the server's config; a refusal is logged, and the switches
+  /// show what the server kept.
+  Future<void> _change({
+    bool? enabled,
+    bool? hostedEnabled,
+    String? relayUrl,
+  }) async {
+    try {
+      await ref
+          .read(remoteAccessControllerProvider)
+          .setRemoteAccess(
+            enabled: enabled,
+            hostedEnabled: hostedEnabled,
+            relayUrl: relayUrl,
+          );
+    } on Object catch (error, stack) {
+      _log.warning('Remote access settings were not changed.', error, stack);
+    }
   }
 
   @override
@@ -49,10 +83,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
     super.dispose();
   }
 
-  void _setEnabled(bool value) {
-    ref.read(settingsControllerProvider.notifier).setRemoteAccessEnabled(value);
-    ref.read(remoteAccessControllerProvider).sync();
-  }
+  void _setEnabled(bool value) => unawaited(_change(enabled: value));
 
   /// Start/stop the embedded relay. Persisted, so it auto-starts with remote
   /// access on later launches; the hosted relay is untouched by this.
@@ -62,22 +93,15 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
   }
 
   /// Turn the hosted relay on or off. Its devices park while it is off.
-  void _setHostedEnabled(bool value) {
-    ref.read(relayPrefsProvider.notifier).setHostedEnabled(value);
-    ref.read(remoteAccessControllerProvider).sync();
-  }
+  void _setHostedEnabled(bool value) =>
+      unawaited(_change(hostedEnabled: value));
 
-  void _saveRelay(String value) {
-    final trimmed = value.trim();
-    ref
-        .read(settingsControllerProvider.notifier)
-        .setRemoteRelayUrl(trimmed.isEmpty ? null : trimmed);
-  }
-
-  /// The relay is redialled only when editing ends — not per keystroke.
+  /// The relay is written, and redialled, only when editing ends — not per
+  /// keystroke. Empty is the PopupBits relay.
   void _applyRelay() {
-    _saveRelay(_relay.text);
-    ref.read(remoteAccessControllerProvider).sync();
+    final text = _relay.text.trim();
+    if (text == _relayText(ref.read(remoteAccessSettingsProvider))) return;
+    unawaited(_change(relayUrl: text));
   }
 
   /// The local port, applied when editing ends; junk snaps back.
@@ -95,7 +119,14 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(settingsControllerProvider);
+    final access = ref.watch(remoteAccessSettingsProvider);
+    // What the server decided replaces the field's text — read late, or
+    // changed from elsewhere — unless the person is typing in it.
+    ref.listen(remoteAccessSettingsProvider, (previous, next) {
+      final text = _relayText(next);
+      if (previous != null && _relayText(previous) == text) return;
+      _relay.text = text;
+    });
     final prefs = ref.watch(relayPrefsProvider);
     final devices = ref.watch(pairedDevicesProvider);
     final sshRelays = ref.watch(sshRelaysProvider);
@@ -113,19 +144,19 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
           SettingsSwitchRow(
             label: 'Remote access',
             help: 'Follow and answer sessions from a paired phone. Encrypted.',
-            value: settings.remoteAccessEnabled,
+            value: access.enabled,
             onChanged: _setEnabled,
           ),
-          if (settings.remoteAccessEnabled) ...[
+          if (access.enabled) ...[
             const SizedBox(height: Insets.sm),
             _RelaySwitches(
               prefs: prefs,
+              hostedEnabled: access.relayEnabled,
               port: _port,
               relay: _relay,
               onLocalChanged: _setLocalEnabled,
               onHostedChanged: _setHostedEnabled,
               onPortDone: _applyPort,
-              onRelayEdited: _saveRelay,
               onRelayDone: _applyRelay,
             ),
             const SizedBox(height: Insets.md),
@@ -139,7 +170,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
                 // Its own box relay while that is on; otherwise — and also —
                 // the hosted one, which every phone falls back to.
                 final box = _sshRelayOf(device, sshRelays);
-                return !(box?.enabled ?? false) && !prefs.hostedEnabled;
+                return !(box?.enabled ?? false) && !access.relayEnabled;
               },
             ),
           ],
@@ -165,22 +196,24 @@ SshRelayEntry? _sshRelayOf(PairedDevice device, List<SshRelayEntry> relays) {
 class _RelaySwitches extends StatelessWidget {
   const _RelaySwitches({
     required this.prefs,
+    required this.hostedEnabled,
     required this.port,
     required this.relay,
     required this.onLocalChanged,
     required this.onHostedChanged,
     required this.onPortDone,
-    required this.onRelayEdited,
     required this.onRelayDone,
   });
 
   final RelayPrefs prefs;
+
+  /// Whether the internet relay is served — the server's config.
+  final bool hostedEnabled;
   final TextEditingController port;
   final TextEditingController relay;
   final ValueChanged<bool> onLocalChanged;
   final ValueChanged<bool> onHostedChanged;
   final VoidCallback onPortDone;
-  final ValueChanged<String> onRelayEdited;
   final VoidCallback onRelayDone;
 
   /// A port is five digits; the field need not be wider.
@@ -220,10 +253,10 @@ class _RelaySwitches extends StatelessWidget {
         SettingsSwitchRow(
           label: 'Hosted relay (internet)',
           help: 'Reaches a phone anywhere. The relay can read nothing.',
-          value: prefs.hostedEnabled,
+          value: hostedEnabled,
           onChanged: onHostedChanged,
         ),
-        if (prefs.hostedEnabled)
+        if (hostedEnabled)
           TextField(
             controller: relay,
             decoration: const InputDecoration(
@@ -234,11 +267,10 @@ class _RelaySwitches extends StatelessWidget {
                   'Leave empty for the PopupBits relay, or point it at '
                   'your own.',
             ),
-            onChanged: onRelayEdited,
             onSubmitted: (_) => onRelayDone(),
             onEditingComplete: onRelayDone,
           ),
-        if (!prefs.anyEnabled)
+        if (!prefs.localEnabled && !hostedEnabled)
           const Padding(
             padding: EdgeInsets.only(top: Insets.xs),
             child: SettingsNotice(

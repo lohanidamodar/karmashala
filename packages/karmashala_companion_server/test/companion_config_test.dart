@@ -13,20 +13,24 @@ void main() {
     advertise: true,
   );
 
-  test('reads back what it wrote', () {
-    expect(CompanionConfig.fromJson(full.toJson()), full);
+  test('off listens nowhere', () {
+    const off = CompanionConfig.off;
+    expect(off.enabled, isFalse);
+    expect(off.relay, isNull);
+    expect(off.advertise, isFalse);
   });
 
-  test('a host no app configured meets phones only where each row says', () {
-    const unconfigured = CompanionConfig.unconfigured;
-    expect(unconfigured.enabled, isTrue);
-    expect(unconfigured.relay, isNull);
-    expect(unconfigured.advertise, isFalse);
+  test('the embedded relay comes and goes and nothing else moves', () {
+    final without = full.withLocalRelay(null);
+    expect(without.localRelayUrl, isNull);
+    expect(without.relay, full.relay);
+    expect(without.extraRelays, full.extraRelays);
+    expect(without.withLocalRelay(full.localRelayUrl), full);
   });
 
   test('only the relay, the beacon and the switch restart a server', () {
     expect(
-      full.restartsFor(full.withoutLocalRelay()),
+      full.restartsFor(full.withLocalRelay(null)),
       isFalse,
       reason: 'the embedded relay comes and goes on a running server',
     );
@@ -36,17 +40,6 @@ void main() {
       ),
       isTrue,
     );
-  });
-
-  test('the store keeps it without the app\'s own relay', () {
-    final database = AppDatabase.memory();
-    addTearDown(database.close);
-    final store = CompanionConfigStore(database);
-
-    expect(store.read(), isNull);
-    store.write(full);
-
-    expect(store.read(), full.withoutLocalRelay());
   });
 
   test('one machine identity, minted once', () {

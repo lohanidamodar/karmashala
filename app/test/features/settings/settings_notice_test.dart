@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/presentation/remote_access_section.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_notice.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../../support/memory_server_config.dart';
 
 /// The one notice the settings surfaces draw under a setting.
 void main() {
@@ -82,10 +81,8 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container
-        .read(settingsControllerProvider.notifier)
-        .setRemoteAccessEnabled(true);
-    container.read(relayPrefsProvider.notifier).setHostedEnabled(false);
+    setRemoteAccessNow(container, enabled: true);
+    setRemoteAccessNow(container, hostedEnabled: false);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(

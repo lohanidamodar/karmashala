@@ -74,7 +74,7 @@ void main() {
     // The `serve` it starts is told the same folder, and reads it back there.
     expect(access.serveEnvironment, {kHostDirectoryEnvironmentVariable: home});
     expect(
-      HostPaths.resolve(environment: access.serveEnvironment).directory.path,
+      HostPaths.resolve(environment: access.serveEnvironment!).directory.path,
       home,
     );
   }, skip: desktop ? null : 'no local host off the desktop');
@@ -116,7 +116,10 @@ void main() {
     ).read(localHostSessionAccessProvider)!;
     // Found after an upgrade: the per-user default, and no variable handed to
     // the `serve` it starts, so an already-running host is the one it finds.
-    expect(access.paths.directory.path, HostPaths.resolve().directory.path);
+    expect(
+      access.paths.directory.path,
+      HostPaths.resolve(environment: Platform.environment).directory.path,
+    );
     if (Platform.isWindows &&
         !Platform.environment.containsKey(kHostDirectoryEnvironmentVariable)) {
       expect(

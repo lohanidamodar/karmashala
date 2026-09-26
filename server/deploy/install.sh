@@ -24,6 +24,8 @@
 #   --relay <url>        the relay phones meet this server at
 #   --relay-token <t>    that relay's access token (32+ url-safe characters)
 #   --beacon             announce this server on the LAN beacon
+#   --no-companion       write the config with phones not served (the
+#                        installer turns them on by default)
 #   --force-config       replace an existing server.json with these options
 #   --restart            restart a running server even if it holds sessions
 #                        (ends them)
@@ -34,7 +36,7 @@
 # binary finds its bundled SQLite at ../lib.
 set -euo pipefail
 
-usage() { sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; }
 say() { printf '%s\n' "$*"; }
 die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
 
@@ -42,7 +44,9 @@ SOURCE=""
 PREFIX=""
 SYSTEM=0
 DATA_DIR="${HOME}/.karmashala"
-INIT_FLAGS=()
+# A server installed for phones serves them; `serve` alone would not until
+# its config said so.
+INIT_FLAGS=("--companion")
 FORCE_CONFIG=0
 RESTART=0
 SERVICE=1
@@ -58,6 +62,7 @@ while [ $# -gt 0 ]; do
     --relay) INIT_FLAGS+=("--relay=${2:?--relay needs a URL}"); shift 2 ;;
     --relay-token) INIT_FLAGS+=("--relay-token=${2:?--relay-token needs a token}"); shift 2 ;;
     --beacon) INIT_FLAGS+=("--beacon"); shift ;;
+    --no-companion) INIT_FLAGS+=("--no-companion"); shift ;;
     --force-config) FORCE_CONFIG=1; shift ;;
     --restart) RESTART=1; shift ;;
     --no-service) SERVICE=0; shift ;;
@@ -73,7 +78,7 @@ done
 OS="$(uname -s)"
 case "$OS" in
   Linux|Darwin) ;;
-  *) die "this installer is for Linux and macOS; on $OS run \`karmashala_host serve --standalone\` yourself" ;;
+  *) die "this installer is for Linux and macOS; on $OS run \`karmashala_host serve\` yourself" ;;
 esac
 
 if [ -z "$PREFIX" ]; then
@@ -149,14 +154,14 @@ esac
 # and never replaced unless asked.
 if [ -f "$DATA_DIR/server.json" ] && [ "$FORCE_CONFIG" = 0 ]; then
   say "Keeping $DATA_DIR/server.json (--force-config replaces it)."
-  [ "${#INIT_FLAGS[@]}" = 0 ] || say "  The config options given were not applied."
+  [ "${#INIT_FLAGS[@]}" = 1 ] || say "  The config options given were not applied."
 else
   FORCE=()
   [ "$FORCE_CONFIG" = 1 ] && FORCE=(--force)
   "$BIN" init "--data-dir=$DATA_DIR" ${INIT_FLAGS[@]+"${INIT_FLAGS[@]}"} ${FORCE[@]+"${FORCE[@]}"}
 fi
 
-[ "$SERVICE" = 1 ] || { say "Not installing a service (--no-service). Run: $BIN serve --standalone --data-dir=$DATA_DIR"; exit 0; }
+[ "$SERVICE" = 1 ] || { say "Not installing a service (--no-service). Run: $BIN serve --data-dir=$DATA_DIR"; exit 0; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 render() {
@@ -201,7 +206,7 @@ if ! ours_active && "$BIN" list >/dev/null 2>&1; then
 fi
 
 if [ "$OS" = Linux ]; then
-  command -v systemctl >/dev/null || die "no systemctl here; run \`$BIN serve --standalone --data-dir=$DATA_DIR\` under your own supervisor"
+  command -v systemctl >/dev/null || die "no systemctl here; run \`$BIN serve --data-dir=$DATA_DIR\` under your own supervisor"
   UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   mkdir -p "$UNIT_DIR"
   render "$HERE/templates/karmashala-server.service" "$UNIT_DIR/karmashala-server.service"

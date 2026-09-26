@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_remote/client.dart';
@@ -38,8 +37,14 @@ String fakeAgentPath(Directory dataDir) => '${dataDir.parent.path}/fake-agent';
 /// would have left it — this machine's environment, a project, a repository,
 /// session rows not yet started, agent installations (one a stand-in script),
 /// a note and a todo — and closes it again before the host opens the file.
+/// Its `server.json` has remote access on, as the desktop's switch leaves it
+/// (on loopback, no beacon: a test multicasts nothing).
 void seedStore(Directory dataDir) {
   dataDir.createSync(recursive: true);
+  File(
+    '${dataDir.path}/server.json',
+  ).writeAsStringSync('{"companion": {"enabled": true}}\n');
+  Process.runSync('chmod', ['600', '${dataDir.path}/server.json']);
   final database = AppDatabase.open(dataDir);
   try {
     final t0 = DateTime.now().toUtc();
@@ -140,8 +145,8 @@ int companionPortOf(String greeting) {
 }
 
 /// The desktop app's side of the companion, over the same lifecycle link the
-/// app opens (`LocalHostLifecycleSource` → `HostLifecycleWatch`): the config it
-/// sends on every link, the pairing it asks for, and the calls the host
+/// app opens (`LocalHostLifecycleSource` → `HostLifecycleWatch`): the attach
+/// it sends on every link, the pairing it asks for, and the calls the host
 /// forwards to it.
 class AppLink {
   AppLink._(this.watch);
@@ -157,18 +162,18 @@ class AppLink {
   /// re-sweeps phones.
   final _standing = <String, Map<String, Object?>>{};
 
-  /// A link that is the app: it sends [config] as `HostCompanionLink.attached`
-  /// does. Without one it only watches — a `pair` over SSH, which is not the
-  /// app and must not be adopted as it.
+  /// A link that is the app when [asApp]: it attaches as
+  /// `HostCompanionLink.attached` does. Otherwise it only watches — a `pair`
+  /// over SSH, which is not the app and must not be adopted as it.
   static Future<AppLink> connect(
     String socketPath, {
-    CompanionConfig? config,
+    bool asApp = false,
   }) async {
     final watch = await HostLifecycleWatch.connect(socketPath);
     if (watch == null) throw StateError('no host at $socketPath');
     final link = AppLink._(watch);
     watch.companionCalls.listen(link._onCall);
-    if (config != null) watch.configureCompanion(config.toJson());
+    if (asApp) watch.attachCompanion();
     return link;
   }
 
@@ -229,7 +234,9 @@ class AppLink {
 class LoopbackPhone {
   LoopbackPhone(this.port, {required this.name});
 
-  final int port;
+  /// Where it dials: a server whose listener moved is dialled at the new port
+  /// with the same pairing.
+  int port;
   final String name;
   final store = InMemoryCompanionStore();
   CompanionPairing? pairing;

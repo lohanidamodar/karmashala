@@ -59,6 +59,7 @@ export 'src/server/pair_command.dart';
 export 'src/server/server_admin.dart';
 export 'src/server/server_administration.dart';
 export 'src/server/server_config.dart';
+export 'src/server/server_config_service.dart';
 export 'src/server/server_data_directory.dart';
 export 'src/server/terminal_qr.dart';
 export 'src/domain/screen_snapshot.dart';

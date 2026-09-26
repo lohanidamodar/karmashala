@@ -5,7 +5,7 @@ import 'package:karmashala_host/host_paths.dart';
 import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/paths/app_support_directory.dart';
+import '../../../core/paths/server_data_directory.dart';
 import '../../../core/probe/probe_mode.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_ssh/host.dart';
@@ -30,10 +30,11 @@ final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
   }
   if (!ref.watch(localHostReachableProvider)) return null;
   final probe = ref.watch(probeModeProvider);
-  // The daemon opens this app's own database, in the folder the app keeps it.
+  // The server keeps its data — the database this app opens too — in its own
+  // default folder, so it is started with no `--data-dir`.
   if (!probe.enabled) {
     return LocalHostSessionAccess(
-      dataDirectory: () async => p.absolute((await appSupportDirectory()).path),
+      dataDirectory: () async => p.absolute((await serverDataDirectory()).path),
     );
   }
   // A probe's host is its own: the owner's is per user, so sharing it would
@@ -46,7 +47,7 @@ final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
     paths: paths,
     serveEnvironment: {kHostDirectoryEnvironmentVariable: paths.directory.path},
     dataDirectory: () async => data,
-    serveFlags: const ['--mcp-port=0', '--companion-port=0'],
+    serveFlags: ['--data-dir=$data', '--mcp-port=0', '--companion-port=0'],
   );
 });
 

@@ -299,8 +299,12 @@ class _ClientSession {
         _server.mcpTools?.adopt(this, message.tools, _send);
       case McpResultMessage():
         _server.mcpTools?.answer(this, message);
-      case CompanionConfigMessage():
-        await _server.companion?.adopt(this, message.config, _send);
+      case CompanionAttachMessage(:final localRelayUrl):
+        await _server.companion?.adopt(
+          this,
+          localRelayUrl == null ? null : Uri.tryParse(localRelayUrl),
+          _send,
+        );
       case CompanionResultMessage():
         _server.companion?.answer(this, message);
       case CompanionNoticeMessage():

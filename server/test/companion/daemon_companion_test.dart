@@ -88,6 +88,7 @@ void main() {
       hostName: 'desk',
       dataDirectory: '${home.path}/data',
       lanPort: 0,
+      config: const CompanionConfig(enabled: true),
       transcriptPollInterval: Duration.zero,
       screens: RegistryScreens(registry, enterDelay: Duration.zero),
       clock: () => t0,
@@ -306,13 +307,9 @@ void main() {
 
         final app = Object();
         final calls = <CompanionCallMessage>[];
-        await companion.adopt(
-          app,
-          const CompanionConfig(enabled: true).toJson(),
-          (message) {
-            if (message is CompanionCallMessage) calls.add(message);
-          },
-        );
+        await companion.adopt(app, null, (message) {
+          if (message is CompanionCallMessage) calls.add(message);
+        });
         while (calls.isEmpty) {
           await Future<void>.delayed(const Duration(milliseconds: 5));
         }
@@ -793,13 +790,9 @@ void main() {
 
     setUp(() async {
       calls = [];
-      await companion.adopt(
-        app,
-        const CompanionConfig(enabled: true).toJson(),
-        (message) {
-          if (message is CompanionCallMessage) calls.add(message);
-        },
-      );
+      await companion.adopt(app, null, (message) {
+        if (message is CompanionCallMessage) calls.add(message);
+      });
     });
 
     test('the session list is the app\'s', () async {
@@ -921,36 +914,64 @@ void main() {
   });
 
   group('settings', () {
-    test('what the app sent is kept, without its own relay', () async {
-      await companion.adopt(
-        Object(),
-        CompanionConfig(
-          enabled: true,
-          relay: Uri.parse('wss://relay.example.com'),
-          localRelayUrl: Uri.parse('ws://192.168.1.4:8787'),
-          notesEnabled: false,
-        ).toJson(),
-        (_) {},
-      );
+    test('the app adds only its embedded relay, and takes it along', () async {
+      final app = Object();
+      await companion.adopt(app, Uri.parse('ws://192.168.1.4:8787'), (_) {});
 
-      final kept = CompanionConfigStore(database).read()!;
-      expect(kept.relay, Uri.parse('wss://relay.example.com'));
-      expect(kept.localRelayUrl, isNull);
-      expect(kept.notesEnabled, isFalse);
+      expect(
+        companion.config.localRelayUrl,
+        Uri.parse('ws://192.168.1.4:8787'),
+      );
+      expect(companion.config.enabled, isTrue, reason: 'the server config');
+      expect(companion.ownConfig.localRelayUrl, isNull);
+
+      await companion.detach(app);
+      expect(companion.config.localRelayUrl, isNull);
+      expect(companion.service, isNotNull, reason: 'still serving');
     });
 
     test('remote access switched off stops listening', () async {
       expect(companion.service, isNotNull);
 
-      await companion.adopt(
-        Object(),
-        const CompanionConfig(enabled: false).toJson(),
-        (_) {},
+      await companion.reconfigure(
+        config: CompanionConfig.off,
+        lanAddress: '127.0.0.1',
+        lanPort: 0,
       );
 
       expect(companion.service, isNull);
       expect(companion.port, isNull);
     });
+
+    test(
+      'a new bind restarts the listener there; relays move in place',
+      () async {
+        final before = companion.service;
+        expect(before, isNotNull);
+
+        await companion.reconfigure(
+          config: CompanionConfig(
+            enabled: true,
+            extraRelays: [Uri.parse('ws://box.example.com:8787')],
+          ),
+          lanAddress: '127.0.0.1',
+          lanPort: 0,
+        );
+        expect(companion.service, same(before), reason: 'relays re-pointed');
+        expect(companion.config.extraRelays, [
+          Uri.parse('ws://box.example.com:8787'),
+        ]);
+
+        await companion.reconfigure(
+          config: const CompanionConfig(enabled: true),
+          lanAddress: '0.0.0.0',
+          lanPort: 0,
+        );
+        expect(companion.service, isNot(same(before)));
+        expect(companion.lanAddress, '0.0.0.0');
+        expect(companion.port, isNotNull);
+      },
+    );
 
     test('a pairing with no relay anywhere is direct and says so', () async {
       final window = await companion.openPairing(

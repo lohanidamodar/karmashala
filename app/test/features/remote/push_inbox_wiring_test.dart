@@ -4,6 +4,7 @@ library;
 
 import 'dart:convert';
 import 'dart:typed_data';
+import '../../support/memory_server_config.dart';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -14,7 +15,6 @@ import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/push.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -112,9 +112,8 @@ void main() {
         pushPlatform: 'android',
       ),
     );
-    final settings = container.read(settingsControllerProvider.notifier);
-    settings.setRemoteAccessEnabled(true);
-    settings.setRemoteRelayUrl('http://127.0.0.1:${relay.port}');
+    setRemoteAccessNow(container, enabled: true);
+    setRemoteAccessNow(container, relayUrl: 'http://127.0.0.1:${relay.port}');
     await controller.sync();
   });
 
@@ -193,9 +192,7 @@ void main() {
   });
 
   test('with remote access off, inbox news drops quietly', () async {
-    container
-        .read(settingsControllerProvider.notifier)
-        .setRemoteAccessEnabled(false);
+    setRemoteAccessNow(container, enabled: false);
     await controller.sync();
 
     controller.onInboxChanged(AttentionInbox.empty, _inbox([_item('s1')]));

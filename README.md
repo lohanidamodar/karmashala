@@ -34,7 +34,8 @@ into the shell and reachable; caveats are stated inline rather than implied.
   app; polling is the fallback.
 - **An MCP server of its own** — around 85 tools
   ([`mcp_tool_catalogue.dart`](packages/karmashala_mcp/lib/src/mcp_tool_catalogue.dart) is
-  the list). Served over HTTP by the app, and over stdio by a separate
+  the list). Served over HTTP by the local server (or the app, where none
+  runs), and over stdio by a separate
   `karmashala_mcp` binary
   ([`packages/mcp_bridge/`](packages/mcp_bridge/bin/karmashala_mcp.dart)). The bridge exists
   because a session inside WSL cannot reach the host across the WSL switch on
@@ -173,11 +174,17 @@ workflows for the companion.
 work and does nothing: `path_provider` resolves the Windows folder through
 `SHGetKnownFolderPath`, which ignores the environment variable, so an instance
 launched that way silently opens the **real** database and imports into it.
+Two resolvers read it, and every consumer goes through one of them:
+`serverDataDirectory()`
+([`app/lib/src/core/paths/server_data_directory.dart`](app/lib/src/core/paths/server_data_directory.dart))
+for what is the server's — the database (shared with the local
+`karmashala_host serve`), `server.json`, the MCP handshake and session
+configs, the verification artifacts — `~/.karmashala` by default; and
 `appSupportDirectory()`
 ([`app/lib/src/core/paths/app_support_directory.dart`](app/lib/src/core/paths/app_support_directory.dart))
-is the one resolver, and all seven consumers go through it — the database, the
-log directory, the env vault, the IPC socket, the session media store and the
-verification artifacts. It moves as a set on purpose: a demo instance writing
+for what only the app keeps — logs, the env vault, the IPC socket, the session
+media store. With the variable set, both are that folder. It moves as a set on
+purpose: a demo instance writing
 its rows to a scratch directory and its socket to the real one would be worse
 than no override at all. The MCP bridge reads the same variable, so it finds
 the handshake the instance actually published instead of connecting to the
@@ -185,7 +192,7 @@ real install.
 
 | Variable | Read by | Effect |
 | --- | --- | --- |
-| `KARMASHALA_DATA_DIR` | the app and the MCP bridge, at launch | Puts the whole per-user data directory somewhere else, created if absent. For screenshots, demos and running a release build against data nobody minds losing. **Not a user setting** — nothing in the app writes it. |
+| `KARMASHALA_DATA_DIR` | the app and the MCP bridge, at launch | Puts the whole per-user data directory — the server's (`~/.karmashala`) and the app's own — somewhere else, created if absent; the app then starts its server with `--data-dir` naming it. For screenshots, demos and running a release build against data nobody minds losing. **Not a user setting** — nothing in the app writes it. |
 | `KARMASHALA_PROBE` | the app, once at launch | `1` makes the instance a **probe**: a second copy for testing a change beside the real app, with no global side effects (agent hooks, skills, launch at login, hotkey, remote access, toasts, the fixed control port) and a PROBE banner. Requires `KARMASHALA_DATA_DIR` pointing somewhere other than the real folder, or it refuses to start. See PROJECT.md §23. |
 | `KARMASHALA_SESSION_ID` | stamped on agent panes; read by the MCP bridge | Which session a process belongs to. The bridge forwards it as `callerSessionId`, which is how agent-spawns-agent depth is capped from the real process tree. |
 | `KARMASHALA_PORT_BASE` | stamped on agent panes | A deterministic per-session port base in `[20000, 32760)`. A namespace a repo's own scripts may read — not a lock or a reservation. |

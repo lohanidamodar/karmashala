@@ -75,19 +75,6 @@ void main() {
   });
   tearDown(() => root.deleteSync(recursive: true));
 
-  test('without --data-dir it refuses before touching anything', () async {
-    final hostDir = Directory(p.join(root.path, 'host'));
-    final code = await runServe(
-      ['--companion-port=0'],
-      out: out,
-      err: err,
-      paths: HostPaths(hostDir),
-    );
-    expect(code, 2);
-    expect(err.text.toString(), contains('--data-dir=<dir>'));
-    expect(hostDir.existsSync(), isFalse);
-  });
-
   test('--data-dir is read absolute, and empty is missing', () {
     expect(dataDirectoryOf(['--data-dir=']), isNull);
     expect(dataDirectoryOf(['--companion-port=0']), isNull);

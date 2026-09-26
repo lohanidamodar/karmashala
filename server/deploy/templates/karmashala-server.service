@@ -15,7 +15,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=@BIN@ serve --standalone --data-dir=@DATA_DIR@
+ExecStart=@BIN@ serve --data-dir=@DATA_DIR@
 # The agents' own tools and anything they run are found on this PATH, the
 # installer's own: a user unit otherwise gets systemd's bare one.
 Environment=PATH=@PATH@

@@ -62,4 +62,4 @@ ENTRYPOINT ["/usr/bin/tini", "--", "/opt/karmashala-server/bin/karmashala_host"]
 # Inside a container the listener has to bind every interface to be reachable
 # through a published port at all; which interfaces of the *machine* reach it
 # is decided by how the port is published (see docker-compose.yml).
-CMD ["serve", "--standalone", "--data-dir=/data", "--bind=0.0.0.0"]
+CMD ["serve", "--data-dir=/data", "--companion", "--bind=0.0.0.0"]

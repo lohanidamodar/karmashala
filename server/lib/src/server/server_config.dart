@@ -33,7 +33,8 @@ class ServerConfigError implements Exception {
 ///   "companion": {
 ///     "enabled": true, "bind": "0.0.0.0", "port": 47820, "beacon": false,
 ///     "relay": "wss://relay.example.com", "relayToken": "<32+ url-safe>",
-///     "extraRelays": ["ws://box:8787/k/<token>"], "notes": true
+///     "relayEnabled": true, "extraRelays": ["ws://box:8787/k/<token>"],
+///     "notes": true
 ///   },
 ///   "mcp": {"port": 47821}
 /// }
@@ -47,6 +48,7 @@ class ServerConfig {
     this.beacon,
     this.relay,
     this.relayToken,
+    this.relayEnabled,
     this.extraRelays,
     this.notes,
     this.mcpPort,
@@ -74,6 +76,10 @@ class ServerConfig {
   /// shown without it.
   final String? relayToken;
 
+  /// Whether [relay] is served. Off keeps the URL — the desktop's "Hosted
+  /// relay" switch — and parks the phones paired through it.
+  final bool? relayEnabled;
+
   /// More relays this server listens on, each a full URL (token included).
   final List<Uri>? extraRelays;
 
@@ -82,16 +88,6 @@ class ServerConfig {
 
   /// The port agents' MCP endpoint prefers. Always loopback.
   final int? mcpPort;
-
-  /// Whether this says anything about how phones are served — beyond where
-  /// the listener binds, which is fixed for the process.
-  bool get saysHowToServe =>
-      companionEnabled != null ||
-      beacon != null ||
-      relay != null ||
-      relayToken != null ||
-      extraRelays != null ||
-      notes != null;
 
   /// This, with every field [other] sets taken from [other].
   ServerConfig overriddenBy(ServerConfig other) => ServerConfig(
@@ -102,6 +98,7 @@ class ServerConfig {
     beacon: other.beacon ?? beacon,
     relay: other.relay ?? relay,
     relayToken: other.relayToken ?? relayToken,
+    relayEnabled: other.relayEnabled ?? relayEnabled,
     extraRelays: other.extraRelays ?? extraRelays,
     notes: other.notes ?? notes,
     mcpPort: other.mcpPort ?? mcpPort,
@@ -115,6 +112,7 @@ class ServerConfig {
       'beacon': ?beacon,
       'relay': ?relay?.toString(),
       'relayToken': ?relayToken,
+      'relayEnabled': ?relayEnabled,
       if (extraRelays != null)
         'extraRelays': [for (final uri in extraRelays!) uri.toString()],
       'notes': ?notes,
@@ -184,6 +182,11 @@ class ServerConfig {
           'relayToken',
           'companion.relayToken',
         ),
+        relayEnabled: typed<bool>(
+          companion,
+          'relayEnabled',
+          'companion.relayEnabled',
+        ),
         extraRelays: extras == null
             ? null
             : [
@@ -207,6 +210,7 @@ class ServerConfig {
     'beacon',
     'relay',
     'relayToken',
+    'relayEnabled',
     'extraRelays',
     'notes',
   ];
@@ -264,6 +268,7 @@ class ServerConfig {
         beacon: toggle('beacon', 'no-beacon'),
         relay: _uri(value('relay'), '--relay'),
         relayToken: value('relay-token'),
+        relayEnabled: toggle('relay-enabled', 'no-relay-enabled'),
         extraRelays: extras.isEmpty
             ? null
             : [for (final text in extras) _uri(text, '--extra-relay')!],
@@ -343,6 +348,43 @@ class ServerConfig {
     return fromJson(json, source: file.path);
   }
 
+  /// This with [patch] laid over it: [patch] is shaped like the file, a key
+  /// it names replaces that field (inside `companion` and `mcp` too), a key
+  /// set to null clears the field back to its default, and a key it leaves
+  /// out is kept. Checked as the file is — throws [ServerConfigError] naming
+  /// [source].
+  ServerConfig patchedWith(
+    Map<String, Object?> patch, {
+    String source = 'server.config.set',
+  }) {
+    Map<String, Object?> merge(
+      Map<String, Object?> base,
+      Map<String, Object?> over,
+    ) {
+      final merged = Map<String, Object?>.of(base);
+      for (final MapEntry(:key, :value) in over.entries) {
+        final current = merged[key];
+        if (value == null) {
+          merged.remove(key);
+        } else if (value is Map<String, Object?> &&
+            current is Map<String, Object?>) {
+          merged[key] = merge(current, value);
+        } else {
+          merged[key] = value;
+        }
+      }
+      return merged;
+    }
+
+    final merged = merge(toJson(), patch);
+    // An emptied section is no section: fromJson reads either the same.
+    for (final section in const ['companion', 'mcp']) {
+      final value = merged[section];
+      if (value is Map && value.isEmpty) merged.remove(section);
+    }
+    return fromJson(merged, source: source);
+  }
+
   /// Writes this as `<dataDirectory>/server.json`, owner-only from the first
   /// byte.
   Future<void> write(String dataDirectory) => writeOwnerOnly(
@@ -359,30 +401,30 @@ class ServerSettings {
     required this.bind,
     required this.companionPort,
     required this.mcpPort,
-    required this.ownCompanion,
+    required this.companion,
   });
 
-  /// Decides each field: a flag, else the file, else the default. A
-  /// [standalone] server binds the phone listener to loopback unless told
-  /// otherwise — it may be on a public address — and serves phones by its
-  /// own config whether or not the file says anything about it; a host the
-  /// app starts binds every interface (its phones are on the desktop's
-  /// network) and serves by the app's settings unless the file says how.
+  /// The address the phone listener binds when nothing says: loopback. A
+  /// server may sit on a public address, and nobody has asked for phones to
+  /// reach it yet — the desktop's Remote access switch, `init --bind` or the
+  /// file says otherwise.
+  static const String defaultBind = '127.0.0.1';
+
+  /// Decides each field: a flag, else the file, else the default. Phones are
+  /// not served until something turns the companion on (`companion.enabled`),
+  /// and then on loopback unless `companion.bind` says otherwise.
   factory ServerSettings.resolve({
     required ServerConfig file,
     required ServerConfig flags,
-    required bool standalone,
     required String hostName,
   }) {
     final config = file.overriddenBy(flags);
     return ServerSettings(
       name: config.name?.trim() ?? hostName,
-      bind: config.bind ?? (standalone ? '127.0.0.1' : '0.0.0.0'),
+      bind: config.bind ?? defaultBind,
       companionPort: config.companionPort ?? kHostCompanionPort,
       mcpPort: config.mcpPort ?? kPreferredMcpPort,
-      ownCompanion: standalone || config.saysHowToServe
-          ? companionConfigOf(config)
-          : null,
+      companion: companionConfigOf(config),
     );
   }
 
@@ -391,9 +433,26 @@ class ServerSettings {
   final int companionPort;
   final int mcpPort;
 
-  /// How phones are served while no app is connected, or null to serve by
-  /// what the app last sent (a host the app starts, with nothing in a file).
-  final CompanionConfig? ownCompanion;
+  /// How phones are served.
+  final CompanionConfig companion;
+
+  /// These settings as `server.config.get` reports them: every field decided.
+  /// The relay is shown as configured, its token never.
+  Map<String, Object?> toJson(ServerConfig decided) => {
+    'name': name,
+    'companion': {
+      'enabled': companion.enabled,
+      'bind': bind,
+      'port': companionPort,
+      'beacon': companion.advertise,
+      'relay': ?decided.relay?.toString(),
+      'relayTokenSet': decided.relayToken != null,
+      'relayEnabled': decided.relayEnabled ?? true,
+      'extraRelays': [for (final uri in companion.extraRelays) uri.toString()],
+      'notes': companion.notesEnabled,
+    },
+    'mcp': {'port': mcpPort},
+  };
 
   /// The companion's serving config [config] says: its relay, with the token
   /// spelled into the path the relay gates on (`/k/<token>`).
@@ -406,9 +465,9 @@ class ServerSettings {
             path: joinRelayPath(relay.path, relayAccessTokenPrefix(token)),
           );
     return CompanionConfig(
-      enabled: config.companionEnabled ?? true,
+      enabled: config.companionEnabled ?? false,
       relay: served,
-      hostedEnabled: served != null,
+      hostedEnabled: served != null && (config.relayEnabled ?? true),
       extraRelays: config.extraRelays ?? const [],
       notesEnabled: config.notes ?? true,
       advertise: config.beacon ?? false,

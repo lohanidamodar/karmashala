@@ -1,11 +1,13 @@
 /// This app's half of the phone companion when the session host serves it:
-/// it answers the calls the host forwards, and carries the Remote access
-/// settings, the desktop's news and pairing requests the other way.
+/// it answers the calls the host forwards, and carries where the app's
+/// embedded relay is, the desktop's news, pairing requests and the server
+/// config calls (`server.config.get` / `set`) the other way.
 library;
 
 import 'dart:async';
 
-import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart'
+    show CompanionCallDispatcher;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_remote/host.dart';
@@ -21,6 +23,7 @@ class HostCompanionLink implements HostCompanionPeer {
     required RemoteHostBindings Function() bindings,
     required this.deviceById,
     required this.onDevicesChanged,
+    this.onAttached,
     AppLogger? logger,
   }) : _dispatcher = CompanionCallDispatcher(bindings),
        _log = logger ?? AppLogger.named('remote.host');
@@ -33,12 +36,16 @@ class HostCompanionLink implements HostCompanionPeer {
   /// The host moved paired-device rows: lists re-read.
   final void Function() onDevicesChanged;
 
+  /// A link to a host opened — maybe a new host: what it serves by is read
+  /// again.
+  final void Function()? onAttached;
+
   final AppLogger _log;
 
   HostLifecycleFeed? _feed;
   StreamSubscription<CompanionCallMessage>? _calls;
   StreamSubscription<CompanionEventMessage>? _events;
-  Map<String, Object?>? _config;
+  String? _localRelayUrl;
   final Map<int, Completer<PairedDevice>> _pairings = {};
 
   /// Whether a link to the host is open, so pairing can be asked for.
@@ -50,9 +57,10 @@ class HostCompanionLink implements HostCompanionPeer {
     _feed = feed;
     _calls = feed.companionCalls.listen((call) => unawaited(_run(feed, call)));
     _events = feed.companionEvents.listen(_onEvent);
-    final config = _config;
-    // Every link, not just the first: the host may be a new one.
-    if (config != null) feed.configureCompanion(config);
+    // Every link, not just the first: the host may be a new one. This app is
+    // the one phones' calls are forwarded to whenever it is connected.
+    feed.attachCompanion(localRelayUrl: _localRelayUrl);
+    onAttached?.call();
   }
 
   @override
@@ -62,12 +70,31 @@ class HostCompanionLink implements HostCompanionPeer {
     _failPairings('the session host went away before a phone paired');
   }
 
-  /// Serves phones by [config] from now on — sent at once when a link is
-  /// open, and on every link after.
-  void configure(CompanionConfig config) {
-    final json = config.toJson();
-    _config = json;
-    _feed?.configureCompanion(json);
+  /// Where this app's embedded relay listens from now on (null: none) — sent
+  /// at once when a link is open, and on every link after.
+  void setLocalRelay(Uri? localRelay) {
+    final url = localRelay?.toString();
+    if (url == _localRelayUrl) return;
+    _localRelayUrl = url;
+    _feed?.attachCompanion(localRelayUrl: _localRelayUrl);
+  }
+
+  /// Asks the server one administrative question (`ServerMethod`). Throws
+  /// [StateError] with the reason when there is no link, or the server
+  /// refuses.
+  Future<Map<String, Object?>> serverCall(
+    String method, [
+    Map<String, Object?> arguments = const {},
+  ]) async {
+    final feed = _feed;
+    if (feed == null) {
+      throw StateError('The session host is not running.');
+    }
+    try {
+      return await feed.serverCall(method, arguments);
+    } on HostLifecycleWatchRefused catch (refusal) {
+      throw StateError(refusal.message);
+    }
   }
 
   /// News from the desktop; dropped while no link is open, when the host

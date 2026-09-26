@@ -97,7 +97,7 @@ void main() {
       final access = LocalHostSessionAccess(
         paths: paths,
         executable: LocalHostExecutable(executableDirectory: home.path),
-        dataDirectory: () async => '${home.path}/data',
+        serveFlags: ['--data-dir=${home.path}/data'],
         startServe: (path) async {
           starts.add(path);
           await serve();

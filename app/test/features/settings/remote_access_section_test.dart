@@ -5,6 +5,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
+import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
@@ -18,6 +19,8 @@ import 'package:karmashala/src/features/settings/presentation/settings_row.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/memory_server_config.dart';
 
 /// Records what the section asked for; starts no service, opens no socket.
 class _FakeAccess extends RemoteAccessController {
@@ -64,8 +67,12 @@ class _FakeAccess extends RemoteAccessController {
 void main() {
   late AppDatabase db;
   late _FakeAccess fake;
+  late MemoryServerConfigSource server;
 
-  setUp(() => db = AppDatabase.memory());
+  setUp(() {
+    db = AppDatabase.memory();
+    server = MemoryServerConfigSource();
+  });
   tearDown(() => db.close());
 
   Widget app({
@@ -73,6 +80,7 @@ void main() {
   }) => ProviderScope(
     overrides: [
       databaseProvider.overrideWithValue(db),
+      serverConfigIn(server),
       localRelayStatusProvider.overrideWithValue(relayStatus),
       remoteAccessControllerProvider.overrideWith((ref) {
         fake = _FakeAccess(ref);
@@ -148,12 +156,16 @@ void main() {
     expect(find.text('Relay URL'), findsNothing);
   });
 
-  testWidgets('the toggle persists and wakes the controller', (tester) async {
+  testWidgets('the toggle is written to the server config — on the LAN, with '
+      'the beacon — and wakes the controller', (tester) async {
     await tester.pumpWidget(app());
 
     await enableRemoteAccess(tester);
 
-    expect(SettingsRepository(db).load().remoteAccessEnabled, isTrue);
+    expect(server.config.companionEnabled, isTrue);
+    expect(server.config.bind, '0.0.0.0');
+    expect(server.config.beacon, isTrue);
+    expect(server.config.relay, Uri.parse(kDefaultRelayUrl));
     expect(fake.syncCalls, 1);
     expect(find.text('Pair a device'), findsOneWidget);
     expect(find.text('No paired devices yet.'), findsOneWidget);
@@ -265,7 +277,7 @@ void main() {
 
     // Persisted, so it auto-starts with remote access on later launches.
     expect(RelayPrefsController.readFrom(db)!.localEnabled, isTrue);
-    expect(RelayPrefsController.readFrom(db)!.hostedEnabled, isTrue);
+    expect(server.config.relayEnabled ?? true, isTrue);
     // The controller was woken — that is what auto-starts the local relay.
     expect(fake.syncCalls, 2);
     expect(find.text('Relay running at ws://192.168.1.7:8787'), findsOneWidget);
@@ -278,6 +290,53 @@ void main() {
     expect(find.text('Relay URL'), findsOneWidget);
   });
 
+  testWidgets('the relay URL is written to the server config when editing '
+      'ends, and shows what the server kept', (tester) async {
+    await tester.pumpWidget(app());
+    await enableRemoteAccess(tester);
+    final field = find.widgetWithText(TextField, 'Relay URL');
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      isEmpty,
+      reason: 'the PopupBits relay shows as the hint',
+    );
+
+    await tester.enterText(field, 'wss://mine.example.com');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(server.config.relay, Uri.parse('wss://mine.example.com'));
+
+    await tester.enterText(field, '');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(server.config.relay, Uri.parse(kDefaultRelayUrl));
+  });
+
+  testWidgets('what the server says is shown, read late or not', (
+    tester,
+  ) async {
+    server.config = server.config.patchedWith({
+      'companion': {'enabled': true, 'relay': 'wss://theirs.example.com'},
+    });
+    await tester.pumpWidget(app());
+    expect(find.text('Relay URL'), findsNothing, reason: 'not read yet');
+
+    final element = tester.element(find.byType(RemoteAccessSection));
+    await ProviderScope.containerOf(
+      element,
+    ).read(remoteAccessSettingsProvider.notifier).load();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pair a device'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Relay URL'))
+          .controller!
+          .text,
+      'wss://theirs.example.com',
+    );
+  });
+
   testWidgets('turning both relays off says remote access is idle', (
     tester,
   ) async {
@@ -286,8 +345,8 @@ void main() {
 
     await toggleRelay(tester, hostedTitle);
 
-    expect(RelayPrefsController.readFrom(db)!.hostedEnabled, isFalse);
-    expect(RelayPrefsController.readFrom(db)!.localEnabled, isFalse);
+    expect(server.config.relayEnabled, isFalse);
+    expect(RelayPrefsController.readFrom(db)?.localEnabled ?? false, isFalse);
     expect(find.textContaining('No relay is switched on'), findsOneWidget);
     expect(find.text('Relay URL'), findsNothing);
     expect(find.text('Port'), findsNothing);

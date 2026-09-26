@@ -4,8 +4,8 @@ library;
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../settings/application/settings_controller.dart';
 import '../application/remote_access_controller.dart';
+import '../application/remote_access_settings.dart';
 import '../application/ssh_relays.dart';
 import '../relay_local/relay_endpoints.dart';
 
@@ -61,12 +61,12 @@ final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
         ),
     ];
   }
-  final settings = ref.watch(settingsControllerProvider);
-  if (settings.remoteAccessEnabled) return const [];
+  final access = ref.watch(remoteAccessSettingsProvider);
+  if (access.enabled) return const [];
   return [
     PairingRelayEndpoint(
       label: 'Internet',
-      url: resolveRelayUri(settings.remoteRelayUrl),
+      url: hostedRelayOf(access),
       kind: PairingRelayKind.internet,
     ),
   ];

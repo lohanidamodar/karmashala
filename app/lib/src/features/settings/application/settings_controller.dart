@@ -466,19 +466,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void setRemoteAccessEnabled(bool value) {
-    state = state.copyWith(remoteAccessEnabled: value);
-    _save();
-  }
-
-  void setRemoteRelayUrl(String? url) {
-    state = state.copyWith(
-      remoteRelayUrl: url,
-      clearRemoteRelayUrl: url == null,
-    );
-    _save();
-  }
-
   void setLocalRelayPort(int port) {
     state = state.copyWith(localRelayPort: port);
     _save();

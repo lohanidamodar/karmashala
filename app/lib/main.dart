@@ -18,6 +18,7 @@ import 'src/core/lifecycle/uncaught_errors.dart';
 import 'package:karmashala_core/logging.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
 import 'src/core/paths/app_support_directory.dart';
+import 'src/core/paths/server_data_directory.dart';
 import 'src/core/probe/probe_mode.dart';
 import 'src/core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/process.dart';
@@ -99,12 +100,16 @@ Future<void> _bootstrap(AppLogger logger) async {
       'Disabled: ${ProbeMode.disabledEffects.join(', ')}.',
     );
     await appSupportDirectory();
+    await serverDataDirectory();
   }
   // Opening the file needs `path_provider`, hundreds of milliseconds in, so it
   // backfills the buffer. Awaited: the directory below asks the same question.
   await attachDefaultLogFile(Diagnostics.instance);
-  // The app resolves the directory; `AppDatabase` only opens in it.
-  final database = AppDatabase.open(await appSupportDirectory());
+  // The server's database, in the server's data folder (`~/.karmashala`, or a
+  // probe's own): this app is a client of the local server, and opens the
+  // same file beside it — no second database. The app resolves the
+  // directory; `AppDatabase` only opens in it.
+  final database = AppDatabase.open(await serverDataDirectory());
   bootstrapMetadata(database, logger: logger);
 
   // The verification artifact root, before the first frame: a Riverpod provider

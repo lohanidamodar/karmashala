@@ -29,6 +29,7 @@ class HostLifecycleWatch {
   final _pairings = <int, Completer<PairedMessage>>{};
   final _checks = <int, Completer<ChecksRanMessage>>{};
   final _prompts = <int, Completer<PromptAnsweredMessage>>{};
+  final _serverCalls = <int, Completer<Map<String, Object?>>>{};
   var _lastRequestId = 2;
   final _done = Completer<void>();
   StreamSubscription<List<int>>? _incoming;
@@ -93,19 +94,43 @@ class HostLifecycleWatch {
         : McpResultMessage.failure(callId, error),
   );
 
-  /// Each companion call the host forwards, once this client has sent its
-  /// config with [configureCompanion]; answer each with [answerCompanionCall].
+  /// Each companion call the host forwards, once this client has said it is
+  /// the app with [attachCompanion]; answer each with [answerCompanionCall].
   Stream<CompanionCallMessage> get companionCalls => _companionCalls.stream;
 
   /// What the host's companion tells this client: device rows moved, a
   /// pairing window this client opened ended.
   Stream<CompanionEventMessage> get companionEvents => _companionEvents.stream;
 
-  /// Makes this client the app the host forwards companion calls to, serving
-  /// by [config] — `CompanionConfig.toJson`, kept by the host for when this
-  /// client is gone.
-  void configureCompanion(Map<String, Object?> config) =>
-      _write(CompanionConfigMessage(config));
+  /// Makes this client the app the host forwards companion calls to, with its
+  /// embedded relay at [localRelayUrl] (null: none). How phones are served is
+  /// the server's config: [serverCall] `server.config.set` changes it.
+  void attachCompanion({String? localRelayUrl}) =>
+      _write(CompanionAttachMessage(localRelayUrl: localRelayUrl));
+
+  /// Asks the server one administrative question (`ServerMethod`) and
+  /// completes with its answer. Throws [HostLifecycleWatchRefused] with the
+  /// server's reason when it refuses, or when the link closes first.
+  Future<Map<String, Object?>> serverCall(
+    String method, [
+    Map<String, Object?> arguments = const {},
+  ]) {
+    if (_done.isCompleted) {
+      return Future.error(
+        const HostLifecycleWatchRefused('the host link is closed'),
+      );
+    }
+    final requestId = ++_lastRequestId;
+    final answer = _serverCalls[requestId] = Completer<Map<String, Object?>>();
+    _write(
+      ServerCallMessage(
+        requestId: requestId,
+        method: method,
+        arguments: arguments,
+      ),
+    );
+    return answer.future;
+  }
 
   /// How the companion call [callId] ended: [result], or the companion error
   /// [code] and [message] the phone is refused with.
@@ -364,6 +389,19 @@ class HostLifecycleWatch {
       _prompts.remove(message.requestId)?.complete(message);
       return;
     }
+    if (message is ServerResultMessage) {
+      final call = _serverCalls.remove(message.requestId);
+      if (call == null) return;
+      final result = message.result;
+      if (result != null) {
+        call.complete(result);
+      } else {
+        call.completeError(
+          HostLifecycleWatchRefused(message.message ?? 'refused'),
+        );
+      }
+      return;
+    }
     if (message is ErrorMessage) {
       final pairing = _pairings.remove(message.requestId);
       if (pairing != null) {
@@ -416,6 +454,12 @@ class HostLifecycleWatch {
       );
     }
     _prompts.clear();
+    for (final call in _serverCalls.values) {
+      call.completeError(
+        const HostLifecycleWatchRefused('the host link closed'),
+      );
+    }
+    _serverCalls.clear();
     if (!_done.isCompleted) _done.complete();
   }
 

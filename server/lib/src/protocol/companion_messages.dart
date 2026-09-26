@@ -4,24 +4,32 @@ part of 'messages.dart';
 // forwards to the connected app what only the app can answer. JSON inside a
 // length-prefixed string, like the lifecycle feed and the MCP relay.
 
-/// client → host: the desktop's Remote access settings, as
-/// `CompanionConfig.toJson` writes them. Sending it makes this connection the
-/// app the host forwards companion calls to.
-class CompanionConfigMessage extends HostMessage {
-  const CompanionConfigMessage(this.config);
+/// client → host: this connection is the desktop app, which the host
+/// forwards companion calls to, and its embedded relay listens at
+/// [localRelayUrl] (null: it runs none). Sent on every link and again when the
+/// embedded relay moves. How phones are served is not here: that is the
+/// server's `server.json`, changed with `server.config.set`.
+class CompanionAttachMessage extends HostMessage {
+  const CompanionAttachMessage({this.localRelayUrl});
 
-  final Map<String, Object?> config;
+  final String? localRelayUrl;
 
   @override
   Frame toFrame() => Frame(
-    MessageType.companionConfig,
+    MessageType.companionAttach,
     0,
-    (WireWriter()..str(jsonEncode(config))).take(),
+    (WireWriter()..str(jsonEncode({'localRelayUrl': ?localRelayUrl}))).take(),
   );
 
-  static CompanionConfigMessage decode(Frame frame) => CompanionConfigMessage(
-    _object(_decodeJson(WireReader(frame.payload).str()), 'companion config'),
-  );
+  static CompanionAttachMessage decode(Frame frame) {
+    final map = _object(
+      _decodeJson(WireReader(frame.payload).str()),
+      'companion attach',
+    );
+    return CompanionAttachMessage(
+      localRelayUrl: _optional<String>(map, 'localRelayUrl'),
+    );
+  }
 }
 
 /// host → client: answer [method] (a `CompanionMethod` wire name) with

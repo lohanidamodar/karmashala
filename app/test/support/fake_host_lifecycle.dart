@@ -74,8 +74,17 @@ class FakeHostLifecycle implements HostLifecycleSource {
   final companionCallLinks = <StreamController<CompanionCallMessage>>[];
   final companionEventLinks = <StreamController<CompanionEventMessage>>[];
 
-  /// The companion configs the app sent, in order.
-  final companionConfigs = <Map<String, Object?>>[];
+  /// Each attach the app sent, in order: where its embedded relay was.
+  final companionAttaches = <String?>[];
+
+  /// The server calls the app made, in order, and how they are answered —
+  /// refused when nobody set [answerServerCall].
+  final serverCalls = <({String method, Map<String, Object?> arguments})>[];
+  Future<Map<String, Object?>> Function(
+    String method,
+    Map<String, Object?> arguments,
+  )?
+  answerServerCall;
 
   /// How the app answered each forwarded companion call.
   final companionAnswers =
@@ -146,7 +155,16 @@ class FakeHostLifecycle implements HostLifecycleSource {
           mcpAnswers.add((callId: callId, result: result, error: error)),
       companionCalls: companionCalls.stream,
       companionEvents: companionEvents.stream,
-      configureCompanion: companionConfigs.add,
+      attachCompanion: ({localRelayUrl}) =>
+          companionAttaches.add(localRelayUrl),
+      serverCall: (method, [arguments = const {}]) {
+        serverCalls.add((method: method, arguments: arguments));
+        final answer = answerServerCall;
+        if (answer == null) {
+          return Future.error(StateError('no server calls here'));
+        }
+        return answer(method, arguments);
+      },
       answerCompanionCall: (callId, {result, code, message}) => companionAnswers
           .add((callId: callId, result: result, code: code, message: message)),
       noticeCompanion: companionNotices.add,

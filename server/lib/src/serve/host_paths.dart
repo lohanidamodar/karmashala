@@ -12,13 +12,35 @@ const String kHostDirectoryEnvironmentVariable = 'KARMASHALA_HOST_DIR';
 /// `$XDG_RUNTIME_DIR` — per-user, 0700, tmpfs — then `~/.karmashala`,
 /// because plenty of SSH hosts have no runtime dir for a non-login session.
 /// Windows roots at `%USERPROFILE%`: a stray inherited `HOME` must not move it.
+/// [paths] when the caller named the host directory, else the one
+/// [environment] resolves. Neither is a programming error — a command that
+/// would otherwise have reached for the real home — and throws [ArgumentError]
+/// naming [command].
+HostPaths hostPathsFor(
+  String command, {
+  HostPaths? paths,
+  Map<String, String>? environment,
+}) {
+  if (paths != null) return paths;
+  if (environment == null) {
+    throw ArgumentError(
+      '$command: pass the host directory (paths) or the environment to '
+      'resolve it from — the library never falls back to the real home',
+    );
+  }
+  return HostPaths.resolve(environment: environment);
+}
+
 class HostPaths {
   HostPaths(this.directory);
 
   final Directory directory;
 
-  static HostPaths resolve({Map<String, String>? environment}) {
-    final env = environment ?? Platform.environment;
+  /// Resolved from [environment], which is always passed: this library never
+  /// reads `Platform.environment` for a home, so no caller — a test least of
+  /// all — lands in the real one without saying so.
+  static HostPaths resolve({required Map<String, String> environment}) {
+    final env = environment;
     final scoped = env[kHostDirectoryEnvironmentVariable]?.trim();
     if (scoped != null && scoped.isNotEmpty) {
       return HostPaths(Directory(scoped));

@@ -107,6 +107,10 @@ class InProcessServer {
     final stop = Completer<void>();
     final exited = runServe(
       args,
+      // A home of its own: without --data-dir in [args], it is where the
+      // data folder resolves — never the owner's.
+      environment: scratchEnvironment(root),
+      agentScanDelay: Duration.zero,
       out: out,
       err: err,
       paths: paths,
@@ -128,6 +132,24 @@ class InProcessServer {
     return exited;
   }
 }
+
+/// An environment whose home and host directory are nowhere real: for a
+/// command a test runs that must refuse, or print, before touching anything.
+/// The library never falls back to the real environment, so every call names
+/// one — this, a temp home, or `--data-dir` and paths outright.
+const Map<String, String> kNowhereEnvironment = {
+  'HOME': '/nonexistent/karmashala-test-home',
+  'USERPROFILE': '/nonexistent/karmashala-test-home',
+  'KARMASHALA_HOST_DIR': '/nonexistent/karmashala-test-home/host',
+};
+
+/// A home under [root] — a test's temp directory — and its host directory,
+/// as the environment a command resolves them from.
+Map<String, String> scratchEnvironment(Directory root) => {
+  'HOME': '${root.path}/home',
+  'USERPROFILE': '${root.path}/home',
+  'KARMASHALA_HOST_DIR': '${root.path}/host',
+};
 
 /// A [ServerAgents] whose probe finds nothing and spawns nothing.
 ServerAgents noAgents(AppDatabase database) =>

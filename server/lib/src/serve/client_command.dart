@@ -179,10 +179,15 @@ class HostClientRefusal implements Exception {
 }
 
 /// `karmashala_host list`.
-Future<int> runList({IOSink? out, IOSink? err, HostPaths? paths}) async {
+Future<int> runList({
+  IOSink? out,
+  IOSink? err,
+  HostPaths? paths,
+  Map<String, String>? environment,
+}) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
-  final resolved = paths ?? HostPaths.resolve();
+  final resolved = hostPathsFor('list', paths: paths, environment: environment);
   final client = await HostClient.connect(resolved.socketPath);
   if (client == null) {
     errSink.writeln('karmashala_host list: no host at ${resolved.socketPath}');
@@ -210,6 +215,7 @@ Future<int> runEnd(
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
+  Map<String, String>? environment,
 }) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
@@ -217,7 +223,7 @@ Future<int> runEnd(
     errSink.writeln('karmashala_host end: name a session (see `list`)');
     return 2;
   }
-  final resolved = paths ?? HostPaths.resolve();
+  final resolved = hostPathsFor('end', paths: paths, environment: environment);
   final client = await HostClient.connect(resolved.socketPath);
   if (client == null) {
     errSink.writeln('karmashala_host end: no host at ${resolved.socketPath}');
@@ -243,12 +249,13 @@ Future<int> runStop(
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
+  Map<String, String>? environment,
   Duration grace = const Duration(seconds: 5),
   Duration answerWithin = const Duration(seconds: 10),
 }) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
-  final resolved = paths ?? HostPaths.resolve();
+  final resolved = hostPathsFor('stop', paths: paths, environment: environment);
   final force = args.contains('--force') || args.contains('-f');
 
   HostClient? client;

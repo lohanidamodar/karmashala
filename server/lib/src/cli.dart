@@ -53,18 +53,21 @@ const _configSwitches = {
   'no-beacon',
   'notes',
   'no-notes',
+  'relay-enabled',
+  'no-relay-enabled',
 };
 
 const _configFlagsUsage = '''
   --name=<n>              the name phones show (default: the hostname)
-  --bind=<ip>             the phone listener's interface
+  --bind=<ip>             the phone listener's interface (default 127.0.0.1)
   --companion-port=<n>    the phone listener's port (default 47820)
   --relay=<url>           a relay phones meet this server at
   --relay-token=<t>       that relay's token (32+ url-safe characters)
+  --[no-]relay-enabled    serve through --relay (default on); off keeps it
   --extra-relay=<url>     another relay, repeatable
   --[no-]beacon           announce on the LAN (default off)
   --[no-]notes            phone notes (default on)
-  --[no-]companion        serve phones at all (default on)
+  --[no-]companion        serve phones at all (default off)
   --mcp-port=<n>          the agents' MCP endpoint, always loopback (default 47821)
 ''';
 
@@ -81,7 +84,13 @@ class _Command {
   });
 
   final String usage;
-  final Future<int> Function(List<String> args, IOSink out, IOSink err) run;
+  final Future<int> Function(
+    List<String> args,
+    IOSink out,
+    IOSink err,
+    Map<String, String> environment,
+  )
+  run;
 
   /// Written `--flag=value`.
   final Set<String> valueFlags;
@@ -127,19 +136,18 @@ final Map<String, _Command> _commands = {
         '''
 karmashala_host serve — own sessions on this machine until told to stop.
 
-  --data-dir=<dir>        the server's data: <dir>/karmashala.sqlite (the
-                          store), <dir>/server.json (its config) and
-                          <dir>/sessions (its session records). Required
-                          unless --standalone
-  --standalone            a server on its own: data in ~/.karmashala unless
-                          --data-dir says, phone listener on loopback unless
-                          --bind says, agent CLIs found at start
+  --data-dir=<dir>        the server's data (default ~/.karmashala, the
+                          folder the desktop app opens too):
+                          <dir>/karmashala.sqlite (the store, created and
+                          migrated here) and <dir>/server.json (its config)
 $_configFlagsUsage
-Each config flag overrides server.json, field by field.
+Each config flag overrides server.json, field by field, for the life of the
+process. The agent CLIs on this machine are looked for at start.
 ''',
     valueFlags: {'data-dir', ..._configValueFlags},
-    switches: {'standalone', ..._configSwitches},
-    run: (args, out, err) => runServe(args, out: out, err: err),
+    switches: _configSwitches,
+    run: (args, out, err, env) =>
+        runServe(args, out: out, err: err, environment: env),
   ),
   'init': _Command(
     usage: '''
@@ -150,7 +158,8 @@ karmashala_host init — write a server's server.json (owner-only).
 $_configFlagsUsage''',
     valueFlags: {'data-dir', ..._configValueFlags},
     switches: {'force', ..._configSwitches},
-    run: (args, out, err) => runInit(args, out: out, err: err),
+    run: (args, out, err, env) =>
+        runInit(args, out: out, err: err, environment: env),
   ),
   'pair': _Command(
     usage: '''
@@ -165,13 +174,15 @@ its code and QR, then wait until a device pairs or the window closes.
 ''',
     valueFlags: {'capabilities', 'relay', 'name', 'address'},
     switches: {'no-color'},
-    run: (args, out, err) => runPair(args, out: out, err: err),
+    run: (args, out, err, env) =>
+        runPair(args, out: out, err: err, environment: env),
   ),
   'devices': _Command(
     usage: '''
 karmashala_host devices — every phone paired with the running server.
 ''',
-    run: (args, out, err) => runDevices(args, out: out, err: err),
+    run: (args, out, err, env) =>
+        runDevices(args, out: out, err: err, environment: env),
   ),
   'revoke': _Command(
     usage: '''
@@ -179,7 +190,8 @@ karmashala_host revoke <id> — revoke one paired device, by its id or a prefix
 only it has (see `devices`), and drop its live links.
 ''',
     positional: 1,
-    run: (args, out, err) => runRevoke(args, out: out, err: err),
+    run: (args, out, err, env) =>
+        runRevoke(args, out: out, err: err, environment: env),
   ),
   'agents': _Command(
     usage: '''
@@ -188,26 +200,29 @@ karmashala_host agents — the agent CLIs the running server recorded.
   --refresh               look for them again now
 ''',
     switches: {'refresh'},
-    run: (args, out, err) => runAgents(args, out: out, err: err),
+    run: (args, out, err, env) =>
+        runAgents(args, out: out, err: err, environment: env),
   ),
   'attach': _Command(
     usage: '''
 karmashala_host attach — proxy stdio to the running host's socket.
 ''',
-    run: (args, out, err) => runAttach(args, output: out, err: err),
+    run: (args, out, err, env) =>
+        runAttach(args, output: out, err: err, environment: env),
   ),
   'list': _Command(
     usage: '''
 karmashala_host list — every session this machine's host is holding.
 ''',
-    run: (args, out, err) => runList(out: out, err: err),
+    run: (args, out, err, env) => runList(out: out, err: err, environment: env),
   ),
   'end': _Command(
     usage: '''
 karmashala_host end <id> — end one session (see `list` for ids).
 ''',
     positional: 1,
-    run: (args, out, err) => runEnd(args, out: out, err: err),
+    run: (args, out, err, env) =>
+        runEnd(args, out: out, err: err, environment: env),
   ),
   'stop': _Command(
     usage: '''
@@ -218,25 +233,26 @@ sessions.
 ''',
     switches: {'force'},
     shortSwitches: {'f'},
-    run: (args, out, err) => runStop(args, out: out, err: err),
+    run: (args, out, err, env) =>
+        runStop(args, out: out, err: err, environment: env),
   ),
   'probe-pty': _Command(
     usage: '''
 karmashala_host probe-pty — prove the pty layer works on this machine.
 ''',
-    run: (args, out, err) => runPtyProbe(out: out),
+    run: (args, out, err, env) => runPtyProbe(out: out),
   ),
   'probe-store': _Command(
     usage: '''
 karmashala_host probe-store — prove this machine can hold a store.
 ''',
-    run: (args, out, err) => runStoreProbe(out: out),
+    run: (args, out, err, env) => runStoreProbe(out: out),
   ),
   'version': _Command(
     usage: '''
 karmashala_host version — print the host and protocol versions.
 ''',
-    run: (args, out, err) async {
+    run: (args, out, err, env) async {
       // Both numbers, because the deployer compares them separately: a host
       // can be new enough to run and still speak a protocol the app does not.
       out.writeln('host $kHostVersion protocol $kProtocolVersion');
@@ -245,7 +261,17 @@ karmashala_host version — print the host and protocol versions.
   ),
 };
 
-Future<int> runHostCli(List<String> args, {IOSink? out, IOSink? err}) async {
+/// Runs one `karmashala_host` command. [environment] is where the user's
+/// home, runtime dir and host directory are read from whenever a command is
+/// not told its data or host directory outright: only the executable passes
+/// `Platform.environment`, so nothing in this library — or a test calling it
+/// — ever falls back to the real home by itself.
+Future<int> runHostCli(
+  List<String> args, {
+  required Map<String, String> environment,
+  IOSink? out,
+  IOSink? err,
+}) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
   final name = args.isEmpty ? '' : args.first;
@@ -282,5 +308,5 @@ Future<int> runHostCli(List<String> args, {IOSink? out, IOSink? err}) async {
       ..write(command.usage);
     return 2;
   }
-  return command.run(rest, sink, errSink);
+  return command.run(rest, sink, errSink, environment);
 }

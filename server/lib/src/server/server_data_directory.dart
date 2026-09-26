@@ -2,17 +2,21 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// Where `serve --standalone` keeps its store and `server.json` when no
-/// `--data-dir` names another: `~/.karmashala` (`%USERPROFILE%\.karmashala`
-/// on Windows).
+/// The server's data directory when no `--data-dir` names another — the one
+/// folder per user per machine: `~/.karmashala` (`%USERPROFILE%\.karmashala`
+/// on Windows). Its store, `server.json`, the MCP handshake and session
+/// configs, and the files phones send.
 ///
-/// The same directory the SSH deployer starts a box's host with, on purpose:
-/// a box set up by hand and one set up from the desktop are one server with
-/// one set of pairings, whichever way it was installed. The socket, lock and
-/// sessions go where they always go (`HostPaths.resolve` — the runtime dir
-/// when there is one, else this same directory).
-String defaultServerDataDirectory({Map<String, String>? environment}) {
-  final env = environment ?? Platform.environment;
+/// The desktop app opens its database here and starts `serve` with no
+/// `--data-dir`; the SSH deployer and the installers use it too, so a machine
+/// set up any of those ways is one server with one set of pairings. The
+/// socket, lock and sessions go where they always go (`HostPaths.resolve` —
+/// the runtime dir when there is one, else this same directory).
+///
+/// [environment] is always passed — never read here — so nothing in this
+/// library lands in the real home without its caller saying so.
+String defaultServerDataDirectory({required Map<String, String> environment}) {
+  final env = environment;
   final home = Platform.isWindows
       ? (env['USERPROFILE'] ?? env['HOME'])
       : (env['HOME'] ?? env['USERPROFILE']);

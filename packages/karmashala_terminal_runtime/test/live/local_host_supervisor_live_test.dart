@@ -45,8 +45,11 @@ void main() {
           kHostDirectoryEnvironmentVariable: hostDirectory.path,
           'HOME': home.path,
         },
-        dataDirectory: () async => data.path,
-        serveFlags: const ['--mcp-port=0', '--companion-port=0'],
+        serveFlags: [
+          '--data-dir=${data.path}',
+          '--mcp-port=0',
+          '--companion-port=0',
+        ],
       );
       final supervisor = LocalHostSupervisor(
         access: access,

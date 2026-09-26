@@ -28,7 +28,7 @@ class HostLifecycleFeed {
     void Function(int callId, {Object? result, String? error})? answerMcpCall,
     Stream<CompanionCallMessage>? companionCalls,
     Stream<CompanionEventMessage>? companionEvents,
-    void Function(Map<String, Object?> config)? configureCompanion,
+    void Function({String? localRelayUrl})? attachCompanion,
     CompanionAnswer? answerCompanionCall,
     void Function(CompanionNoticeMessage notice)? noticeCompanion,
     CompanionPair? pairCompanion,
@@ -41,6 +41,7 @@ class HostLifecycleFeed {
     Stream<HostAgentStatusChange>? agentStatuses,
     Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)?
     answerPrompt,
+    ServerCall? serverCall,
   }) : hooks = hooks ?? const Stream.empty(),
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
@@ -51,7 +52,8 @@ class HostLifecycleFeed {
        answerMcpCall = answerMcpCall ?? _noAnswer,
        companionCalls = companionCalls ?? const Stream.empty(),
        companionEvents = companionEvents ?? const Stream.empty(),
-       configureCompanion = configureCompanion ?? _noConfig,
+       attachCompanion = attachCompanion ?? _noAttach,
+       serverCall = serverCall ?? _noServerCalls,
        answerCompanionCall = answerCompanionCall ?? _noCompanionAnswer,
        noticeCompanion = noticeCompanion ?? _noNotice,
        pairCompanion = pairCompanion ?? _noPairing,
@@ -101,7 +103,11 @@ class HostLifecycleFeed {
   static void _noReply(int holdId) {}
   static void _noOffer(List<Map<String, Object?>> tools) {}
   static void _noAnswer(int callId, {Object? result, String? error}) {}
-  static void _noConfig(Map<String, Object?> config) {}
+  static void _noAttach({String? localRelayUrl}) {}
+  static Future<Map<String, Object?>> _noServerCalls(
+    String method, [
+    Map<String, Object?> arguments = const {},
+  ]) => Future.error(StateError('this host answers no server calls'));
   static void _noCompanionAnswer(
     int callId, {
     Map<String, Object?>? result,
@@ -140,16 +146,20 @@ class HostLifecycleFeed {
   final void Function(int callId, {Object? result, String? error})
   answerMcpCall;
 
-  /// Companion calls the host forwards, once this app has sent its config.
+  /// Companion calls the host forwards, once this app has attached.
   final Stream<CompanionCallMessage> companionCalls;
 
   /// What the host's companion tells this app.
   final Stream<CompanionEventMessage> companionEvents;
 
-  /// Makes this app the one the host forwards companion calls to, serving by
-  /// `CompanionConfig.toJson` [config] — kept by the host while this app is
-  /// closed.
-  final void Function(Map<String, Object?> config) configureCompanion;
+  /// Makes this app the one the host forwards companion calls to, its
+  /// embedded relay at `localRelayUrl` (null: none). How phones are served
+  /// is the server's own config — [serverCall] `server.config.set`.
+  final void Function({String? localRelayUrl}) attachCompanion;
+
+  /// Asks the server one administrative question (`ServerMethod`): its config,
+  /// its agent CLIs. Throws with the server's reason when it refuses.
+  final ServerCall serverCall;
 
   /// How one forwarded companion call ended.
   final CompanionAnswer answerCompanionCall;
@@ -185,6 +195,13 @@ typedef CompanionAnswer =
       String? code,
       String? message,
     });
+
+/// One administrative question to the server, and its answer.
+typedef ServerCall =
+    Future<Map<String, Object?>> Function(
+      String method, [
+      Map<String, Object?> arguments,
+    ]);
 
 /// Opens a pairing window at the host; its end arrives on the companion events.
 typedef CompanionPair =

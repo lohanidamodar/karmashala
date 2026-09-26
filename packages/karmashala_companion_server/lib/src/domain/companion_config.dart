@@ -1,9 +1,6 @@
-/// What the desktop's Remote access settings say about serving phones, as the
-/// session host needs them: the host serves the phones, but the person
-/// switches remote access on, picks relays and turns Notes off in the app.
-///
-/// The app sends one on every link; the host keeps it, without
-/// [localRelayUrl], so it serves the same way while the app is closed.
+/// How the session host serves phones: what its `server.json` says — which
+/// the desktop's Remote access settings write — plus, while the desktop app
+/// is connected, where that app's embedded relay listens.
 class CompanionConfig {
   const CompanionConfig({
     required this.enabled,
@@ -15,9 +12,8 @@ class CompanionConfig {
     this.advertise = false,
   });
 
-  /// What a host that no app has ever configured serves by: phones only where
-  /// each row says, no default relay and no beacon — a box's way.
-  static const CompanionConfig unconfigured = CompanionConfig(enabled: true);
+  /// Remote access off: nothing listens.
+  static const CompanionConfig off = CompanionConfig(enabled: false);
 
   /// Whether remote access is on at all. Off, nothing listens.
   final bool enabled;
@@ -43,11 +39,12 @@ class CompanionConfig {
   /// find it that way; a box has no business multicasting.
   final bool advertise;
 
-  /// The same config with the app's own listener gone.
-  CompanionConfig withoutLocalRelay() => CompanionConfig(
+  /// The same config with the app's embedded relay at [url], or none.
+  CompanionConfig withLocalRelay(Uri? url) => CompanionConfig(
     enabled: enabled,
     relay: relay,
     hostedEnabled: hostedEnabled,
+    localRelayUrl: url,
     extraRelays: extraRelays,
     notesEnabled: notesEnabled,
     advertise: advertise,
@@ -59,39 +56,6 @@ class CompanionConfig {
       other.enabled != enabled ||
       other.relay?.toString() != relay?.toString() ||
       other.advertise != advertise;
-
-  Map<String, Object?> toJson() => {
-    'enabled': enabled,
-    if (relay != null) 'relay': relay.toString(),
-    'hostedEnabled': hostedEnabled,
-    if (localRelayUrl != null) 'localRelayUrl': localRelayUrl.toString(),
-    'extraRelays': [for (final relay in extraRelays) relay.toString()],
-    'notesEnabled': notesEnabled,
-    'advertise': advertise,
-  };
-
-  /// Reads what [toJson] wrote. Anything unreadable is left at its default,
-  /// never guessed.
-  static CompanionConfig fromJson(Map<String, Object?> json) {
-    Uri? uri(Object? value) {
-      if (value is! String || value.isEmpty) return null;
-      final parsed = Uri.tryParse(value);
-      return parsed != null && parsed.hasScheme ? parsed : null;
-    }
-
-    final extras = json['extraRelays'];
-    return CompanionConfig(
-      enabled: json['enabled'] != false,
-      relay: uri(json['relay']),
-      hostedEnabled: json['hostedEnabled'] != false,
-      localRelayUrl: uri(json['localRelayUrl']),
-      extraRelays: [
-        for (final value in extras is List ? extras : const []) ?uri(value),
-      ],
-      notesEnabled: json['notesEnabled'] != false,
-      advertise: json['advertise'] == true,
-    );
-  }
 
   @override
   bool operator ==(Object other) =>

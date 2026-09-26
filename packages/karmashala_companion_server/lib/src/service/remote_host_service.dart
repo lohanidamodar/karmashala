@@ -87,8 +87,8 @@ class RemoteHostService {
   final int lanPort;
 
   /// The address the LAN listener binds: every interface by default (a
-  /// desktop's phones on its network), loopback or one interface when a
-  /// standalone server's config says so. The listener carries only the sealed
+  /// desktop's phones on its network), loopback or one interface when the
+  /// server's config says so. The listener carries only the sealed
   /// protocol; this narrows who can knock, not what they can do.
   final Object lanAddress;
 

@@ -13,8 +13,10 @@ T roundTrip<T extends HostMessage>(T message) =>
     decodeMessage(FrameParser().add(message.toFrame().encode()).single) as T;
 
 /// The app's side of the companion over the host protocol: the lifecycle link
-/// the app already holds carries its config, the calls the host forwards and
-/// their answers, the desktop's news, and pairing.
+/// the app already holds says it is the app (and where its embedded relay
+/// is), carries the calls the host forwards and their answers, the desktop's
+/// news, and pairing. How phones are served is the server's config, never
+/// the link's.
 void main() {
   group('the companion frames survive the wire', () {
     test('a call and both kinds of answer', () {
@@ -69,16 +71,12 @@ void main() {
       expect((event.requestId, event.error), (9, 'expired'));
     });
 
-    test('the config', () {
-      final config = CompanionConfig(
-        enabled: true,
-        relay: Uri.parse('wss://relay.example.com'),
-        extraRelays: [Uri.parse('wss://box.example.com')],
-        notesEnabled: false,
-        advertise: true,
+    test('the attach, with and without an embedded relay', () {
+      final back = roundTrip(
+        const CompanionAttachMessage(localRelayUrl: 'ws://192.168.1.4:8787'),
       );
-      final back = roundTrip(CompanionConfigMessage(config.toJson()));
-      expect(CompanionConfig.fromJson(back.config), config);
+      expect(back.localRelayUrl, 'ws://192.168.1.4:8787');
+      expect(roundTrip(const CompanionAttachMessage()).localRelayUrl, isNull);
     });
   });
 
@@ -97,6 +95,7 @@ void main() {
         registry: registry,
         hostName: 'desk',
         lanPort: 0,
+        config: const CompanionConfig(enabled: true),
         transcriptPollInterval: Duration.zero,
       );
       server = HostServer(
@@ -120,10 +119,10 @@ void main() {
     Future<void> settle() =>
         Future<void>.delayed(const Duration(milliseconds: 20));
 
-    test('sending the config makes this the app calls go to', () async {
+    test('attaching makes this the app calls go to', () async {
       expect(companion.app.connected, isFalse);
 
-      watch.configureCompanion(const CompanionConfig(enabled: true).toJson());
+      watch.attachCompanion();
       await settle();
       expect(companion.app.connected, isTrue);
 
@@ -147,7 +146,7 @@ void main() {
     });
 
     test('the app hanging up leaves the host serving on its own', () async {
-      watch.configureCompanion(const CompanionConfig(enabled: true).toJson());
+      watch.attachCompanion();
       await settle();
 
       await watch.close();
@@ -157,8 +156,23 @@ void main() {
       expect(await companion.bindings.listSessions(), isEmpty);
     });
 
+    test('the embedded relay is served while the app is attached', () async {
+      watch.attachCompanion(localRelayUrl: 'ws://127.0.0.1:8787');
+      await settle();
+      expect(companion.config.localRelayUrl, Uri.parse('ws://127.0.0.1:8787'));
+      expect(companion.config.enabled, isTrue, reason: 'the server config');
+
+      await watch.close();
+      await settle();
+      expect(
+        companion.config.localRelayUrl,
+        isNull,
+        reason: 'it closed with the app',
+      );
+    });
+
     test('a pairing window is opened, drawn and ended', () async {
-      watch.configureCompanion(const CompanionConfig(enabled: true).toJson());
+      watch.attachCompanion();
       await settle();
 
       final window = await watch.pairCompanion(
@@ -180,7 +194,12 @@ void main() {
     });
 
     test('a host with remote access off refuses to pair in words', () async {
-      watch.configureCompanion(const CompanionConfig(enabled: false).toJson());
+      await companion.reconfigure(
+        config: CompanionConfig.off,
+        lanAddress: '127.0.0.1',
+        lanPort: 0,
+      );
+      watch.attachCompanion();
       await settle();
 
       await expectLater(

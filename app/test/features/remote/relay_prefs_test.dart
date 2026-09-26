@@ -1,6 +1,7 @@
-/// The two-relay settings model: independent switches, every combination
-/// legal, persisted, and seeded by the v50 upgrade from the retired either/or
-/// mode so an existing setup wakes up on the relay it was already using.
+/// The embedded relay's switch: this app's own listener, so its preference is
+/// the app's — persisted, and seeded by the v50 upgrade from the retired
+/// either/or mode so an existing setup wakes up on the relay it was using.
+/// The internet relay is the server's config, never kept here.
 library;
 
 import 'dart:convert';
@@ -47,10 +48,10 @@ void main() {
     return container;
   }
 
-  test('nothing stored: hosted on, local off', () {
+  test('nothing stored: the embedded relay is off', () {
     expect(
       open().read(relayPrefsProvider),
-      const RelayPrefs(localEnabled: false, hostedEnabled: true),
+      const RelayPrefs(localEnabled: false),
     );
   });
 
@@ -65,12 +66,12 @@ void main() {
       return container;
     }
 
-    test('a local-mode setup wakes up with only the local relay on', () {
+    test('a local-mode setup wakes up with the local relay on', () {
       final container = upgrade(
         _before50(settings: {'remoteRelayMode': 'local'}),
       );
 
-      const local = RelayPrefs(localEnabled: true, hostedEnabled: false);
+      const local = RelayPrefs(localEnabled: true);
       expect(
         container.read(relayPrefsProvider),
         local,
@@ -84,7 +85,7 @@ void main() {
       );
     });
 
-    test('a hosted-mode, junk or mode-less setup stays on hosted', () {
+    test('a hosted-mode, junk or mode-less setup has it off', () {
       for (final settings in <Map<String, Object?>?>[
         {'remoteRelayMode': 'hosted'},
         {'remoteRelayMode': 'teleport'},
@@ -94,7 +95,7 @@ void main() {
         final container = upgrade(_before50(settings: settings));
         expect(
           container.read(relayPrefsProvider),
-          const RelayPrefs(localEnabled: false, hostedEnabled: true),
+          const RelayPrefs(localEnabled: false),
           reason: '$settings',
         );
       }
@@ -110,16 +111,18 @@ void main() {
 
       expect(
         container.read(relayPrefsProvider),
-        const RelayPrefs(localEnabled: false, hostedEnabled: false),
+        const RelayPrefs(localEnabled: false),
       );
     });
 
-    test('settings that still carry the old key load and save', () {
+    test('settings that still carry old keys load and save, and the '
+        'retired remote-access keys are neither read nor written', () {
       final container = upgrade(
         _before50(
           settings: {
             'remoteRelayMode': 'local',
             'remoteAccessEnabled': true,
+            'remoteRelayUrl': 'wss://relay.example.com',
             'localRelayPort': 9001,
           },
         ),
@@ -127,28 +130,28 @@ void main() {
       final db = container.read(databaseProvider);
 
       final loaded = container.read(settingsControllerProvider);
-      expect(loaded.remoteAccessEnabled, isTrue);
       expect(loaded.localRelayPort, 9001);
 
       container
           .read(settingsControllerProvider.notifier)
           .setLocalRelayPort(9002);
-      expect(SettingsRepository(db).load().localRelayPort, 9002);
+      final saved = SettingsRepository(db).load();
+      expect(saved.localRelayPort, 9002);
+      expect(saved.toJson(), isNot(contains('remoteAccessEnabled')));
+      expect(saved.toJson(), isNot(contains('remoteRelayUrl')));
       expect(RelayPrefsController.readFrom(db)?.localEnabled, isTrue);
     });
   });
 
-  test('every combination is legal and survives a relaunch', () {
+  test('both values survive a relaunch', () {
     for (final wanted in const [
-      RelayPrefs(localEnabled: true, hostedEnabled: true),
-      RelayPrefs(localEnabled: true, hostedEnabled: false),
-      RelayPrefs(localEnabled: false, hostedEnabled: true),
-      RelayPrefs(localEnabled: false, hostedEnabled: false),
+      RelayPrefs(localEnabled: true),
+      RelayPrefs(localEnabled: false),
     ]) {
       final container = open();
-      container.read(relayPrefsProvider.notifier)
-        ..setLocalEnabled(wanted.localEnabled)
-        ..setHostedEnabled(wanted.hostedEnabled);
+      container
+          .read(relayPrefsProvider.notifier)
+          .setLocalEnabled(wanted.localEnabled);
 
       expect(container.read(relayPrefsProvider), wanted);
       expect(RelayPrefsController.readFrom(db), wanted);
@@ -156,37 +159,21 @@ void main() {
     }
   });
 
-  test('the switches are independent — one never moves the other', () {
-    final container = open();
-    final prefs = container.read(relayPrefsProvider.notifier);
-
-    prefs.setLocalEnabled(true);
-    expect(container.read(relayPrefsProvider).hostedEnabled, isTrue);
-    prefs.setHostedEnabled(false);
-    expect(container.read(relayPrefsProvider).localEnabled, isTrue);
-    prefs.setLocalEnabled(false);
-    expect(container.read(relayPrefsProvider).hostedEnabled, isFalse);
-  });
-
-  test('anyEnabled is the "remote access is idle" question', () {
-    expect(
-      const RelayPrefs(localEnabled: false, hostedEnabled: false).anyEnabled,
-      isFalse,
+  test('a stored "hosted" from before is ignored: that is the server\'s', () {
+    db.writeMetadata(
+      kRelayPrefsMetadataKey,
+      jsonEncode({'local': true, 'hosted': false}),
     );
     expect(
-      const RelayPrefs(localEnabled: true, hostedEnabled: false).anyEnabled,
-      isTrue,
-    );
-    expect(
-      const RelayPrefs(localEnabled: false, hostedEnabled: true).anyEnabled,
-      isTrue,
+      open().read(relayPrefsProvider),
+      const RelayPrefs(localEnabled: true),
     );
   });
 
-  test('unreadable stored prefs fall back to hosted', () {
+  test('unreadable stored prefs fall back to off', () {
     db.writeMetadata(kRelayPrefsMetadataKey, '{not json');
 
     expect(RelayPrefsController.readFrom(db), isNull);
-    expect(open().read(relayPrefsProvider).hostedEnabled, isTrue);
+    expect(open().read(relayPrefsProvider).localEnabled, isFalse);
   });
 }

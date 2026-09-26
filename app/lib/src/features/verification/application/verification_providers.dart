@@ -13,7 +13,7 @@ import 'package:karmashala_verification/store.dart';
 import '../domain/session_verdict.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'verification_service.dart';
-import '../../../core/paths/app_support_directory.dart';
+import '../../../core/paths/server_data_directory.dart';
 
 final verificationDaoProvider = Provider<VerificationDao>(
   (ref) => VerificationDao(ref.watch(databaseProvider)),
@@ -40,8 +40,9 @@ Directory? _resolvedRoot;
 Future<Directory> resolveVerificationRoot() async {
   final existing = _resolvedRoot;
   if (existing != null) return existing;
-  final support = await appSupportDirectory();
-  final root = Directory(p.join(support.path, 'verification'));
+  // Beside the store, where the server writes the gates it runs itself.
+  final data = await serverDataDirectory();
+  final root = Directory(p.join(data.path, 'verification'));
   await root.create(recursive: true);
   return _resolvedRoot = root;
 }

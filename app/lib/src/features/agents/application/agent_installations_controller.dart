@@ -19,6 +19,10 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   List<AgentInstallation> build() =>
       ref.watch(agentInstallationDaoProvider).getAll();
 
+  /// Reads the rows again: the server wrote some (its agent discovery on this
+  /// machine, at start or on `agents.refresh`).
+  void reload() => state = ref.read(agentInstallationDaoProvider).getAll();
+
   /// Re-probes and reconciles every environment — the **recovery path**, which
   /// ignores [AgentProbeLog]; an unreachable one reconciles against nothing.
   Future<AgentDiscoveryReport> discoverAll() => _sweep();

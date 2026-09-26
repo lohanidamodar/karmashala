@@ -1,6 +1,8 @@
-/// `serve --standalone` in this process, on temp directories: its own store
-/// (created, or the app's, or refused when newer), its own config, pairing,
-/// devices and revoke from the CLI, and the agent CLIs it records.
+/// `serve` — one server, one way — in this process on temp directories: its
+/// store (created, or the one the desktop app migrated, or refused when
+/// newer), its data directory by default, its config (read, and changed live
+/// over `server.config.set`), pairing, devices and revoke from the CLI, and
+/// the agent CLIs it records.
 @TestOn('mac-os || linux')
 library;
 
@@ -10,7 +12,8 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/process.dart' show EnvironmentKind;
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_host/lifecycle_client.dart' show HostLifecycleWatch;
+import 'package:karmashala_host/lifecycle_client.dart'
+    show HostLifecycleWatch, HostLifecycleWatchRefused;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -31,8 +34,7 @@ void main() {
   });
   tearDown(() => root.deleteSync(recursive: true));
 
-  List<String> standalone([List<String> more = const []]) => [
-    '--standalone',
+  List<String> serveArgs([List<String> more = const []]) => [
     '--data-dir=$dataDir',
     '--companion-port=0',
     '--mcp-port=0',
@@ -51,11 +53,11 @@ void main() {
   group('its own store', () {
     test('a fresh data directory gets a store at the schema this build '
         'carries, owner-only', () async {
-      final server = await InProcessServer.start(root, standalone());
+      final server = await InProcessServer.start(root, serveArgs());
       addTearDown(server.stop);
       expect(
         server.out.text.toString(),
-        contains('standalone server "${Platform.localHostname}", data in '),
+        contains('server "${Platform.localHostname}", data in $dataDir'),
       );
       expect(await server.stop(), 0, reason: '${server.err.text}');
 
@@ -75,7 +77,7 @@ void main() {
       final version = app.schemaVersion;
       app.close();
 
-      final server = await InProcessServer.start(root, standalone());
+      final server = await InProcessServer.start(root, serveArgs());
       expect(await server.stop(), 0, reason: '${server.err.text}');
 
       expect(userVersion(dataDir), version);
@@ -95,7 +97,8 @@ void main() {
         final out = CapturingSink();
         final err = CapturingSink();
         final code = await runServe(
-          standalone(),
+          serveArgs(),
+          environment: scratchEnvironment(root),
           out: out,
           err: err,
           paths: HostPaths(Directory(p.join(root.path, 'host'))),
@@ -107,19 +110,49 @@ void main() {
       },
     );
 
-    test('a host the app starts keeps running without the store it cannot '
-        'open', () async {
-      Directory(dataDir).createSync(recursive: true);
-      final newer = AppDatabase.open(Directory(dataDir));
-      newer.execute('PRAGMA user_version = ${newer.schemaVersion + 1};');
-      newer.close();
-      final server = await InProcessServer.start(root, [
-        '--data-dir=$dataDir',
-        '--companion-port=0',
-        '--mcp-port=0',
-      ]);
-      expect(server.out.text.toString(), contains('no store'));
-      expect(await server.stop(), 0);
+    test('with no --data-dir it is ~/.karmashala: store created and '
+        'migrated there, config read there', () async {
+      final home = Directory(p.join(root.path, 'home'))..createSync();
+      final data = p.join(home.path, '.karmashala');
+      await const ServerConfig(name: 'from-home').write(data);
+      final serve = await Process.start(
+        Platform.resolvedExecutable,
+        [
+          'bin/karmashala_host.dart',
+          'serve',
+          '--companion-port=0',
+          '--mcp-port=0',
+        ],
+        environment: {
+          'HOME': home.path,
+          kHostDirectoryEnvironmentVariable: p.join(root.path, 'host'),
+        },
+      );
+      final said = StringBuffer();
+      final greeted = Completer<void>();
+      serve.stdout.transform(const SystemEncoding().decoder).listen((text) {
+        said.write(text);
+        if (said.toString().contains('restored ') && !greeted.isCompleted) {
+          greeted.complete();
+        }
+      });
+      final errors = StringBuffer();
+      serve.stderr
+          .transform(const SystemEncoding().decoder)
+          .listen(errors.write);
+      await Future.any([
+        greeted.future,
+        serve.exitCode.then((code) => fail('serve exited $code: $errors')),
+      ]).timeout(const Duration(minutes: 2));
+      expect('$said', contains('server "from-home", data in $data'));
+      expect('$said', contains('store ${p.join(data, kStoreFileName)}'));
+      serve.kill(ProcessSignal.sigterm);
+      expect(await serve.exitCode, 0, reason: '$errors');
+
+      final expected = AppDatabase.memory();
+      addTearDown(expected.close);
+      expect(userVersion(data), expected.schemaVersion);
+      expect(Directory(data).statSync().mode & 0x1ff, 0x1c0);
     });
   });
 
@@ -139,7 +172,7 @@ void main() {
           ..close();
       }
 
-      final server = await InProcessServer.start(root, standalone());
+      final server = await InProcessServer.start(root, serveArgs());
       addTearDown(server.stop);
       expect(
         server.out.text.toString(),
@@ -157,7 +190,7 @@ void main() {
 
     test('a second server as the same user is refused, naming the data '
         'directory of the one that holds the socket', () async {
-      final first = await InProcessServer.start(root, standalone());
+      final first = await InProcessServer.start(root, serveArgs());
       addTearDown(first.stop);
       // A process of its own: the lock is a POSIX record lock, which never
       // conflicts with its own process.
@@ -166,7 +199,6 @@ void main() {
         [
           'bin/karmashala_host.dart',
           'serve',
-          '--standalone',
           '--data-dir=${p.join(root.path, 'other-data')}',
           '--companion-port=0',
           '--mcp-port=0',
@@ -197,11 +229,11 @@ void main() {
       ).write(dataDir);
       final server = await InProcessServer.start(
         root,
-        standalone(['--name=from-flag']),
+        serveArgs(['--name=from-flag', '--companion']),
       );
       addTearDown(server.stop);
       final said = server.out.text.toString();
-      expect(said, contains('standalone server "from-flag"'));
+      expect(said, contains('server "from-flag"'));
       // `--companion-port=0` beat the file's 1.
       expect(server.companionPort, isNot(1));
       expect(said, contains('(bound to 127.0.0.1)'));
@@ -216,7 +248,8 @@ void main() {
       final hostDir = Directory(p.join(root.path, 'host'));
       final err = CapturingSink();
       final code = await runServe(
-        standalone(),
+        serveArgs(),
+        environment: scratchEnvironment(root),
         out: CapturingSink(),
         err: err,
         paths: HostPaths(hostDir),
@@ -227,45 +260,132 @@ void main() {
       expect(hostDir.existsSync(), isFalse);
     });
 
-    test('the companion comes up from the file with no app, and an app '
-        'that connects is the authority only while connected', () async {
-      final relay = Uri.parse('wss://relay.example.com');
-      await ServerConfig(
-        relay: relay,
-        relayToken: 'a' * 32,
-        beacon: false,
-      ).write(dataDir);
-      final database = <AppDatabase>[];
-      final server = await InProcessServer.start(
-        root,
-        standalone(),
-        agentsFor: (db) {
-          database.add(db);
-          return noAgents(db);
-        },
-      );
+    test('a fresh server serves no phones until its config says so', () async {
+      final server = await InProcessServer.start(root, serveArgs());
       addTearDown(server.stop);
+      expect(server.out.text.toString(), contains('companion off'));
+    });
 
+    test('server.config.get and set round-trip over the socket: the file is '
+        'written owner-only, its token never said back, and the phone '
+        'listener follows at once', () async {
+      await ServerConfig(
+        companionEnabled: true,
+        relay: Uri.parse('wss://relay.example.com'),
+        relayToken: 'a' * 32,
+      ).write(dataDir);
+      final server = await InProcessServer.start(root, serveArgs());
+      addTearDown(server.stop);
       final client = (await HostClient.connect(server.paths.socketPath))!;
       addTearDown(client.close);
-      Future<String?> servedRelay() async {
-        final info = await client.call(ServerMethod.serverInfo);
-        return (info['companion']! as Map)['relay'] as String?;
-      }
+      Future<Map<String, Object?>> served() async =>
+          (await client.call(ServerMethod.serverInfo))['companion']!
+              as Map<String, Object?>;
 
-      // The token is spelled into the path and never said back.
-      expect(await servedRelay(), 'wss://relay.example.com/k/…');
+      final got = await client.call(ServerMethod.configGet);
+      final file = got['file']! as Map<String, Object?>;
+      final settings = got['settings']! as Map<String, Object?>;
+      expect((file['companion']! as Map)['relay'], 'wss://relay.example.com');
+      expect('$got', isNot(contains('a' * 32)), reason: 'never the token');
+      expect((settings['companion']! as Map)['relayTokenSet'], isTrue);
+      expect((settings['companion']! as Map)['bind'], '127.0.0.1');
+      expect(got['flags'], containsAll(['companion.port', 'mcp.port']));
+      expect((await served())['bind'], '127.0.0.1');
+      expect((await served())['relay'], 'wss://relay.example.com/k/…');
 
+      final set = await client.call(
+        ServerMethod.configSet,
+        arguments: {
+          'patch': {
+            'companion': {
+              'bind': '0.0.0.0',
+              'beacon': true,
+              'relay': null,
+              'relayToken': null,
+              'extraRelays': ['ws://box.example.com:8787/k/${'b' * 32}'],
+            },
+          },
+        },
+      );
+      final after = set['settings']! as Map<String, Object?>;
+      expect((after['companion']! as Map)['bind'], '0.0.0.0');
+      expect((await served())['bind'], '0.0.0.0');
+      expect((await served())['serving'], isTrue);
+      expect((await served())['relay'], isNull);
+
+      final path = p.join(dataDir, kServerConfigFileName);
+      expect(File(path).statSync().mode & 0x1ff, 0x180, reason: 'owner-only');
+      final written = await ServerConfig.read(dataDir);
+      expect(written.bind, '0.0.0.0');
+      expect(written.beacon, isTrue);
+      expect(written.relay, isNull);
+      expect(written.companionEnabled, isTrue, reason: 'kept, not named');
+      expect(written.extraRelays, [
+        Uri.parse('ws://box.example.com:8787/k/${'b' * 32}'),
+      ]);
+
+      // Off stops the listener; the file says so for the next start too.
+      await client.call(
+        ServerMethod.configSet,
+        arguments: {
+          'patch': {
+            'companion': {'enabled': false},
+          },
+        },
+      );
+      expect((await served())['serving'], isFalse);
+      expect((await ServerConfig.read(dataDir)).companionEnabled, isFalse);
+    });
+
+    test('a patch that cannot be served by is refused in words, and nothing '
+        'is written', () async {
+      final server = await InProcessServer.start(root, serveArgs());
+      addTearDown(server.stop);
+      final client = (await HostClient.connect(server.paths.socketPath))!;
+      addTearDown(client.close);
+      await expectLater(
+        client.call(
+          ServerMethod.configSet,
+          arguments: {
+            'patch': {
+              'companion': {'bind': 'everywhere'},
+            },
+          },
+        ),
+        throwsA(
+          isA<HostClientRefusal>().having(
+            (e) => '$e',
+            'message',
+            contains('not an IP address'),
+          ),
+        ),
+      );
+      expect(File(p.join(dataDir, kServerConfigFileName)).existsSync(), false);
+    });
+
+    test('the app on its lifecycle link reads and writes the config too, and '
+        'its attach adds only its embedded relay', () async {
+      final server = await InProcessServer.start(root, serveArgs());
+      addTearDown(server.stop);
       final app = (await HostLifecycleWatch.connect(server.paths.socketPath))!;
-      app.configureCompanion({'enabled': true, 'hostedEnabled': false});
-      // The config is applied in order with this link's frames; the next
-      // answer on another link comes after it.
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(await servedRelay(), isNull);
+      addTearDown(app.close);
+      app.attachCompanion(localRelayUrl: 'ws://127.0.0.1:8787');
 
-      await app.close();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(await servedRelay(), 'wss://relay.example.com/k/…');
+      final set = await app.serverCall(ServerMethod.configSet, {
+        'patch': {
+          'companion': {'enabled': true},
+        },
+      });
+      expect(
+        ((set['settings']! as Map)['companion']! as Map)['enabled'],
+        isTrue,
+      );
+      final got = await app.serverCall(ServerMethod.configGet);
+      expect(((got['file']! as Map)['companion']! as Map)['enabled'], isTrue);
+      await expectLater(
+        app.serverCall('server.nothing'),
+        throwsA(isA<HostLifecycleWatchRefused>()),
+      );
     });
   });
 
@@ -273,7 +393,10 @@ void main() {
     test('pair opens a window, prints a code, a QR and a payload that '
         'decodes, and reports the phone that paired; devices lists it and '
         'revoke revokes it', () async {
-      final server = await InProcessServer.start(root, standalone());
+      final server = await InProcessServer.start(
+        root,
+        serveArgs(['--companion']),
+      );
       addTearDown(server.stop);
       final port = server.companionPort;
 
@@ -392,8 +515,8 @@ void main() {
   });
 
   group('agent CLIs', () {
-    test('a standalone server records what it finds at start, under this '
-        "machine's environment, and agents --refresh probes again", () async {
+    test("the server records what it finds at start, under this machine's "
+        'environment, and agents --refresh probes again', () async {
       final adapter = AgentRegistry.builtIn.adapters.first;
       final binary = adapter.descriptor.binaries
           .forKind(EnvironmentKind.localPosix)
@@ -401,7 +524,7 @@ void main() {
       final runner = FakeRunner({binary: '/opt/fake/$binary'});
       final server = await InProcessServer.start(
         root,
-        standalone(),
+        serveArgs(),
         agentsFor: (db) => ServerAgents(database: db, runner: runner),
       );
       addTearDown(server.stop);
@@ -435,16 +558,28 @@ void main() {
       expect(environment.single['kind'], EnvironmentKind.localPosix.name);
     });
 
-    test('a host the app starts does not probe on its own', () async {
-      final runner = FakeRunner(const {});
-      final server = await InProcessServer.start(root, [
-        '--data-dir=$dataDir',
-        '--companion-port=0',
-        '--mcp-port=0',
-      ], agentsFor: (db) => ServerAgents(database: db, runner: runner));
+    test('the app asks for a refresh over its lifecycle link', () async {
+      final adapter = AgentRegistry.builtIn.adapters.first;
+      final binary = adapter.descriptor.binaries
+          .forKind(EnvironmentKind.localPosix)
+          .first;
+      final server = await InProcessServer.start(
+        root,
+        serveArgs(),
+        agentsFor: (db) => ServerAgents(
+          database: db,
+          runner: FakeRunner({binary: '/opt/fake/$binary'}),
+        ),
+      );
       addTearDown(server.stop);
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(runner.asked, isEmpty);
+      final app = (await HostLifecycleWatch.connect(server.paths.socketPath))!;
+      addTearDown(app.close);
+      final answer = await app.serverCall(ServerMethod.agentsRefresh);
+      expect(answer['summary'], contains('Found 1 agent CLI'));
+      expect(
+        (answer['agents']! as List).single,
+        containsPair('agent', adapter.id),
+      );
     });
   });
 }

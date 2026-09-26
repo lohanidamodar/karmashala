@@ -14,7 +14,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../remote/application/remote_access_controller.dart';
-import '../../settings/application/settings_controller.dart';
+import '../../remote/application/remote_access_settings.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../application/companion_route_store.dart';
 import '../application/host_session_providers.dart';
@@ -85,8 +85,7 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
 
   /// The relay a box is met at when it cannot be dialled: the one this desktop
   /// is configured with, so there is one hosted relay and one place to set it.
-  Uri get _hostedRelay =>
-      resolveRelayUri(ref.read(settingsControllerProvider).remoteRelayUrl);
+  Uri get _hostedRelay => hostedRelayOf(ref.read(remoteAccessSettingsProvider));
 
   Future<void> _invite({
     bool probe = true,

@@ -5,6 +5,7 @@
 library;
 
 import 'dart:io';
+import '../../../support/memory_server_config.dart';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -69,7 +70,7 @@ void main() {
   });
 
   test('turning the local relay on starts it and the host serves it', () async {
-    settings.setRemoteAccessEnabled(true);
+    setRemoteAccessNow(container, enabled: true);
     settings.setLocalRelayPort(0);
     prefs.setLocalEnabled(true);
 
@@ -92,12 +93,11 @@ void main() {
   });
 
   test('both switches on: both relays are served at once', () async {
-    settings.setRemoteAccessEnabled(true);
-    settings.setRemoteRelayUrl('wss://relay.example.com');
+    setRemoteAccessNow(container, enabled: true);
+    setRemoteAccessNow(container, relayUrl: 'wss://relay.example.com');
     settings.setLocalRelayPort(0);
-    prefs
-      ..setLocalEnabled(true)
-      ..setHostedEnabled(true);
+    prefs.setLocalEnabled(true);
+    setRemoteAccessNow(container, hostedEnabled: true);
 
     await controller.sync();
 
@@ -110,11 +110,10 @@ void main() {
   test(
     'turning the local relay off stops it and leaves hosted alone',
     () async {
-      settings.setRemoteAccessEnabled(true);
+      setRemoteAccessNow(container, enabled: true);
       settings.setLocalRelayPort(0);
-      prefs
-        ..setLocalEnabled(true)
-        ..setHostedEnabled(true);
+      prefs.setLocalEnabled(true);
+      setRemoteAccessNow(container, hostedEnabled: true);
       await controller.sync();
       final service = controller.service;
       expect(localRelay.isRunning, isTrue);
@@ -134,14 +133,13 @@ void main() {
   );
 
   test('turning the hosted relay off leaves the local one serving', () async {
-    settings.setRemoteAccessEnabled(true);
+    setRemoteAccessNow(container, enabled: true);
     settings.setLocalRelayPort(0);
-    prefs
-      ..setLocalEnabled(true)
-      ..setHostedEnabled(true);
+    prefs.setLocalEnabled(true);
+    setRemoteAccessNow(container, hostedEnabled: true);
     await controller.sync();
 
-    prefs.setHostedEnabled(false);
+    setRemoteAccessNow(container, hostedEnabled: false);
     await controller.sync();
 
     expect(controller.service!.hostedEnabled, isFalse);
@@ -150,10 +148,9 @@ void main() {
   });
 
   test('neither relay: the host still runs for direct LAN links', () async {
-    settings.setRemoteAccessEnabled(true);
-    prefs
-      ..setLocalEnabled(false)
-      ..setHostedEnabled(false);
+    setRemoteAccessNow(container, enabled: true);
+    prefs.setLocalEnabled(false);
+    setRemoteAccessNow(container, hostedEnabled: false);
 
     await controller.sync();
 
@@ -165,13 +162,13 @@ void main() {
   });
 
   test('disabling remote access stops relay and host together', () async {
-    settings.setRemoteAccessEnabled(true);
+    setRemoteAccessNow(container, enabled: true);
     settings.setLocalRelayPort(0);
     prefs.setLocalEnabled(true);
     await controller.sync();
     final port = localRelay.status.boundPort!;
 
-    settings.setRemoteAccessEnabled(false);
+    setRemoteAccessNow(container, enabled: false);
     await controller.sync();
 
     expect(controller.service, isNull);
@@ -189,7 +186,7 @@ void main() {
     final second = secondSocket.port;
     await secondSocket.close();
 
-    settings.setRemoteAccessEnabled(true);
+    setRemoteAccessNow(container, enabled: true);
     settings.setLocalRelayPort(first);
     prefs.setLocalEnabled(true);
     await controller.sync();
@@ -205,7 +202,7 @@ void main() {
   test('a taken port surfaces as status, and heals on the next sync', () async {
     final taken = await ServerSocket.bind('127.0.0.1', 0);
     addTearDown(taken.close);
-    settings.setRemoteAccessEnabled(true);
+    setRemoteAccessNow(container, enabled: true);
     settings.setLocalRelayPort(taken.port);
     prefs.setLocalEnabled(true);
 

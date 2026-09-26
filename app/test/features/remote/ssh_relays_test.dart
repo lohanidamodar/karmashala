@@ -13,10 +13,10 @@ import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.d
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/remote/relay_local/relay_endpoints.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
+import '../../support/memory_server_config.dart';
 
 import '../../support/fixtures.dart';
 
@@ -184,9 +184,7 @@ void main() {
   group('what a new pairing is offered', () {
     test('an enabled box sits before the hosted relay, under its own name', () {
       final container = containerWith();
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
+      setRemoteAccessNow(container, enabled: true);
       container
           .read(sshRelaysProvider.notifier)
           .put(
@@ -213,9 +211,7 @@ void main() {
 
     test('a stopped box is not offered: nobody would be listening there', () {
       final container = containerWith();
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
+      setRemoteAccessNow(container, enabled: true);
       container
           .read(sshRelaysProvider.notifier)
           .put(

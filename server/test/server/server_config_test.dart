@@ -218,52 +218,42 @@ void main() {
       final settings = ServerSettings.resolve(
         file: file,
         flags: const ServerConfig(companionPort: 0, name: 'from-flag'),
-        standalone: true,
         hostName: 'machine',
       );
       expect(settings.companionPort, 0);
       expect(settings.name, 'from-flag');
       expect(settings.bind, '0.0.0.0', reason: 'the file, no flag');
       expect(settings.mcpPort, 47901);
-      expect(settings.ownCompanion!.advertise, isTrue);
+      expect(settings.companion.advertise, isTrue);
     });
 
-    test('with neither, a standalone server binds loopback and serves by '
-        'its own defaults', () {
+    test('with neither, a fresh server serves no phones, and would on '
+        'loopback', () {
       final settings = ServerSettings.resolve(
         file: ServerConfig.empty,
         flags: ServerConfig.empty,
-        standalone: true,
         hostName: 'machine',
       );
       expect(settings.name, 'machine');
       expect(settings.bind, '127.0.0.1');
       expect(settings.companionPort, kHostCompanionPort);
       expect(settings.mcpPort, kPreferredMcpPort);
-      final own = settings.ownCompanion!;
-      expect(own.enabled, isTrue);
-      expect(own.relay, isNull);
-      expect(own.advertise, isFalse);
+      final companion = settings.companion;
+      expect(companion.enabled, isFalse);
+      expect(companion.relay, isNull);
+      expect(companion.advertise, isFalse);
     });
 
-    test('a host the app starts binds every interface and serves by the '
-        "app's settings unless a file says how", () {
-      final bare = ServerSettings.resolve(
-        file: ServerConfig.empty,
-        flags: const ServerConfig(companionPort: 0),
-        standalone: false,
-        hostName: 'desk',
+    test('a relay switched off is kept and parked', () {
+      final companion = ServerSettings.companionConfigOf(
+        ServerConfig(
+          companionEnabled: true,
+          relay: Uri.parse('wss://relay.example.com'),
+          relayEnabled: false,
+        ),
       );
-      expect(bare.bind, '0.0.0.0');
-      expect(bare.ownCompanion, isNull);
-
-      final told = ServerSettings.resolve(
-        file: const ServerConfig(beacon: false),
-        flags: ServerConfig.empty,
-        standalone: false,
-        hostName: 'desk',
-      );
-      expect(told.ownCompanion, isNotNull);
+      expect(companion.relay, Uri.parse('wss://relay.example.com'));
+      expect(companion.hostedEnabled, isFalse);
     });
 
     test('the relay token is spelled into the path the relay gates on', () {
@@ -278,7 +268,44 @@ void main() {
     });
   });
 
-  test('the standalone data directory is ~/.karmashala', () {
+  group('a patch', () {
+    final file = ServerConfig(
+      name: 'desk',
+      companionEnabled: true,
+      relay: Uri.parse('wss://relay.example.com'),
+      relayToken: _token,
+      mcpPort: 47901,
+    );
+
+    test('replaces what it names, clears what it nulls, keeps the rest', () {
+      final next = file.patchedWith({
+        'companion': {'bind': '0.0.0.0', 'relayToken': null, 'relay': null},
+        'mcp': {'port': null},
+      });
+      expect(next.name, 'desk');
+      expect(next.companionEnabled, isTrue);
+      expect(next.bind, '0.0.0.0');
+      expect(next.relay, isNull);
+      expect(next.relayToken, isNull);
+      expect(next.mcpPort, isNull);
+      expect(next.toJson().containsKey('mcp'), isFalse);
+    });
+
+    test('is checked as the file is', () {
+      expect(
+        () => file.patchedWith({
+          'companion': {'bind': 'everywhere'},
+        }),
+        throwsA(isA<ServerConfigError>()),
+      );
+      expect(
+        () => file.patchedWith({'what': 1}),
+        throwsA(isA<ServerConfigError>()),
+      );
+    });
+  });
+
+  test('the data directory is ~/.karmashala', () {
     expect(
       defaultServerDataDirectory(
         environment: {'HOME': '/home/k', 'USERPROFILE': r'C:\Users\k'},

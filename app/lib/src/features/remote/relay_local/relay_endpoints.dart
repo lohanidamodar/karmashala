@@ -4,8 +4,8 @@ library;
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../settings/application/settings_controller.dart';
 import '../application/relay_prefs.dart';
+import '../application/remote_access_settings.dart';
 import '../application/ssh_relays.dart';
 import '../application/remote_access_controller.dart';
 import 'local_relay_providers.dart';
@@ -44,8 +44,8 @@ class RelayEndpointOption {
 /// Empty while remote access is off or no relay is usable — a tab no phone
 /// can dial would only pretend. Local first: it always works on a shared net.
 final relayEndpointsProvider = Provider<List<RelayEndpointOption>>((ref) {
-  final settings = ref.watch(settingsControllerProvider);
-  if (!settings.remoteAccessEnabled) return const [];
+  final access = ref.watch(remoteAccessSettingsProvider);
+  if (!access.enabled) return const [];
   final prefs = ref.watch(relayPrefsProvider);
   final options = <RelayEndpointOption>[];
 
@@ -74,11 +74,11 @@ final relayEndpointsProvider = Provider<List<RelayEndpointOption>>((ref) {
       ),
     );
   }
-  if (prefs.hostedEnabled) {
+  if (access.relayEnabled) {
     options.add(
       RelayEndpointOption(
         label: 'Internet',
-        url: resolveRelayUri(settings.remoteRelayUrl),
+        url: hostedRelayOf(access),
         kind: RelayEndpointKind.internet,
       ),
     );

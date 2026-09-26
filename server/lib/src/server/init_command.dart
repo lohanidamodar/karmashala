@@ -10,19 +10,35 @@ import 'server_config.dart';
 import 'server_data_directory.dart';
 
 /// `karmashala_host init [--data-dir=<dir>] [--force] [config flags…]`:
-/// writes a standalone server's `server.json` — owner-only from its first
+/// writes the server's `server.json` — owner-only from its first
 /// byte, since it can hold the relay token — from the same flags `serve`
 /// takes (`--name`, `--bind`, `--companion-port`, `--beacon`, `--relay`,
 /// `--relay-token`, `--extra-relay`, `--no-notes`, `--mcp-port`,
 /// `--no-companion`). Refuses to replace a file that is there without
 /// `--force`. What the installers run, so a hand-written file and theirs are
 /// checked by the same rules.
-Future<int> runInit(List<String> args, {IOSink? out, IOSink? err}) async {
+///
+/// Without `--data-dir`, [environment] names the home; with neither the call
+/// is a programming error ([ArgumentError]): the library never falls back to
+/// the real home.
+Future<int> runInit(
+  List<String> args, {
+  Map<String, String>? environment,
+  IOSink? out,
+  IOSink? err,
+}) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
   final String dataDirectory;
   try {
-    dataDirectory = dataDirectoryOf(args) ?? defaultServerDataDirectory();
+    final named = dataDirectoryOf(args);
+    if (named == null && environment == null) {
+      throw ArgumentError(
+        'init: pass --data-dir=<dir> or the environment to find the home in',
+      );
+    }
+    dataDirectory =
+        named ?? defaultServerDataDirectory(environment: environment!);
   } on StateError catch (error) {
     errSink.writeln('karmashala_host init: ${error.message}');
     return 2;
@@ -63,6 +79,7 @@ Future<int> runInit(List<String> args, {IOSink? out, IOSink? err}) async {
             beacon: config.beacon,
             relay: config.relay,
             relayToken: config.relayToken == null ? null : '…',
+            relayEnabled: config.relayEnabled,
             extraRelays: config.extraRelays,
             notes: config.notes,
             mcpPort: config.mcpPort,

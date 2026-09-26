@@ -663,8 +663,12 @@ void main() {
           (c) => c.contains('setsid nohup'),
         );
         expect(start, contains('serve'));
-        // The store off tmpfs, beside the binaries: this box's pairings.
-        expect(start, contains("'--data-dir=/home/fake/.karmashala'"));
+        // The server's default folder — off tmpfs, beside the binaries,
+        // holding this box's pairings — so no --data-dir; phones served on
+        // every interface as a box always was.
+        expect(start, isNot(contains('--data-dir')));
+        expect(start, contains("mkdir -p '/home/fake/.karmashala'"));
+        expect(start, contains("serve --companion '--bind=0.0.0.0'"));
         expect(
           start,
           contains('< /dev/null'),

@@ -1,6 +1,7 @@
-/// The two-relay settings model: local and hosted are independent switches,
-/// persisted in `app_metadata`. The retired either/or mode was carried over
-/// by the store's v50 upgrade.
+/// The embedded relay's switch: this computer's own relay is this app's
+/// listener, so whether it runs is this app's preference, persisted in
+/// `app_metadata`. The internet relay is the server's config
+/// (`remote_access_settings.dart`), never kept here.
 library;
 
 import 'dart:convert';
@@ -13,62 +14,45 @@ import '../../../core/database/database_providers.dart';
 /// Where the prefs live in the `app_metadata` key/value table.
 const String kRelayPrefsMetadataKey = 'remote.relay_prefs.v1';
 
-/// Which relays remote access serves through. With both off the host still
-/// answers direct LAN links but offers no endpoint for a new pairing.
+/// Whether this app runs its embedded relay while remote access is on.
 class RelayPrefs {
-  const RelayPrefs({required this.localEnabled, required this.hostedEnabled});
+  const RelayPrefs({required this.localEnabled});
 
   /// The embedded relay this computer runs itself (`ws://<lan-ip>:<port>`).
   final bool localEnabled;
 
-  /// A relay on the internet: the PopupBits default or a self-hosted URL.
-  final bool hostedEnabled;
+  RelayPrefs copyWith({bool? localEnabled}) =>
+      RelayPrefs(localEnabled: localEnabled ?? this.localEnabled);
 
-  bool get anyEnabled => localEnabled || hostedEnabled;
-
-  RelayPrefs copyWith({bool? localEnabled, bool? hostedEnabled}) => RelayPrefs(
-    localEnabled: localEnabled ?? this.localEnabled,
-    hostedEnabled: hostedEnabled ?? this.hostedEnabled,
-  );
-
-  Map<String, Object?> toJson() => {
-    'local': localEnabled,
-    'hosted': hostedEnabled,
-  };
+  Map<String, Object?> toJson() => {'local': localEnabled};
 
   @override
   bool operator ==(Object other) =>
-      other is RelayPrefs &&
-      other.localEnabled == localEnabled &&
-      other.hostedEnabled == hostedEnabled;
+      other is RelayPrefs && other.localEnabled == localEnabled;
 
   @override
-  int get hashCode => Object.hash(localEnabled, hostedEnabled);
+  int get hashCode => localEnabled.hashCode;
 
   @override
-  String toString() =>
-      'RelayPrefs(local: $localEnabled, hosted: $hostedEnabled)';
+  String toString() => 'RelayPrefs(local: $localEnabled)';
 }
 
 class RelayPrefsController extends Notifier<RelayPrefs> {
   @override
   RelayPrefs build() {
     final stored = readFrom(ref.watch(databaseProvider));
-    return stored ?? const RelayPrefs(localEnabled: false, hostedEnabled: true);
+    return stored ?? const RelayPrefs(localEnabled: false);
   }
 
   /// The persisted prefs, or null when nothing was written yet, which means
-  /// hosted only. Static, so a test can read what a fresh launch loads.
+  /// no embedded relay. Static, so a test can read what a fresh launch loads.
   static RelayPrefs? readFrom(AppDatabase db) {
     final raw = db.readMetadata(kRelayPrefsMetadataKey);
     if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
-        return RelayPrefs(
-          localEnabled: decoded['local'] == true,
-          hostedEnabled: decoded['hosted'] == true,
-        );
+        return RelayPrefs(localEnabled: decoded['local'] == true);
       }
     } on FormatException {
       // Unreadable — treated as never written.
@@ -78,9 +62,6 @@ class RelayPrefsController extends Notifier<RelayPrefs> {
 
   void setLocalEnabled(bool value) =>
       _save(state.copyWith(localEnabled: value));
-
-  void setHostedEnabled(bool value) =>
-      _save(state.copyWith(hostedEnabled: value));
 
   void _save(RelayPrefs prefs) {
     state = prefs;

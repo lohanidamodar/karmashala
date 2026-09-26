@@ -12,7 +12,8 @@ Future<int> runDevices(
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
-}) => _withServer('devices', paths, err, (client) async {
+  Map<String, String>? environment,
+}) => _withServer('devices', paths, environment, err, (client) async {
   final sink = out ?? stdout;
   final devices = _devices(await client.call(ServerMethod.devicesList));
   if (devices.isEmpty) {
@@ -44,6 +45,7 @@ Future<int> runRevoke(
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
+  Map<String, String>? environment,
 }) {
   final errSink = err ?? stderr;
   final named = args.where((a) => !a.startsWith('--')).toList();
@@ -51,7 +53,7 @@ Future<int> runRevoke(
     errSink.writeln('karmashala_host revoke: name a device (see `devices`)');
     return Future.value(2);
   }
-  return _withServer('revoke', paths, err, (client) async {
+  return _withServer('revoke', paths, environment, err, (client) async {
     final sink = out ?? stdout;
     final wanted = named.first.trim().toLowerCase();
     final matches = [
@@ -89,7 +91,8 @@ Future<int> runAgents(
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
-}) => _withServer('agents', paths, err, (client) async {
+  Map<String, String>? environment,
+}) => _withServer('agents', paths, environment, err, (client) async {
   final sink = out ?? stdout;
   final refresh = args.contains('--refresh');
   final answer = await client.call(
@@ -130,11 +133,16 @@ Future<int> runAgents(
 Future<int> _withServer(
   String command,
   HostPaths? paths,
+  Map<String, String>? environment,
   IOSink? err,
   Future<int> Function(HostClient client) body,
 ) async {
   final errSink = err ?? stderr;
-  final resolved = paths ?? HostPaths.resolve();
+  final resolved = hostPathsFor(
+    command,
+    paths: paths,
+    environment: environment,
+  );
   final HostClient? client;
   try {
     client = await HostClient.connect(resolved.socketPath);

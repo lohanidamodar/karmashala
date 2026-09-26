@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:karmashala_host/karmashala_host.dart';
 
 Future<void> main(List<String> args) async {
-  final code = await runHostCli(args);
+  // The one place the real environment is read: the library never does.
+  final code = await runHostCli(args, environment: Platform.environment);
   // A proxy that has finished must not wait for the event loop to drain: a
   // stdin nobody closes holds it open for ever, and one did for five days.
   //

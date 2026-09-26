@@ -33,18 +33,61 @@ void main() {
     }
   });
 
-  test('serve is started with the app\'s data directory, and without one it '
-      'is started bare, which serve refuses in words', () async {
-    final told = LocalHostSessionAccess(
-      paths: paths,
-      dataDirectory: () async => '${home.path}/data',
+  test('under a test runner a real serve starts only with a data folder and '
+      'a host directory of its own', () {
+    const testRun = {'FLUTTER_TEST': 'true'};
+    String? refusal(List<String> args, Map<String, String>? env) =>
+        LocalHostSessionAccess.refusalUnderTest(
+          arguments: args,
+          serveEnvironment: env,
+          processEnvironment: testRun,
+        );
+
+    expect(refusal(['serve'], null), isNotNull, reason: 'the real home');
+    expect(refusal(['serve', '--data-dir=/t/d'], null), isNotNull);
+    expect(
+      refusal(['serve'], {kHostDirectoryEnvironmentVariable: '/t/h'}),
+      isNotNull,
     );
-    expect(await told.serveArguments(), [
+    expect(
+      refusal(
+        ['serve', '--data-dir=/t/d'],
+        {kHostDirectoryEnvironmentVariable: '/t/h'},
+      ),
+      isNull,
+    );
+    expect(
+      LocalHostSessionAccess.refusalUnderTest(
+        arguments: const ['serve'],
+        serveEnvironment: null,
+        processEnvironment: const {},
+      ),
+      isNull,
+      reason: 'the app, run for real, starts it bare',
+    );
+  });
+
+  test('and this very test run is one', () async {
+    expect(Platform.environment['FLUTTER_TEST'], 'true');
+  });
+
+  test('serve is started bare — the server keeps its data in its default '
+      'folder — and where the data is is only for readers', () async {
+    final real = LocalHostSessionAccess(
+      paths: paths,
+      dataDirectory: () async => '${home.path}/.karmashala',
+    );
+    expect(await real.serveArguments(), ['serve']);
+    expect(await real.dataDirectory!(), '${home.path}/.karmashala');
+
+    final probe = LocalHostSessionAccess(
+      paths: paths,
+      serveFlags: ['--data-dir=${home.path}/probe', '--mcp-port=0'],
+    );
+    expect(await probe.serveArguments(), [
       'serve',
-      '--data-dir=${home.path}/data',
-    ]);
-    expect(await LocalHostSessionAccess(paths: paths).serveArguments(), [
-      'serve',
+      '--data-dir=${home.path}/probe',
+      '--mcp-port=0',
     ]);
   });
 

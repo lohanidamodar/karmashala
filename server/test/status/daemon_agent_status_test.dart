@@ -392,6 +392,7 @@ void main() {
         registry: registry,
         hostName: 'desk',
         lanPort: 0,
+        config: const CompanionConfig(enabled: true),
         transcriptPollInterval: Duration.zero,
         screens: RegistryScreens(registry, enterDelay: Duration.zero),
         prompts: prompts,

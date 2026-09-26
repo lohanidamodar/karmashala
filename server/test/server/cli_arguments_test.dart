@@ -36,7 +36,8 @@ void main() {
     err = CapturingSink();
   });
 
-  Future<int> cli(List<String> args) => runHostCli(args, out: out, err: err);
+  Future<int> cli(List<String> args) =>
+      runHostCli(args, environment: kNowhereEnvironment, out: out, err: err);
 
   for (final command in _commands) {
     group(command, () {

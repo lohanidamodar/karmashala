@@ -24,11 +24,11 @@ abstract interface class CompanionHandler {
     String label = '',
   });
 
-  /// [owner] is the desktop app from now on, with its Remote access settings
-  /// in [config]; frames to it go through [send].
+  /// [owner] is the desktop app from now on, its embedded relay listening at
+  /// [localRelay] (null: none); frames to it go through [send].
   Future<void> adopt(
     Object owner,
-    Map<String, Object?> config,
+    Uri? localRelay,
     void Function(HostMessage) send,
   );
 

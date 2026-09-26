@@ -8,9 +8,9 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/memory_server_config.dart';
 
 void main() {
   late AppDatabase db;
@@ -38,9 +38,7 @@ void main() {
   });
 
   test('follows the configured relay URL', () {
-    container
-        .read(settingsControllerProvider.notifier)
-        .setRemoteRelayUrl('wss://my.relay.example');
+    setRemoteAccessNow(container, relayUrl: 'wss://my.relay.example');
 
     final endpoints = container.read(pairingRelayEndpointsProvider);
     expect(endpoints.single.url, Uri.parse('wss://my.relay.example'));

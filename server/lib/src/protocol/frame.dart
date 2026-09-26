@@ -58,11 +58,13 @@ enum MessageType {
   mcpCall(0x1e),
   mcpResult(0x1f),
   // Protocol 4: the daemon serves the phone companion and the app answers
-  // what only it can. client → host: the Remote access settings (and "I am
-  // the app"); host → client: one forwarded call; client → host: its answer;
-  // client → host: news from the desktop; host → client: news from the
-  // companion (device rows moved, a pairing window ended).
-  companionConfig(0x20),
+  // what only it can. client → host: "I am the app" and where its embedded
+  // relay listens (protocol 10 — how phones are served is the server's
+  // `server.json`, never sent on a link); host → client: one forwarded call;
+  // client → host: its answer; client → host: news from the desktop; host →
+  // client: news from the companion (device rows moved, a pairing window
+  // ended).
+  companionAttach(0x20),
   companionCall(0x21),
   companionResult(0x22),
   companionNotice(0x23),
@@ -83,9 +85,10 @@ enum MessageType {
   agentStatus(0x2b),
   promptAnswer(0x2c),
   promptAnswered(0x2d),
-  // Protocol 8: a standalone server administered from its own machine.
-  // client → host: one question (devices, revoke, agents); host → client:
-  // its answer. 0x2e and 0x2f are left for the companion's own frames.
+  // Protocol 8: a server administered from its own machine. client → host:
+  // one question (devices, revoke, agents, its config — protocol 10); host →
+  // client: its answer. 0x2e and 0x2f are left for the companion's own
+  // frames.
   serverCall(0x30),
   serverResult(0x31);
 

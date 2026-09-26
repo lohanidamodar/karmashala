@@ -98,8 +98,6 @@ class Settings {
     this.letAgentsUpdateThemselves,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
-    this.remoteAccessEnabled = false,
-    this.remoteRelayUrl,
     this.localRelayPort = 8787,
     this.uiTextScale = 1.0,
     this.terminalFontSize = defaultTerminalFontSize,
@@ -272,12 +270,6 @@ class Settings {
   /// The imported terminal theme as `<format>:<path>`, or `null` for built-in.
   final String? terminalThemeSource;
 
-  /// Whether the mobile-companion host runs. Off: nothing listens or dials.
-  final bool remoteAccessEnabled;
-
-  /// The relay the host dials, or `null` for the PopupBits default.
-  final String? remoteRelayUrl;
-
   /// The embedded relay's port; the default matches the relay package's own.
   final int localRelayPort;
 
@@ -389,9 +381,6 @@ class Settings {
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
-    bool? remoteAccessEnabled,
-    String? remoteRelayUrl,
-    bool clearRemoteRelayUrl = false,
     int? localRelayPort,
     double? uiTextScale,
     double? terminalFontSize,
@@ -469,10 +458,6 @@ class Settings {
     terminalThemeSource: clearTerminalThemeSource
         ? null
         : (terminalThemeSource ?? this.terminalThemeSource),
-    remoteAccessEnabled: remoteAccessEnabled ?? this.remoteAccessEnabled,
-    remoteRelayUrl: clearRemoteRelayUrl
-        ? null
-        : (remoteRelayUrl ?? this.remoteRelayUrl),
     localRelayPort: localRelayPort ?? this.localRelayPort,
     uiTextScale: uiTextScale ?? this.uiTextScale,
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
@@ -572,8 +557,6 @@ class Settings {
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
-    'remoteAccessEnabled': remoteAccessEnabled,
-    if (remoteRelayUrl != null) 'remoteRelayUrl': remoteRelayUrl,
     'localRelayPort': localRelayPort,
     'uiTextScale': uiTextScale,
     'terminalFontSize': terminalFontSize,
@@ -754,10 +737,6 @@ class Settings {
       terminalThemeSource: json['terminalThemeSource'] is String
           ? json['terminalThemeSource'] as String
           : null,
-      remoteAccessEnabled: json['remoteAccessEnabled'] == true,
-      remoteRelayUrl: json['remoteRelayUrl'] is String
-          ? json['remoteRelayUrl'] as String
-          : null,
       localRelayPort: json['localRelayPort'] is int
           ? json['localRelayPort'] as int
           : 8787,
@@ -854,8 +833,6 @@ class Settings {
       other.letAgentsUpdateThemselves == letAgentsUpdateThemselves &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
-      other.remoteAccessEnabled == remoteAccessEnabled &&
-      other.remoteRelayUrl == remoteRelayUrl &&
       other.localRelayPort == localRelayPort &&
       other.uiTextScale == uiTextScale &&
       other.terminalFontSize == terminalFontSize &&
@@ -908,8 +885,6 @@ class Settings {
       shellIntegrationEnabled,
       restoreLivePanes,
       terminalThemeSource,
-      remoteAccessEnabled,
-      remoteRelayUrl,
       localRelayPort,
       uiTextScale,
       terminalFontSize,

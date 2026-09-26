@@ -10,20 +10,26 @@ Future<int> runAttach(
   Stream<List<int>>? input,
   IOSink? output,
   IOSink? err,
+  HostPaths? paths,
+  Map<String, String>? environment,
 }) async {
   final errSink = err ?? stderr;
-  final paths = HostPaths.resolve();
+  final resolved = hostPathsFor(
+    'attach',
+    paths: paths,
+    environment: environment,
+  );
   final Socket socket;
   try {
     socket = await Socket.connect(
-      InternetAddress(paths.socketPath, type: InternetAddressType.unix),
+      InternetAddress(resolved.socketPath, type: InternetAddressType.unix),
       0,
     );
   } on SocketException catch (e) {
     // A distinct code, so the deployer can tell "no host running" from
     // "the host refused me" and start one.
     errSink.writeln(
-      'karmashala_host attach: no host at ${paths.socketPath} (${e.osError?.message ?? e.message})',
+      'karmashala_host attach: no host at ${resolved.socketPath} (${e.osError?.message ?? e.message})',
     );
     return 5;
   }

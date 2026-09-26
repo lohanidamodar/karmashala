@@ -1,15 +1,19 @@
+import 'dart:io';
+
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_store/database.dart';
 
-/// The two tables a standalone server writes about its agents: this machine's
+/// The two tables the server writes about its agents: this machine's
 /// `execution_environments` row, and one `agent_installations` row per CLI it
 /// found. Narrow on purpose, like `CheckoutRows`: the app's DAOs carry every
 /// query its settings need; the host needs "is it recorded" and "record it".
 ///
-/// Rows are never deleted here: a session row points at its installation
-/// (`ON DELETE RESTRICT`), and a CLI that has gone is the app's to reconcile
-/// with the person.
+/// It keeps the desktop's rules for the rows it shares with the app: a path a
+/// person chose is never overruled, a CLI that moved keeps its row (and its
+/// id, which settings pin), and rows are never deleted here — a session row
+/// points at its installation (`ON DELETE RESTRICT`), and a CLI that has gone
+/// is the app's to reconcile with the person.
 class AgentInstallationRows {
   AgentInstallationRows(this._db);
 
@@ -33,10 +37,13 @@ class AgentInstallationRows {
     );
   }
 
-  /// Records [found]: a new row when no row has its agent, environment and
-  /// path (the table's identity), else the version it answered now on the
-  /// row already there. Returns the row as recorded, and whether it is new.
-  ({AgentInstallation installation, bool added}) record(
+  /// Records [found]: the version it answered now on the row already at its
+  /// agent, environment and path (the table's identity). With none there:
+  /// nothing when a person pinned the same agent here to another path that
+  /// still opens — their answer; the row moved in place when the same agent's
+  /// row here points at a path that is gone; else a new row. Returns the row
+  /// as recorded, and whether it is new; null when a pinned row stands.
+  ({AgentInstallation installation, bool added})? record(
     AgentInstallation found,
   ) {
     final existing = _byIdentity(
@@ -45,8 +52,35 @@ class AgentInstallationRows {
       found.executable.path,
     );
     if (existing == null) {
+      final elsewhere = [
+        for (final row in inEnvironment(found.executable.environmentId))
+          if (row.agentId == found.agentId) row,
+      ];
+      for (final row in elsewhere) {
+        if (row.executableByUser && _opens(row.executable.path)) return null;
+      }
+      for (final row in elsewhere) {
+        if (row.executableByUser || _opens(row.executable.path)) continue;
+        _db.execute(
+          'UPDATE agent_installations SET executable_path = ?, version = ?, '
+          'version_read_at = ? WHERE id = ?;',
+          [
+            found.executable.path,
+            found.version ?? row.version,
+            found.versionReadAt == null
+                ? (row.versionReadAt == null
+                      ? null
+                      : isoFromDate(row.versionReadAt!))
+                : isoFromDate(found.versionReadAt!),
+            row.id,
+          ],
+        );
+        return (installation: _byId(row.id) ?? row, added: false);
+      }
+      // OR IGNORE: the desktop's own sweep may record the same CLI a moment
+      // before — the identity is unique — and then that row is the one.
       _db.execute(
-        'INSERT INTO agent_installations '
+        'INSERT OR IGNORE INTO agent_installations '
         '(id, agent_kind, environment_id, executable_path, version, '
         'version_read_at, created_at, executable_by_user) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, 0);',
@@ -62,6 +96,14 @@ class AgentInstallationRows {
           isoFromDate(found.createdAt),
         ],
       );
+      final recorded = _byIdentity(
+        found.agentId,
+        found.executable.environmentId,
+        found.executable.path,
+      );
+      if (recorded != null && recorded.id != found.id) {
+        return (installation: recorded, added: false);
+      }
       return (installation: found, added: true);
     }
     final version = found.version;
@@ -85,6 +127,10 @@ class AgentInstallationRows {
     ))
       _fromRow(row),
   ];
+
+  /// Whether [path] is a file on this machine — where every row this writes
+  /// is recorded.
+  static bool _opens(String path) => File(path).existsSync();
 
   AgentInstallation? _byIdentity(
     String agentId,

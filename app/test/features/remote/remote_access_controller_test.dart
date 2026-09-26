@@ -3,6 +3,7 @@
 library;
 
 import 'dart:typed_data';
+import '../../support/memory_server_config.dart';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -10,7 +11,6 @@ import 'package:karmashala/src/features/remote/application/remote_access_control
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -86,29 +86,29 @@ void main() {
     });
 
     test('enabling starts the service; disabling stops it', () async {
-      final settings = container.read(settingsControllerProvider.notifier);
-
-      settings.setRemoteAccessEnabled(true);
-      settings.setRemoteRelayUrl('http://127.0.0.1:${relay.port}');
+      setRemoteAccessNow(container, enabled: true);
+      setRemoteAccessNow(container, relayUrl: 'http://127.0.0.1:${relay.port}');
       await controller.sync();
       expect(controller.isRunning, isTrue);
       expect(controller.service!.lanPortBound, isNotNull);
 
-      settings.setRemoteAccessEnabled(false);
+      setRemoteAccessNow(container, enabled: false);
       await controller.sync();
       expect(controller.service, isNull);
     });
 
     test('a moved relay URL restarts onto the new relay', () async {
-      final settings = container.read(settingsControllerProvider.notifier);
-      settings.setRemoteAccessEnabled(true);
-      settings.setRemoteRelayUrl('http://127.0.0.1:${relay.port}');
+      setRemoteAccessNow(container, enabled: true);
+      setRemoteAccessNow(container, relayUrl: 'http://127.0.0.1:${relay.port}');
       await controller.sync();
       final first = controller.service!;
 
       final second = await RelayServer.bind(address: '127.0.0.1', port: 0);
       addTearDown(second.close);
-      settings.setRemoteRelayUrl('http://127.0.0.1:${second.port}');
+      setRemoteAccessNow(
+        container,
+        relayUrl: 'http://127.0.0.1:${second.port}',
+      );
       await controller.sync();
 
       expect(controller.service, isNot(same(first)));
@@ -117,9 +117,8 @@ void main() {
     });
 
     test('an unchanged relay does not restart the service', () async {
-      final settings = container.read(settingsControllerProvider.notifier);
-      settings.setRemoteAccessEnabled(true);
-      settings.setRemoteRelayUrl('http://127.0.0.1:${relay.port}');
+      setRemoteAccessNow(container, enabled: true);
+      setRemoteAccessNow(container, relayUrl: 'http://127.0.0.1:${relay.port}');
       await controller.sync();
       final first = controller.service!;
 

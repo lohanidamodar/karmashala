@@ -40,8 +40,8 @@ class ServerAgentScan {
   }
 }
 
-/// A standalone server finds the agent CLIs on its own machine — nobody else
-/// is there to — and records them where every agent launch looks them up
+/// The server finds the agent CLIs on its own machine — at every start, and
+/// on `agents.refresh` — and records them where every agent launch looks them up
 /// (`agent_installations`, under this machine's environment row). Which
 /// agents, under which names, and how to read a version all come from the
 /// registry's adapters: nothing here names an agent.
@@ -117,7 +117,9 @@ class ServerAgents {
           createdAt: now,
         ),
       );
-      if (recorded.added) addedIds.add(recorded.installation.id);
+      if (recorded != null && recorded.added) {
+        addedIds.add(recorded.installation.id);
+      }
     }
     final foundIds = {for (final agent in found) agent.descriptor.id};
     return ServerAgentScan(

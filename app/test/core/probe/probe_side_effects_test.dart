@@ -32,6 +32,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:path/path.dart' as p;
+import '../../support/memory_server_config.dart';
 
 import '../../features/remote/fake_bindings.dart';
 import '../../features/system/fake_native_adapters.dart';
@@ -360,9 +361,8 @@ void main() {
     ) async {
       final controller = container.read(remoteAccessControllerProvider);
       addTearDown(controller.shutdown);
-      container.read(settingsControllerProvider.notifier)
-        ..setRemoteAccessEnabled(true)
-        ..setLocalRelayPort(0);
+      setRemoteAccessNow(container, enabled: true);
+      container.read(settingsControllerProvider.notifier).setLocalRelayPort(0);
       container.read(relayPrefsProvider.notifier).setLocalEnabled(true);
       await controller.sync();
       return controller;

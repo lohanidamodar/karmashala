@@ -1,16 +1,28 @@
 part of 'messages.dart';
 
 // Administering a server from its own machine (protocol 8): the paired
-// devices, revoking one, and the agent CLIs it found — what
-// `karmashala_host devices`, `revoke` and `agents` ask over the owner-only
-// socket. One request/answer pair with a method name, because each is a small
+// devices, revoking one, the agent CLIs it found, and its config (protocol
+// 10) — what `karmashala_host devices`, `revoke` and `agents`, and the
+// desktop's Remote access settings, ask over the owner-only socket. One request/answer pair with a method name, because each is a small
 // JSON question and none streams; the methods are [ServerMethod]'s.
 
 /// The methods a [ServerCallMessage] may name.
 abstract final class ServerMethod {
-  /// `{}` → `{name, standalone, companion: {serving, port?, bind, relay?}}` —
-  /// what `pair` needs to build an invite. A relay's token is never in it.
+  /// `{}` → `{name, dataDirectory, companion: {serving, port?, bind,
+  /// relay?}}` — what `pair` needs to build an invite. A relay's token is
+  /// never in it.
   static const String serverInfo = 'server.info';
+
+  /// `{}` → `{file, settings, flags}`: `server.json` as written (a relay
+  /// token only as `companion.relayTokenSet`), every field as decided, and
+  /// the fields a `serve` flag holds for the life of the process.
+  static const String configGet = 'server.config.get';
+
+  /// `{patch}` → as [configGet], after laying `patch` — shaped like
+  /// `server.json`, a null clearing a field — over the file, writing it
+  /// owner-only and applying it: how phones are served and where the
+  /// listener binds at once, the name and the MCP port at the next start.
+  static const String configSet = 'server.config.set';
 
   /// `{}` → `{devices: [PairedDeviceSummary…]}`.
   static const String devicesList = 'devices.list';

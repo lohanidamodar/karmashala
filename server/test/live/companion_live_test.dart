@@ -83,11 +83,8 @@ void main() {
     expect(watching.holdsWriteToken, isFalse);
     addTearDown(observer.close);
 
-    // The app: config on the link, a pairing window, then gone.
-    final app = await AppLink.connect(
-      host.socketPath,
-      config: const CompanionConfig(enabled: true),
-    );
+    // The app: attached on the link, a pairing window, then gone.
+    final app = await AppLink.connect(host.socketPath, asApp: true);
     final everything = await app.pair(CapabilitySet.all);
     await app.close();
 
@@ -462,10 +459,7 @@ void main() {
       // A request makes the phone live, so the app's arrival re-sweeps it.
       await client.listSessions();
 
-      final app = await AppLink.connect(
-        host.socketPath,
-        config: const CompanionConfig(enabled: true),
-      );
+      final app = await AppLink.connect(host.socketPath, asApp: true);
       final sweep = await app.nextCall(CompanionMethod.listSessions.wire);
       expect(sweep.method, CompanionMethod.listSessions.wire);
       // Gone without answering, as an app that quits mid-sweep is.
@@ -483,10 +477,7 @@ void main() {
     test(
       'what the host cannot answer is the app\'s, news from it included',
       () async {
-        final app = await AppLink.connect(
-          host.socketPath,
-          config: const CompanionConfig(enabled: true),
-        );
+        final app = await AppLink.connect(host.socketPath, asApp: true);
         addTearDown(app.close);
         // The app's own view, whenever the host re-sweeps phones.
         app
@@ -495,8 +486,8 @@ void main() {
           ..answerAlways(CompanionMethod.deliveryStage.wire, {'stage': null});
         final client = await dial(phone);
 
-        // The config frame and the phone's call travel on two sockets; until
-        // the config lands the host answers "not running", so ask again until
+        // The attach frame and the phone's call travel on two sockets; until
+        // the attach lands the host answers "not running", so ask again until
         // a call is held open for the app instead.
         late Future<List<RemoteWorkspaceProject>> listing;
         for (var attempt = 0; ; attempt++) {

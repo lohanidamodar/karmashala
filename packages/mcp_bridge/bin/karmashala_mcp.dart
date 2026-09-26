@@ -261,16 +261,17 @@ class _BridgeConfig {
   final String? socketPath;
 }
 
-/// Where the app publishes `mcp_bridge.json`.
+/// Where the server publishes `mcp_bridge.json`: its data folder, the one per
+/// user per machine — `~/.karmashala` (`%USERPROFILE%\\.karmashala` on
+/// Windows), as `defaultServerDataDirectory` resolves it — and where the
+/// desktop app publishes its own when no server runs. Overridable so a bridge
+/// can be pointed at a second install (or a test app) without guessing.
 ///
-/// Mirrors `path_provider`'s application-support directory per platform, and is
-/// overridable so a bridge can be pointed at a second install (or a test app)
-/// without guessing.
-///
-/// `KARMASHALA_DATA_DIR` is read for the same reason the app reads it: an
-/// instance started against a throwaway data directory publishes its handshake
-/// there, and a bridge computing `%APPDATA%` would look past it at the real
-/// install's file — connecting to the wrong app rather than failing.
+/// `KARMASHALA_DATA_DIR` is read for the same reason the app reads it: a probe
+/// started against a throwaway data folder has its server publish its
+/// handshake there, and a bridge computing the home folder would look past it
+/// at the real install's file — connecting to the wrong app rather than
+/// failing.
 String _handshakePath() {
   final override = Platform.environment['KARMASHALA_BRIDGE_HANDSHAKE'];
   if (override != null && override.isNotEmpty) return override;
@@ -278,22 +279,15 @@ String _handshakePath() {
   if (dataDir != null && dataDir.trim().isNotEmpty) {
     return '${dataDir.trim()}${Platform.pathSeparator}mcp_bridge.json';
   }
-  if (Platform.isWindows) {
-    final appData = Platform.environment['APPDATA'];
-    if (appData == null) {
-      throw StateError('APPDATA is not set; cannot locate mcp_bridge.json.');
-    }
-    return '$appData\\com.popupbits\\karmashala\\mcp_bridge.json';
+  final env = Platform.environment;
+  final home = Platform.isWindows
+      ? (env['USERPROFILE'] ?? env['HOME'])
+      : (env['HOME'] ?? env['USERPROFILE']);
+  if (home == null || home.isEmpty) {
+    throw StateError(
+      'neither HOME nor USERPROFILE is set; cannot locate mcp_bridge.json.',
+    );
   }
-  final home = Platform.environment['HOME'];
-  if (home == null) {
-    throw StateError('HOME is not set; cannot locate mcp_bridge.json.');
-  }
-  if (Platform.isMacOS) {
-    return '$home/Library/Application Support/com.popupbits.karmashala/'
-        'mcp_bridge.json';
-  }
-  final dataHome =
-      Platform.environment['XDG_DATA_HOME'] ?? '$home/.local/share';
-  return '$dataHome/com.popupbits.karmashala/mcp_bridge.json';
+  final separator = Platform.pathSeparator;
+  return '$home$separator.karmashala${separator}mcp_bridge.json';
 }

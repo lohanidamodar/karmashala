@@ -9,6 +9,8 @@ import 'package:karmashala_host/src/cli.dart';
 import 'package:karmashala_host/src/relay/relay_command.dart';
 import 'package:test/test.dart';
 
+import '../server/server_test_support.dart' show kNowhereEnvironment;
+
 /// An [IOSink] that keeps what it was given, for reading back what was said.
 class _Sink implements IOSink {
   final StringBuffer text = StringBuffer();
@@ -176,9 +178,33 @@ void main() {
   });
 
   test('the cli knows the command and lists it', () async {
-    expect(await runHostCli(['--help'], out: out, err: err), 0);
+    expect(
+      await runHostCli(
+        ['--help'],
+        environment: kNowhereEnvironment,
+        out: out,
+        err: err,
+      ),
+      0,
+    );
     expect(out.text.toString(), contains('karmashala_host relay'));
-    expect(await runHostCli(['relay', '--help'], out: out, err: err), 0);
-    expect(await runHostCli(['relay'], out: out, err: err), 2);
+    expect(
+      await runHostCli(
+        ['relay', '--help'],
+        environment: kNowhereEnvironment,
+        out: out,
+        err: err,
+      ),
+      0,
+    );
+    expect(
+      await runHostCli(
+        ['relay'],
+        environment: kNowhereEnvironment,
+        out: out,
+        err: err,
+      ),
+      2,
+    );
   });
 }

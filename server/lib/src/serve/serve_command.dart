@@ -19,6 +19,7 @@ import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
 import '../server/server_config.dart';
+import '../server/server_config_service.dart';
 import '../server/server_data_directory.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
@@ -37,17 +38,27 @@ import 'surviving_sink.dart';
 /// Windows — and ignores SIGHUP, so an SSH channel closing is not the end of
 /// every session on the machine.
 ///
-/// `--data-dir=<dir>` is required, except with `--standalone`, where it
-/// defaults to [defaultServerDataDirectory]: the store is
-/// `<dir>/karmashala.sqlite` — the app's own file when the app starts it — and
-/// `<dir>/server.json` is the server's own config (`ServerConfig`), each field
-/// overridden by its flag. A standalone server creates and migrates its store
-/// itself, finds the agent CLIs on its machine, serves phones by its own
-/// config while no app is connected, and binds the phone listener to
-/// loopback unless told otherwise. [paths], [until] and [agentsFor] are for
+/// One server, one way: its data directory is `--data-dir=<dir>`, or
+/// [defaultServerDataDirectory] (`~/.karmashala`) — the one folder per user
+/// per machine the desktop app opens too. The server owns what is in it: it
+/// creates and migrates the store (`<dir>/karmashala.sqlite`, refusing one a
+/// newer build migrated), reads `<dir>/server.json` (`ServerConfig`, each
+/// field overridden by its flag, changed live with `server.config.set`),
+/// finds the agent CLIs on its machine at start, and serves phones by that
+/// config — off until something turns it on, and then on loopback unless
+/// `companion.bind` says otherwise. [paths], [until] and [agentsFor] are for
 /// tests.
+///
+/// [environment] is where the home (for the default data directory) and the
+/// host directory are resolved from. It is never defaulted: without
+/// `--data-dir` and [environment] — or without [paths] and [environment] —
+/// the call is a programming error ([ArgumentError]), so a test cannot
+/// reach the real `~/.karmashala` by leaving something out. Only the
+/// executable passes `Platform.environment`.
 Future<int> runServe(
   List<String> args, {
+  Map<String, String>? environment,
+  Duration agentScanDelay = const Duration(seconds: 5),
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
@@ -58,39 +69,39 @@ Future<int> runServe(
   // a write that fails must cost the line, never the daemon.
   final sink = SurvivingSink(out ?? stdout);
   final errSink = SurvivingSink(err ?? stderr);
-  final standalone = args.contains('--standalone');
-  // Refused before anything is touched: every caller is ours and passes it,
-  // and a host run without it would record no session's status, silently. A
-  // standalone server has a home of its own.
-  String? dataDirectory;
+  final named = dataDirectoryOf(args);
+  if (named == null && environment == null) {
+    throw ArgumentError(
+      'serve: pass --data-dir=<dir> or the environment to find the home in '
+      '— the library never falls back to the real home',
+    );
+  }
+  if (paths == null && environment == null) {
+    throw ArgumentError(
+      'serve: pass the host directory (paths) or the environment to resolve '
+      'it from — the library never falls back to the real home',
+    );
+  }
+  final String dataDirectory;
   try {
     dataDirectory =
-        dataDirectoryOf(args) ??
-        (standalone ? defaultServerDataDirectory() : null);
+        named ?? defaultServerDataDirectory(environment: environment!);
   } on StateError catch (error) {
     errSink.writeln('karmashala_host: refusing to serve — ${error.message}');
     return 2;
   }
-  if (dataDirectory == null) {
-    errSink.writeln(
-      'karmashala_host: refusing to serve — `--data-dir=<dir>` is required '
-      '(the store is <dir>/karmashala.sqlite, the app\'s own database), or '
-      '`--standalone` to serve from a home of its own',
-    );
-    return 2;
-  }
   // The config is read, and refused, before anything binds: a server told
   // to bind somewhere it cannot parse must not bind somewhere else.
-  final ServerSettings settings;
+  final ServerConfigService config;
   try {
-    if (standalone) await _ensurePrivateDirectory(dataDirectory);
-    settings = ServerSettings.resolve(
+    await _ensurePrivateDirectory(dataDirectory);
+    config = ServerConfigService(
+      dataDirectory: dataDirectory,
       file: await ServerConfig.read(
         dataDirectory,
         log: (message) => errSink.writeln('karmashala_host: $message'),
       ),
       flags: ServerConfig.fromFlags(args),
-      standalone: standalone,
       hostName: Platform.localHostname,
     );
   } on ServerConfigError catch (error) {
@@ -103,7 +114,7 @@ Future<int> runServe(
     );
     return 6;
   }
-  paths ??= HostPaths.resolve();
+  paths ??= HostPaths.resolve(environment: environment!);
   paths.ensureDirectory();
 
   // Before the lock: a socket anybody can traverse to is a socket anybody can
@@ -187,49 +198,41 @@ Future<int> runServe(
   )..ensureDirectory();
   final registry = SessionRegistry(launcher: pty.launcher, store: store);
 
-  // The app's own database, shared: its pairings, its host id and the rows
-  // whose lifecycle status this daemon alone writes. Allowed to be absent — a
-  // machine whose SQLite will not load still owns every PTY on it — and then
-  // `pair` refuses by name and no status is recorded.
+  // The server's store, which the desktop app opens beside it: the pairings,
+  // the host id and the rows whose lifecycle status this daemon alone
+  // writes. A server with no store has nothing to pair into and no rows to
+  // launch from: it is refused rather than half there.
   final database = _openStore(dataDirectory, errSink);
-  // A standalone server with no store has nothing to pair into and no rows
-  // to launch from: it is refused rather than half there.
-  if (standalone && database == null) {
+  if (database == null) {
     errSink.writeln(
-      'karmashala_host: refusing to serve standalone without a store — the '
-      'line above says why',
+      'karmashala_host: refusing to serve without a store — the line above '
+      'says why',
     );
     lock.release();
     return 7;
   }
+  final settings = config.settings;
   // What each hosted agent is doing, from the hooks and screens this host
-  // holds, and the answers to what they ask. Needs the rows to know which
-  // agent a session runs, so there is none without a store.
+  // holds, and the answers to what they ask.
   late final HostServer server;
-  final status = database == null
-      ? null
-      : DaemonAgentStatus(
-          registry: registry,
-          database: database,
-          publish: (sessionId, body) =>
-              server.lifecycle.publishAgentStatus(sessionId, body),
-        );
-  final prompts = status == null
-      ? null
-      : DaemonPromptAnswers(status: status, database: database!);
-  final companion = database == null
-      ? null
-      : DaemonCompanion(
-          database: database,
-          registry: registry,
-          hostName: settings.name,
-          dataDirectory: dataDirectory,
-          lanPort: settings.companionPort,
-          lanAddress: settings.bind,
-          ownConfig: settings.ownCompanion,
-          prompts: prompts,
-          onLog: (message) => errSink.writeln('karmashala_host: $message'),
-        );
+  final status = DaemonAgentStatus(
+    registry: registry,
+    database: database,
+    publish: (sessionId, body) =>
+        server.lifecycle.publishAgentStatus(sessionId, body),
+  );
+  final prompts = DaemonPromptAnswers(status: status, database: database);
+  final companion = DaemonCompanion(
+    database: database,
+    registry: registry,
+    hostName: settings.name,
+    dataDirectory: dataDirectory,
+    lanPort: settings.companionPort,
+    lanAddress: settings.bind,
+    config: settings.companion,
+    prompts: prompts,
+    onLog: (message) => errSink.writeln('karmashala_host: $message'),
+  );
 
   final mcpTools = McpToolRelay(cachePath: paths.mcpToolsPath);
   server = HostServer(
@@ -239,18 +242,19 @@ Future<int> runServe(
     build: hostBuildOf(Platform.resolvedExecutable),
     mcpTools: mcpTools,
   )..prompts = prompts;
-  server.lifecycle.statusSnapshot = status?.snapshot;
-  status?.start();
-  final recording = database == null
-      ? null
-      : (SessionStatusRecording(
-          server.lifecycle,
-          database,
-          clock: () => DateTime.now().toUtc(),
-        )..start());
-  final companionServing =
-      companion != null &&
-      await _startCompanion(companion, server.lifecycle, status, errSink);
+  server.lifecycle.statusSnapshot = status.snapshot;
+  status.start();
+  final recording = SessionStatusRecording(
+    server.lifecycle,
+    database,
+    clock: () => DateTime.now().toUtc(),
+  )..start();
+  final companionServing = await _startCompanion(
+    companion,
+    server.lifecycle,
+    status,
+    errSink,
+  );
   final hookServer = await _openHookServer(
     paths,
     server.lifecycle,
@@ -267,7 +271,7 @@ Future<int> runServe(
   );
   // A phone starts and resumes sessions here with no app, once a launched
   // agent can be handed its tools.
-  companion?.serveSessions(
+  companion.serveSessions(
     mcp: SessionMcpAccessPoint(
       mcp: mcp,
       configDirectory: p.join(dataDirectory, 'mcp'),
@@ -287,35 +291,28 @@ Future<int> runServe(
   // `session_answer` for a session this host holds is answered here; every
   // other local tool is the automations', and the rest go to the app.
   final automationsTool = mcpTools.local;
-  if (prompts != null) {
-    mcpTools.local = (tool, arguments, caller) =>
-        sessionAnswerTool(prompts, tool, arguments, caller) ??
-        automationsTool?.call(tool, arguments, caller);
-  }
-  // Devices, revoke and agents from `karmashala_host` on this machine; a
-  // standalone server also looks for its agent CLIs now, since no app will.
-  final agents = database == null
-      ? null
-      : (agentsFor ?? (database) => ServerAgents(database: database))(database);
-  if (agents != null) {
-    server.admin = ServerAdministration(
-      companion: companionServing ? companion : null,
-      agents: agents,
-      name: settings.name,
-      bind: settings.bind,
-      standalone: standalone,
+  mcpTools.local = (tool, arguments, caller) =>
+      sessionAnswerTool(prompts, tool, arguments, caller) ??
+      automationsTool?.call(tool, arguments, caller);
+  // `server.config.set` brings the phone listener in line at once.
+  if (companionServing) {
+    config.apply = (settings) => companion.reconfigure(
+      config: settings.companion,
+      lanAddress: settings.bind,
+      lanPort: settings.companionPort,
     );
   }
-  final agentScan = standalone ? agents?.refresh() : null;
-  if (agentScan != null) {
-    unawaited(
-      agentScan.then(
-        (scan) => sink.writeln('agents: ${scan.summary}'),
-        onError: (Object error) =>
-            errSink.writeln('karmashala_host: agent probe failed ($error)'),
-      ),
-    );
-  }
+  // Devices, revoke, agents and the config, from `karmashala_host` and the
+  // desktop app on this machine; the server looks for its agent CLIs now.
+  final agents = (agentsFor ?? (database) => ServerAgents(database: database))(
+    database,
+  );
+  server.admin = ServerAdministration(
+    companion: companionServing ? companion : null,
+    agents: agents,
+    config: config,
+    dataDirectory: dataDirectory,
+  );
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
 
@@ -323,6 +320,24 @@ Future<int> runServe(
   void stop(int code) {
     if (!stopping.isCompleted) stopping.complete(code);
   }
+
+  // Not in the first moments: the probe starts a dozen processes, and a
+  // server SIGKILLed while the VM is between fork and exec for one of them
+  // can leave that half-born child behind for good, holding the socket —
+  // connections accepted, never answered (found live: a start killed at
+  // once). A server killed that early probes nothing; `agents.refresh`
+  // still probes at once when asked.
+  unawaited(
+    Future<void>.delayed(agentScanDelay).then((_) async {
+      if (stopping.isCompleted) return;
+      try {
+        final scan = await agents.refresh();
+        sink.writeln('agents: ${scan.summary}');
+      } on Object catch (error) {
+        errSink.writeln('karmashala_host: agent probe failed ($error)');
+      }
+    }),
+  );
 
   // Asked by platform: SIGINT is the only signal Windows has, and watching
   // SIGTERM there throws errno 50 from `onListen`'s own microtask, where no
@@ -340,11 +355,7 @@ Future<int> runServe(
 
   sink
     ..writeln('karmashala_host serving on ${listener.address}')
-    ..writeln(
-      standalone
-          ? 'standalone server "${settings.name}", data in $dataDirectory'
-          : 'server "${settings.name}", data in $dataDirectory',
-    )
+    ..writeln('server "${settings.name}", data in $dataDirectory')
     ..writeln('pty library ${pty.library}')
     ..writeln(
       hookServer == null
@@ -358,21 +369,18 @@ Future<int> runServe(
           ? 'agent tools on port ${mcp.endpoint.port}'
           : 'agent tools refused — the line above says why',
     )
-    ..writeln(
-      database == null
-          ? 'no store — session status is not recorded; the line above says why'
-          : 'store ${p.join(dataDirectory, 'karmashala.sqlite')}',
-    )
+    ..writeln('store ${p.join(dataDirectory, kStoreFileName)}')
     ..writeln(
       automations == null
           ? 'automations unavailable — the line above says why'
           : 'automations scheduled here',
     )
     ..writeln(
-      companion == null || !companionServing
+      !companionServing
           ? 'companion unavailable — the line above says why'
           : companion.service == null
-          ? 'companion off — remote access is switched off in the app, '
+          ? 'companion off — remote access is switched off '
+                '(companion.enabled in server.json), '
                 '${companion.paired()} phone(s) paired'
           : 'companion on port ${companion.port} (bound to ${settings.bind}), '
                 '${companion.paired()} phone(s) paired',
@@ -392,13 +400,13 @@ Future<int> runServe(
   await hookServer?.close();
   await mcp?.close();
   mcpTools.close();
-  await companion?.close();
-  await status?.close();
+  await companion.close();
+  await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await automations?.close();
-  await recording?.close();
+  await recording.close();
   await registry.shutdown();
-  database?.close();
+  database.close();
   lock.release();
   // Bounded: a reader that is there but not reading must not hold the exit.
   await Future.wait([
@@ -560,8 +568,8 @@ String? dataDirectoryOf(List<String> args) {
   return null;
 }
 
-/// Creates [directory] if it is not there and makes it owner-only: a
-/// standalone server's store holds every phone's pairing key.
+/// Creates [directory] if it is not there and makes it owner-only: the
+/// server's store holds every phone's pairing key.
 Future<void> _ensurePrivateDirectory(String directory) async {
   final dir = Directory(directory);
   if (!dir.existsSync()) dir.createSync(recursive: true);

@@ -28,6 +28,7 @@ Future<int> runPair(
   IOSink? out,
   IOSink? err,
   HostPaths? paths,
+  Map<String, String>? environment,
   DateTime Function()? now,
 }) async {
   final sink = out ?? stdout;
@@ -47,9 +48,9 @@ Future<int> runPair(
   final address = _flag(args, 'address');
   final ansi =
       !args.contains('--no-color') &&
-      !Platform.environment.containsKey('NO_COLOR');
+      !(environment ?? const {}).containsKey('NO_COLOR');
 
-  final resolved = paths ?? HostPaths.resolve();
+  final resolved = hostPathsFor('pair', paths: paths, environment: environment);
   final HostClient? client;
   try {
     client = await HostClient.connect(resolved.socketPath);
@@ -60,7 +61,7 @@ Future<int> runPair(
   if (client == null) {
     errSink.writeln(
       'karmashala_host pair: no server at ${resolved.socketPath} — start one '
-      'with `karmashala_host serve --standalone`',
+      'with `karmashala_host serve`',
     );
     return 5;
   }

@@ -1380,7 +1380,7 @@ $env:KARMASHALA_HOST_DIR = "$env:KARMASHALA_DATA_DIR\host"
 | OS toasts (the first rewrites the Start Menu shortcut toasts are delivered through) | `notificationPresenterProvider` |
 | The preferred control port 47821 | `LauncherControlServer.start` binds an ephemeral port |
 | The env-vault key in the per-user cache folder | `EnvVault.open` keeps a probe's key in `<data>/probe-key` |
-| The owner's local session host (`~/.karmashala`: its socket, lock, log and sessions; its store is the app's database) — attaching to, listing, ending or starting it | `localHostSessionAccessProvider` gives a probe its own host in `<data>/host`, and the `serve` it starts from the same binary is handed `KARMASHALA_HOST_DIR` naming it, which `HostPaths.resolve` reads first, and `--data-dir=<data>`, so it opens the probe's database |
+| The owner's local server (`~/.karmashala`: its socket, lock, log and sessions, and its data — the database the app opens too, `server.json`) — attaching to, listing, ending or starting it | `localHostSessionAccessProvider` gives a probe its own host in `<data>/host`, and the `serve` it starts from the same binary is handed `KARMASHALA_HOST_DIR` naming it, which `HostPaths.resolve` reads first, and `--data-dir=<data>`, so it keeps its data — the probe's database — in the probe's folder (the real app's `serve` gets no `--data-dir`: its data is the server's default folder) |
 | The session host on SSH machines, which holds the owner's remote sessions | `_hostSessionAccessFor` answers null and `HostSessionsService` refuses, so a probe's SSH panes take the tmux path and its session lists stay empty |
 
 A probe's local host socket is `<data>\host\host.sock`; when that is too long

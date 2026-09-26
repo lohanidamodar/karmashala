@@ -1,6 +1,7 @@
 /// Where this machine has a session host, the host serves the phones: this app
-/// runs no companion server, sends the host its Remote access settings, and
-/// answers the calls the host forwards with its own bindings.
+/// runs no companion server, writes its Remote access settings into the
+/// server's config through the host, tells it where the app's embedded relay
+/// is, and answers the calls the host forwards with its own bindings.
 library;
 
 import 'dart:typed_data';
@@ -12,15 +13,18 @@ import 'package:karmashala/src/features/remote/application/host_companion_link.d
 import 'package:karmashala/src/features/remote/application/host_companion_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_source.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart'
+    show CompanionMethod;
 import 'package:karmashala_host/lifecycle_client.dart';
+import 'package:karmashala_host/server_config.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
 
 import '../../support/fake_host_lifecycle.dart';
+import '../../support/memory_server_config.dart';
 import 'fake_bindings.dart';
 
 void main() {
@@ -62,16 +66,42 @@ void main() {
   Future<void> settle() => Future<void>.delayed(Duration.zero);
 
   group('the link', () {
-    test('sends the settings on every link, the first included', () async {
-      link.configure(const CompanionConfig(enabled: true, advertise: true));
-      expect(host.companionConfigs, isEmpty, reason: 'no link yet');
+    test(
+      'attaches as the app on every link, with its embedded relay',
+      () async {
+        link.setLocalRelay(Uri.parse('ws://192.168.1.4:8787'));
+        expect(host.companionAttaches, isEmpty, reason: 'no link yet');
 
-      await attach();
-      expect(host.companionConfigs.single['advertise'], isTrue);
+        await attach();
+        expect(host.companionAttaches.single, 'ws://192.168.1.4:8787');
 
-      link.detached();
+        link.setLocalRelay(null);
+        expect(host.companionAttaches.last, isNull, reason: 'told at once');
+        link.setLocalRelay(null);
+        expect(host.companionAttaches, hasLength(2), reason: 'nothing moved');
+
+        link.detached();
+        await attach();
+        expect(host.companionAttaches, hasLength(3));
+      },
+    );
+
+    test('asks the server over the link, and says so with no link', () async {
+      await expectLater(
+        link.serverCall(ServerMethod.configGet),
+        throwsA(isA<StateError>()),
+      );
+      host.answerServerCall = (method, arguments) async => {
+        'asked': method,
+        ...arguments,
+      };
       await attach();
-      expect(host.companionConfigs, hasLength(2));
+
+      final answer = await link.serverCall(ServerMethod.configSet, {
+        'patch': {'companion': <String, Object?>{}},
+      });
+      expect(answer['asked'], ServerMethod.configSet);
+      expect(host.serverCalls.single.method, ServerMethod.configSet);
     });
 
     test('answers a forwarded call with this app\'s bindings', () async {
@@ -195,13 +225,16 @@ void main() {
   group('the controller, where the host serves the phones', () {
     late ProviderContainer container;
     late RemoteAccessController controller;
+    late MemoryServerConfigSource server;
 
     setUp(() async {
+      server = MemoryServerConfigSource();
       container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
           companionAtHostProvider.overrideWithValue(true),
           hostCompanionLinkProvider.overrideWithValue(link),
+          serverConfigIn(server),
         ],
       );
       controller = container.read(remoteAccessControllerProvider);
@@ -213,26 +246,52 @@ void main() {
       container.dispose();
     });
 
-    test('runs no server of its own and tells the host the settings', () async {
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
-      await controller.sync();
+    test('switching remote access on writes the server config — the LAN, '
+        'the beacon, the PopupBits relay and what only the app knows — and '
+        'runs no server of its own', () async {
+      await controller.setRemoteAccess(enabled: true);
 
       expect(controller.service, isNull, reason: 'one server: the host\'s');
-      final sent = CompanionConfig.fromJson(host.companionConfigs.last);
-      expect(sent.enabled, isTrue);
-      expect(sent.relay, Uri.parse(kDefaultRelayUrl));
-      expect(sent.advertise, isTrue);
+      final config = server.config;
+      expect(config.companionEnabled, isTrue);
+      expect(config.bind, '0.0.0.0');
+      expect(config.beacon, isTrue);
+      expect(config.relay, Uri.parse(kDefaultRelayUrl));
+      expect(config.notes, isTrue);
+      expect(config.extraRelays, isEmpty);
+      expect(container.read(remoteAccessSettingsProvider).enabled, isTrue);
 
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(false);
-      await controller.sync();
-      expect(
-        CompanionConfig.fromJson(host.companionConfigs.last).enabled,
-        isFalse,
+      await controller.setRemoteAccess(enabled: false);
+      expect(server.config.companionEnabled, isFalse);
+      expect(server.config.bind, '0.0.0.0', reason: 'the rest kept');
+      expect(container.read(remoteAccessSettingsProvider).enabled, isFalse);
+    });
+
+    test('the internet relay and its switch are the server config', () async {
+      await controller.setRemoteAccess(enabled: true);
+      await controller.setRemoteAccess(relayUrl: 'wss://mine.example.com');
+      expect(server.config.relay, Uri.parse('wss://mine.example.com'));
+
+      await controller.setRemoteAccess(relayUrl: '');
+      expect(server.config.relay, Uri.parse(kDefaultRelayUrl));
+
+      await controller.setRemoteAccess(hostedEnabled: false);
+      expect(server.config.relayEnabled, isFalse);
+      expect(container.read(remoteAccessSettingsProvider).relayEnabled, false);
+    });
+
+    test('a link attaching reads what the server serves by again', () async {
+      server.config = ServerConfig(
+        companionEnabled: true,
+        relay: Uri.parse('wss://relay.example.com'),
+        notes: true,
       );
+      await controller.reload();
+
+      final access = container.read(remoteAccessSettingsProvider);
+      expect(access.enabled, isTrue);
+      expect(access.relay, Uri.parse('wss://relay.example.com'));
+      expect(server.patches, isEmpty, reason: 'nothing of the app\'s moved');
     });
 
     test('a revoke is written here and applied by the host', () async {

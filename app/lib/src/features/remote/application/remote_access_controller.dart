@@ -1,8 +1,11 @@
-/// Brings the phone companion in line with the settings. Where this machine
-/// has a session host, the host serves the phones and this sends it the
-/// settings; only where there is none does this app run [RemoteHostService]
-/// itself. The two relays are independent: turning one off *parks* its
-/// devices, restarting nothing.
+/// Brings the phone companion in line with the settings. The Remote access
+/// settings are the server's config (`server.json`, [remoteAccessSettingsProvider]):
+/// where this machine has a session host, it serves the phones by that config,
+/// and this app writes what only it knows into it (its SSH hosts' relays, the
+/// Notes switch) and tells it where the app's embedded relay listens; only
+/// where there is none does this app run [RemoteHostService] itself, by the
+/// same file. The relays are independent: turning one off *parks* its devices,
+/// restarting nothing.
 library;
 
 import 'dart:async';
@@ -27,6 +30,7 @@ import 'host_companion_link.dart';
 import 'host_companion_providers.dart';
 import 'pairing_in_progress.dart';
 import 'relay_prefs.dart';
+import 'remote_access_settings.dart';
 import 'ssh_relays.dart';
 import 'remote_bindings.dart';
 import 'remote_providers.dart';
@@ -40,9 +44,15 @@ Uri resolveRelayUri(String? configured) {
   final text = configured?.trim() ?? '';
   if (text.isEmpty) return Uri.parse(kDefaultRelayUrl);
   final parsed = Uri.tryParse(text);
-  if (parsed == null || !parsed.hasScheme) return Uri.parse(kDefaultRelayUrl);
+  if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
+    return Uri.parse(kDefaultRelayUrl);
+  }
   return parsed;
 }
+
+/// The internet relay the server's config names, or the PopupBits one.
+Uri hostedRelayOf(RemoteAccessSettings settings) =>
+    settings.relay ?? Uri.parse(kDefaultRelayUrl);
 
 class RemoteAccessController {
   RemoteAccessController(
@@ -75,9 +85,59 @@ class RemoteAccessController {
       ? _ref.read(hostCompanionLinkProvider)
       : null;
 
+  /// Reads the server's config again, then brings everything in line with it:
+  /// a link to a (maybe new) host opened.
+  Future<void> reload() async {
+    await _ref.read(remoteAccessSettingsProvider.notifier).load();
+    await sync();
+  }
+
+  /// Changes the Remote access settings — the server's config — and brings
+  /// the phone companion in line. Switching remote access on is also what
+  /// opens this machine to the LAN: the listener binds every interface and
+  /// announces itself on the beacon, as the desktop's phones expect. Throws
+  /// with the server's reason when it refuses.
+  Future<void> setRemoteAccess({
+    bool? enabled,
+    bool? hostedEnabled,
+    String? relayUrl,
+  }) async {
+    final current = _ref.read(remoteAccessSettingsProvider);
+    final relay = relayUrl == null
+        ? null
+        : resolveRelayUri(relayUrl).toString();
+    final companion = <String, Object?>{
+      'enabled': ?enabled,
+      'relayEnabled': ?hostedEnabled,
+      if (relay != null) ...{'relay': relay, 'relayToken': null},
+      if (enabled == true) ...{
+        'bind': '0.0.0.0',
+        'beacon': true,
+        // The internet relay the desktop has always offered, until the
+        // person names another.
+        if (relay == null && current.relay == null) 'relay': kDefaultRelayUrl,
+        ..._appOwned(),
+      },
+    };
+    await _ref.read(remoteAccessSettingsProvider.notifier).update({
+      'companion': companion,
+    });
+    await sync();
+  }
+
+  /// What only this app knows about serving phones, in the config's words:
+  /// the relays on its SSH hosts, and whether Notes is on.
+  Map<String, Object?> _appOwned() => {
+    'extraRelays': [
+      for (final uri in _ref.read(activeSshRelayUrlsProvider)) uri.toString(),
+    ],
+    'notes': _ref.read(notesEnabledProvider),
+  };
+
   /// Brings the service in line with the settings: started when enabled (and
   /// restarted when the relay URL moved), stopped when disabled — or, where the
-  /// session host serves the phones, the host told what the settings say.
+  /// session host serves the phones, its config given what only this app
+  /// knows and the host told where this app's embedded relay is.
   Future<void> sync() {
     _chain = _chain.then((_) => _sync()).catchError((
       Object error,
@@ -98,40 +158,33 @@ class RemoteAccessController {
   Future<void> _sync() async {
     final settings = _ref.read(settingsControllerProvider);
     final host = _host;
+    final remote = _ref.read(remoteAccessSettingsProvider.notifier);
+    if (!_ref.read(remoteAccessSettingsProvider).loaded) await remote.load();
+    final access = _ref.read(remoteAccessSettingsProvider);
     // A probe binds no relay port, opens no firewall rule and dials no relay:
     // the phone is paired to the real app, and 8787 is its port.
-    if (!settings.remoteAccessEnabled || isDisabledByProbe) {
+    if (!access.enabled || isDisabledByProbe) {
       await _stopService();
       await _stopLocalRelay();
-      host?.configure(
-        CompanionConfig(
-          enabled: false,
-          notesEnabled: _ref.read(notesEnabledProvider),
-        ),
-      );
+      host?.setLocalRelay(null);
       return;
     }
     final prefs = _ref.read(relayPrefsProvider);
-    // Both relays are brought to the state the prefs ask for, independently.
+    // The embedded relay is this app's own, brought to what its prefs ask.
     final localUrl = await _syncLocalRelay(settings, prefs);
-    final hosted = resolveRelayUri(settings.remoteRelayUrl);
+    final hosted = hostedRelayOf(access);
     final sshRelays = _ref.read(activeSshRelayUrlsProvider);
 
     if (host != null) {
-      // One server per machine: the host's. The embedded relay stays this
-      // app's, and the host is told where it is while it runs.
+      // One server per machine: the host's, serving by its own config. What
+      // only this app knows goes into that config when it moved; the embedded
+      // relay stays this app's, and the host is told where it is.
       await _stopService();
-      host.configure(
-        CompanionConfig(
-          enabled: true,
-          relay: hosted,
-          hostedEnabled: prefs.hostedEnabled,
-          localRelayUrl: localUrl,
-          extraRelays: sshRelays,
-          notesEnabled: _ref.read(notesEnabledProvider),
-          advertise: true,
-        ),
-      );
+      final notes = _ref.read(notesEnabledProvider);
+      if (access.notes != notes || !_sameUris(access.extraRelays, sshRelays)) {
+        await remote.update({'companion': _appOwned()});
+      }
+      host.setLocalRelay(localUrl);
       return;
     }
 
@@ -141,7 +194,7 @@ class RemoteAccessController {
       // — no restart, no dropped generation, no re-pairing.
       await service.updateRelays(
         localRelayUrl: localUrl,
-        hostedEnabled: prefs.hostedEnabled,
+        hostedEnabled: access.relayEnabled,
         extraRelays: sshRelays,
       );
       return;
@@ -163,7 +216,7 @@ class RemoteAccessController {
     _service = started;
     await started.updateRelays(
       localRelayUrl: localUrl,
-      hostedEnabled: prefs.hostedEnabled,
+      hostedEnabled: access.relayEnabled,
       extraRelays: sshRelays,
     );
     await started.start();
@@ -209,7 +262,7 @@ class RemoteAccessController {
     }
     final host = _host;
     if (host != null) {
-      if (!_ref.read(settingsControllerProvider).remoteAccessEnabled) {
+      if (!_ref.read(remoteAccessSettingsProvider).enabled) {
         throw StateError('Turn on remote access first.');
       }
       return host.pair(
@@ -358,6 +411,14 @@ class RemoteAccessController {
   }
 }
 
+bool _sameUris(List<Uri> a, List<Uri> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i].toString() != b[i].toString()) return false;
+  }
+  return true;
+}
+
 /// The desktop's news for phones, whichever server carries it.
 abstract interface class _CompanionNews {
   void sessionsMoved();
@@ -447,7 +508,8 @@ final remoteAccessControllerProvider = Provider<RemoteAccessController>((ref) {
     attentionInboxProvider,
     (previous, next) => controller.onInboxChanged(previous, next),
   );
-  // The host answers `notes.get` itself, by the switch it was last sent.
+  // The host answers `notes.get` itself, by its config's switch, which this
+  // keeps in step with the app's.
   ref.listen(notesEnabledProvider, (_, _) => unawaited(controller.sync()));
   ref.onDispose(() {
     unawaited(controller.shutdown());

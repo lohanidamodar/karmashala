@@ -22,6 +22,7 @@ import 'mcp_session_token_reaper.dart';
 import 'mcp_tool_dispatcher.dart';
 import 'session_mcp.dart';
 import '../../core/paths/app_support_directory.dart';
+import '../../core/paths/server_data_directory.dart';
 import '../../core/probe/probe_mode.dart';
 
 /// The port asked for before falling back to an ephemeral one. Fixed because a
@@ -187,9 +188,10 @@ class LauncherControlServer implements SessionMcp {
   /// `null` before that, and when the session host takes them instead.
   AgentHookEndpoint? get hookEndpoint => _hookEndpoint;
 
-  /// Where the bridge reads the port + token from.
+  /// Where the bridge reads the port + token from: the server's data folder,
+  /// where the server publishes its own handshake while it serves agents.
   static Future<String> bridgeFilePath() async {
-    final dir = await appSupportDirectory();
+    final dir = await serverDataDirectory();
     return p.join(dir.path, 'mcp_bridge.json');
   }
 
@@ -301,8 +303,8 @@ class LauncherControlServer implements SessionMcp {
     // The last checkpoint: looking for the WSL switch is a subprocess and a
     // bind, and the directory below is created after it.
     if (await _abandonedMidStart()) return;
-    // Beside the handshake file: a second `appSupportDirectory()` would be a
-    // platform-channel call for a path every caller has already given us.
+    // Beside the handshake file, in the server's data folder: every caller
+    // has already given us that path.
     await _prepareSessionConfigs(
       sessionConfigDirectory ?? p.join(p.dirname(file.path), 'mcp'),
     );

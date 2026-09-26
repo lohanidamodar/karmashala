@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import '../support/memory_server_config.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -495,9 +496,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container
-        .read(settingsControllerProvider.notifier)
-        .setRemoteAccessEnabled(true);
+    setRemoteAccessNow(container, enabled: true);
 
     await expectSurvivesWindowMatrix(
       tester,
@@ -564,9 +563,7 @@ void main() {
         ),
       );
       final container = containerFor(db, _RelayBox(url));
-      container
-          .read(settingsControllerProvider.notifier)
-          .setRemoteAccessEnabled(true);
+      setRemoteAccessNow(container, enabled: true);
       // The row, then a reading with a remedy and a command under it.
       await container
           .read(sshRelayControllerProvider.notifier)
