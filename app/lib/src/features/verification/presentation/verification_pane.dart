@@ -41,7 +41,16 @@ class VerificationPane extends ConsumerWidget {
       data: (_) {
         final selected = ref.watch(selectedVerificationRunProvider);
         if (selected == null) return const _RunList();
-        final run = ref.watch(verificationRunProvider(selected));
+        final asked = ref.watch(verificationRunProvider(selected));
+        final run = asked.value;
+        if (run == null && asked.isLoading) {
+          return const Center(
+            child: InlineSpinner(
+              size: InlineSpinnerSize.medium,
+              semanticsLabel: 'Opening the run',
+            ),
+          );
+        }
         if (run == null) {
           // The run was deleted from under us; fall back to the list.
           return const _RunList();
@@ -58,7 +67,7 @@ class _RunList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final runs = ref.watch(verificationRunsProvider);
+    final runs = ref.watch(verificationRunsProvider).value ?? const [];
     final active = ref.watch(verificationServiceProvider).activeRun;
 
     return Column(

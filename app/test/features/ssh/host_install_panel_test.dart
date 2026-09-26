@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart
 import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 import '../../support/fake_data_server.dart';
@@ -22,6 +21,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_host_box.dart';
+import '../../support/test_machine.dart';
 
 class _Access extends RemoteAccessController {
   _Access(super.ref);
@@ -31,20 +31,19 @@ class _Access extends RemoteAccessController {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late FakeHostBox box;
   late List<({String host, String? typed})> terminals;
 
   setUp(() async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     server = FakeDataServer(clock: () => testTime);
     data = await server.connect();
     box = FakeHostBox();
     terminals = [];
   });
-  tearDown(() => db.close());
 
   ProviderContainer containerFor({
     FakeBundles? bundles,
@@ -52,7 +51,7 @@ void main() {
   }) {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),

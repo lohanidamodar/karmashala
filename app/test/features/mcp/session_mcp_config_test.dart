@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/process.dart';
@@ -53,13 +51,8 @@ void main() async {
     String? configDirectory,
     File? Function()? bridgeExecutable,
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     container = ProviderContainer(
-      overrides: [
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-        databaseProvider.overrideWithValue(db),
-      ],
+      overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
     );
     final server = LauncherControlServer(
       container,

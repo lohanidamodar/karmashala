@@ -29,8 +29,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
-import '../scale/scale_harness.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **What a project's second line costs.** It shows more than the one-line row
@@ -56,12 +55,11 @@ void main() {
   late FakeCommandRunner git;
   late _EveryHead files;
 
-  CountingDatabase seed(FakeDataServer server) {
-    final db = CountingDatabase();
-    server.mirrorInto(db);
+  CountingMachine seed(FakeDataServer server) {
+    final db = CountingMachine();
+    server.runsOn(db);
     server.environmentRows.upsert(posixEnv());
     server.installationRows.insert(agentInstallation());
-    db.execute('BEGIN');
     for (var i = 0; i < _projects; i++) {
       // Padded: projects list by creation and then id, and these share a time.
       final p = '$i'.padLeft(4, '0');
@@ -76,7 +74,7 @@ void main() {
       // scrolled past, not counted.
       if (i >= 12) continue;
       for (var s = 0; s < 2; s++) {
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           Session(
             id: 'p$p-s$s',
             repositoryId: 'r$p',
@@ -90,11 +88,10 @@ void main() {
         );
       }
     }
-    db.execute('COMMIT');
     return db;
   }
 
-  Future<({ProviderContainer container, CountingDatabase db})> pump(
+  Future<({ProviderContainer container, CountingMachine db})> pump(
     WidgetTester tester,
   ) async {
     // Wide, because the test font is a square per glyph and the branch is
@@ -105,7 +102,6 @@ void main() {
     final server = FakeDataServer();
     final db = seed(server);
     files = _EveryHead();
-    addTearDown(db.close);
     git = FakeCommandRunner(
       responder: (request) {
         if (request.arguments.contains('status')) {
@@ -120,7 +116,7 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db, gitFiles: files),
+        ...fakeTerminalOverrides(machine: db, gitFiles: files),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -243,7 +239,10 @@ void main() {
     final before = cards(tester);
     expect(before.keys, contains('Project 0003'));
 
-    mirroredServer(harness.db).sessionRows.updateStatus('p0003-s0', SessionStatus.running);
+    harness.db.server.sessionRows.updateStatus(
+      'p0003-s0',
+      SessionStatus.running,
+    );
     harness.container
         .read(sessionsRevisionProvider.notifier)
         .changed(const SessionChange.statusChanged('p0003-s0'));
@@ -287,7 +286,7 @@ void main() {
     harness.db.reset();
     files.reads.clear();
     // A second arrival: the working tree moved under the open cards.
-    mirroredServer(harness.db).sessionRows.updateStatus('p0002-s0', SessionStatus.idle);
+    harness.db.server.sessionRows.updateStatus('p0002-s0', SessionStatus.idle);
     harness.container
         .read(sessionsRevisionProvider.notifier)
         .changed(const SessionChange.statusChanged('p0002-s0'));

@@ -8,13 +8,12 @@ import 'package:karmashala/src/features/automations/application/automation_undo.
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_undo_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// A run that left more commits than fit on one screen.
@@ -65,13 +64,12 @@ void main() {
       tester,
       because: 'the dialog echoes every argument it will store',
       build: () {
-        final db = AppDatabase.memory();
-        addTearDown(db.close);
+        final db = TestMachine();
         server.environmentRows.upsert(windowsEnv());
-        server.mirrorInto(db);
+        server.runsOn(db);
         final container = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: db),
+            ...fakeTerminalOverrides(machine: db),
             dataClientProvider.overrideWithValue(client),
             clockProvider.overrideWithValue(
               FixedClock(DateTime.utc(2026, 9, 9, 9)),

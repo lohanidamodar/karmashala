@@ -4,8 +4,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
@@ -14,7 +12,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// The todo tools, over the endpoint.
@@ -24,20 +22,20 @@ import 'package:agent_cli/process.dart';
 /// left of it has to hand the remainder back through a person.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_todo_tools_');
-    db = AppDatabase.memory();
+    db = TestMachine();
     // The server files by the calling session: s1 is in r1, which is in p1.
     final data =
         FakeDataServer(
             clock: () => testTime,
             repositoryOfSession: {'s1': 'r1'},
             projectOfRepository: {'r1': 'p1'},
-          ).mirrorInto(db)
+          ).runsOn(db)
           ..environmentRows.upsert(localHostEnvironment(testTime))
           ..projectRows.insert(project())
           ..projectRows.insert(
@@ -45,13 +43,10 @@ void main() {
           )
           ..repositoryRows.insert(repository());
     data.installationRows.insert(agentInstallation());
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session(id: 's1', title: 'Fix login'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Fix login'));
     final workspace = await data.override();
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         workspace,
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
@@ -66,7 +61,6 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 

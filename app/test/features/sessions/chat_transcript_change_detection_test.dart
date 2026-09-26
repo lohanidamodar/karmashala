@@ -10,11 +10,10 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -36,19 +35,19 @@ import '../../support/fixtures.dart';
 void main() {
   late Directory dir;
   late File transcript;
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -77,7 +76,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         chatTranscriptPollIntervalProvider.overrideWithValue(
           const Duration(milliseconds: 5),

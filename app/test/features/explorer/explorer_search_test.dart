@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:flutter/material.dart';
@@ -12,8 +10,6 @@ import '../../support/fixtures.dart';
 
 void main() {
   testWidgets('filters the project tree by the search query', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows
@@ -23,7 +19,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           // A session card asks git for its checkout's changes; a widget test
           // must never spawn one.
@@ -49,8 +44,6 @@ void main() {
   testWidgets(
     'a search typed from deep in the list starts at its first match',
     (tester) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
       final server = FakeDataServer();
       server.environmentRows.upsert(windowsEnv());
       for (var i = 0; i < 80; i++) {
@@ -62,7 +55,6 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             await server.override(),
             commandRunnerFactoryProvider.overrideWithValue(
               FakeCommandRunnerFactory(),

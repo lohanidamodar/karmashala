@@ -145,7 +145,7 @@ class VerificationTools {
   }
 
   Future<Object?> _list(Map<String, dynamic> args) async {
-    final runs = _service.list(
+    final runs = await _service.list(
       limit: _int(args['limit']) ?? 20,
       sessionId: _string(args['sessionId']),
     );
@@ -171,8 +171,8 @@ class VerificationTools {
     final run = id == null
         ? (_service.activeRun == null
               ? null
-              : _service.get(_service.activeRun!.id))
-        : _service.find(id);
+              : await _service.get(_service.activeRun!.id))
+        : await _service.find(id);
     if (run == null) {
       if (id == null) {
         throw const VerificationException(
@@ -180,7 +180,7 @@ class VerificationTools {
           'verification_list to see what has been recorded.',
         );
       }
-      final near = _service.matching(id);
+      final near = await _service.matching(id);
       throw VerificationException(
         near.isEmpty
             ? 'No verification run with id (or prefix) "$id".'

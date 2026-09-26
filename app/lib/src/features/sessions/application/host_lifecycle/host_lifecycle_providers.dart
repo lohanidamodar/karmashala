@@ -28,10 +28,10 @@ import 'host_lifecycle_source.dart';
 import 'host_lifecycle_subscriber.dart';
 import 'local_host_lifecycle_source.dart';
 
-/// This machine's host feed, or null when local panes are not host-backed or
-/// no host may be reached — never under `flutter test`, which a test overrides.
+/// This machine's server feed, whatever the panes setting (which governs only
+/// where panes run), or null when no server may be reached — never under
+/// `flutter test`, which a test overrides.
 final hostLifecycleSourceProvider = Provider<HostLifecycleSource?>((ref) {
-  if (!ref.watch(hostBackedLocalPanesProvider)) return null;
   final access = ref.watch(localHostSessionAccessProvider);
   return access == null ? null : LocalHostLifecycleSource(access.socketPath);
 });
@@ -155,11 +155,10 @@ final sessionRunningOnHostProvider = Provider<bool Function(String)>(
 );
 
 /// Ends the session this machine's host runs for a row, when no pane of ours
-/// holds it; null where local panes are not host-backed or no host may be
-/// reached. The host records the ending; nothing here writes the row.
+/// holds it; null where no host may be reached. The host records the ending;
+/// nothing here writes the row.
 final hostedSessionEnderProvider =
     Provider<Future<void> Function(String sessionId)?>((ref) {
-      if (!ref.watch(hostBackedLocalPanesProvider)) return null;
       final access = ref.watch(localHostSessionAccessProvider);
       if (access == null) return null;
       return (sessionId) => access.endSession(hostSessionIdOf(sessionId));

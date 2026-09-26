@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
@@ -8,11 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 void main() {
-  late AppDatabase db;
   late ProjectImportService service;
   late ImportedSessionsData importedDao;
   late FakeDataServer server;
@@ -38,8 +35,7 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     final client = await server.connect();
     importedDao = ImportedSessionsData(client, SessionsData(client));
@@ -50,7 +46,6 @@ void main() {
       clock: FixedClock(testTime),
     );
   });
-  tearDown(() => db.close());
 
   test('imports a project, repository, and its sessions', () async {
     final summary = await service.importAll([

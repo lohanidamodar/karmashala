@@ -1,9 +1,12 @@
 import 'package:karmashala_store/database.dart';
 
+import '../domain/automation_copy_rules.dart';
+import '../service/automation_records.dart';
+
 import '../domain/scheduled_resume.dart';
 
 /// Data access for scheduled resumes. Hand-written SQL.
-class ScheduledResumeDao {
+class ScheduledResumeDao implements ResumeRecords {
   ScheduledResumeDao(this._db);
 
   final AppDatabase _db;
@@ -12,6 +15,7 @@ class ScheduledResumeDao {
 
   /// Arms [resume], ending whatever was live for its session: one per session,
   /// and the newest is the one the user meant.
+  @override
   void replaceFor(ScheduledResume resume, {required DateTime now}) =>
       _db.transaction(() {
         _db.execute(
@@ -56,6 +60,7 @@ class ScheduledResumeDao {
 
   /// Writes what moves after arming. What the user chose never changes; a
   /// different choice is a new row.
+  @override
   void update(ScheduledResume resume) => _db.execute(
     'UPDATE scheduled_resumes SET account_key = ?, account_email = ?, '
     'resets_at = ?, fire_at = ?, state = ?, reason = ?, attempts = ?, '
@@ -75,6 +80,7 @@ class ScheduledResumeDao {
 
   /// Moves [id] from one state to another, and says whether it did. The guard
   /// is what keeps two ticks from both firing one row.
+  @override
   bool transition(
     String id, {
     required ScheduledResumeState from,
@@ -87,6 +93,7 @@ class ScheduledResumeDao {
     return _db.query('SELECT changes() AS n;').first['n'] == 1;
   }
 
+  @override
   ScheduledResume? getById(String id) {
     final rows = _db.query('SELECT * FROM scheduled_resumes WHERE id = ?;', [
       id,
@@ -95,6 +102,7 @@ class ScheduledResumeDao {
   }
 
   /// The one live row for [sessionId], or null.
+  @override
   ScheduledResume? liveFor(String sessionId) {
     final rows = _db.query(
       'SELECT * FROM scheduled_resumes WHERE session_id = ? '
@@ -107,6 +115,7 @@ class ScheduledResumeDao {
   /// The newest ended row for [sessionId], or null. What says whether this
   /// session has a standing arrangement to resume when its limit resets, and
   /// how the last one ended — a cancelled one is the user calling it off.
+  @override
   ScheduledResume? lastEndedFor(String sessionId) {
     final rows = _db.query(
       'SELECT * FROM scheduled_resumes WHERE session_id = ? '
@@ -118,6 +127,7 @@ class ScheduledResumeDao {
   }
 
   /// Every live row, soonest first.
+  @override
   List<ScheduledResume> live() => _db
       .query(
         'SELECT * FROM scheduled_resumes WHERE state IN $_live '
@@ -126,6 +136,7 @@ class ScheduledResumeDao {
       .map(_row)
       .toList();
 
+  @override
   List<ScheduledResume> inState(ScheduledResumeState state) => _db
       .query(
         'SELECT * FROM scheduled_resumes WHERE state = ? '
@@ -136,6 +147,7 @@ class ScheduledResumeDao {
       .toList();
 
   /// The newest ended rows, for the page's record of what happened.
+  @override
   List<ScheduledResume> recentEnded({int limit = 20}) => _db
       .query(
         'SELECT * FROM scheduled_resumes WHERE state NOT IN $_live '
@@ -145,6 +157,25 @@ class ScheduledResumeDao {
       .map(_row)
       .toList();
 
+  /// What a client's copy holds: every live row, each session's last ended
+  /// one, and the newest [kEndedResumesCopied] ended.
+  List<ScheduledResume> copied() {
+    final rows = {
+      for (final r in live()) r.id: r,
+      for (final r in recentEnded()) r.id: r,
+      for (final row in _db.query(
+        'SELECT * FROM scheduled_resumes r WHERE r.state NOT IN $_live AND '
+        'NOT EXISTS (SELECT 1 FROM scheduled_resumes o WHERE '
+        'o.session_id = r.session_id AND o.state NOT IN $_live AND '
+        'COALESCE(o.finished_at, o.fire_at) > '
+        'COALESCE(r.finished_at, r.fire_at));',
+      ))
+        row['id']! as String: _row(row),
+    };
+    return [...rows.values];
+  }
+
+  @override
   void delete(String id) =>
       _db.execute('DELETE FROM scheduled_resumes WHERE id = ?;', [id]);
 

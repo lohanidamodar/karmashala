@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -11,6 +10,7 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// What a pane is *told* it is, against the box it is *drawn* in, as the window
 /// changes size.
@@ -36,9 +36,8 @@ import 'fake_instance.dart';
 /// same pane, which is what resizing is.
 void main() {
   ProviderContainer panelContainer() {
-    final database = AppDatabase.memory();
-    addTearDown(database.close);
-    final container = fakeTerminalContainer(database: database);
+    final database = TestMachine();
+    final container = fakeTerminalContainer(machine: database);
     addTearDown(container.dispose);
     return container;
   }

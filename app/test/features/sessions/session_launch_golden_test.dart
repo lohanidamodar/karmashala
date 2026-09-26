@@ -48,7 +48,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -77,7 +76,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 const _goldenPath = 'test/features/sessions/session_launches.golden.json';
@@ -152,9 +151,8 @@ typedef _Env = ({
 
 void main() {
   test('the launch contract matches the committed golden', () async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final server = FakeDataServer()..mirrorInto(db);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
 
     final packets = await Directory.systemTemp.createTemp(
       'karmashala-launch-golden-',
@@ -247,7 +245,7 @@ void main() {
     final runner = FakeCommandRunner();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -283,7 +281,7 @@ void main() {
 
     final launcher = container.read(sessionLauncherProvider);
     final registry = container.read(agentRegistryProvider);
-    final sessions = mirroredServer(db).sessionRows;
+    final sessions = db.server.sessionRows;
     final terminals = container.read(
       terminalSessionsControllerProvider.notifier,
     );

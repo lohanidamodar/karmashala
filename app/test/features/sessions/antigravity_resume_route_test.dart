@@ -3,7 +3,6 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -23,7 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -81,7 +80,7 @@ const _terminal = SystemTerminal(
 void main() {
   late Directory tmp;
   late String storeHome;
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late _RecordingTerminals terminals;
@@ -90,8 +89,8 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_resume_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -103,7 +102,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
@@ -125,7 +124,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
     try {
       tmp.deleteSync(recursive: true);
     } on FileSystemException {
@@ -142,7 +140,7 @@ void main() {
   /// A stopped Antigravity session with no CLI id — what every app-launched
   /// Antigravity session used to become the moment its pane died.
   void insertPhantom({String id = 'phantom', String? externalId}) {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r1',
@@ -178,7 +176,7 @@ void main() {
         // And the row is no longer a phantom, so the *next* click is an ordinary
         // resume of a row that knows its own conversation.
         expect(
-          mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
+          db.server.sessionRows.getById('phantom')!.externalSessionId,
           _conversation,
         );
       },
@@ -198,7 +196,7 @@ void main() {
         expect(result.message, contains(_repoPath));
         expect(result.message, isNot(contains('No resumable CLI session id')));
         expect(
-          mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
+          db.server.sessionRows.getById('phantom')!.externalSessionId,
           isNull,
         );
       },
@@ -218,7 +216,7 @@ void main() {
         expect(result.outcome, ExplorerOutcome.selected);
         expect(result.message, contains('another session'));
         expect(
-          mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
+          db.server.sessionRows.getById('phantom')!.externalSessionId,
           isNull,
         );
       },
@@ -230,7 +228,7 @@ void main() {
       server.installationRows.insert(
         agentInstallation(id: 'a2', agentId: AgentIds.claudeCode),
       );
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 'claude-phantom',
           repositoryId: 'r1',
@@ -277,7 +275,7 @@ void main() {
         _conversation,
       ]);
       expect(
-        mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
+        db.server.sessionRows.getById('phantom')!.externalSessionId,
         _conversation,
       );
     });

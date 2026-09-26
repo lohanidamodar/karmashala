@@ -19,12 +19,11 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/instances.dart'
     show hostSessionIdFor;
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -48,7 +47,7 @@ Future<void> _settle() async {
 /// attaches a pane to that session — never a second agent, never a resume of
 /// a conversation the agent may not have written yet.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late FakeSessionRows dao;
@@ -59,8 +58,8 @@ void main() {
   late List<String> endedAtHost;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -76,7 +75,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
@@ -98,7 +97,6 @@ void main() {
     );
     addTearDown(() {
       container.dispose();
-      db.close();
     });
   });
 

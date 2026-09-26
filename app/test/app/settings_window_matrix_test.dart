@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/apps.dart';
 import 'package:karmashala/src/core/apps/installed_applications_providers.dart';
@@ -42,8 +41,6 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala_store/devices.dart';
 
 import '../support/fake_command_runner.dart';
 import '../support/fakes.dart';
@@ -52,6 +49,7 @@ import '../features/ssh/fake_host_box.dart';
 import '../support/window_matrix.dart';
 import '../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
+import '../support/test_machine.dart';
 
 /// The settings surfaces — pages, their cards and the dialogs they open — with
 /// user data of realistic length: host names, distro names, project names and
@@ -100,8 +98,6 @@ void main() {
   });
 
   testWidgets('Environments section with a long SSH host name', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     // Seeded before a client connects: a saved host is told by id alone.
     final server = FakeDataServer();
     server.environmentRows
@@ -133,7 +129,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -157,8 +152,6 @@ void main() {
 
   testWidgets('Environments section with the SSH host card at its wordiest: a '
       'failed install and the sudo step for a terminal', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     // Seeded before a client connects: a saved host is told by id alone.
     final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
@@ -177,7 +170,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -224,9 +216,8 @@ void main() {
     const longCheckout =
         'karmashala-app-checkout-with-an-unreasonably-long-folder-name';
 
-    AppDatabase seeded() {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+    TestMachine seeded() {
+      final db = TestMachine();
       server.environmentRows
         ..upsert(windowsEnv())
         ..upsert(wslEnv(id: 'wsl:$longDistro', distro: longDistro));
@@ -251,10 +242,9 @@ void main() {
       return db;
     }
 
-    ProviderContainer containerFor(AppDatabase db) {
+    ProviderContainer containerFor(TestMachine db) {
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           ...noProcessOverrides(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -306,9 +296,6 @@ void main() {
 
   group('PairPhoneDialog', () {
     // The route chosen for a host is read from the store.
-    late AppDatabase routes;
-    setUp(() => routes = AppDatabase.memory());
-    tearDown(() => routes.close());
 
     final host = SshHost(
       id: 'h1',
@@ -359,7 +346,6 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...noProcessOverrides(),
-          databaseProvider.overrideWithValue(routes),
           data,
           sshCompanionSetupProvider.overrideWith(
             (ref, host) async => _InvitingSetup(host),
@@ -384,7 +370,6 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...noProcessOverrides(),
-          databaseProvider.overrideWithValue(routes),
           data,
           sshCompanionSetupProvider.overrideWith(
             (ref, host) async => _InvitingSetup(host),
@@ -486,12 +471,10 @@ void main() {
   });
 
   testWidgets('Remote access section with a long device name', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
-    PairedDeviceDao(db).insert(
+    server.deviceRows.insert(
       PairedDevice(
         id: 'a' * 32,
         name: "Damodar's Pixel 9 Pro XL (work profile, second SIM, travel)",
@@ -504,7 +487,6 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -544,10 +526,9 @@ void main() {
     );
     final url = Uri.parse('ws://${longHost.host}:8787/k/$token');
 
-    ProviderContainer containerFor(AppDatabase db, _RelayBox box) {
+    ProviderContainer containerFor(TestMachine db, _RelayBox box) {
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           ...noProcessOverrides(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -567,13 +548,12 @@ void main() {
 
     testWidgets('Remote access with a box that is shut from here, and a phone '
         'paired through it', (tester) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+      final db = TestMachine();
       server.environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
       server.sshHostRows.upsert(longHost);
-      PairedDeviceDao(db).insert(
+      server.deviceRows.insert(
         PairedDevice(
           id: 'b' * 32,
           name: "Damodar's Pixel 9 Pro XL (work profile, second SIM, travel)",
@@ -608,8 +588,7 @@ void main() {
     testWidgets('the dialog that sets one up, with its verdict', (
       tester,
     ) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+      final db = TestMachine();
       server.sshHostRows.upsert(longHost);
       final container = containerFor(db, _RelayBox(url));
 
@@ -648,14 +627,11 @@ void main() {
   testWidgets('Editor & files page with a custom terminal and editor', (
     tester,
   ) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),

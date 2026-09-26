@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -27,7 +25,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **What a section actually holds, and what it refuses to go and find out.**
@@ -48,9 +46,9 @@ void main() {
   // The server the last [seed] filled; every container built after it reads it.
   late FakeDataServer server;
 
-  AppDatabase seed({int failed = 1, int running = 1}) {
-    final db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+  TestMachine seed({int failed = 1, int running = 1}) {
+    final db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     seedDefaultSections(server);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(
@@ -59,12 +57,12 @@ void main() {
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     for (var i = 0; i < failed; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(id: 'f$i', title: 'Failed $i', status: SessionStatus.failed),
       );
     }
     for (var i = 0; i < running; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(id: 'r$i', title: 'Running $i', status: SessionStatus.running),
       );
     }
@@ -87,10 +85,9 @@ void main() {
     },
   );
 
-  Future<ProviderContainer> mount(AppDatabase db, FakeCommandRunner git) async {
+  Future<ProviderContainer> mount(TestMachine db, FakeCommandRunner git) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -118,7 +115,6 @@ void main() {
   group('a rule section', () {
     test('files a session its own row already condemns', () async {
       final db = seed(failed: 2);
-      addTearDown(db.close);
       final container = await mount(db, FakeCommandRunner());
       await container.pump();
 
@@ -128,7 +124,6 @@ void main() {
 
     test('files an agent the ambient waiting list says is stuck', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db, FakeCommandRunner());
       await container.pump();
       expect(idsIn(container, 'section-awaiting-input'), isEmpty);
@@ -151,7 +146,6 @@ void main() {
 
     test('matches a branch something else already measured', () async {
       final db = seed();
-      addTearDown(db.close);
       final git = gitOn('release/1.4');
       final container = await mount(db, git);
       final sections = container.read(explorerSectionsProvider.notifier);
@@ -205,7 +199,6 @@ void main() {
   group('when two sections want the same row', () {
     test('a pin takes it out of the rule section below', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db, FakeCommandRunner());
       await container.pump();
       expect(idsIn(container, 'section-ended-in-failure'), ['f0']);
@@ -227,7 +220,6 @@ void main() {
 
     test('dragging a section above another moves the rows with it', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db, gitOn('release/1.4'));
       final controller = container.read(explorerSectionsProvider.notifier);
       final releases = controller.add(
@@ -266,7 +258,6 @@ void main() {
 
     test('a hand-filled group beats a rule that is above it', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db, FakeCommandRunner());
       final controller = container.read(explorerSectionsProvider.notifier);
       final mine = controller.add(name: 'Mine', rule: const ManualRule());
@@ -289,7 +280,7 @@ void main() {
     /// off, and what the filter *does* is only visible with it on.
     Future<ProviderContainer> pump(
       WidgetTester tester,
-      AppDatabase db, {
+      TestMachine db, {
       bool hideEmpty = true,
     }) async {
       tester.view.physicalSize = const Size(460, 900);
@@ -298,7 +289,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -330,7 +321,6 @@ void main() {
       tester,
     ) async {
       final db = seed();
-      addTearDown(db.close);
       await pump(tester, db);
 
       // Folded shut, so the failed session is nowhere on screen even though
@@ -353,7 +343,6 @@ void main() {
 
     testWidgets('an open, empty section explains itself', (tester) async {
       final db = seed(failed: 0);
-      addTearDown(db.close);
       await pump(tester, db, hideEmpty: false);
 
       await tester.tap(find.text('Checks failing'));
@@ -369,7 +358,6 @@ void main() {
       tester,
     ) async {
       final db = seed();
-      addTearDown(db.close);
       await pump(tester, db);
 
       await tester.tap(find.text('Ended in failure'));
@@ -388,14 +376,14 @@ void main() {
   /// saying "Checks failing", "Awaiting input" and "Ended in failure" above the
   /// tree, each costing a full row whether or not it had anything in it.
   group('the empty filter', () {
-    Future<ProviderContainer> pump(WidgetTester tester, AppDatabase db) async {
+    Future<ProviderContainer> pump(WidgetTester tester, TestMachine db) async {
       tester.view.physicalSize = const Size(460, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -424,7 +412,6 @@ void main() {
       tester,
     ) async {
       final db = seed();
-      addTearDown(db.close);
       await pump(tester, db);
 
       // One failed session, so exactly one of the four seeded sections has
@@ -439,7 +426,6 @@ void main() {
       tester,
     ) async {
       final db = seed();
-      addTearDown(db.close);
       final container = await pump(tester, db);
 
       // The funnel is the whole of the feature's discoverability: a section
@@ -469,7 +455,6 @@ void main() {
       tester,
     ) async {
       final db = seed();
-      addTearDown(db.close);
       final container = await pump(tester, db);
       expect(find.text('Pinned'), findsNothing);
 
@@ -489,7 +474,6 @@ void main() {
       tester,
     ) async {
       final db = seed(failed: 0);
-      addTearDown(db.close);
       final container = await pump(tester, db);
 
       // Opened by hand — the user is looking at it, and the sentence under it

@@ -8,8 +8,8 @@ import 'package:karmashala_verification/verification.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/project_check.dart';
-import '../store/automation_dao.dart';
-import '../store/project_check_dao.dart';
+import 'automation_records.dart';
+
 import 'check_command_runner.dart';
 import 'checkout_facts.dart';
 
@@ -21,7 +21,7 @@ typedef SessionChecks = ({List<CommandCheck> checks, VerificationRun run});
 /// claim about itself. A check that could not run is inconclusive, never a pass.
 class ProjectCheckRunner {
   ProjectCheckRunner({
-    required AutomationDao automations,
+    required AutomationRecords automations,
     required this._checks,
     required this._facts,
     required this._commands,
@@ -33,8 +33,8 @@ class ProjectCheckRunner {
        _onChanged = onChanged ?? _nothing,
        _log = log ?? _ignore;
 
-  final AutomationDao _dao;
-  final ProjectCheckDao _checks;
+  final AutomationRecords _dao;
+  final ProjectCheckRecords _checks;
   final CheckoutFacts _facts;
   final CheckCommandRunner _commands;
   final CommandCheckRecorder _recorder;

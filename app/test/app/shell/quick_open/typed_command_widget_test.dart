@@ -11,13 +11,13 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fake_data_server.dart';
 import '../../../support/fixtures.dart';
-import '../../../support/workspace_mirror.dart';
+import '../../../support/test_machine.dart';
+import '../../../support/conversation_index_database.dart';
 
 /// Records the start instead of launching an agent: what is under test is that
 /// the command reaches the Explorer's own start, with the right arguments.
@@ -39,23 +39,22 @@ class _RecordingExplorerActions extends ExplorerActions {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(session(id: 's1', title: 'Fix login redirect'))
       ..insert(session(id: 's2', title: 'Write the release notes'));
   });
-  tearDown(() => db.close());
 
   late _RecordingExplorerActions explorer;
 
@@ -63,7 +62,8 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
         data,
         explorerActionsProvider.overrideWith(_RecordingExplorerActions.new),
       ],

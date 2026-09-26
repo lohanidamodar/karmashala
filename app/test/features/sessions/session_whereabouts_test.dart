@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -16,7 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -91,10 +90,10 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
 harness() async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -103,7 +102,7 @@ harness() async {
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       // Never shell out: an external launch must not open a real terminal.
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -175,7 +174,6 @@ void writeToPane(ProviderContainer container, String paneId, String text) {
 void main() {
   test('a live pane of ours is the one thing we can be certain of', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
@@ -189,7 +187,6 @@ void main() {
 
   test('a dead pane showing the agent\'s refusal is proof of a holder', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
@@ -209,7 +206,6 @@ void main() {
 
   test('a dead pane with ordinary output claims nothing', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
@@ -226,7 +222,6 @@ void main() {
 
   test('an external surface is a record, never a claim', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     // No pane: it was handed to a terminal window we do not own.
@@ -242,7 +237,6 @@ void main() {
 
   test('a session we know nothing about says nothing', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final where = h.container.read(sessionWhereaboutsProvider('no-such-thing'));
@@ -262,8 +256,8 @@ void main() {
         interactiveResume: AgentResume.subcommand('resume'),
       ),
     );
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -271,7 +265,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // Never shell out: an external launch must not open a real terminal.
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -282,7 +276,6 @@ void main() {
         settingsControllerProvider.overrideWith(_StaticSettings.new),
       ],
     );
-    addTearDown(db.close);
     addTearDown(container.dispose);
 
     final id = await launch(container);
@@ -303,7 +296,6 @@ void main() {
     // saw this exact pane and read it as lost work; the row now carries the
     // agent's own answer instead of still saying "running here".
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
@@ -335,8 +327,8 @@ void main() {
         interactiveResume: AgentResume.subcommand('resume'),
       ),
     );
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -344,7 +336,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -354,7 +346,6 @@ void main() {
         settingsControllerProvider.overrideWith(_StaticSettings.new),
       ],
     );
-    addTearDown(db.close);
     addTearDown(container.dispose);
 
     final id = await launch(container);
@@ -374,7 +365,6 @@ void main() {
     // in there is not evidence about this one — and reading it would build the
     // buffer the restore deliberately kept unparsed.
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
@@ -466,7 +456,6 @@ void main() {
       // the newest set it has read. The user used to see the raw
       // `error: invalid value …` and an agent that would not start.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final id = await launch(h.container);

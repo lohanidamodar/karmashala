@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -536,7 +535,7 @@ void main() {
       addTearDown(db.close);
       TerminalLayoutDao(db).saveLayout(storedLayout(tabs), activeTabId: 't0');
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -607,7 +606,7 @@ void main() {
         ),
       ], activeTabId: 'tab-1');
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -637,7 +636,7 @@ void main() {
       ], activeTabId: 't0');
 
       final container = fakeTerminalContainer(
-        database: db,
+        layoutStore: db,
         // So every pane comes back dormant, including the active tab's:
         // what is being counted here is the metadata flip, not the restart.
         restoreLivePanes: false,
@@ -676,7 +675,7 @@ void main() {
         tab('t1', wasLive: true),
       ], activeTabId: 't0');
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -733,7 +732,7 @@ void main() {
         ),
       ], activeTabId: 't0');
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -786,14 +785,14 @@ void main() {
   });
 }
 
-/// An [AppDatabase] that records every statement the layout dao issues.
+/// An [TerminalLayoutStore] that records every statement the layout dao issues.
 ///
 /// Overriding [execute] rather than reaching for `sqlite3_changes` keeps the
 /// unit honest: a statement the dao does not issue is a row it does not write,
 /// and a statement it does issue writes exactly the one row its `WHERE id = ?`
 /// or `ON CONFLICT (id)` names. `transaction` runs BEGIN/COMMIT on the raw
 /// handle, so the counter never sees them.
-class _CountingDatabase extends AppDatabase {
+class _CountingDatabase extends TerminalLayoutStore {
   _CountingDatabase() : super(sqlite3.openInMemory());
 
   final List<String> statements = [];
@@ -819,7 +818,9 @@ class _CountingDatabase extends AppDatabase {
   /// Writes against the backup mirrors, plus the metadata stamp that goes with
   /// them.
   int get backupWrites => statements
-      .where((sql) => sql.contains('_backup') || sql.contains('app_metadata'))
+      .where(
+        (sql) => sql.contains('_backup') || sql.contains('layout_metadata'),
+      )
       .length;
 
   @override

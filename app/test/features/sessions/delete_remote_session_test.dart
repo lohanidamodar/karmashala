@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
@@ -13,7 +11,7 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala_session/session.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -28,7 +26,7 @@ import '../../support/fixtures.dart';
 /// (reported 2026-09-11). The row is ours and goes; the transcript on the
 /// other machine is reported as left rather than claimed.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
@@ -40,8 +38,8 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows
       ..upsert(windowsEnv())
@@ -58,10 +56,9 @@ void main() {
     );
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   void addSession(String id, {required String repositoryId}) =>
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: repositoryId,
@@ -78,7 +75,6 @@ void main() {
     final mutator = _RecordingMutator();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(mutator),
@@ -97,7 +93,7 @@ void main() {
         .read(sessionActionsProvider)
         .deleteNative('s-remote');
 
-    expect(mirroredServer(db).sessionRows.getById('s-remote'), isNull);
+    expect(db.server.sessionRows.getById('s-remote'), isNull);
     expect(notice, contains('do-box'));
     expect(notice, contains('was left'));
     // Nothing on this machine was touched on that session's behalf.
@@ -115,7 +111,7 @@ void main() {
       container.read(sessionActionsProvider).deleteNative('s-local'),
       throwsA(isA<StateError>()),
     );
-    expect(mirroredServer(db).sessionRows.getById('s-local'), isNotNull);
+    expect(db.server.sessionRows.getById('s-local'), isNotNull);
     expect(mutator.deleted, isEmpty);
   });
 
@@ -127,7 +123,7 @@ void main() {
         .read(sessionActionsProvider)
         .deleteNative('s-local', deleteFromCli: false);
 
-    expect(mirroredServer(db).sessionRows.getById('s-local'), isNull);
+    expect(db.server.sessionRows.getById('s-local'), isNull);
     expect(notice, isNull);
     expect(mutator.deleted, isEmpty);
   });

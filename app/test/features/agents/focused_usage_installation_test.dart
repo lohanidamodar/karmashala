@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/usage.dart';
@@ -10,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **Which quota a session is spending**, and nothing at all for an agent whose
 /// usage endpoint we do not speak.
@@ -22,13 +20,12 @@ import '../../support/workspace_mirror.dart';
 /// Codex pane got one of the two, and clicking in the tree could change which
 /// account the number belonged to without changing the pane being typed into.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
 
-  Future<ProviderContainer> containerFor(AppDatabase database) async {
+  Future<ProviderContainer> containerFor(TestMachine database) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(database),
-        await mirroredServer(database).override(),
+        await database.server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentUsageServiceProvider.overrideWithValue(FakeAgentUsageService()),
       ],
@@ -36,8 +33,6 @@ void main() {
     addTearDown(container.dispose);
     return container;
   }
-
-  tearDown(() => db.close());
 
   test('resolves a session to its Claude installation', () async {
     db = seedUsageDatabase();
@@ -49,18 +44,14 @@ void main() {
   test('answers per session across Claude, Codex, and Antigravity — all at '
       'once', () async {
     db = seedUsageDatabase();
-    mirroredServer(db).installationRows.insert(
+    db.server.installationRows.insert(
       agentInstallation(id: 'a2', agentId: AgentIds.codex),
     );
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
-    mirroredServer(db).installationRows.insert(
+    db.server.sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
+    db.server.installationRows.insert(
       agentInstallation(id: 'a3', agentId: AgentIds.antigravity),
     );
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session(id: 's3', agentInstallationId: 'a3'));
+    db.server.sessionRows.insert(session(id: 's3', agentInstallationId: 'a3'));
     final container = await containerFor(db);
 
     // Three panes, three agents, three quotas — read together rather than one
@@ -85,13 +76,11 @@ void main() {
     // environments, so they are different keys and different quotas — the
     // reason an app-level figure could not be right for both.
     db = seedUsageDatabase();
-    mirroredServer(db).environmentRows.upsert(wslEnv());
-    mirroredServer(db).installationRows.insert(
+    db.server.environmentRows.upsert(wslEnv());
+    db.server.installationRows.insert(
       agentInstallation(id: 'a2', environmentId: wslEnv().id),
     );
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
+    db.server.sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
     final container = await containerFor(db);
 
     final first = container.read(usageInstallationForSessionProvider('s1'))!;

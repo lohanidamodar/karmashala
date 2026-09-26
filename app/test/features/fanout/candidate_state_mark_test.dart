@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_chrome.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
@@ -128,8 +128,11 @@ void main() {
   group('the surfaces the mark grew inside', () {
     // It was 7px and is now Chrome.iconSmall. Both hosts put it at the head of
     // a row that already carries an agent id, a diff stat and buttons.
+    late Override data;
+    setUp(() async => data = await seedDatabase().server.override());
+
     Widget app(Widget child) => ProviderScope(
-      overrides: [databaseProvider.overrideWithValue(seedDatabase())],
+      overrides: [data],
       child: MaterialApp(
         theme: AppTheme.light(),
         home: Scaffold(body: child),

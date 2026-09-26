@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_auto_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
@@ -11,7 +10,6 @@ import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
@@ -22,7 +20,6 @@ import 'package:karmashala/src/features/environments/data/environments_data.dart
 /// will become their own project"*. A conversation that ran in a subfolder is
 /// its own project, not the parent's, and this pins that it stays that way.
 void main() {
-  late AppDatabase db;
   late EnvironmentsData environments;
   late List<StoreScanRequest> asked;
   late FakeDataServer server;
@@ -69,8 +66,7 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     environments = EnvironmentsData(await server.connect());
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
@@ -87,7 +83,6 @@ void main() {
     sessions = SessionsData(client);
     imported = ImportedSessionsData(client, sessions);
   });
-  tearDown(() => db.close());
 
   List<Repository> repos() => server.repositoryRows.getAll();
 

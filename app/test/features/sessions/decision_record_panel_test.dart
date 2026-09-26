@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_decision_providers.dart';
@@ -18,6 +17,7 @@ import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
 
 /// The records, counting the decision reads the panel costs.
 ///
@@ -43,19 +43,18 @@ class _CountingRecords extends SessionRecordsData {
 /// nobody could add the constraint they had just imposed out loud.
 void main() {
   final recordedAt = testTime.add(const Duration(hours: 1));
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   _CountingRecords? counting;
   int reads() => counting?.reads ?? 0;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TestMachine();
     server = FakeDataServer()..sessionRows.insert(session());
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
   });
-  tearDown(() => db.close());
 
   void seed() {
     server.decisionRows.append(
@@ -86,7 +85,7 @@ void main() {
     final records = counting = _CountingRecords(client);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(client),
         sessionRecordsProvider.overrideWithValue(records),
         decisionsPanelSessionIdProvider.overrideWithValue('s1'),

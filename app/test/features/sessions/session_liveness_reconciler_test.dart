@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -18,7 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
@@ -46,10 +45,10 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
 harness() async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -58,7 +57,7 @@ harness() async {
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
@@ -363,7 +362,6 @@ void main() {
     test('a pane whose process dies stops claiming to run a session', () async {
       final (:container, :db, server: _) = await harness();
       addTearDown(container.dispose);
-      addTearDown(db.close);
       // Exactly what `AppShell` does: watched, not read. Riverpod 3 pauses a
       // provider's own subscriptions while nothing listens to it, so a
       // reconciler nobody watches would hear no pane ever stop.

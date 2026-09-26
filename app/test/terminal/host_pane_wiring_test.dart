@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -18,15 +16,12 @@ import 'package:karmashala_host/karmashala_host.dart';
 /// only way to know that is to open a pane through the same provider the app
 /// does and look at what came back.
 void main() {
-  late AppDatabase db;
   late Directory home;
 
   setUp(() {
-    db = AppDatabase.memory();
     home = Directory.systemTemp.createTempSync('ksw');
   });
   tearDown(() {
-    db.close();
     try {
       home.deleteSync(recursive: true);
     } on FileSystemException {
@@ -50,7 +45,6 @@ void main() {
     LocalHostSessionAccess? access,
   }) => ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(db),
       hostBackedLocalPanesProvider.overrideWithValue(setting),
       localHostSessionAccessProvider.overrideWithValue(access),
     ],

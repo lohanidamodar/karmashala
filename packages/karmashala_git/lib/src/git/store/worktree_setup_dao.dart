@@ -198,6 +198,12 @@ class WorktreeSetupDao {
       .map(_report)
       .toList();
 
+  /// Every run, newest first — one row per worktree, so bounded by them.
+  List<WorktreeSetupReport> allRuns() => _db
+      .query('SELECT * FROM worktree_setup_runs ORDER BY ran_at DESC;')
+      .map(_report)
+      .toList();
+
   WorktreeSetupReport _report(Map<String, Object?> row) =>
       WorktreeSetupReport.fromStored(
         repositoryId: row['repository_id'] as String,

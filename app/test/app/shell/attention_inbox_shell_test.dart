@@ -1,7 +1,6 @@
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/status_bar_items.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -27,7 +26,7 @@ import '../../support/fixtures.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// The inbox in the shell: one count, three places that show it, and a list
@@ -44,7 +43,7 @@ void main() {
   // chord *does*, which is the same on every platform.
   setUp(() => commandKeyIsMeta = false);
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
@@ -58,24 +57,23 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Fix login'));
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // Session cards ask git about their checkout; the shell must never
         // spawn one from a test.

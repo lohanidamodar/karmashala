@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/app_projects/application/project_build_loop.dart';
@@ -12,6 +11,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 const EnvironmentPath _project = EnvironmentPath(
   environmentId: 'wsl:Ubuntu',
@@ -54,7 +54,7 @@ flutter:
 ''';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeCommandRunner runner;
   late ProviderContainer container;
 
@@ -98,7 +98,7 @@ void main() {
   }
 
   Future<void> make({CommandResult Function(CommandRequest)? responder}) async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     final server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
@@ -118,7 +118,7 @@ void main() {
     );
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
@@ -130,7 +130,6 @@ void main() {
   setUp(make);
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   ProjectBuildController builds() =>

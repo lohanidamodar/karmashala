@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/usage.dart';
@@ -14,7 +12,7 @@ import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **Why there is no number, in words the user can act on.**
 ///
@@ -23,27 +21,25 @@ import '../../support/workspace_mirror.dart';
 /// run the agent once, do nothing — so the card says which it is, and keeps the
 /// last reading with its age underneath.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late MovableClock clock;
   late FakeAgentUsageService service;
 
   final installation = agentInstallation();
 
   setUp(() {
-    db = AppDatabase.memory();
-    FakeDataServer().mirrorInto(db);
-    mirroredServer(db).environmentRows.upsert(windowsEnv());
+    db = TestMachine();
+    FakeDataServer().runsOn(db);
+    db.server.environmentRows.upsert(windowsEnv());
     clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
-          await mirroredServer(db).override(),
+          await db.server.override(),
           clockProvider.overrideWithValue(clock),
           agentUsageServiceProvider.overrideWithValue(service),
         ],

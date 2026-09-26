@@ -22,6 +22,7 @@ import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/local_host_startup.dart';
+import '../../features/terminal/application/terminal_layout_providers.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../data/data_providers.dart';
 import '../data/metadata_keys.dart';
@@ -568,6 +569,9 @@ class AppLifecycle {
     //    it *starts* is not, so those begin here, where the wait is budgeted.
     final pending = _startContainerTeardowns();
     final database = _databaseOrNull();
+    final layoutStore = _container.exists(terminalLayoutStoreProvider)
+        ? _container.read(terminalLayoutStoreProvider)
+        : null;
     try {
       _container.dispose();
     } on Object catch (error, stack) {
@@ -582,6 +586,13 @@ class AppLifecycle {
 
     // 7. The database handle, last. Not a `_step`: `close()` is one synchronous
     //    call, and `exit(0)` leaves a `-wal`/`-shm` for the next launch to recover.
+    try {
+      layoutStore?.close();
+    } on Object catch (error) {
+      _logger.warning(
+        'lifecycle: closing the layout store failed reason=$error',
+      );
+    }
     try {
       database?.close();
     } on Object catch (error) {

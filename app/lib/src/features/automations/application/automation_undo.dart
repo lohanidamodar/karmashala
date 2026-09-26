@@ -2,6 +2,7 @@ import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../checkpoints/application/checkpoint_providers.dart';
+import '../../checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -19,7 +20,7 @@ class AutomationUndo {
   /// taken is `null`, never zero: `published` is as fresh as the last fetch.
   Future<RunCommits> commitsOf(AutomationRun run) async {
     final automation = _ref
-        .read(automationDaoProvider)
+        .read(automationsDataProvider)
         .getById(run.automationId);
     if (automation == null) return RunCommits.unread;
     final repository = _ref
@@ -27,7 +28,7 @@ class AutomationUndo {
         .repository(automation.repositoryId);
     final checkpointId = run.baseCheckpointId;
     if (repository == null || checkpointId == null) return RunCommits.unread;
-    final base = _ref.read(checkpointDaoProvider).getById(checkpointId);
+    final base = await _ref.read(checkpointsDataProvider).byId(checkpointId);
     final baseSha = base?.headSha;
     if (baseSha == null || baseSha.isEmpty) {
       // A repository with no commits yet, or a checkpoint from before the
@@ -86,7 +87,7 @@ class AutomationUndo {
         'to. Nothing is restored on a reading Karmashala never took.',
       );
     }
-    final base = _ref.read(checkpointDaoProvider).getById(checkpointId);
+    final base = await _ref.read(checkpointsDataProvider).byId(checkpointId);
     if (base == null) {
       throw StateError(
         'The checkpoint this run was taken against is gone, so there is '
@@ -106,7 +107,7 @@ class AutomationUndo {
     if (refusal != null) throw StateError(refusal);
 
     final automation = _ref
-        .read(automationDaoProvider)
+        .read(automationsDataProvider)
         .getById(run.automationId);
     final repository = automation == null
         ? null
@@ -130,7 +131,6 @@ class AutomationUndo {
       branch: branch,
       sha: summary.baseSha!,
     );
-    _ref.read(automationsRevisionProvider.notifier).bump();
   }
 }
 

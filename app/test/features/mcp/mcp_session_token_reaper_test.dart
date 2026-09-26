@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'package:karmashala/src/features/mcp/mcp_session_token_reaper.dart';
@@ -15,7 +13,6 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// A capability token speaks for one session for as long as it is valid, so it
 /// has to stop being valid when that session stops existing.
@@ -26,27 +23,19 @@ import '../../support/workspace_mirror.dart';
 /// deleted is over, and a config file left on disk must not keep speaking for
 /// it.
 void main() {
-  late AppDatabase db;
   late FakeSessionRows sessions;
   late ProviderContainer container;
   late McpCallerRegistry callers;
   late McpSessionTokenReaper reaper;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    addTearDown(db.close);
-    final fake = FakeDataServer()..mirrorInto(db);
+    final fake = FakeDataServer();
     fake.environmentRows.upsert(windowsEnv());
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     fake.installationRows.insert(agentInstallation());
     sessions = fake.sessionRows;
-    container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        await fake.override(),
-      ],
-    );
+    container = ProviderContainer(overrides: [await fake.override()]);
     addTearDown(container.dispose);
     callers = McpCallerRegistry();
     reaper = McpSessionTokenReaper(container, callers)..start();

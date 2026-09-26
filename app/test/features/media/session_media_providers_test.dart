@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
@@ -14,7 +12,6 @@ import '../../support/fixtures.dart';
 import 'session_media_fixture.dart';
 import '../../support/temp_directory.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// The panel end to end: a session row, the record it points at, and the list
 /// the panel draws from.
@@ -24,13 +21,11 @@ import '../../support/workspace_mirror.dart';
 /// CLI stores, which is `SessionTranscriptLocator`'s job and is tested where it
 /// lives. Everything downstream of "here is the file" is the same for both.
 void main() {
-  late AppDatabase db;
   late Directory dir;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer().mirrorInto(db)
+    server = FakeDataServer()
       ..environmentRows.upsert(windowsEnv())
       ..environmentRows.upsert(wslEnv())
       ..projectRows.insert(project())
@@ -38,7 +33,6 @@ void main() {
     dir = Directory.systemTemp.createTempSync('media_providers');
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(dir);
   });
 
@@ -62,7 +56,6 @@ void main() {
   Future<ProviderContainer> containerFor() async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         // `path_provider` is a platform channel; the cache goes somewhere real
         // instead, which is also what makes the extracted files assertable.

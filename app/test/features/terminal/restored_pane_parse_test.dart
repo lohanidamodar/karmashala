@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -120,8 +119,8 @@ void main() {
   group('through the workbench', () {
     /// A stored layout of [tabs] one-pane tabs, each holding [lines] of
     /// history.
-    AppDatabase seeded({int tabs = 2, int lines = 200}) {
-      final db = AppDatabase.memory();
+    TerminalLayoutStore seeded({int tabs = 2, int lines = 200}) {
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       final text = stored(lines);
       TerminalLayoutDao(db).saveLayout([
@@ -147,9 +146,9 @@ void main() {
 
     Future<TerminalSessionsController> launch(
       WidgetTester tester,
-      AppDatabase db,
+      TerminalLayoutStore db,
     ) async {
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -207,7 +206,7 @@ void main() {
       // A second run over the same store. Its panes are built during the
       // restore, and the launch frame parses every mounted tab's history in
       // `build` — before the layout pass that measured `drawn` last time.
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final second = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -238,7 +237,7 @@ void main() {
       final db = seeded();
 
       // Never saved, so nothing was recorded — a first run, or an upgrade.
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,

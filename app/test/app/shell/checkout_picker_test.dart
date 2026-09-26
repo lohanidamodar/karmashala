@@ -1,7 +1,5 @@
 import 'package:karmashala/src/app/shell/side_panel_context.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -30,7 +28,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// Picking the checkout the repository-scoped surfaces describe.
 ///
@@ -42,7 +40,7 @@ void main() {
   const relayPath = r'C:\src\demo\projects\wt-relay';
   const inboxPath = r'C:\src\demo\projects\wt-inbox';
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late FakeCommandRunner git;
@@ -115,8 +113,8 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Demo', path: hubPath));
@@ -124,12 +122,10 @@ void main() {
     git = FakeCommandRunner(responder: respond);
     discovery = FakeRepositoryDiscoveryService();
   });
-  tearDown(() => db.close());
 
   ProviderContainer makeContainer() {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -344,7 +340,7 @@ void main() {
       tester,
     ) async {
       insertAllCheckouts();
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 's-hub',
           repositoryId: 'hub',
@@ -386,7 +382,7 @@ void main() {
     // terminal tabs put the panel back on the hub — which reads exactly like
     // the pick never happened.
     insertAllCheckouts();
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's-hub',
         repositoryId: 'hub',
@@ -399,7 +395,6 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

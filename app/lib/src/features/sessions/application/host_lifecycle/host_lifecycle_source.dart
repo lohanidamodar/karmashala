@@ -32,7 +32,6 @@ class HostLifecycleFeed {
     void Function(CompanionNoticeMessage notice)? noticeCompanion,
     CompanionPair? pairCompanion,
     Stream<AutomationCallMessage>? automationCalls,
-    Stream<void>? automationsChanged,
     void Function(AutomationNoticeKind kind)? noticeAutomations,
     void Function(int callId, {String? error})? answerAutomationCall,
     Future<ChecksRanMessage> Function(String sessionId)? runChecks,
@@ -56,7 +55,6 @@ class HostLifecycleFeed {
        noticeCompanion = noticeCompanion ?? _noNotice,
        pairCompanion = pairCompanion ?? _noPairing,
        automationCalls = automationCalls ?? const Stream.empty(),
-       automationsChanged = automationsChanged ?? const Stream.empty(),
        noticeAutomations = noticeAutomations ?? _noAutomationNotice,
        answerAutomationCall = answerAutomationCall ?? _noAutomationAnswer,
        runChecks = runChecks ?? _noChecks;
@@ -86,10 +84,7 @@ class HostLifecycleFeed {
   /// app.
   final Stream<AutomationCallMessage> automationCalls;
 
-  /// Each time the host wrote automation, run, check or verification rows.
-  final Stream<void> automationsChanged;
-
-  /// "I am the app", or "I wrote automation rows".
+  /// "I am the app".
   final void Function(AutomationNoticeKind kind) noticeAutomations;
 
   /// How one forwarded automation call ended.

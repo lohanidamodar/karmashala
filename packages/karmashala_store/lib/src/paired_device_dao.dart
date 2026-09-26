@@ -5,13 +5,14 @@ import 'row_mapping.dart';
 import 'package:karmashala_remote/remote.dart';
 
 /// Data access for the `paired_devices` table (schema v18, `relay_url` v19).
-class PairedDeviceDao {
+class PairedDeviceDao implements PairedDeviceStore {
   PairedDeviceDao(this._db);
 
   final AppDatabase _db;
 
   /// An **upsert on the device id**: a phone re-pairing with new key material
   /// is the same phone, and keeps its `created_at` and push token.
+  @override
   void insert(PairedDevice device) {
     _db.execute(
       'INSERT INTO paired_devices '
@@ -45,12 +46,14 @@ class PairedDeviceDao {
   }
 
   /// Every paired device, newest first — what the settings list shows.
+  @override
   List<PairedDevice> getAll() => _db
       .query('SELECT * FROM paired_devices ORDER BY created_at DESC;')
       .map(_fromRow)
       .toList();
 
   /// Devices the host should listen for: paired and not revoked.
+  @override
   List<PairedDevice> getActive() => _db
       .query(
         'SELECT * FROM paired_devices WHERE revoked = 0 '
@@ -59,11 +62,13 @@ class PairedDeviceDao {
       .map(_fromRow)
       .toList();
 
+  @override
   PairedDevice? getById(String id) {
     final rows = _db.query('SELECT * FROM paired_devices WHERE id = ?;', [id]);
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  @override
   void updateLastSeen(String id, DateTime at) {
     _db.execute('UPDATE paired_devices SET last_seen_at = ? WHERE id = ?;', [
       isoFromDate(at),
@@ -73,6 +78,7 @@ class PairedDeviceDao {
 
   /// Persists the rendezvous generation counter — the one number the key
   /// schedule needs remembered per device.
+  @override
   void updateGeneration(String id, int generation) {
     _db.execute('UPDATE paired_devices SET generation = ? WHERE id = ?;', [
       generation,
@@ -82,6 +88,7 @@ class PairedDeviceDao {
 
   /// What the user calls this device. The name a phone sent at pairing is a
   /// reading of what it said it was; only this makes it correctable (§20).
+  @override
   void rename(String id, String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
@@ -95,6 +102,7 @@ class PairedDeviceDao {
   /// the desktop's to change, and re-pairing to widen one threw the phone's
   /// key, generation and push token away to say something this row can say.
   /// A revoked row is left alone — it has no key to grant anything to.
+  @override
   void updateCapabilities(String id, CapabilitySet capabilities) {
     _db.execute(
       'UPDATE paired_devices SET capabilities = ? WHERE id = ? AND revoked = 0;',
@@ -104,6 +112,7 @@ class PairedDeviceDao {
 
   /// Revokes a device: the key is **deleted**, not merely flagged, so a
   /// revoked row can never seal or open another frame.
+  @override
   void revoke(String id) {
     _db.execute(
       "UPDATE paired_devices SET revoked = 1, device_key = '' WHERE id = ?;",
@@ -113,6 +122,7 @@ class PairedDeviceDao {
 
   /// What `notifications.register` brought. [now] stamps the presence, not the
   /// token: presence is only worth anything with its age beside it (§19).
+  @override
   void updatePush(
     String id, {
     required String token,
@@ -136,6 +146,7 @@ class PairedDeviceDao {
     );
   }
 
+  @override
   void delete(String id) {
     _db.execute('DELETE FROM paired_devices WHERE id = ?;', [id]);
   }

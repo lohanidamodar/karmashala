@@ -22,7 +22,6 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_ui/code.dart';
 
-import '../../features/scale/scale_harness.dart';
 import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
@@ -30,6 +29,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/test_machine.dart';
 
 /// **A file opens in a tab of this app, and closing one cannot lose an edit.**
 ///
@@ -118,18 +118,18 @@ class _FakeStore extends DocumentStore {
 }
 
 void main() {
-  late CountingDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late _FakeStore store;
 
   setUp(() async {
-    db = CountingDatabase();
+    db = TestMachine();
     server = FakeDataServer();
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
@@ -140,13 +140,12 @@ void main() {
       _huge: List.generate(60000, (i) => 'var x$i = $i;').join('\n'),
     });
   });
-  tearDown(() => db.close());
 
   ProviderContainer shellContainer() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db, layoutStore: layoutStoreOf(db)),
         documentStoreProvider.overrideWithValue(store),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -438,7 +437,10 @@ void main() {
   testWidgets('it comes back after a restart, and re-reads the file', (
     tester,
   ) async {
-    final first = fakeTerminalContainer(database: db);
+    final first = fakeTerminalContainer(
+      machine: db,
+      layoutStore: layoutStoreOf(db),
+    );
     final terminals = first.read(terminalSessionsControllerProvider.notifier);
     terminals.openTab(TerminalProfile.powerShell);
     terminals.openEditorTab(_path);
@@ -461,7 +463,10 @@ void main() {
       'same file again reuses it', (tester) async {
     const legacy = r'\\wsl.localhost\Ubuntu\home\me\app\main.dart';
     store.disk[legacy] = 'from wsl\n';
-    final first = fakeTerminalContainer(database: db);
+    final first = fakeTerminalContainer(
+      machine: db,
+      layoutStore: layoutStoreOf(db),
+    );
     final terminals = first.read(terminalSessionsControllerProvider.notifier);
     terminals.openTab(TerminalProfile.powerShell);
     terminals.openEditorTab(legacy);

@@ -1,47 +1,22 @@
-import 'package:riverpod/riverpod.dart';
-
-import '../../../core/database/database_providers.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
-import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
-import 'host_automations.dart';
+import 'package:riverpod/riverpod.dart';
 
-final automationDaoProvider = Provider<AutomationDao>(
-  (ref) => AutomationDao(ref.watch(databaseProvider)),
-);
+import '../../../core/util/clock_provider.dart';
+import '../../../core/util/id_generator_provider.dart';
+import '../data/automations_data.dart';
 
-final projectCheckDaoProvider = Provider<ProjectCheckDao>(
-  (ref) => ProjectCheckDao(ref.watch(databaseProvider)),
-);
-
-/// Bumped by every write to an automation, a run or a checkout's checks — a
-/// fire happens on a timer, so the page notices without polling (§19).
-class AutomationsRevision extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  /// This app wrote automation rows: surfaces re-read, and a session host
-  /// that runs automations is told to.
-  void bump() {
-    final host = ref.read(hostAutomationsLinkProvider);
-    state = state + 1;
-    host.notifyChanged();
-  }
-
-  /// The host wrote them: surfaces re-read, and nothing goes back.
-  void bumpFromHost() => state = state + 1;
-}
-
-final automationsRevisionProvider = NotifierProvider<AutomationsRevision, int>(
-  AutomationsRevision.new,
-);
+export '../data/automations_data.dart'
+    show
+        automationsDataProvider,
+        automationsRevisionProvider,
+        projectChecksDataProvider,
+        resumesDataProvider;
 
 final automationsProvider = Provider<List<Automation>>((ref) {
   ref.watch(automationsRevisionProvider);
-  return ref.watch(automationDaoProvider).getAll();
+  return ref.watch(automationsDataProvider).getAll();
 });
 
 final automationRunsProvider = Provider.family<List<AutomationRun>, String>((
@@ -49,14 +24,14 @@ final automationRunsProvider = Provider.family<List<AutomationRun>, String>((
   automationId,
 ) {
   ref.watch(automationsRevisionProvider);
-  return ref.watch(automationDaoProvider).runsFor(automationId);
+  return ref.watch(automationsDataProvider).runsFor(automationId);
 });
 
 /// What one occurrence's project checks said, in the order they ran.
 final automationRunChecksProvider =
     Provider.family<List<AutomationCheckVerdict>, String>((ref, runId) {
       ref.watch(automationsRevisionProvider);
-      return ref.watch(automationDaoProvider).checksFor(runId);
+      return ref.watch(automationsDataProvider).checksFor(runId);
     });
 
 final projectChecksProvider = Provider.family<List<ProjectCheck>, String>((
@@ -64,7 +39,7 @@ final projectChecksProvider = Provider.family<List<ProjectCheck>, String>((
   repositoryId,
 ) {
   ref.watch(automationsRevisionProvider);
-  return ref.watch(projectCheckDaoProvider).forRepository(repositoryId);
+  return ref.watch(projectChecksDataProvider).forRepository(repositoryId);
 });
 
 final projectVerificationEnabledProvider = Provider.family<bool, String>((
@@ -72,10 +47,12 @@ final projectVerificationEnabledProvider = Provider.family<bool, String>((
   repositoryId,
 ) {
   ref.watch(automationsRevisionProvider);
-  return ref.watch(projectCheckDaoProvider).isVerificationEnabled(repositoryId);
+  return ref
+      .watch(projectChecksDataProvider)
+      .isVerificationEnabled(repositoryId);
 });
 
-/// Writes an automation or a checkout's verification, and tells the surfaces.
+/// Writes an automation or a checkout's verification through the server.
 /// Arming goes through here and nowhere else — no MCP tool reaches it.
 class AutomationController {
   AutomationController(this._ref);
@@ -85,52 +62,33 @@ class AutomationController {
   String newId() => _ref.read(idGeneratorProvider).newId();
   DateTime now() => _ref.read(clockProvider).nowUtc();
 
-  void save(Automation automation) {
-    final dao = _ref.read(automationDaoProvider);
-    if (dao.getById(automation.id) == null) {
-      dao.insert(automation);
-    } else {
-      dao.update(automation);
-    }
-    _ref.read(automationsRevisionProvider.notifier).bump();
-  }
+  void save(Automation automation) =>
+      _ref.read(automationsDataProvider).save(automation);
 
-  void setEnabled(String id, {required bool enabled}) {
-    _ref.read(automationDaoProvider).setEnabled(id, enabled: enabled);
-    _ref.read(automationsRevisionProvider.notifier).bump();
-  }
+  void setEnabled(String id, {required bool enabled}) =>
+      _ref.read(automationsDataProvider).setEnabled(id, enabled: enabled);
 
-  void delete(String id) {
-    _ref.read(automationDaoProvider).delete(id);
-    _ref.read(automationsRevisionProvider.notifier).bump();
-  }
+  void delete(String id) => _ref.read(automationsDataProvider).delete(id);
 
-  void setVerificationEnabled(String repositoryId, {required bool enabled}) {
-    _ref
-        .read(projectCheckDaoProvider)
-        .setVerificationEnabled(repositoryId, enabled: enabled, now: now());
-    _ref.read(automationsRevisionProvider.notifier).bump();
-  }
+  void setVerificationEnabled(String repositoryId, {required bool enabled}) =>
+      _ref
+          .read(projectChecksDataProvider)
+          .setVerification(repositoryId, enabled: enabled);
 
-  void addCheck(String repositoryId, String name, List<String> command) {
-    _ref
-        .read(projectCheckDaoProvider)
-        .insert(
-          ProjectCheck(
-            id: newId(),
-            repositoryId: repositoryId,
-            name: name.trim(),
-            command: command,
-            createdAt: now(),
-          ),
-        );
-    _ref.read(automationsRevisionProvider.notifier).bump();
-  }
+  void addCheck(String repositoryId, String name, List<String> command) => _ref
+      .read(projectChecksDataProvider)
+      .add(
+        ProjectCheck(
+          id: newId(),
+          repositoryId: repositoryId,
+          name: name.trim(),
+          command: command,
+          createdAt: now(),
+        ),
+      );
 
-  void removeCheck(String id) {
-    _ref.read(projectCheckDaoProvider).delete(id);
-    _ref.read(automationsRevisionProvider.notifier).bump();
-  }
+  void removeCheck(String id) =>
+      _ref.read(projectChecksDataProvider).remove(id);
 }
 
 final automationControllerProvider = Provider<AutomationController>(

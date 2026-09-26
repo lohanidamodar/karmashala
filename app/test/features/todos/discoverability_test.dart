@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/notes/application/note_drafts.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
@@ -15,6 +14,8 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/conversation_index_database.dart';
+import '../../support/test_machine.dart';
 
 /// **Can somebody who has never read the code find where to write one?**
 ///
@@ -45,14 +46,16 @@ void main() {
   }
 
   Future<ProviderContainer> pumpApp(WidgetTester tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     final data =
         await (FakeDataServer()
               ..environmentRows.upsert(localHostEnvironment(testTime)))
             .override();
     final container = ProviderContainer(
-      overrides: [...fakeTerminalOverrides(data: data, database: db)],
+      overrides: [
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(data: data, machine: db),
+      ],
     );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);

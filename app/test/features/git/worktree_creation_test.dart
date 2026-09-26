@@ -4,12 +4,10 @@ import 'package:karmashala/src/features/environments/data/environments_data.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'worktree_processes.dart';
 
 const _repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
@@ -18,7 +16,6 @@ const _worktree = r'C:\src\.karmashala-worktrees\app-s1';
 /// Worktree creation in named stages: what each runs, what it shows while it
 /// runs, and what a failure or a cancel leaves behind.
 void main() {
-  late AppDatabase db;
   late FakeCommandRunner runner;
   late WorktreeService service;
   late WorktreeCreationTracker tracker;
@@ -41,7 +38,6 @@ void main() {
   ];
 
   setUp(() async {
-    db = AppDatabase.memory();
     final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     final envDao = EnvironmentsData(await server.connect());
     streams = {};
@@ -59,7 +55,6 @@ void main() {
     );
     tracker = WorktreeCreationTracker(repo: _repo);
   });
-  tearDown(() => db.close());
 
   Future<GitWorktree> create({String? baseRef}) => service.createForSession(
     repo: _repo,
@@ -349,34 +344,5 @@ void main() {
       'fatal: unable to access remote',
     ]);
     expect(stage(WorktreeStage.checkout).state, WorktreeStageState.done);
-  });
-
-  group('the agent-timing setting', () {
-    test('defaults to starting at once, and a wait survives a save', () {
-      final dao = WorktreeSetupDao(db);
-      final server = FakeDataServer()..mirrorInto(db);
-      server.environmentRows.upsert(windowsEnv());
-      server.projectRows.insert(project());
-      server.repositoryRows.insert(repository());
-      final now = DateTime.utc(2026, 9, 21);
-      dao.save('r1', const WorktreeSetup(command: ['make']), now);
-      expect(dao.get('r1').startAgentBeforeSetup, isTrue);
-
-      dao.save(
-        'r1',
-        const WorktreeSetup(command: ['make'], startAgentBeforeSetup: false),
-        now,
-      );
-      expect(dao.get('r1').startAgentBeforeSetup, isFalse);
-      expect(dao.getAll()['r1']!.startAgentBeforeSetup, isFalse);
-
-      dao.clear('r1');
-      dao.save('r1', const WorktreeSetup(command: ['make']), now);
-      expect(
-        dao.get('r1').startAgentBeforeSetup,
-        isTrue,
-        reason: 'clearing the setup clears its timing with it',
-      );
-    });
   });
 }

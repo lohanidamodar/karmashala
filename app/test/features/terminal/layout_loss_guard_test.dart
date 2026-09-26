@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -16,7 +15,7 @@ import 'fake_instance.dart';
 void main() {
   group('an empty save nobody asked for', () {
     test('is refused, and the stored layout survives', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       // A stored layout the user has, in a pane the app can no longer
@@ -44,7 +43,7 @@ void main() {
       ], activeTabId: 'tab-1');
       expect(dao.storedTabCount(), 1);
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -71,7 +70,7 @@ void main() {
     });
 
     test('stops being refused once the user has closed something', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       final dao = TerminalLayoutDao(db);
       dao.saveLayout([
@@ -92,7 +91,7 @@ void main() {
         ),
       ], activeTabId: 'tab-1');
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -113,11 +112,11 @@ void main() {
 
   group('an empty save the user caused', () {
     test('still clears the stored layout', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       final dao = TerminalLayoutDao(db);
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -134,11 +133,11 @@ void main() {
     });
 
     test('leaves the outgoing layout in the backup tables', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       final dao = TerminalLayoutDao(db);
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -167,11 +166,11 @@ void main() {
   });
 
   group('the backup', () {
-    late AppDatabase db;
+    late TerminalLayoutStore db;
     late TerminalLayoutDao dao;
 
     setUp(() {
-      db = AppDatabase.memory();
+      db = TerminalLayoutStore.memory();
       dao = TerminalLayoutDao(db);
     });
     tearDown(() => db.close());
@@ -193,7 +192,6 @@ void main() {
     );
 
     test('the schema carries the backup tables', () {
-      expect(db.schemaVersion, greaterThanOrEqualTo(11));
       final tables = db.query(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN "
         "('terminal_tabs_backup', 'terminal_panes_backup');",

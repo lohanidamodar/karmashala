@@ -11,12 +11,10 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -98,8 +96,7 @@ class _LanCut {
 }
 
 void main() {
-  late AppDatabase db;
-  late PairedDeviceDao dao;
+  late MemoryPairedDeviceStore dao;
   late FakeRemoteBindings fake;
   late RelayServer hosted;
   late RelayServer local;
@@ -114,8 +111,7 @@ void main() {
   final relayDials = <Uri>[];
 
   setUp(() async {
-    db = AppDatabase.memory();
-    dao = PairedDeviceDao(db);
+    dao = MemoryPairedDeviceStore();
     fake = FakeRemoteBindings()..addSession('s1');
     hosted = await RelayServer.bind(address: '127.0.0.1', port: 0);
     local = await RelayServer.bind(address: '127.0.0.1', port: 0);
@@ -138,7 +134,6 @@ void main() {
     service = null;
     await hosted.close();
     if (!localClosed) await local.close();
-    db.close();
   });
 
   Future<RemoteHostService> startService() async {

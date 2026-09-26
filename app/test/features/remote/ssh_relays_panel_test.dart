@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
@@ -13,7 +12,6 @@ import 'package:karmashala/src/features/ssh/application/host_install_controller.
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
@@ -82,14 +80,11 @@ SshRelayReading _reading(
 );
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
   });
-  tearDown(() => db.close());
 
   void addHost() => server.sshHostRows.upsert(
     SshHost(
@@ -125,7 +120,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),
@@ -517,7 +511,6 @@ void main() {
     final never = Completer<SshRelayReading>();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),

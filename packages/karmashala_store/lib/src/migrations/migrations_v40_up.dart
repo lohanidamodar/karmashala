@@ -531,3 +531,13 @@ void _migrateToV58(Database db) {
     'ON session_relays (from_session_id, to_session_id, created_at);',
   );
 }
+
+/// The terminal layout is each client's own (`TerminalLayoutStore`, in the
+/// app-support folder): the server keeps none of it. Dropped, not moved.
+void _migrateToV59(Database db) {
+  db.execute('DROP TABLE IF EXISTS terminal_panes;');
+  db.execute('DROP TABLE IF EXISTS terminal_tabs;');
+  db.execute('DROP TABLE IF EXISTS terminal_panes_backup;');
+  db.execute('DROP TABLE IF EXISTS terminal_tabs_backup;');
+  db.execute("DELETE FROM app_metadata WHERE key LIKE 'terminal.%';");
+}

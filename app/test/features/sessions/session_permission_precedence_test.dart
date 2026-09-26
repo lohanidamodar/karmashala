@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -15,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
@@ -80,22 +79,20 @@ const _trust = PermissionSelection({'mode': 'trust'});
 /// and **after a restart**, and a frozen fake can answer neither.
 /// [server] is where settings and the workspace live; a restart passes the
 /// one the first container used.
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
-harness({AppDatabase? reopen, FakeDataServer? server}) async {
-  final db = reopen ?? AppDatabase.memory();
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
+harness({TestMachine? reopen, FakeDataServer? server}) async {
+  final db = reopen ?? TestMachine();
   server ??= FakeDataServer();
   if (reopen == null) {
-    server.mirrorInto(db);
-    mirroredServer(db).environmentRows.upsert(windowsEnv());
+    server.runsOn(db);
+    db.server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    mirroredServer(
-      db,
-    ).installationRows.insert(agentInstallation(agentId: 'roverCli'));
+    db.server.installationRows.insert(agentInstallation(agentId: 'roverCli'));
   }
   final container = ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       await server.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -173,7 +170,6 @@ void main() {
 
   test('a session\'s own mode beats the global default at launch', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaults(forNew: _trust);
 
@@ -199,7 +195,6 @@ void main() {
 
   test('a session\'s own mode beats the global default at resume', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaults(forExisting: _trust);
     seedStopped(h.server, mode: _careful);
@@ -227,7 +222,6 @@ void main() {
     'changing the global default does not move a session that chose',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedStopped(h.server, mode: _edits);
 
@@ -243,7 +237,6 @@ void main() {
     'changing the global default moves a session that never chose',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedStopped(h.server);
 
@@ -264,7 +257,6 @@ void main() {
 
   test('a launch stamps nothing on a session nobody chose for', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaults(forNew: _edits);
 
@@ -296,7 +288,6 @@ void main() {
     'a resumed session that never chose follows the current default',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedStopped(h.server);
       h.container.setDefaults(forExisting: _edits);
@@ -317,7 +308,6 @@ void main() {
 
   test('the choice survives a restart', () async {
     final first = await harness();
-    addTearDown(first.db.close);
     first.container.setDefaults(forExisting: _trust);
     seedStopped(first.server);
     first.container.launcher.setPermissionMode('src', _careful);
@@ -344,7 +334,6 @@ void main() {
 
   test('a session can be handed back to the default', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     seedStopped(h.server, mode: _careful);
     h.container.setDefaults(forExisting: _edits);

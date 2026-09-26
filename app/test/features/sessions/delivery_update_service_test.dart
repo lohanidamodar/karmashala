@@ -1,6 +1,5 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -10,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -28,7 +27,7 @@ import '../terminal/fake_instance.dart';
 /// the ref it names and the fact that it does not open an editor — and the rest
 /// assert that a working tree came back exactly as it went in.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late List<List<String>> gitCalls;
@@ -51,14 +50,14 @@ void main() {
     abortSucceeds = true;
     mergeHead = '';
     gitCalls = [];
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -71,7 +70,6 @@ void main() {
       ),
     );
   });
-  tearDown(() => db.close());
 
   CommandResult respond(CommandRequest request) {
     final args = request.arguments;
@@ -146,7 +144,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
@@ -262,7 +260,7 @@ void main() {
   });
 
   test('a session that is gone is refused, not crashed into', () async {
-    mirroredServer(db).sessionRows.markArchived('s1', testTime);
+    db.server.sessionRows.markArchived('s1', testTime);
 
     expect((await update()).refusal, UpdateRefusal.sessionGone);
     expect(mergeCall(), isNull);

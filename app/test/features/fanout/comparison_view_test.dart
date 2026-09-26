@@ -1,8 +1,5 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
-import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_chrome.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
@@ -13,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/test_machine.dart';
 import 'comparison_fixtures.dart';
 
 /// The view has one job the service cannot do for it: read a comparison whose
@@ -25,13 +23,10 @@ void main() {
   late FakeDataServer server;
   setUp(() => server = FakeDataServer());
 
-  Future<void> pump(WidgetTester tester, AppDatabase db, Widget child) async =>
+  Future<void> pump(WidgetTester tester, TestMachine db, Widget child) async =>
       tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            await server.override(),
-          ],
+          overrides: [await server.override()],
           child: MaterialApp(home: Scaffold(body: child)),
         ),
       );
@@ -40,7 +35,6 @@ void main() {
     tester,
   ) async {
     final db = seedDatabase(server: server);
-    addTearDown(db.close);
 
     await pump(
       tester,
@@ -95,10 +89,10 @@ void main() {
   /// Rewrites `cand-win`'s verdict so only the producer differs, and renders.
   Future<void> pumpWithProducer(
     WidgetTester tester,
-    AppDatabase db,
+    TestMachine db,
     String? producerSessionId,
   ) async {
-    ComparisonDao(db).updateEvidence(
+    db.server.comparisonRows.updateEvidence(
       'cand-win',
       CandidateEvidence(
         verdict: EvidenceVerdict.passed,
@@ -117,7 +111,6 @@ void main() {
     tester,
   ) async {
     final db = seedDatabase(server: server);
-    addTearDown(db.close);
     // s-win is cand-win's own session.
     await pumpWithProducer(tester, db, 's-win');
 
@@ -130,7 +123,6 @@ void main() {
     tester,
   ) async {
     final db = seedDatabase(server: server);
-    addTearDown(db.close);
     await pumpWithProducer(tester, db, 's-lost');
 
     expect(find.text('independent'), findsNWidgets(2));
@@ -141,7 +133,6 @@ void main() {
     tester,
   ) async {
     final db = seedDatabase(server: server);
-    addTearDown(db.close);
 
     await pump(
       tester,
@@ -176,7 +167,6 @@ void main() {
 
     Future<void> pumpAt(WidgetTester tester, Size size) async {
       final db = seedDatabase(server: server);
-      addTearDown(db.close);
       tester.view
         ..physicalSize = size
         ..devicePixelRatio = 1;
@@ -210,15 +200,13 @@ void main() {
   testWidgets('an empty list and an empty comparison are pane placeholders', (
     tester,
   ) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     await pump(tester, db, ComparisonList(onOpen: (_) {}, onNew: () {}));
     expect(find.byType(PanePlaceholder), findsOneWidget);
     expect(find.textContaining('No comparisons yet'), findsOneWidget);
 
     final seeded = seedDatabase(server: server);
-    addTearDown(seeded.close);
-    ComparisonDao(seeded).insert(
+    seeded.server.comparisonRows.insert(
       Comparison(
         id: 'cmp-empty',
         repositoryId: 'r1',
@@ -239,7 +227,6 @@ void main() {
 
   testWidgets('the list shows every comparison and opens one', (tester) async {
     final db = seedDatabase(merged: false, server: server);
-    addTearDown(db.close);
     String? opened;
 
     await pump(
@@ -259,7 +246,6 @@ void main() {
 
   testWidgets('archiving takes a comparison out of the list', (tester) async {
     final db = seedDatabase(server: server);
-    addTearDown(db.close);
     late WidgetRef captured;
 
     await pump(

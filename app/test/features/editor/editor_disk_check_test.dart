@@ -10,8 +10,8 @@ import 'package:karmashala/src/features/notifications/application/notification_p
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
 
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _path = r'C:\repo\lib\main.dart';
 
@@ -381,12 +381,11 @@ void main() {
   testWidgets('autosave never writes over a change or a deletion', (
     tester,
   ) async {
-    final db = CountingDatabase();
-    addTearDown(db.close);
+    final db = TestMachine();
     final disk = _Disk({_path: 'one\n'});
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         documentStoreProvider.overrideWithValue(disk),
       ],
     );

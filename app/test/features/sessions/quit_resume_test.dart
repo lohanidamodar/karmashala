@@ -2,18 +2,16 @@ import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/sessions/application/quit_resume.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -23,7 +21,7 @@ import '../../support/fixtures.dart';
 /// a "yes" actually records, and — the part that matters most — that every one
 /// it will not bring back says why.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late ProviderContainer container;
@@ -37,7 +35,6 @@ void main() {
 
   ProviderContainer build() => ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(db),
       dataClientProvider.overrideWithValue(data),
       clockProvider.overrideWithValue(MovableClock(now)),
       sessionIsHostedLiveProvider.overrideWithValue(live.contains),
@@ -56,7 +53,7 @@ void main() {
   );
 
   void seed(String id, String title, {SessionStatus? status}) =>
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(
           id: id,
           title: title,
@@ -68,8 +65,8 @@ void main() {
     now = testTime;
     live.clear();
     working.clear();
-    db = AppDatabase.memory();
-    server = FakeDataServer(clock: () => now)..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer(clock: () => now)..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -79,7 +76,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   QuitResumeService service() => container.read(quitResumeServiceProvider);
@@ -175,7 +171,7 @@ void main() {
 
     test('an archived one is left archived', () {
       seed('s1', 'Archived');
-      mirroredServer(db).sessionRows.markArchived('s1', testTime);
+      db.server.sessionRows.markArchived('s1', testTime);
       service().remember(['s1']);
 
       expect(
@@ -196,9 +192,7 @@ void main() {
     });
 
     test('one with no conversation recorded cannot be resumed', () {
-      mirroredServer(
-        db,
-      ).sessionRows.insert(session(id: 's1', title: 'Never named one'));
+      db.server.sessionRows.insert(session(id: 's1', title: 'Never named one'));
       service().remember(['s1']);
 
       expect(

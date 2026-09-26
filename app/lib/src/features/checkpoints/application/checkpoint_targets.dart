@@ -7,6 +7,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../explorer/application/where_you_are.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_working_directory.dart';
+import '../data/checkpoints_data.dart';
 import 'checkpoint_providers.dart';
 
 /// How many repositories a session checkpointed before are revisited per turn,
@@ -45,10 +46,9 @@ Future<List<EnvironmentPath>> checkpointTargetsFor(
   // A removed worktree stays in the history and is not revisited: its rows
   // are a record, and a capture there can only fail, every turn.
   final present = ref.read(sessionDirectoryPresentProvider);
-  final known = ref
-      .read(checkpointDaoProvider)
-      .repositoriesFor(sessionId)
-      .where(present);
+  final known =
+      (await ref.read(checkpointsDataProvider).repositoriesFor(sessionId))
+          .where(present);
   for (final repo in known.take(kCheckpointKnownRepositoryLimit)) {
     add(repo);
   }

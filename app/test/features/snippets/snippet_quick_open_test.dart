@@ -5,10 +5,8 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open_item.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
-import 'package:karmashala/src/features/snippets/data/command_snippet_dao.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -19,6 +17,8 @@ import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
+import '../../support/conversation_index_database.dart';
 
 /// Snippets as a **group of quick open**, rather than a second palette.
 ///
@@ -28,19 +28,19 @@ import 'package:agent_cli/process.dart';
 /// The second is the whole feature — see [resolveSnippetTarget] — and it is only
 /// observable by reading what the pane would have handed its PTY.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
+  late TestMachine db;
 
   setUp(() {
-    db = AppDatabase.memory();
+    // Quick Open catches up the conversation index, still in the store (1f).
+    db = TestMachine();
     server = FakeDataServer()
       ..projectRows.insert(project(name: 'Karmashala'))
       ..repositoryRows.insert(repository(name: 'app'));
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
   });
-  tearDown(() => db.close());
 
   /// Opens a pane on [profile], saves [snippets], then opens the palette.
   ///
@@ -57,7 +57,8 @@ void main() {
   }) async {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
@@ -301,10 +302,10 @@ void main() {
   testWidgets('the palette survives the window matrix with snippets in it', (
     tester,
   ) async {
-    // Seeded through the DAO, once: [expectSurvivesWindowMatrix] calls `build`
+    // Seeded at the server, once: [expectSurvivesWindowMatrix] calls `build`
     // afresh per cell, and a controller writing under a fixed clock would issue
     // the same id three times.
-    CommandSnippetDao(db).insert(
+    server.snippetRows.insert(
       CommandSnippet(
         // Long on purpose. The row is a title over a subtitle in a fixed-height
         // box, so the cell that finds an overflow is 720x560 at 1.3x text with
@@ -324,7 +325,8 @@ void main() {
       build: () {
         final container = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: db),
+            conversationIndexDatabase(),
+            ...fakeTerminalOverrides(machine: db),
             dataClientProvider.overrideWithValue(client),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],

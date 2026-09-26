@@ -68,7 +68,7 @@ final checkoutFactsProvider = Provider<CheckoutFacts>(AppCheckoutFacts.new);
 final unattendedPreflightProvider = Provider<UnattendedPreflight>(
   (ref) => UnattendedPreflight(
     facts: ref.watch(checkoutFactsProvider),
-    checks: ref.watch(projectCheckDaoProvider),
+    checks: ref.watch(projectChecksDataProvider),
   ),
 );
 
@@ -79,7 +79,7 @@ final automationRefusalProvider = Provider.family<UnattendedRefusal?, String>((
   automationId,
 ) {
   ref.watch(automationsRevisionProvider);
-  final automation = ref.read(automationDaoProvider).getById(automationId);
+  final automation = ref.read(automationsDataProvider).getById(automationId);
   // A message rule starts no agent; its gate is the target session's.
   if (automation == null || !automation.startsAgent) return null;
   return ref.read(unattendedPreflightProvider).refusalFor(automation);

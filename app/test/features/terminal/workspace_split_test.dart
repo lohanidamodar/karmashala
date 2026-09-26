@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -549,11 +549,11 @@ void main() {
 
   group('a split survives a restart', () {
     test('the groups come back holding the tabs they held', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       final first = ProviderContainer(
-        overrides: fakeTerminalOverrides(database: db),
+        overrides: fakeTerminalOverrides(layoutStore: db),
       );
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
@@ -566,7 +566,10 @@ void main() {
       first.dispose();
 
       final next = ProviderContainer(
-        overrides: fakeTerminalOverrides(database: db, restoreLivePanes: false),
+        overrides: fakeTerminalOverrides(
+          layoutStore: db,
+          restoreLivePanes: false,
+        ),
       );
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
@@ -580,11 +583,11 @@ void main() {
     });
 
     test('several empty groups come back where they were', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       final first = ProviderContainer(
-        overrides: fakeTerminalOverrides(database: db),
+        overrides: fakeTerminalOverrides(layoutStore: db),
       );
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
@@ -600,7 +603,10 @@ void main() {
       first.dispose();
 
       final next = ProviderContainer(
-        overrides: fakeTerminalOverrides(database: db, restoreLivePanes: false),
+        overrides: fakeTerminalOverrides(
+          layoutStore: db,
+          restoreLivePanes: false,
+        ),
       );
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
@@ -619,11 +625,11 @@ void main() {
     });
 
     test('a group whose tabs all went is not restored as empty room', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       final first = ProviderContainer(
-        overrides: fakeTerminalOverrides(database: db),
+        overrides: fakeTerminalOverrides(layoutStore: db),
       );
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
@@ -639,7 +645,10 @@ void main() {
       first.dispose();
 
       final next = ProviderContainer(
-        overrides: fakeTerminalOverrides(database: db, restoreLivePanes: false),
+        overrides: fakeTerminalOverrides(
+          layoutStore: db,
+          restoreLivePanes: false,
+        ),
       );
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);

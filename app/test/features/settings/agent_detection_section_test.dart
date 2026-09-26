@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -15,7 +13,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 const _registry = AgentRegistry([
   DataOnlyAgentAdapter(
@@ -35,7 +33,7 @@ const _registry = AgentRegistry([
 ]);
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   var installed = <String>{'claude'};
 
   FakeCommandRunner runner() => FakeCommandRunner(
@@ -55,18 +53,16 @@ void main() {
 
   setUp(() {
     installed = {'claude'};
-    db = AppDatabase.memory();
-    FakeDataServer().mirrorInto(db);
-    mirroredServer(db).environmentRows.upsert(windowsEnv());
+    db = TestMachine();
+    FakeDataServer().runsOn(db);
+    db.server.environmentRows.upsert(windowsEnv());
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
-          await mirroredServer(db).override(),
+          await db.server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
           agentRegistryProvider.overrideWithValue(_registry),

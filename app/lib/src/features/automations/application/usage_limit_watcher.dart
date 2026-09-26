@@ -146,7 +146,7 @@ class UsageLimitWatcher extends Notifier<int> {
     }
     _handled[session.id] = resets;
     // Already waiting on a resume: the limit is not news to its owner.
-    if (ref.read(scheduledResumeDaoProvider).liveFor(session.id) != null) {
+    if (ref.read(resumesDataProvider).liveFor(session.id) != null) {
       return;
     }
 
@@ -172,7 +172,7 @@ class UsageLimitWatcher extends Notifier<int> {
   /// the user picked is one moment, not an arrangement, and a cancelled or
   /// failed row is not something to repeat unasked.
   ScheduledResume? _standingArrangement(String sessionId) {
-    final last = ref.read(scheduledResumeDaoProvider).lastEndedFor(sessionId);
+    final last = ref.read(resumesDataProvider).lastEndedFor(sessionId);
     if (last == null || last.state != ScheduledResumeState.done) return null;
     return last.windowLabel == null ? null : last;
   }

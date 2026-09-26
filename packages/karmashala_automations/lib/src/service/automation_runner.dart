@@ -1,6 +1,6 @@
 import '../domain/automation.dart';
 import '../domain/automation_run.dart';
-import '../store/automation_dao.dart';
+import 'automation_records.dart';
 import 'automation_firing.dart';
 import 'automation_session_launcher.dart';
 import 'checkout_facts.dart';
@@ -11,7 +11,7 @@ import 'unattended_preflight.dart';
 /// A refusal is a recorded `failed` run — a silent skip would repeat forever.
 class AutomationRunner implements AutomationFiring {
   AutomationRunner({
-    required AutomationDao automations,
+    required AutomationRecords automations,
     required this._preflight,
     required this._facts,
     required this._checkpoints,
@@ -22,7 +22,7 @@ class AutomationRunner implements AutomationFiring {
   }) : _dao = automations,
        _onChanged = onChanged ?? _nothing;
 
-  final AutomationDao _dao;
+  final AutomationRecords _dao;
   final UnattendedPreflight _preflight;
   final CheckoutFacts _facts;
   final RunBaseCheckpoint _checkpoints;

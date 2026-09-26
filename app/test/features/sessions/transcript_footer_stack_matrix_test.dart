@@ -21,14 +21,13 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../app/minimum_window_matrix_test.dart' show noProcessOverrides;
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -41,16 +40,15 @@ void main() {
     bool busy = true,
     Future<void> Function(WidgetTester tester)? check,
   }) async {
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
-    addTearDown(db.close);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(
       agentInstallation(agentId: AgentIds.claudeCode),
     );
-    final dao = mirroredServer(db).sessionRows
+    final dao = db.server.sessionRows
       ..insert(
         Session(
           id: 's1',
@@ -70,7 +68,7 @@ void main() {
         ),
       );
     if (busy) {
-      mirroredServer(db).recapRows.write(
+      db.server.recapRows.write(
         SessionRecap(
           sessionId: 's1',
           text: List.filled(
@@ -100,7 +98,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),

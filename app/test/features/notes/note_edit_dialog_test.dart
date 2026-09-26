@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/notes/presentation/note_edit_dialog.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
@@ -16,14 +14,12 @@ void main() {
   testWidgets('a note being written is titled as new, in the house title', (
     tester,
   ) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final at = DateTime.utc(2026, 9, 16);
     final data = await (FakeDataServer()..environmentRows.upsert(windowsEnv()))
         .override();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db), data],
+        overrides: [data],
         child: MaterialApp(
           home: NoteEditDialog(
             note: Note(id: '', body: '', createdAt: at, updatedAt: at),
@@ -52,14 +48,9 @@ void main() {
           'a body field of 16 lines is taller than the dialog at 720x560, so '
           'its label scrolled out of sight while typing',
       build: () {
-        final db = AppDatabase.memory();
-        addTearDown(db.close);
         server.environmentRows.upsert(windowsEnv());
         final container = ProviderContainer(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            dataClientProvider.overrideWithValue(client),
-          ],
+          overrides: [dataClientProvider.overrideWithValue(client)],
         );
         addTearDown(container.dispose);
         final at = DateTime.utc(2026, 9, 16);

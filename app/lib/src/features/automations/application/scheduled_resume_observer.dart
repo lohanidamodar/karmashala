@@ -71,12 +71,12 @@ class ScheduledResumeObserver extends Notifier<int> {
       ref.read(scheduledResumeControllerProvider);
 
   List<ScheduledResume> _waiting() => [
-    for (final resume in ref.read(scheduledResumeDaoProvider).live())
+    for (final resume in ref.read(resumesDataProvider).live())
       if (resume.state != ScheduledResumeState.firing) resume,
   ];
 
   void _sweep() {
-    final dao = ref.read(scheduledResumeDaoProvider);
+    final dao = ref.read(resumesDataProvider);
     if (!_swept) {
       _swept = true;
       // Only a process that died mid-resume leaves one here at boot.
@@ -113,7 +113,7 @@ class ScheduledResumeObserver extends Notifier<int> {
   }
 
   void _letGo(String sessionId, String reason) {
-    final resume = ref.read(scheduledResumeDaoProvider).liveFor(sessionId);
+    final resume = ref.read(resumesDataProvider).liveFor(sessionId);
     if (resume == null || resume.state == ScheduledResumeState.firing) return;
     final ended = _controller.end(
       resume,

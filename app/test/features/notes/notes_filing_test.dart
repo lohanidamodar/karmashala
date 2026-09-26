@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -13,7 +11,6 @@ import 'package:karmashala_notes/karmashala_notes.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
 import '../../support/window_matrix.dart';
 
 /// Which project a note belongs to, and how it says so.
@@ -24,11 +21,8 @@ import '../../support/window_matrix.dart';
 /// editable) and filing (a choice, editable, and clearable back to nothing).
 void main() {
   Future<ProviderContainer> pump(WidgetTester tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     // The server files a note under its source repository's project.
-    final server = FakeDataServer(projectOfRepository: {'r1': 'p1'})
-      ..mirrorInto(db);
+    final server = FakeDataServer(projectOfRepository: {'r1': 'p1'});
     server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project())
@@ -37,11 +31,11 @@ void main() {
     server.installationRows.insert(agentInstallation());
     final data = await server.override();
 
-    final container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db), data],
-    );
+    final container = ProviderContainer(overrides: [data]);
     addTearDown(container.dispose);
-    container.read(sessionsDataProvider).insert(session(title: 'Toolbar rework'));
+    container
+        .read(sessionsDataProvider)
+        .insert(session(title: 'Toolbar rework'));
 
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -153,16 +147,11 @@ void main() {
           'the header now carries a project name beside the title, and the '
           'panel is 240px at its narrowest',
       build: () {
-        final db = AppDatabase.memory();
-        addTearDown(db.close);
         server.environmentRows.upsert(windowsEnv());
-        server.mirrorInto(db);
+        server;
         server.installationRows.insert(agentInstallation());
         final container = ProviderContainer(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            dataClientProvider.overrideWithValue(data),
-          ],
+          overrides: [dataClientProvider.overrideWithValue(data)],
         );
         addTearDown(container.dispose);
         container.read(sessionsDataProvider).insert(session(title: 'Toolbar'));

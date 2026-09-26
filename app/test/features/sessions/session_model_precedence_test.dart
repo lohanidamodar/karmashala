@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -15,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// `session_permission_precedence_test.dart`'s twin, one field over: the same
@@ -46,12 +45,12 @@ const _rover = AgentDescriptor(
 /// restart**, and a frozen fake can answer neither.
 /// [server] is where settings and the workspace live; a restart passes the
 /// one the first container used.
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
-harness({AppDatabase? reopen, FakeDataServer? server}) async {
-  final db = reopen ?? AppDatabase.memory();
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
+harness({TestMachine? reopen, FakeDataServer? server}) async {
+  final db = reopen ?? TestMachine();
   server ??= FakeDataServer();
   if (reopen == null) {
-    server.mirrorInto(db);
+    server.runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -59,7 +58,7 @@ harness({AppDatabase? reopen, FakeDataServer? server}) async {
   }
   final container = ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       await server.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -86,8 +85,8 @@ extension on ProviderContainer {
   ).instanceFor(paneId)!.agentLaunch!.arguments;
 }
 
-void seedStopped(AppDatabase db, {String? model}) {
-  mirroredServer(db).sessionRows.insert(
+void seedStopped(TestMachine db, {String? model}) {
+  db.server.sessionRows.insert(
     session(
       id: 'src',
       status: SessionStatus.completed,
@@ -122,7 +121,6 @@ Future<SessionLaunchResult> startNew(
 void main() {
   test('the shipped default names no model, and passes none', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final launched = await startNew(h.container);
@@ -145,7 +143,6 @@ void main() {
     'the Settings default reaches the chip and the command line, once',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       h.container.setDefaultModel('deep');
 
@@ -162,7 +159,7 @@ void main() {
       // And nothing was written on the row: following the default is the absence
       // of a choice, not a copy of one.
       expect(
-        mirroredServer(h.db).sessionRows.getById(launched.session.id)!.modelId,
+        h.db.server.sessionRows.getById(launched.session.id)!.modelId,
         isNull,
       );
     },
@@ -170,7 +167,6 @@ void main() {
 
   test('a session\'s own model beats the Settings default at launch', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaultModel('deep');
 
@@ -189,10 +185,9 @@ void main() {
     'changing the default moves the session that never chose, and only it',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedStopped(h.db);
-      mirroredServer(h.db).sessionRows.insert(
+      h.db.server.sessionRows.insert(
         session(
           id: 'own',
           status: SessionStatus.completed,
@@ -211,7 +206,6 @@ void main() {
 
   test('a resume runs on the default the setting names now', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     seedStopped(h.db);
     h.container.setDefaultModel('deep');
@@ -224,12 +218,11 @@ void main() {
       '--continue',
       'cli-1',
     ]);
-    expect(mirroredServer(h.db).sessionRows.getById('src')!.modelId, isNull);
+    expect(h.db.server.sessionRows.getById('src')!.modelId, isNull);
   });
 
   test('back to "let the agent choose", and the flag goes with it', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaultModel('deep');
 
@@ -248,7 +241,6 @@ void main() {
     // One server, two clients: settings live at the server.
     final server = FakeDataServer();
     final first = await harness(server: server);
-    addTearDown(first.db.close);
     first.container.setDefaultModel('deep');
     seedStopped(first.db);
     first.container.dispose();

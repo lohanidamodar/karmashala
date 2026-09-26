@@ -1,5 +1,5 @@
 import 'package:karmashala_automations/automations.dart';
-import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 
@@ -24,7 +24,7 @@ class DaemonAutomationFiring implements AutomationFiring {
   final AutomationFiring local;
   final DaemonCheckoutFacts facts;
   final AutomationAppRelay relay;
-  final AutomationDao automations;
+  final AutomationRecords automations;
   final DateTime Function() now;
   final String Function() newId;
 

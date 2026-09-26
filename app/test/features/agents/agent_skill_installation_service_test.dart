@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_skill_installation_service.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -17,7 +15,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
 import 'package:agent_cli/read.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// Every store the locator would have found, without touching a real home.
 class _StubLocator implements CliStoreLocator {
@@ -46,28 +44,28 @@ void main() {
     ),
   ];
 
-  late AppDatabase db;
+  late TestMachine db;
 
   late Override data;
   late Directory home;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    FakeDataServer().mirrorInto(db);
-    mirroredServer(db).environmentRows.upsert(
+    db = TestMachine();
+    FakeDataServer().runsOn(db);
+    db.server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     home = Directory.systemTemp.createTempSync('karmashala_skillsvc_');
-    data = await mirroredServer(db).override();
+    data = await db.server.override();
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(home);
   });
 
-  String localEnvironmentId() => mirroredServer(
-    db,
-  ).environmentRows.getAll().firstWhere((e) => isLocalHost(e.kind)).id;
+  String localEnvironmentId() => db.server.environmentRows
+      .getAll()
+      .firstWhere((e) => isLocalHost(e.kind))
+      .id;
 
   String claudeStore() => p.join(home.path, '.claude');
   File skillFile() => File(
@@ -80,7 +78,6 @@ void main() {
   }) {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         cliStoreLocatorProvider.overrideWithValue(locator),
         if (registry != null) agentRegistryProvider.overrideWithValue(registry),

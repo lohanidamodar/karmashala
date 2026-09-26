@@ -2,14 +2,12 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
 import 'package:karmashala/src/features/remote/application/remote_binding_support.dart';
 import 'package:karmashala/src/features/repositories/application/host_checkout_presence_probe.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -161,8 +159,6 @@ void main() {
   group('the companion asking whether a WSL folder is missing', () {
     test('stats nothing: it answers what is known, asks for the rest, and the '
         'next list has it', () async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
       final server = FakeDataServer();
       server.environmentRows
         ..upsert(windowsEnv())
@@ -170,7 +166,6 @@ void main() {
       final host = windowsHost({'/home/me/here'});
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(host),

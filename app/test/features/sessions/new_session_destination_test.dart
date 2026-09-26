@@ -2,7 +2,6 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 
@@ -23,7 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -48,7 +47,7 @@ import '../terminal/fake_instance.dart';
 ///   in front of you and the panels beside it must be describing the same
 ///   checkout.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
@@ -76,8 +75,8 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows
@@ -110,7 +109,6 @@ void main() {
       );
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   void deleteAllRepositories() {
     for (final checkout in server.repositoryRows.getAll()) {
@@ -126,7 +124,7 @@ void main() {
         // "not a repository" rather than "could not look".
         dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           gitFiles: plainFolder == null ? null : PlainFolders({plainFolder}),
         ),
         // Nothing here may shell out: the picker classifies worktrees from
@@ -251,13 +249,13 @@ void main() {
       await tester.tap(startButton());
       await tester.pumpAndSettle();
 
-      final started = mirroredServer(db).sessionRows.getByRepository('r2');
+      final started = db.server.sessionRows.getByRepository('r2');
       expect(
         started,
         hasLength(1),
         reason: 'the session was created in the checkout the picker named',
       );
-      expect(mirroredServer(db).sessionRows.getByRepository('r1'), isEmpty);
+      expect(db.server.sessionRows.getByRepository('r1'), isEmpty);
       expect(find.byType(NewSessionDialog), findsNothing);
 
       // Now — and only now — the app follows: a pane describing one checkout
@@ -274,7 +272,7 @@ void main() {
       await open(tester, container);
       await tester.tap(startButton());
       await tester.pumpAndSettle();
-      final untouched = mirroredServer(db).sessionRows.getByRepository('r1');
+      final untouched = db.server.sessionRows.getByRepository('r1');
       expect(untouched.single.title, 'New session');
       expect(untouched.single.titleByUser, isFalse);
 
@@ -285,7 +283,7 @@ void main() {
       );
       await tester.tap(startButton());
       await tester.pumpAndSettle();
-      final typed = mirroredServer(db).sessionRows
+      final typed = db.server.sessionRows
           .getByRepository('r1')
           .singleWhere((s) => s.title != 'New session');
       expect(typed.title, 'desktop 1c');
@@ -313,10 +311,7 @@ void main() {
       await tester.tap(startButton());
       await tester.pumpAndSettle();
 
-      expect(
-        mirroredServer(db).sessionRows.getByRepository('wt1'),
-        hasLength(1),
-      );
+      expect(db.server.sessionRows.getByRepository('wt1'), hasLength(1));
     });
   });
 
@@ -349,7 +344,7 @@ void main() {
     );
     expect(terminals.instanceFor(agentPane)?.agentLaunch, isNotNull);
     expect(
-      mirroredServer(db).sessionRows.getByRepository('r1').single.paneId,
+      db.server.sessionRows.getByRepository('r1').single.paneId,
       agentPane,
     );
   });

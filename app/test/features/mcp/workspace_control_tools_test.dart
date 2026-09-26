@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -19,7 +17,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// The workspace tools, over the endpoint, with git answering the way a test
 /// tells it to.
@@ -29,7 +27,7 @@ import '../../support/workspace_mirror.dart';
 /// reads `unpushed: 0` from a failed git call concludes the branch is pushed.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
   late FakeCommandRunner git;
@@ -47,11 +45,11 @@ branch refs/heads/feature/login
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_workspace_tools_');
-    db = AppDatabase.memory();
-    final fake = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final fake = FakeDataServer()..runsOn(db);
     fake.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     fake.repositoryRows.insert(
@@ -62,7 +60,7 @@ branch refs/heads/feature/login
       ),
     );
     fake.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Work'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Work'));
 
     git = FakeCommandRunner(
       responder: (request) {
@@ -87,7 +85,6 @@ branch refs/heads/feature/login
 
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -108,7 +105,6 @@ branch refs/heads/feature/login
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 

@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -26,9 +24,8 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
@@ -63,12 +60,12 @@ void main() {
     /// it is the number the brief names.
     const rows = 30;
 
-    late AppDatabase db;
+    late TestMachine db;
     late FakeDataServer server;
 
     setUp(() {
-      db = AppDatabase.memory();
-      server = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(
         project(id: 'p1', name: 'Hub', path: r'C:\hub'),
@@ -78,7 +75,7 @@ void main() {
       );
       server.installationRows.insert(agentInstallation());
       for (var i = 0; i < rows; i++) {
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           Session(
             id: 'n$i',
             repositoryId: 'r1',
@@ -92,7 +89,6 @@ void main() {
         );
       }
     });
-    tearDown(() => db.close());
 
     Future<ProviderContainer> pump(WidgetTester tester) async {
       // Tall enough that every one of the thirty cards is really inflated: a
@@ -102,7 +98,7 @@ void main() {
       addTearDown(tester.view.reset);
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -230,9 +226,8 @@ void main() {
 
     for (final count in scale) {
       test('$count sessions', () async {
-        final db = _CountingDatabase();
-        addTearDown(db.close);
-        final server = FakeDataServer()..mirrorInto(db);
+        final db = CountingMachine();
+        final server = FakeDataServer()..runsOn(db);
         server.environmentRows.upsert(windowsEnv());
         server.projectRows.insert(project());
         server.repositoryRows.insert(repository());
@@ -281,7 +276,7 @@ void main() {
                 title: 'Session $i',
               ),
             );
-            mirroredServer(db).sessionRows.insert(
+            db.server.sessionRows.insert(
               Session(
                 id: 'n$i',
                 repositoryId: 'r1',
@@ -295,7 +290,7 @@ void main() {
             );
           } else {
             ids.add('s$i');
-            mirroredServer(db).importedRows.insertIfAbsent(
+            db.server.importedRows.insertIfAbsent(
               ImportedSession(
                 id: 's$i',
                 repositoryId: 'r1',
@@ -322,7 +317,6 @@ void main() {
         final detection = _CountingDetection(detected);
         final container = ProviderContainer(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             await server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             cliSessionMutatorProvider.overrideWithValue(mutator),
@@ -345,15 +339,15 @@ void main() {
           storeScans: mutator.storeScans,
           indexEntriesRead: mutator.indexEntriesRead,
           detectionPasses: detection.passes,
-          rowDeletes: db.rowDeletes,
-          statements: db.statements,
+          rowDeletes: db.statements.where((k) => k.endsWith('.delete')).length,
+          statements: db.count,
           publishes: publishes,
         );
 
         // The work itself still happened.
         expect(mutator.transcriptsDeleted, count);
-        expect(mirroredServer(db).sessionRows.getByRepository('r1'), isEmpty);
-        expect(mirroredServer(db).importedRows.getByRepository('r1'), isEmpty);
+        expect(db.server.sessionRows.getByRepository('r1'), isEmpty);
+        expect(db.server.importedRows.getByRepository('r1'), isEmpty);
       });
     }
 
@@ -399,7 +393,7 @@ void main() {
         expect(
           cost.rowDeletes,
           count,
-          reason: 'at $count: one DELETE per row deleted and not one more',
+          reason: 'at $count: one delete asked per row and not one more',
         );
       }
 
@@ -465,25 +459,4 @@ class _CountingDetection implements CliDetectionService {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-/// Counts the statements a delete issues. `package:sqlite3` is synchronous, so
-/// each one of these runs on the UI isolate inside the frame.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int rowDeletes = 0;
-  int statements = 0;
-
-  void reset() {
-    rowDeletes = 0;
-    statements = 0;
-  }
-
-  @override
-  void execute(String sql, [List<Object?> params = const []]) {
-    statements++;
-    if (sql.trimLeft().toUpperCase().startsWith('DELETE')) rowDeletes++;
-    super.execute(sql, params);
-  }
 }

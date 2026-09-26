@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -11,11 +10,11 @@ import 'package:karmashala/src/features/terminal/presentation/terminal_pane_view
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 ProviderContainer workbenchContainer() {
-  final database = AppDatabase.memory();
-  addTearDown(database.close);
-  final container = fakeTerminalContainer(database: database);
+  final database = TestMachine();
+  final container = fakeTerminalContainer(machine: database);
   addTearDown(container.dispose);
   return container;
 }

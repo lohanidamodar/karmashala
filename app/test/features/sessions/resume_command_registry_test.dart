@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -15,7 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
@@ -96,30 +95,28 @@ const _terminal = SystemTerminal(
 
 typedef Harness = ({
   ProviderContainer container,
-  AppDatabase db,
+  TestMachine db,
   _RecordingTerminals terminals,
 });
 
 Future<Harness> harness(AgentDescriptor agent) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
   server.installationRows.insert(
     agentInstallation(agentId: agent.id, path: r'C:\bin\agent.exe'),
   );
-  mirroredServer(
-    db,
-  ).sessionRows.insert(session(id: 'n1', title: 'Native work'));
-  mirroredServer(db).sessionRows.updateExternalSessionId('n1', 'ext-1');
-  mirroredServer(db).importedRows.insertIfAbsent(_imported(agent));
+  db.server.sessionRows.insert(session(id: 'n1', title: 'Native work'));
+  db.server.sessionRows.updateExternalSessionId('n1', 'ext-1');
+  db.server.importedRows.insertIfAbsent(_imported(agent));
 
   final terminals = _RecordingTerminals();
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
@@ -158,7 +155,6 @@ void main() {
   group('an agent that declares a resume convention gets it', () {
     test('the imported "copy command" carries the declared flag', () async {
       final h = await harness(_conversational);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(
@@ -173,7 +169,6 @@ void main() {
 
     test('the native "copy command" carries it too', () async {
       final h = await harness(_conversational);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(
@@ -192,11 +187,10 @@ void main() {
         // the bug that started this: one syntax was emitted for every
         // environment in the app.
         final h = await harness(_conversational);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
-        mirroredServer(h.db).environmentRows.upsert(wslEnv());
-        mirroredServer(h.db).sessionRows.insert(
+        h.db.server.environmentRows.upsert(wslEnv());
+        h.db.server.sessionRows.insert(
           session(
             id: 'n2',
             title: 'Worktree work',
@@ -206,7 +200,7 @@ void main() {
             ),
           ),
         );
-        mirroredServer(h.db).sessionRows.updateExternalSessionId('n2', 'ext-2');
+        h.db.server.sessionRows.updateExternalSessionId('n2', 'ext-2');
 
         final line = h.container
             .read(sessionActionsProvider)
@@ -219,7 +213,6 @@ void main() {
 
     test('and so does the external-terminal open', () async {
       final h = await harness(_conversational);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await h.container
@@ -236,7 +229,6 @@ void main() {
   group('an agent that declares none is refused in words', () {
     test('the imported "copy command" refuses', () async {
       final h = await harness(_silent);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(
@@ -249,7 +241,6 @@ void main() {
 
     test('the native "copy command" refuses', () async {
       final h = await harness(_silent);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(
@@ -264,7 +255,6 @@ void main() {
       'the imported external-terminal open refuses, launching nothing',
       () async {
         final h = await harness(_silent);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         expect(
@@ -281,7 +271,6 @@ void main() {
       'the native external-terminal open refuses, launching nothing',
       () async {
         final h = await harness(_silent);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         await expectLater(
@@ -299,7 +288,6 @@ void main() {
       // answer for it is "nothing to refuse": it names no conversation, so it
       // cannot be mistaken for continuing one.
       final h = await harness(_silent);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(
@@ -318,7 +306,6 @@ void main() {
       // spelled for is the environment's, so an environment nobody can name
       // cannot be guessed at. Same resolver, same words as the launch paths.
       final h = await harness(_conversational);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(

@@ -201,7 +201,7 @@ class McpToolDispatcher implements HostMcpTools {
           callerSessionId: callerSessionId,
         ).call(name, args);
         if (finishing != null) {
-          recordFinishedVerdict(_container, verification.get(finishing));
+          recordFinishedVerdict(_container, await verification.get(finishing));
         }
         return answer;
       default:

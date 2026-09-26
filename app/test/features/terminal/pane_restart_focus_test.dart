@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -31,10 +31,10 @@ import 'fake_instance.dart';
 /// "Sometimes" was any unrelated rebuild of the stack picking the swap up in
 /// passing. See [terminalPaneInstanceProvider] for the fix and the measurement.
 void main() {
-  ProviderContainer panelContainer({AppDatabase? database}) {
-    final db = database ?? AppDatabase.memory();
+  ProviderContainer panelContainer({TerminalLayoutStore? database}) {
+    final db = database ?? TerminalLayoutStore.memory();
     if (database == null) addTearDown(db.close);
-    final container = fakeTerminalContainer(database: db);
+    final container = fakeTerminalContainer(layoutStore: db);
     addTearDown(container.dispose);
     return container;
   }
@@ -171,10 +171,10 @@ void main() {
     // Restore-on-activate, by contrast, was never broken: activating a tab
     // moves `activeTabId`, and that rebuild picks the swapped instance up on
     // the way past. Pinned here so the difference is on the record.
-    final db = AppDatabase.memory();
+    final db = TerminalLayoutStore.memory();
     addTearDown(db.close);
 
-    final first = fakeTerminalContainer(database: db);
+    final first = fakeTerminalContainer(layoutStore: db);
     final firstController = first.read(
       terminalSessionsControllerProvider.notifier,
     );
@@ -193,7 +193,7 @@ void main() {
     first.dispose();
 
     final container = fakeTerminalContainer(
-      database: db,
+      layoutStore: db,
       restoreLivePanes: false,
     );
     addTearDown(container.dispose);

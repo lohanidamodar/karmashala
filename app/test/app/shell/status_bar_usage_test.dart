@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -23,7 +22,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **What the account quota costs the window's own row — which is now
 /// nothing.**
@@ -50,7 +49,7 @@ void main() {
   /// The database `barContainer` seeded, so a test that has to reach past the
   /// providers — writing a pane id onto a session row — writes into the one the
   /// container is reading.
-  late AppDatabase seeded;
+  late TestMachine seeded;
 
   setUp(() => service = FakeAgentUsageService());
 
@@ -58,7 +57,6 @@ void main() {
     final server = FakeDataServer();
     final db = seedUsageDatabase(server: server);
     seeded = db;
-    addTearDown(db.close);
     // A name long enough to compete for the row's width at 720px, which is
     // where the loss of the middle group is felt.
     server.repositoryRows.insert(
@@ -71,7 +69,7 @@ void main() {
         // A real floor: this file still has to prove a tick cannot reach the
         // row, and a zero floor would arm nothing to prove it with.
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           usageService: service,
           usagePollFloor: kUsageMinInterval,
         ),
@@ -105,7 +103,7 @@ void main() {
             title: 'Session',
           ),
         );
-    mirroredServer(seeded).sessionRows.updatePaneId('s1', opened.paneId);
+    seeded.server.sessionRows.updatePaneId('s1', opened.paneId);
     container.read(selectedSessionIdProvider.notifier).select(null);
   }
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
@@ -14,6 +13,8 @@ import '../../../support/fixtures.dart';
 import '../../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../../support/test_machine.dart';
+import '../../../support/conversation_index_database.dart';
 
 /// **Switching context from the palette.**
 ///
@@ -24,22 +25,21 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 /// move people make most and the way out must not be harder to reach than the
 /// way in.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     server = FakeDataServer();
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> open(
     WidgetTester tester, {
@@ -48,7 +48,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
       ],
     );
     addTearDown(container.dispose);

@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// A selection is a range of the *buffer*, not of the screen.
 ///
@@ -20,16 +20,15 @@ import 'fake_instance.dart';
 /// had scrolled off the top fell out of it. Select a build log while it is
 /// still printing and you got the last screen, not what you dragged over.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   setUp(() {
-    db = AppDatabase.memory();
-    container = fakeTerminalContainer(database: db);
+    db = TestMachine();
+    container = fakeTerminalContainer(machine: db);
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Future<TerminalInstance> pumpPane(WidgetTester tester) async {

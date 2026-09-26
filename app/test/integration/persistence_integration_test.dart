@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/environments/application/environment_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -9,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fixtures.dart';
 import '../support/fake_data_server.dart';
-import '../support/workspace_mirror.dart';
 
 /// End-to-end persistence through the providers: the domains read and written
 /// through the server (environments, installations, the workspace, sessions
@@ -17,25 +14,17 @@ import '../support/workspace_mirror.dart';
 /// AgentInstallation → Session → SessionEvent graph and read it back. The server's own cascades are tested at the server
 /// (server/test/data).
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late FakeDataServer server;
 
   setUp(() async {
-    db = AppDatabase.memory();
     // The installations' foreign keys reach the workspace rows the server
     // writes, so those are mirrored there.
-    server = FakeDataServer()..mirrorInto(db);
-    container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        await server.override(),
-      ],
-    );
+    server = FakeDataServer();
+    container = ProviderContainer(overrides: [await server.override()]);
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   test('providers read the same server', () async {

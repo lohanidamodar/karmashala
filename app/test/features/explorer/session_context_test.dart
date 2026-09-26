@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -11,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// Which checkout a session's work belongs to, and what follows it.
@@ -20,7 +19,7 @@ import '../terminal/fake_instance.dart';
 /// in the Explorer, so a user typing into an agent that runs three folders down
 /// a hub project was shown the hub's diff, branch and forge links.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   /// A hub project holding two checkouts: the hub itself, and a clone nested
@@ -29,8 +28,8 @@ void main() {
   const nested = r'C:\src\demo\projects\app\app';
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(path: hub));
     server.repositoryRows
@@ -39,13 +38,12 @@ void main() {
     server.installationRows.insert(agentInstallation());
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
       ],
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   SessionContext context() => container.read(sessionContextProvider);
 
@@ -53,7 +51,7 @@ void main() {
     // The row says "hub" — that is the repository it was created against — but
     // the agent is working in the clone underneath. The deeper checkout is the
     // one whose diff, branch and remote the user means.
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(
         repositoryId: 'hub',
         useWorktree: true,
@@ -70,7 +68,7 @@ void main() {
   test('a session no checkout contains keeps its own repository', () {
     // A different environment: paths are never compared across two, so nothing
     // contains this and the row's own repository is the honest answer.
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(
         repositoryId: 'nested',
         useWorktree: true,
@@ -85,7 +83,7 @@ void main() {
   });
 
   test('a session with no worktree resolves through its repository', () {
-    mirroredServer(db).sessionRows.insert(session(repositoryId: 'nested'));
+    db.server.sessionRows.insert(session(repositoryId: 'nested'));
 
     expect(context().follow('s1')?.id, 'nested');
   });
@@ -108,7 +106,7 @@ void main() {
         .layout
         .panes
         .single;
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(session(repositoryId: 'nested'))
       ..updatePaneId('s1', paneId);
 
@@ -135,7 +133,7 @@ void main() {
         .layout
         .panes
         .single;
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(session(repositoryId: 'nested'))
       ..updatePaneId('s1', paneId);
 

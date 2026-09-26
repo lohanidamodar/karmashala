@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/dialogs.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -20,7 +19,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
@@ -76,9 +75,9 @@ void main() {
 
   late FakeDataServer server;
 
-  AppDatabase seededDatabase() {
-    final db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+  TestMachine seededDatabase() {
+    final db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.environmentRows.upsert(wslEnv());
     server.projectRows.insert(project());
@@ -88,12 +87,12 @@ void main() {
   }
 
   void seedDeadRow(
-    AppDatabase db, {
+    TestMachine db, {
     required String id,
     required String title,
     EnvironmentPath? workingDirectory,
   }) {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(id: id, title: title).copyWith(
         externalSessionId: id,
         status: SessionStatus.running,
@@ -104,12 +103,12 @@ void main() {
   }
 
   Future<ProviderContainer> containerOver(
-    AppDatabase db, {
+    TestMachine db, {
     bool locatable = true,
   }) async {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -183,7 +182,6 @@ void main() {
         tester,
       ) async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         seedDeadRow(db, id: 'dead-1', title: 'Refactor the parser');
         seedDeadRow(db, id: 'dead-2', title: 'Chase the flake');
@@ -205,7 +203,6 @@ void main() {
 
       testWidgets('un-ticking a row takes it out of the count', (tester) async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         seedDeadRow(db, id: 'dead-1', title: 'One');
         seedDeadRow(db, id: 'dead-2', title: 'Two');
@@ -223,7 +220,6 @@ void main() {
         tester,
       ) async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         seedDeadRow(db, id: 'dead-1', title: 'One');
 
@@ -231,7 +227,7 @@ void main() {
         await tester.tap(find.text('Remove 1 session'));
         await tester.pumpAndSettle();
 
-        expect(mirroredServer(db).sessionRows.getById('dead-1'), isNull);
+        expect(db.server.sessionRows.getById('dead-1'), isNull);
         expect(find.text('One'), findsNothing);
         expect(
           find.textContaining('Every session here names a conversation'),
@@ -243,7 +239,6 @@ void main() {
         tester,
       ) async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         seedDeadRow(db, id: 'dead-1', title: 'Judged');
         // Runs in a distribution whose store was never located.
@@ -279,7 +274,6 @@ void main() {
         tester,
       ) async {
         final db = seededDatabase();
-        addTearDown(db.close);
         seedDeadRow(db, id: 'dead-1', title: 'Cannot say');
 
         await pumpAt(tester, await containerOver(db, locatable: false), size);
@@ -300,7 +294,6 @@ void main() {
 
       testWidgets('the reading carries its own age', (tester) async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         seedDeadRow(db, id: 'dead-1', title: 'One');
 
@@ -315,7 +308,6 @@ void main() {
         tester,
       ) async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
 
         await pumpAt(tester, await containerOver(db), size);
@@ -331,7 +323,6 @@ void main() {
 
   testWidgets('survives the window matrix and a phone', (tester) async {
     final db = seededDatabase();
-    addTearDown(db.close);
     emptyStore();
     // Long titles, because a fixed content width and a one-line title are what
     // break first.

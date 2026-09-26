@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -13,7 +11,6 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// **What a folder that is not a git repository costs, counted in processes.**
 ///
@@ -35,7 +32,6 @@ import '../../support/workspace_mirror.dart';
 void main() {
   late FakeDataServer server;
   late DataClient client;
-  late AppDatabase db;
   late FakeCommandRunner git;
 
   const checkout = r'C:\Users\me\notes';
@@ -50,22 +46,19 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository(path: checkout));
     client = await server.connect();
     git = FakeCommandRunner(responder: notARepository);
   });
-  tearDown(() => db.close());
 
   /// A container with a repository selected and one fake filesystem behind the
   /// probe.
   ProviderContainer containerWith(GitFiles files) {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),

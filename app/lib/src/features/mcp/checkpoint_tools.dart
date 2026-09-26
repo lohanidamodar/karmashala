@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../checkpoints/application/checkpoint_providers.dart';
+import '../checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../checkpoints/domain/checkpoint_title.dart';
@@ -46,11 +47,11 @@ class CheckpointControlTools {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  Object? _checkpointList(String? sessionId, int? limit) {
-    final service = _container.read(checkpointServiceProvider);
+  Future<Object?> _checkpointList(String? sessionId, int? limit) async {
+    final data = _container.read(checkpointsDataProvider);
     final checkpoints = sessionId == null
-        ? service.recent(limit: limit ?? 50)
-        : service.forSession(sessionId).reversed.take(limit ?? 50).toList();
+        ? await data.recent(limit: limit ?? 50)
+        : (await data.forSession(sessionId)).reversed.take(limit ?? 50);
     return [for (final checkpoint in checkpoints) _checkpointJson(checkpoint)];
   }
 
@@ -90,7 +91,7 @@ class CheckpointControlTools {
 
   Future<Object?> _checkpointDiff(String? id) async {
     final service = _container.read(checkpointServiceProvider);
-    final checkpoint = _requireCheckpoint(service, id);
+    final checkpoint = await _requireCheckpoint(service, id);
     return {'id': checkpoint.id, 'diff': await service.diffOf(checkpoint)};
   }
 
@@ -100,7 +101,7 @@ class CheckpointControlTools {
     List<String>? paths,
   }) async {
     final service = _container.read(checkpointServiceProvider);
-    final checkpoint = _requireCheckpoint(service, id);
+    final checkpoint = await _requireCheckpoint(service, id);
     try {
       final outcome = await service.restore(
         checkpoint,
@@ -109,7 +110,6 @@ class CheckpointControlTools {
           for (final path in paths ?? const <String>[]) HunkSelection(path),
         ],
       );
-      _container.read(checkpointsRevisionProvider.notifier).bump();
       return {
         'restored': !outcome.alreadyThere,
         'alreadyThere': outcome.alreadyThere,
@@ -128,11 +128,14 @@ class CheckpointControlTools {
     }
   }
 
-  Checkpoint _requireCheckpoint(CheckpointService service, String? id) {
+  Future<Checkpoint> _requireCheckpoint(
+    CheckpointService service,
+    String? id,
+  ) async {
     if (id == null || id.trim().isEmpty) {
       throw ArgumentError('id is required.');
     }
-    final checkpoint = service.byId(id);
+    final checkpoint = await service.byId(id);
     if (checkpoint == null) throw StateError('No checkpoint with id $id.');
     return checkpoint;
   }

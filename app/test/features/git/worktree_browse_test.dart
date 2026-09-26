@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/picked_checkouts.dart';
@@ -21,7 +19,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// **Browsing a worktree, and what it is allowed to touch.**
 ///
@@ -55,16 +52,14 @@ void main() {
     unstaged: true,
   );
 
-  late AppDatabase db;
   late List<GitWorktree> worktrees;
   late Map<String, List<FileChange>> changesByPath;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     client = await server.connect();
@@ -79,7 +74,6 @@ void main() {
       pathB: [change('lib/from_b.dart')],
     };
   });
-  tearDown(() => db.close());
 
   ProviderContainer container() {
     final container = ProviderContainer(
@@ -87,7 +81,6 @@ void main() {
         // No workbench here, so no diff tab: the real provider would build
         // the terminal controller and leave its autosave timer pending.
         activeDiffFileProvider.overrideWithValue(null),
-        databaseProvider.overrideWithValue(db),
         dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

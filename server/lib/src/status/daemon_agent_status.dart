@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
-import 'package:karmashala_automations/persistence.dart' show CheckoutRows;
+import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';

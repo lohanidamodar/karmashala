@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -25,7 +24,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// Two groups, two sessions, and the assertion that carries the whole weight:
@@ -38,25 +37,25 @@ import 'package:agent_cli/process.dart';
 /// pane was clicked last. So each case here reads *both* bars, and the switch
 /// case asserts what stayed still rather than what changed.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         sessionTranscriptProvider.overrideWith(
           (ref, id) => Stream.value(const []),
         ),
@@ -86,7 +85,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   TerminalSessionsController terminals() =>
       container.read(terminalSessionsControllerProvider.notifier);
@@ -101,7 +99,7 @@ void main() {
         .layout
         .panes
         .single;
-    final dao = mirroredServer(db).sessionRows;
+    final dao = db.server.sessionRows;
     dao.insert(session(id: id, title: 'Session $id'));
     dao.updatePaneId(id, paneId);
     return tabId;
@@ -430,7 +428,7 @@ void main() {
       final groups = splitAndMove(b);
       terminals().activateTab(a);
       await pump(tester);
-      mirroredServer(db).sessionRows.insert(session(id: 's3', title: 'Read the report'));
+      db.server.sessionRows.insert(session(id: 's3', title: 'Read the report'));
 
       container.read(selectedSessionIdProvider.notifier).select('s3');
       await tester.pumpAndSettle();

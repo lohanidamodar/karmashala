@@ -3,7 +3,6 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -26,7 +25,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -46,14 +45,14 @@ import '../terminal/fake_instance.dart';
 /// and a row that has genuinely gone drops out rather than waiting to fail a
 /// delete.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late FakeRepositoryDiscoveryService discovery;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows.insert(
@@ -63,10 +62,9 @@ void main() {
     discovery = FakeRepositoryDiscoveryService();
     data = await server.connect();
   });
-  tearDown(() => db.close());
 
   void addNative(String id, {required String title, int minutes = 0}) =>
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -80,7 +78,7 @@ void main() {
       );
 
   void addImported(String id, {required String title, int minutes = 0}) =>
-      mirroredServer(db).importedRows.insertIfAbsent(
+      db.server.importedRows.insertIfAbsent(
         ImportedSession(
           id: id,
           repositoryId: 'r1',
@@ -374,8 +372,8 @@ void main() {
 
       // Deleted somewhere else entirely — another window, a project removal, a
       // sweep. The Explorer hears about it the only way it ever does.
-      mirroredServer(db).sessionRows.delete('n1');
-      mirroredServer(db).importedRows.delete('i0');
+      db.server.sessionRows.delete('n1');
+      db.server.importedRows.delete('i0');
       container
           .read(sessionsRevisionProvider.notifier)
           .changed(const SessionChange.removed('n1'));
@@ -464,7 +462,7 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
 
-      expect(mirroredServer(db).sessionRows.getById('n0'), isNotNull);
+      expect(db.server.sessionRows.getById('n0'), isNotNull);
       expect(find.byType(SessionCard), findsNWidgets(2));
       expect(container.read(sessionSelectionProvider).ids, {'n0', 'i0'});
       expect(container.read(sessionSelectionProvider).active, isTrue);
@@ -554,12 +552,12 @@ void main() {
 }
 
 ProviderContainer _container(
-  AppDatabase db,
+  TestMachine db,
   DataClient data,
   FakeRepositoryDiscoveryService discovery,
 ) => ProviderContainer(
   overrides: [
-    ...fakeTerminalOverrides(database: db),
+    ...fakeTerminalOverrides(machine: db),
     dataClientProvider.overrideWithValue(data),
     clockProvider.overrideWithValue(FixedClock(testTime)),
     idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

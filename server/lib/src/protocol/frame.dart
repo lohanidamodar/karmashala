@@ -74,7 +74,6 @@ enum MessageType {
   // client: one forwarded fire; client → host: its answer; client → host:
   // run a session's checks; host → client: how that ended.
   automationNotice(0x25),
-  automationsChanged(0x26),
   automationCall(0x27),
   automationResult(0x28),
   checksRun(0x29),

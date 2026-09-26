@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -19,7 +17,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
-  late AppDatabase db;
   late FakeRepositoryDiscoveryService discovery;
   late ProviderContainer container;
   late FakeDataServer server;
@@ -28,17 +25,15 @@ void main() {
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     discovery = FakeRepositoryDiscoveryService(
       result: [DiscoveredRepository(name: 'app', path: root(r'C:\ws\app'))],
     );
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -51,7 +46,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   test('starts empty', () {

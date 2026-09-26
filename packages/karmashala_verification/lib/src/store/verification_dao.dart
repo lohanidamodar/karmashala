@@ -36,6 +36,21 @@ class VerificationDao {
     );
   }
 
+  /// Writes [run] with its steps and artifacts in one transaction, and answers
+  /// it as read back.
+  VerificationRun recordWhole(VerificationRun run) {
+    _db.transaction(() {
+      insertRun(run);
+      for (final step in run.steps) {
+        insertStep(run.id, step);
+      }
+      for (final artifact in run.artifacts) {
+        insertArtifact(artifact);
+      }
+    });
+    return getRun(run.id)!;
+  }
+
   /// Closes a run with its verdict — the only update a finished run gets, since
   /// steps and artifacts are append-only. `COALESCE` on [producedBySessionId]:
   /// a caller that cannot name itself must not erase the recorded producer.
@@ -76,6 +91,12 @@ class VerificationDao {
           );
     return rows.map(_runFromRow).toList();
   }
+
+  /// Every run, without steps or artifacts, newest first.
+  List<VerificationRun> headers() => _db
+      .query('SELECT * FROM verification_runs ORDER BY started_at DESC, id DESC;')
+      .map(_runFromRow)
+      .toList();
 
   /// One run with everything it recorded.
   VerificationRun? getRun(String id) {

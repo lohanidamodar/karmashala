@@ -64,17 +64,11 @@ void main() {
     return HostLifecycleWatch.over(client, clientId: 'app');
   }
 
-  test('the app says it is the app, and hears the host write rows', () async {
+  test('the app says it is the app', () async {
     final app = await watch();
-    final changes = <void>[];
-    app.automationsChanged.listen(changes.add);
     app.noticeAutomations(AutomationNoticeKind.ready);
     await pump();
     expect(handler.notices, [AutomationNoticeKind.ready]);
-
-    server.lifecycle.publishAutomationsChanged();
-    await pump();
-    expect(changes, hasLength(1));
     await app.close();
     await pump();
     expect(handler.detached, 1);

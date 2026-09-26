@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/devices/application/device_bindings.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -20,7 +19,7 @@ import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_vm_service.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 const String _appPubspec = '''
 name: demo
@@ -44,7 +43,7 @@ const EnvironmentPath _wslProject = EnvironmentPath(
 );
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeCommandRunner runner;
   late ProviderContainer container;
   late Directory vmDirectory;
@@ -92,8 +91,8 @@ void main() {
   Future<void> build({
     CommandResult Function(CommandRequest)? responder,
   }) async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer().mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer().runsOn(db);
     server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
@@ -110,7 +109,7 @@ void main() {
         // The app's half of `karmashala_devices`: its clock, its runner
         // factory, its settings and its shell, behind the package's ports.
         ...deviceBindings,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
@@ -139,7 +138,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
     if (vmDirectory.existsSync()) vmDirectory.deleteSync(recursive: true);
   });
 
@@ -511,12 +509,12 @@ void main() {
     test(
       "another session's claim refuses the launch in the claim's words",
       () async {
-        mirroredServer(
-          db,
-        ).sessionRows.insert(session(id: 's1', title: 'Fixing the list'));
-        mirroredServer(
-          db,
-        ).sessionRows.insert(session(id: 's2', title: 'Something else'));
+        db.server.sessionRows.insert(
+          session(id: 's1', title: 'Fixing the list'),
+        );
+        db.server.sessionRows.insert(
+          session(id: 's2', title: 'Something else'),
+        );
         final held = await loop().run(
           project: _wslProject,
           deviceId: 'emulator-5554',

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -11,6 +10,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _longBody =
     '# Rework the tab strip\n\n'
@@ -20,20 +20,20 @@ const _longBody =
     '- one\n- two\n\n```dart\nfinal x = 1;\n```\n';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late ProviderContainer container;
   late String noteId;
 
   setUp(() async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     server = FakeDataServer();
     final data = await server.override();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
       ],
     );
@@ -48,7 +48,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Widget app() => UncontrolledProviderScope(

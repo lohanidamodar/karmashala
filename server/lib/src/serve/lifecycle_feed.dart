@@ -93,10 +93,6 @@ class LifecycleFeed {
     return subscription;
   }
 
-  /// Tells every watcher the daemon wrote automation, run, check, resume or
-  /// verification rows.
-  void publishAutomationsChanged() =>
-      _out.add(const AutomationsChangedMessage());
 
   /// Tells every watcher what the agent in the row [sessionId] is doing now,
   /// or — [status] null — that it is no longer kept.

@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_title_sync_service.dart';
 import 'package:agent_cli/read.dart';
@@ -8,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// The rename the owner reported, and the hole it came out of.
@@ -25,13 +24,13 @@ import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 /// So these tests are deliberately not about Antigravity. They are about the
 /// missing sync, and Antigravity is one of the agents that exercises it.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeSessionRows dao;
   late SessionsData sessions;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -41,7 +40,6 @@ void main() {
     dao = server.sessionRows;
     sessions = await sessionsOf(server);
   });
-  tearDown(() => db.close());
 
   Session row({
     String id = 's1',

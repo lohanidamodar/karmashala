@@ -7,8 +7,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
-import '../../checkpoints/application/checkpoint_providers.dart'
-    show checkpointDaoProvider;
+import '../../checkpoints/data/checkpoints_data.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -202,7 +201,7 @@ class SessionHandoffService {
       // here until 2026-09-20, and resolved to nothing.
       sourceSessionId: session.id,
       sourceConversationId: session.externalSessionId,
-      checkpoints: _checkpointsFor(sessionId),
+      checkpoints: await _checkpointsFor(sessionId),
       recapUnreadable: recap.unreadable,
       instruction: instruction,
       workingDirectory: directory?.path,
@@ -227,9 +226,11 @@ class SessionHandoffService {
   /// The source's most recent snapshots, newest first, so the packet can offer
   /// the receiving agent somewhere to go back to. Capped: a long session has
   /// hundreds, and a list of hundreds is not an offer, it is noise.
-  List<HandoffCheckpoint> _checkpointsFor(String sessionId) {
+  Future<List<HandoffCheckpoint>> _checkpointsFor(String sessionId) async {
     try {
-      final rows = _ref.read(checkpointDaoProvider).forSession(sessionId);
+      final rows = await _ref
+          .read(checkpointsDataProvider)
+          .forSession(sessionId);
       final newest = rows.reversed.take(kHandoffCheckpointCount);
       return [
         for (final row in newest)

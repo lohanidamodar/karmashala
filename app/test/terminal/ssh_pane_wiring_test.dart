@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_ssh/connection.dart';
@@ -23,8 +21,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 /// The only thing overridden is how a pane reaches a machine's session host —
 /// the same seam `terminalInstanceFactoryProvider` itself is.
 void main() {
-  late AppDatabase db;
-
   final host = SshHost(
     id: 'h1',
     name: 'build-box',
@@ -38,15 +34,12 @@ void main() {
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
     data = await (FakeDataServer()..sshHostRows.upsert(host)).override();
   });
-  tearDown(() => db.close());
 
   ProviderContainer containerWith(HostSessionAccess? access) =>
       ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           hostSessionAccessLookupProvider.overrideWithValue((_) => access),
         ],

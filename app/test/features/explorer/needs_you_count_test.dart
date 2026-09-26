@@ -1,7 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/explorer/application/agent_state_providers.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
@@ -15,12 +14,11 @@ import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **The Agents entry's count is the app's own "needs you".** It counts the
 /// sessions the rest of the app already calls waiting — the needs-approval
@@ -28,7 +26,7 @@ import '../../support/workspace_mirror.dart';
 /// the app labels "Needs you") — and a registry status that says the same
 /// before the watcher's next pass. It invents no model of its own.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late AgentHookReceiver receiver;
   late SessionStatusRegistry registry;
@@ -43,8 +41,8 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(posixEnv());
     server.installationRows.insert(agentInstallation());
     for (final (projectId, sessions) in [
@@ -63,7 +61,7 @@ void main() {
         ),
       );
       for (final id in sessions) {
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           Session(
             id: id,
             repositoryId: 'r-$projectId',
@@ -99,7 +97,6 @@ void main() {
     );
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(clock),
         sessionStatusRegistryProvider.overrideWithValue(registry),
@@ -110,7 +107,6 @@ void main() {
   tearDown(() {
     container.dispose();
     registry.dispose();
-    db.close();
   });
 
   void hook(String row, String event, {String extra = ''}) {

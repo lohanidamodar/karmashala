@@ -1,4 +1,4 @@
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
@@ -66,11 +66,11 @@ void main() {
 
   /// A container whose panes count what the parser and the encoder were given.
   ({ProviderContainer container, TerminalSessionsController controller}) open({
-    AppDatabase? database,
+    TerminalLayoutStore? database,
   }) {
     final container = ProviderContainer(
       overrides: fakeTerminalOverrides(
-        database: database,
+        layoutStore: database,
         instanceFactory:
             ({
               required String id,
@@ -108,7 +108,7 @@ void main() {
     String stored,
   })
   restoredLayout({int lines = 2000}) {
-    final db = AppDatabase.memory();
+    final db = TerminalLayoutStore.memory();
     addTearDown(db.close);
 
     final first = open(database: db);

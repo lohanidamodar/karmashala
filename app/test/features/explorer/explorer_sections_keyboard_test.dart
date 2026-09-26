@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -23,7 +22,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **The saved views are a list of rows too, and take the tree's keys.**
@@ -32,14 +31,14 @@ import '../terminal/fake_instance.dart';
 /// are driven by the same ones, over the rows in the order *this* list draws
 /// them — which is also what a Shift-click ranges over here.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   const failures = 'section-ended-in-failure';
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     seedDefaultSections(server);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(
@@ -48,7 +47,7 @@ void main() {
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     for (final (i, title) in ['Alpha fix', 'Bravo fix', 'Delta fix'].indexed) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(
           id: 'f$i',
           title: title,
@@ -56,11 +55,10 @@ void main() {
         ).copyWith(createdAt: testTime.subtract(Duration(minutes: i))),
       );
     }
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(id: 'r0', title: 'Kept close', status: SessionStatus.completed),
     );
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(
     WidgetTester tester, {
@@ -71,7 +69,7 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(

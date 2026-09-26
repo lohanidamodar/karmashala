@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
@@ -13,7 +12,6 @@ import 'package:karmashala/src/features/settings/presentation/settings_screen.da
 import 'package:karmashala/src/features/settings/presentation/settings_tab_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -26,13 +24,10 @@ import 'package:agent_cli/process.dart';
 /// search that lands on a section, deep links that do, and the narrow layout.
 void main() {
   Future<ProviderContainer> prepared() async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final server = FakeDataServer()
       ..environmentRows.upsert(localHostEnvironment(testTime));
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         // The Terminal page reads the session host's status, and the one running
         // on this machine is not the test's to dial.

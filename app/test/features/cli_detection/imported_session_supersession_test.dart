@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -27,7 +26,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// One CLI session, one row in the workspace.
@@ -87,13 +86,13 @@ Session native({
 void main() {
   late FakeDataServer server;
   late DataClient client;
-  late AppDatabase db;
+  late TestMachine db;
   late ImportedSessionsData dao;
   late SessionsData sessions;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -104,7 +103,6 @@ void main() {
     sessions = SessionsData(client);
     dao = ImportedSessionsData(client, sessions);
   });
-  tearDown(() => db.close());
 
   group('a conversation with a native row', () {
     test('is listed once, not twice', () {
@@ -203,7 +201,7 @@ void main() {
       server.sessionRows.insert(native());
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           dataClientProvider.overrideWithValue(client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('p-')),
@@ -253,7 +251,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            ...fakeTerminalOverrides(database: db),
+            ...fakeTerminalOverrides(machine: db),
             dataClientProvider.overrideWithValue(client),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -288,7 +286,7 @@ void main() {
     ProviderContainer container() {
       final c = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           dataClientProvider.overrideWithValue(client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),

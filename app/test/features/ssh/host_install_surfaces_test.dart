@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/ssh/application/host_install_controller.
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -22,6 +21,7 @@ import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_host_box.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 class _Access extends RemoteAccessController {
   _Access(super.ref);
@@ -33,12 +33,12 @@ class _Access extends RemoteAccessController {
 /// The host line is drawn where the machine is: its card in Settings ›
 /// Environments, and its row in System health. One panel, two places.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeHostBox box;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     box = FakeHostBox();
     final server = FakeDataServer();
     server.environmentRows
@@ -47,11 +47,10 @@ void main() {
     server.sshHostRows.upsert(boxHost);
     data = await server.override();
   });
-  tearDown(() => db.close());
 
   Widget scope(Widget body) => ProviderScope(
     overrides: [
-      ...fakeTerminalOverrides(database: db, data: data),
+      ...fakeTerminalOverrides(machine: db, data: data),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
       remoteAccessControllerProvider.overrideWith(_Access.new),

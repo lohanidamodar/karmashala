@@ -1,7 +1,6 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -15,7 +14,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -28,7 +27,7 @@ import '../terminal/fake_instance.dart';
 /// which means the transcript, the review notes and the checkpoints all have to
 /// survive an archive with nothing but a timestamp changing in the database.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late FakeCommandRunner git;
@@ -44,8 +43,8 @@ void main() {
 
   setUp(() async {
     statusOutput = '';
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -62,7 +61,6 @@ void main() {
       },
     );
   });
-  tearDown(() => db.close());
 
   void addSession({EnvironmentPath? at = worktree}) =>
       server.sessionRows.insert(
@@ -88,7 +86,7 @@ void main() {
         createdAt: testTime,
       ),
     );
-    CheckpointDao(db).insert(
+    db.server.checkpointRows.insert(
       Checkpoint(
         id: 'c1',
         sessionId: 's1',
@@ -108,7 +106,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),
@@ -154,7 +152,7 @@ void main() {
       server.eventRows.listForSession('s1').single.payload,
       '{"text":"fix the login"}',
     );
-    expect(CheckpointDao(db).forSession('s1').single.treeSha, 'tree');
+    expect(db.server.checkpointRows.forSession('s1').single.treeSha, 'tree');
   });
 
   test('refuses while an agent is live in the worktree', () async {

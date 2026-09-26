@@ -1,7 +1,7 @@
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 
 import '../../support/fixtures.dart';
 

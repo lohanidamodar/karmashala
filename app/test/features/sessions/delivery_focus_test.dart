@@ -1,6 +1,5 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
@@ -16,7 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -67,7 +66,7 @@ class _SlowRunner extends FakeCommandRunner {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late List<List<String>> ghCalls;
@@ -83,14 +82,14 @@ void main() {
     ghCalls = [];
     gitCalls = [];
     clock = _MovableClock(testTime);
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -103,7 +102,6 @@ void main() {
       ),
     );
   });
-  tearDown(() => db.close());
 
   CommandResult respond(CommandRequest request) {
     if (request.executable == 'gh') {
@@ -182,7 +180,7 @@ void main() {
       ProviderScope(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(clock),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: _SlowRunner(responder: respond)),

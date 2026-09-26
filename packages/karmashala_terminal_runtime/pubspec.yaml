@@ -47,10 +47,11 @@ dependencies:
   # links through.
   karmashala_ssh:
     path: ../karmashala_ssh
-  # The layout and preset tables the two DAOs read and write. The DAOs take an
-  # `AppDatabase`; their providers stay in the app.
+  # The preset table's `AppDatabase`, and the row conversions both DAOs use.
   karmashala_store:
     path: ../karmashala_store
+  # The layout's own client-local file (`TerminalLayoutStore`).
+  sqlite3: ^3.3.3
   # Frame sinks, for rendering a recorded cast to GIF, PNG or MP4.
   karmashala_media:
     path: ../karmashala_media

@@ -24,11 +24,10 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -42,7 +41,7 @@ import '../terminal/fake_instance.dart';
 /// on the way. These are the keys every tree view has, over the rows in the
 /// order the list draws them — built or not, since the list is lazy.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   void seed({int extra = 0}) {
@@ -91,7 +90,7 @@ void main() {
     );
     server.installationRows.insert(agentInstallation());
     for (final (i, title) in ['Fix login', 'Add tests'].indexed) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -107,10 +106,9 @@ void main() {
   }
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(
     WidgetTester tester, {
@@ -121,7 +119,7 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
@@ -10,7 +9,6 @@ import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:logging/logging.dart';
@@ -22,7 +20,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
 import 'package:agent_cli/read.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// Every store the locator would have found, without touching a real home.
 class _StubLocator implements CliStoreLocator {
@@ -42,7 +40,7 @@ class _StubLocator implements CliStoreLocator {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late Override data;
   late Directory claudeHome;
 
@@ -54,16 +52,15 @@ void main() {
   const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
 
   setUp(() async {
-    db = AppDatabase.memory();
-    FakeDataServer().mirrorInto(db);
-    mirroredServer(db).environmentRows.upsert(
+    db = TestMachine();
+    FakeDataServer().runsOn(db);
+    db.server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     claudeHome = Directory.systemTemp.createTempSync('karmashala_hooksvc_');
-    data = await mirroredServer(db).override();
+    data = await db.server.override();
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(claudeHome);
   });
 
@@ -79,11 +76,7 @@ void main() {
   /// case in this file to depend on the suite's machine having WSL.
   ProviderContainer containerWith(_StubLocator locator) {
     final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        data,
-        cliStoreLocatorProvider.overrideWithValue(locator),
-      ],
+      overrides: [data, cliStoreLocatorProvider.overrideWithValue(locator)],
     );
     addTearDown(container.dispose);
     return container;
@@ -95,9 +88,10 @@ void main() {
   /// this used to throw `Bad state: No element` before the store was ever
   /// looked at. These cases are about a **local** store, not a Windows one —
   /// the WSL and SSH cases below name their environments explicitly.
-  String localEnvironmentId() => mirroredServer(
-    db,
-  ).environmentRows.getAll().firstWhere((e) => isLocalHost(e.kind)).id;
+  String localEnvironmentId() => db.server.environmentRows
+      .getAll()
+      .firstWhere((e) => isLocalHost(e.kind))
+      .id;
 
   _StubLocator localStore() => _StubLocator([
     CliStore(
@@ -314,7 +308,7 @@ void main() {
       }),
     );
     final ssh = sshEnvFixture();
-    mirroredServer(db).environmentRows.upsert(ssh);
+    db.server.environmentRows.upsert(ssh);
     final locator = _StubLocator([
       CliStore(
         environmentId: ssh.id,
@@ -352,7 +346,7 @@ void main() {
     /// kind is under test; the file is a fixture either way.
     (_StubLocator, ExecutionEnvironment) wslStore() {
       final wsl = wslEnv();
-      mirroredServer(db).environmentRows.upsert(wsl);
+      db.server.environmentRows.upsert(wsl);
       return (
         _StubLocator([
           CliStore(
@@ -368,7 +362,7 @@ void main() {
     /// environment this app still has no way to hear from.
     (_StubLocator, ExecutionEnvironment) sshStore() {
       final ssh = sshEnvFixture();
-      mirroredServer(db).environmentRows.upsert(ssh);
+      db.server.environmentRows.upsert(ssh);
       return (
         _StubLocator([
           CliStore(
@@ -520,7 +514,7 @@ void main() {
       // arrives, and a script left beside it is a bearer token in somebody's
       // home directory answering to nobody.
       final ssh = sshEnvFixture();
-      mirroredServer(db).environmentRows.upsert(ssh);
+      db.server.environmentRows.upsert(ssh);
       final codexHome = Directory(p.join(claudeHome.path, '.codex'))
         ..createSync(recursive: true);
       final script = File(p.join(codexHome.path, '$agentHookMarker.sh'))
@@ -759,7 +753,7 @@ void main() {
     addTearDown(AppLogger.initialize);
     const secret = AgentHookEndpoint(port: 4242, token: 'S3CRET-hook-token');
     final wsl = wslEnv();
-    mirroredServer(db).environmentRows.upsert(wsl);
+    db.server.environmentRows.upsert(wsl);
     settings().writeAsStringSync('{ not json');
     final service = containerWith(
       _StubLocator([
@@ -800,7 +794,7 @@ void main() {
     final brokenConfig = File(p.join(broken.path, 'settings.json'));
     brokenConfig.writeAsStringSync('{ not json');
     final wsl = wslEnv();
-    mirroredServer(db).environmentRows.upsert(wsl);
+    db.server.environmentRows.upsert(wsl);
     final service = containerWith(
       _StubLocator([
         CliStore(

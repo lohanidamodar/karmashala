@@ -69,7 +69,6 @@ void main() {
   }) async {
     final server = FakeDataServer();
     final db = seedUsageDatabase(server: server);
-    addTearDown(db.close);
     if (onWsl) server.environmentRows.upsert(wslEnv());
     server.repositoryRows.insert(
       repository(
@@ -84,7 +83,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),

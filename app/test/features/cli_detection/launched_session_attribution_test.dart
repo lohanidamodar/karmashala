@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/launched_session_attribution_service.dart';
 import 'package:agent_cli/read.dart';
@@ -9,7 +8,6 @@ import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/agents/data/agents_data.dart';
@@ -28,7 +26,6 @@ import 'package:karmashala/src/features/agents/data/agents_data.dart';
 /// *not* launch, and `DirectoryConversationAttributionService` is gated on `agy`'s
 /// store. This service is the something.
 void main() {
-  late AppDatabase db;
   late EnvironmentsData environments;
   late AgentInstallationsData installations;
   late FakeSessionRows dao;
@@ -42,8 +39,7 @@ void main() {
   final launchedAt = testTime;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
     environments = EnvironmentsData(await server.connect());
     installations = AgentInstallationsData(await server.connect());
     server.environmentRows.upsert(windowsEnv());
@@ -56,7 +52,6 @@ void main() {
     );
     dao = server.sessionRows;
     sessions = await sessionsOf(server);
-    addTearDown(db.close);
   });
 
   void insert({

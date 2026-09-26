@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
@@ -31,11 +29,8 @@ void main() {
     WidgetTester tester,
     SessionStatusCoverage? coverage,
   ) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         diagnosticsProvider.overrideWithValue(
           Diagnostics(echoToConsole: false),
         ),

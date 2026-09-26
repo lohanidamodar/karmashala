@@ -5,9 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 import 'package:karmashala/src/features/todos/domain/project_scope.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
@@ -18,6 +16,7 @@ import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/test_machine.dart';
 
 /// A todo at the length the owner’s own list actually runs to: past 200
 /// characters. Long is the normal case on this surface, not an edge one, which
@@ -38,8 +37,7 @@ void main() {
     WidgetTester tester, {
     TargetPlatform platform = TargetPlatform.windows,
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows
@@ -54,7 +52,7 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
       ],
     );
@@ -634,14 +632,9 @@ void main() {
             'a 200-character todo is the owner’s ordinary case, and it '
             'has to wrap rather than clip at either width',
         build: () {
-          final db = AppDatabase.memory();
-          addTearDown(db.close);
           server.environmentRows.upsert(windowsEnv());
           final container = ProviderContainer(
-            overrides: [
-              databaseProvider.overrideWithValue(db),
-              dataClientProvider.overrideWithValue(data),
-            ],
+            overrides: [dataClientProvider.overrideWithValue(data)],
           );
           addTearDown(container.dispose);
           return UncontrolledProviderScope(
@@ -678,14 +671,9 @@ void main() {
           'the side panel is 240px at its narrowest and this row carries a '
           'tick, a line, a project name and a menu',
       build: () {
-        final db = AppDatabase.memory();
-        addTearDown(db.close);
         server.environmentRows.upsert(windowsEnv());
         final container = ProviderContainer(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            dataClientProvider.overrideWithValue(data),
-          ],
+          overrides: [dataClientProvider.overrideWithValue(data)],
         );
         addTearDown(container.dispose);
         return UncontrolledProviderScope(

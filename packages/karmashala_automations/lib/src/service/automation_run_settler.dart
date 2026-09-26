@@ -4,13 +4,13 @@ import 'package:karmashala_session/session.dart';
 
 import '../domain/automation.dart';
 import '../domain/automation_run.dart';
-import '../store/automation_dao.dart';
+import 'automation_records.dart';
 
 /// Turns "the automation's session ended" into the run's verdict, then runs
 /// the checkout's checks, spends the failure budget and lets the queue move.
 class AutomationRunSettler {
   AutomationRunSettler({
-    required AutomationDao automations,
+    required AutomationRecords automations,
     required this._sessionOf,
     required this._runChecks,
     required this._drain,
@@ -21,7 +21,7 @@ class AutomationRunSettler {
        _onChanged = onChanged ?? _nothing,
        _log = log ?? _ignore;
 
-  final AutomationDao _dao;
+  final AutomationRecords _dao;
   final Session? Function(String sessionId) _sessionOf;
   final void Function(AutomationRun finished) _runChecks;
   final Future<void> Function(String repositoryId) _drain;

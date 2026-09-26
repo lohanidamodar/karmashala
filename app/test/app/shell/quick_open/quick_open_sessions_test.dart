@@ -12,7 +12,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -25,11 +24,12 @@ import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
 import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../../support/workspace_mirror.dart';
+import '../../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
+import '../../../support/conversation_index_database.dart';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
@@ -44,18 +44,19 @@ void main() {
   final reports = <String, AgentStatusReport>{};
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     reports.clear();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
-    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
   });
-  tearDown(() => db.close());
 
   void active(String sessionId, Duration ago) {
     reports[sessionId] = AgentStatusReport(
@@ -73,7 +74,7 @@ void main() {
     String id, {
     required String title,
     Duration createdAgo = Duration.zero,
-  }) => mirroredServer(db).sessionRows.insert(
+  }) => db.server.sessionRows.insert(
     Session(
       id: id,
       repositoryId: 'r1',
@@ -89,7 +90,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(now)),
         sessionStatusLookupProvider.overrideWithValue((id) => reports[id]),
       ],
@@ -211,7 +213,7 @@ void main() {
   });
 
   testWidgets('imported history is dated by its own file', (tester) async {
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i1',
         repositoryId: 'r1',

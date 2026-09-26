@@ -1,7 +1,6 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -18,7 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -63,7 +62,7 @@ import '../terminal/fake_instance.dart';
 /// that the grid a pane is told is the grid it is drawn in, so a row that moves
 /// here is a row that moves on screen.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late ProviderContainer container;
@@ -133,15 +132,15 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     for (final id in ['s1', 's2']) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -158,7 +157,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
@@ -170,7 +169,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   /// Lets the faked git and `gh` answer. `pumpAndSettle` cannot be used against
   /// the workbench — something always has a frame scheduled — and the delays
@@ -202,7 +200,7 @@ void main() {
       controller.openTab(TerminalProfile.powerShell);
       final tab = container.read(terminalSessionsControllerProvider).activeTab!;
       tabs.add(tab.id);
-      mirroredServer(db).sessionRows.updatePaneId(id, tab.layout.panes.single);
+      db.server.sessionRows.updatePaneId(id, tab.layout.panes.single);
     }
     await tester.pumpWidget(
       UncontrolledProviderScope(

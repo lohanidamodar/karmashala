@@ -1,8 +1,6 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_automations/checks.dart';
-import 'package:karmashala_automations/persistence.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
@@ -10,7 +8,6 @@ import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
-import 'package:karmashala_verification/store.dart';
 import 'package:karmashala/src/features/verification/domain/session_verdict.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -32,20 +29,19 @@ import '../terminal/fake_instance.dart';
 /// build cannot read is a seventh thing that is none of the six. Each one gets
 /// its own words, and the test that matters most is the one for no run at all.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   /// Nowhere to continue to: this file is about the verdict, not the actions.
   final noContinuation = SessionContinuation(
@@ -61,7 +57,7 @@ void main() {
   );
 
   void insertSession({SessionStatus status = SessionStatus.idle}) =>
-      mirroredServer(db).sessionRows.insert(session(id: 's1', status: status));
+      db.server.sessionRows.insert(session(id: 's1', status: status));
 
   /// A run against session `s1`, open unless [verdict] is given.
   void insertRun({
@@ -73,7 +69,7 @@ void main() {
     // Another session by default: a self-graded pass reads as its own thing.
     String? producedBySessionId = 's2',
   }) {
-    final dao = VerificationDao(db);
+    final dao = db.server.verificationRows;
     dao.insertRun(
       VerificationRun(
         id: id,
@@ -98,7 +94,7 @@ void main() {
   Widget strip() => ProviderScope(
     overrides: [
       dataClientProvider.overrideWithValue(data),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
       sessionContinuationProvider.overrideWith((ref, _) => noContinuation),
@@ -175,9 +171,9 @@ void main() {
     insertRun(id: 'v1');
     // What a newer build's row looks like from here: finished, with a word
     // `VerificationVerdict.parse` returns null for.
-    db.execute(
-      'UPDATE verification_runs SET finished_at = ?, verdict = ? WHERE id = ?;',
-      ['2026-01-02T03:10:00.000Z', 'flaky', 'v1'],
+    db.server.verificationRows.finishRun(
+      'v1',
+      finishedAt: DateTime.utc(2026, 1, 2, 3, 10),
     );
     await pump(tester);
 
@@ -235,7 +231,7 @@ void main() {
       ProviderScope(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
         ],
@@ -407,7 +403,7 @@ void main() {
       await pump(tester);
       expect(find.text('Run checks'), findsNothing);
 
-      ProjectCheckDao(db).insert(
+      server.projectCheckRows.insert(
         ProjectCheck(
           id: 'pc1',
           repositoryId: 'r1',

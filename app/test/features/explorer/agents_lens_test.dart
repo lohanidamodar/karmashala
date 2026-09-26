@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -19,20 +18,19 @@ import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **The Agents entry and the page it opens**, drawn: the count appears only
 /// above zero, the page groups by state in its order with its folds, and
 /// leaving it puts the tree back.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late AgentHookReceiver receiver;
   late SessionStatusRegistry registry;
@@ -50,7 +48,7 @@ void main() {
     SessionStatus status = SessionStatus.running,
     String? worktree,
     Duration age = Duration.zero,
-  }) => mirroredServer(db).sessionRows.insert(
+  }) => db.server.sessionRows.insert(
     Session(
       id: id,
       repositoryId: 'r1',
@@ -66,8 +64,8 @@ void main() {
   );
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.installationRows.insert(agentInstallation());
     server.projectRows.insert(
@@ -102,7 +100,6 @@ void main() {
   });
   tearDown(() {
     registry.dispose();
-    db.close();
   });
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
@@ -111,7 +108,6 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),

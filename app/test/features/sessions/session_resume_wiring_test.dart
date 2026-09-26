@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -22,7 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -92,7 +91,7 @@ const _terminal = SystemTerminal(
 
 typedef Harness = ({
   ProviderContainer container,
-  AppDatabase db,
+  TestMachine db,
   _RecordingTerminals terminals,
   FakeDataServer server,
 });
@@ -101,8 +100,8 @@ Future<Harness> harness(
   AgentDescriptor agent, {
   Set<String> missingDirectories = const {},
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -112,7 +111,7 @@ Future<Harness> harness(
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
@@ -172,7 +171,6 @@ void main() {
   group('the launcher answers the capability question once', () {
     test('for every agent it knows, and false for one it does not', () async {
       final h = await harness(_sharing);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launcher = h.container.read(sessionLauncherProvider);
 
@@ -188,7 +186,6 @@ void main() {
 
     test('knowing we host it by either of the session\'s two names', () async {
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await startLive(h, _exclusive);
@@ -205,7 +202,6 @@ void main() {
     for (final agent in [_sharing, _exclusive]) {
       test('${agent.id}: resuming a session we host reopens it', () async {
         final h = await harness(agent);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final liveId = await startLive(h, agent);
@@ -235,7 +231,6 @@ void main() {
   group('handing a live conversation to a terminal we do not own', () {
     test('is allowed when the agent permits it — the Claude case', () async {
       final h = await harness(_sharing);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await startLive(h, _sharing);
@@ -257,7 +252,6 @@ void main() {
 
     test('is refused when the agent forbids it — the Codex case', () async {
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await startLive(h, _exclusive);
@@ -297,7 +291,6 @@ void main() {
       // discovered. A guard that only joined on the external id let every native
       // Codex session straight through.
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await startLive(h, _exclusive, externalId: null);
@@ -320,7 +313,6 @@ void main() {
 
     test('is allowed once nothing of ours is running it', () async {
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await startLive(h, _exclusive);
@@ -340,7 +332,6 @@ void main() {
   group('the launcher backstop', () {
     test('lets a permitted second process through, and records it', () async {
       final h = await harness(_sharing);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await startLive(h, _sharing);
@@ -371,7 +362,6 @@ void main() {
 
     test('refuses a forbidden one before anything is written', () async {
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await startLive(h, _exclusive);
@@ -397,7 +387,6 @@ void main() {
 
     test('does not stand in the way of an unrelated conversation', () async {
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await startLive(h, _exclusive);
@@ -436,7 +425,6 @@ void main() {
 
     test('an external terminal starts in the recorded directory', () async {
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adopted(h);
 
@@ -449,7 +437,6 @@ void main() {
 
     test('the copied resume command cds where the agent ran', () async {
       final h = await harness(_exclusive);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adopted(h);
 
@@ -471,7 +458,6 @@ void main() {
           _exclusive,
           missingDirectories: const {subdirectory},
         );
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         adopted(h);
 
@@ -502,7 +488,7 @@ void main() {
     /// A repository filed under a WSL environment that has lost its
     /// distribution name.
     void broken(Harness h) {
-      mirroredServer(h.db).environmentRows.upsert(
+      h.db.server.environmentRows.upsert(
         ExecutionEnvironment(
           id: 'wsl:Ubuntu',
           kind: EnvironmentKind.wsl,
@@ -522,7 +508,6 @@ void main() {
       'an imported entry refuses rather than spelling a broken line',
       () async {
         final h = await harness(_sharing);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         broken(h);
 
@@ -552,7 +537,6 @@ void main() {
 
     test('and one of our own sessions refuses in the same words', () async {
       final h = await harness(_sharing);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       broken(h);
       h.server.sessionRows.insert(

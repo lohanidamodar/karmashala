@@ -1,7 +1,6 @@
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart'
     show shellCommandLabel;
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
@@ -48,7 +47,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// The minimum window at Windows' largest text step. Not in the shared matrix
 /// — adding it there would silently change what every existing surface
@@ -72,7 +71,7 @@ final paneTailProvider = Provider<List<String> Function(String)>(
 );
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
@@ -104,12 +103,12 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows
       ..insert(repository())
@@ -128,7 +127,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         // Both of these poll on a real timer, which would outlive the widget
         // tree and trip flutter_test's pending-timer check. The workbench does
         // not care what they say — only that a session has two renderings.
@@ -163,7 +162,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   /// Builds the workbench and settles.
   ///

@@ -1,6 +1,5 @@
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -11,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// Double-clicking the empty part of a tab bar opens a new tab in VS Code,
 /// every browser and most terminals. The owner asked for it here.
@@ -23,9 +23,8 @@ import 'fake_instance.dart';
 /// touch, and the drop target it must not swallow.
 
 ProviderContainer harness() {
-  final database = AppDatabase.memory();
-  addTearDown(database.close);
-  final container = fakeTerminalContainer(database: database);
+  final database = TestMachine();
+  final container = fakeTerminalContainer(machine: database);
   addTearDown(container.dispose);
   return container;
 }

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:karmashala_automations/check_runner.dart';
-import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/runs.dart';
 
 import '../protocol/messages.dart';
@@ -22,7 +22,7 @@ class DaemonRunChecks {
   final ProjectCheckRunner checks;
   final DaemonCheckoutFacts facts;
   final AutomationAppRelay relay;
-  final AutomationDao automations;
+  final AutomationRecords automations;
 
   void start(AutomationRun run) {
     final automation = automations.getById(run.automationId);

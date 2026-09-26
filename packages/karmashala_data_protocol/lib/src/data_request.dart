@@ -1,19 +1,41 @@
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/records.dart';
+import 'package:karmashala_automations/resumes.dart';
+import 'package:karmashala_automations/runs.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart'
+    show Checkpoint, checkpointFromJson, checkpointToJson;
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
+import 'package:karmashala_verification/verification.dart';
+import 'package:karmashala_git/git.dart'
+    show
+        ReviewAnchor,
+        ReviewAuthorKind,
+        ReviewThread,
+        ReviewThreadStatus,
+        WorktreeSetup,
+        WorktreeSetupReport;
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_remote/remote.dart'
+    show CapabilitySet, PairedDevice, pairedDeviceFromJson, pairedDeviceToJson;
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 
+import 'automation_values.dart';
 import 'environment_values.dart';
 import 'refusal.dart';
 import 'session_values.dart';
 import 'workspace_values.dart';
+import 'worktree_values.dart';
 
 part 'requests/subscription_requests.dart';
 part 'requests/sessions_requests.dart';
@@ -22,6 +44,11 @@ part 'requests/todos_requests.dart';
 part 'requests/preferences_requests.dart';
 part 'requests/workspace_requests.dart';
 part 'requests/hosts_requests.dart';
+part 'requests/automations_requests.dart';
+part 'requests/checkpoints_requests.dart';
+part 'requests/worktrees_requests.dart';
+part 'requests/snippets_requests.dart';
+part 'requests/pairings_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -209,13 +236,23 @@ sealed class DataRequest<R> {
         args.string('accountKey'),
         args.date('since'),
       ),
-      _ => throw DataRefused.invalid('no data request is called "$kind"'),
+      _ => _domainRequestFromJson(kind, args),
     };
   }
 
   @override
   String toString() => 'DataRequest($kind)';
 }
+
+/// A request of the domains slice 1e moved, each family read by its own part
+/// file; refused when none knows [kind].
+DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
+    _automationsRequestFromJson(kind, args) ??
+    _checkpointsRequestFromJson(kind, args) ??
+    _worktreesRequestFromJson(kind, args) ??
+    _snippetsRequestFromJson(kind, args) ??
+    _pairingsRequestFromJson(kind, args) ??
+    (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.
 final class DataAck {

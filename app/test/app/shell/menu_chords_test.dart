@@ -4,12 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -25,14 +24,14 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 /// none, so the sweep below reads the shortcut off every item in every menu and
 /// fails unless `shellShortcutMap` has it too.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
     commandKeyIsMeta = false;
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
@@ -40,7 +39,6 @@ void main() {
   });
   tearDown(() {
     commandKeyIsMeta = false;
-    db.close();
   });
 
   /// `SingleActivator` has no `==`, so chords are compared by what they are.
@@ -56,7 +54,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final container = fakeTerminalContainer(database: db, data: data);
+    final container = fakeTerminalContainer(machine: db, data: data);
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(

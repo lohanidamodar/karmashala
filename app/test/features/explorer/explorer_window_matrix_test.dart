@@ -27,7 +27,6 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -36,7 +35,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -135,8 +134,8 @@ void main() {
     data = await server.connect();
   }
 
-  AppDatabase seeded({bool third = false}) {
-    final db = AppDatabase.memory();
+  TestMachine seeded({bool third = false}) {
+    final db = TestMachine();
     server.environmentRows.upsert(windowsEnv());
     // A third: the strip is at its widest, and has a WSL mark in it.
     if (third) server.environmentRows.upsert(wslEnv());
@@ -154,10 +153,10 @@ void main() {
       ),
     );
     server.environmentRows.upsert(sshEnvFixture(name: _longHost));
-    server.mirrorInto(db);
+    server.runsOn(db);
     server.installationRows.insert(agentInstallation());
     for (var i = 0; i < 4; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(
           id: 's$i',
           title: 'A session title long enough to need truncating, number $i',
@@ -170,10 +169,9 @@ void main() {
 
   Widget explorer(double width, {bool working = false, bool third = false}) {
     final db = seeded(third: third);
-    addTearDown(db.close);
     return ProviderScope(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

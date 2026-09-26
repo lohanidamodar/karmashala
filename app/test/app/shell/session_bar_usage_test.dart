@@ -1,6 +1,5 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
@@ -27,7 +26,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// **The quota in its new home: the bar that belongs to the session.**
@@ -50,7 +49,7 @@ import 'package:agent_cli/process.dart';
 ///   action row: the actions wrap rather than shrink, so anything sharing their
 ///   row is paid for in runs.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
@@ -76,7 +75,7 @@ void main() {
       overrides: [
         data,
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           usageService: service,
           usagePollFloor: floor,
         ),
@@ -93,12 +92,12 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
@@ -106,7 +105,6 @@ void main() {
     service = FakeAgentUsageService(clock: clock);
     delivery = fullBar;
   });
-  tearDown(() => db.close());
 
   /// A session running in a pane of ours, which is the only kind with a bar.
   void seedPane({String id = 's1', String installation = 'a1'}) {
@@ -120,7 +118,7 @@ void main() {
         .layout
         .panes
         .single;
-    final dao = mirroredServer(db).sessionRows;
+    final dao = db.server.sessionRows;
     dao.insert(session(id: id, agentInstallationId: installation));
     dao.updatePaneId(id, paneId);
   }
@@ -232,7 +230,9 @@ void main() {
     // Two tabs, two accounts. This is the whole of *"each session might be
     // different one"*: activating the other tab must change which quota is
     // reported, because it is a different account's.
-    server.installationRows.insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
+    server.installationRows.insert(
+      agentInstallation(id: 'a2', agentId: AgentIds.codex),
+    );
     container = containerFor();
     seedPane();
     seedPane(id: 's2', installation: 'a2');
@@ -263,7 +263,9 @@ void main() {
   ) async {
     // Nothing, not a dash: a dash in a line of facts reads as a reading. The
     // service's own allowlist decides, one step earlier.
-    server.installationRows.insert(agentInstallation(id: 'a2', agentId: 'unknownAgent'));
+    server.installationRows.insert(
+      agentInstallation(id: 'a2', agentId: 'unknownAgent'),
+    );
     container = containerFor();
     seedPane(id: 's1', installation: 'a2');
     container.read(selectedSessionIdProvider.notifier).select('s1');

@@ -9,9 +9,11 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/window_matrix.dart';
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
+import '../../support/conversation_index_database.dart';
 
 /// What the snippets button costs the terminal's typing path, in counts.
 ///
@@ -41,19 +43,21 @@ void main() {
   // it: a later suite in the same isolate must see the host's own answer.
   tearDownAll(() => commandKeyIsMeta = hostCommandKeyIsMeta);
 
-  late CountingDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
 
-  setUp(() {
-    db = CountingDatabase();
+  setUp(() async {
+    server = FakeDataServer();
+    // The picker catches up the conversation index, still in the store (1f).
+    final db = TestMachine();
     container = ProviderContainer(
-      overrides: [...fakeTerminalOverrides(database: db)],
+      overrides: [
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db, data: await server.override()),
+      ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   TerminalSessionsController controller() =>
       container.read(terminalSessionsControllerProvider.notifier);
@@ -109,7 +113,7 @@ void main() {
     pane.terminal.onOutput = typed.add;
 
     TerminalToolbar.debugBuildCount = 0;
-    db.reset();
+    server.requests.clear();
     for (final letter in 'flutter test'.split('')) {
       pane.terminal.textInput(letter);
       pane.receive(letter);
@@ -131,11 +135,9 @@ void main() {
           'moves while somebody types',
     );
     expect(
-      db.count,
-      0,
-      reason:
-          'typing a character says nothing about any stored row: '
-          '${db.statements}',
+      server.requests,
+      isEmpty,
+      reason: 'typing a character says nothing about any stored row',
     );
   });
 
@@ -196,15 +198,8 @@ void main() {
       tester,
       because: 'the terminal toolbar with the snippets button added',
       build: () {
-        final matrixDb = CountingDatabase();
-        addTearDown(matrixDb.close);
         final scope = ProviderContainer(
-          overrides: [
-            ...fakeTerminalOverrides(
-              database: matrixDb,
-              shellIntegration: true,
-            ),
-          ],
+          overrides: [...fakeTerminalOverrides(shellIntegration: true)],
         );
         addTearDown(scope.dispose);
         final terminals = scope.read(

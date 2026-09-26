@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -6,7 +5,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:flutter/gestures.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
     show formatResetClock;
-import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -33,7 +31,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **A session's own tick repaints that session's row, not the Explorer.**
@@ -60,12 +58,12 @@ class _NoStores implements CliDetectionService {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows.insert(
@@ -73,7 +71,7 @@ void main() {
     );
     server.installationRows.insert(agentInstallation());
     for (var i = 0; i < 6; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -87,7 +85,7 @@ void main() {
       );
     }
     for (var i = 0; i < 6; i++) {
-      mirroredServer(db).importedRows.insertIfAbsent(
+      db.server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i$i',
           repositoryId: 'r1',
@@ -105,7 +103,6 @@ void main() {
       );
     }
   });
-  tearDown(() => db.close());
 
   Future<({ProviderContainer container, FakeTerminalInstance pane})> pump(
     WidgetTester tester,
@@ -116,7 +113,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -162,7 +159,7 @@ void main() {
         .tabs
         .firstWhere((tab) => tab.id == tabId)
         .focusedPaneId;
-    mirroredServer(db).sessionRows.updatePaneId('n0', paneId);
+    db.server.sessionRows.updatePaneId('n0', paneId);
     container
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.moved('n0'));
@@ -194,7 +191,7 @@ void main() {
     final panelBefore = panel(tester);
     expect(before.length, 12, reason: 'every card must be on screen to count');
 
-    mirroredServer(db).sessionRows.updateStatus('n3', SessionStatus.idle);
+    db.server.sessionRows.updateStatus('n3', SessionStatus.idle);
     harness.container
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.statusChanged('n3'));
@@ -229,7 +226,10 @@ void main() {
 
   group('a scheduled resume', () {
     ScheduledResume arm(ProviderContainer container, String sessionId) {
-      mirroredServer(db).sessionRows.updatePermissionMode(sessionId, 'mode=bypassPermissions');
+      db.server.sessionRows.updatePermissionMode(
+        sessionId,
+        'mode=bypassPermissions',
+      );
       return container
           .read(scheduledResumeControllerProvider)
           .schedule(
@@ -270,7 +270,10 @@ void main() {
       final before = cards(tester);
 
       // The revision the badge shares with every automation and run.
-      harness.container.read(automationsRevisionProvider.notifier).bump();
+      server.projectCheckRows.setVerificationEnabled(
+        'elsewhere',
+        enabled: true,
+      );
       await tester.pump();
       // And time passing: the row draws a clock time, which does not tick.
       await tester.pump(const Duration(minutes: 5));
@@ -291,10 +294,7 @@ void main() {
       await tester.tap(find.text('Cancel scheduled resume'));
       await tester.pumpAndSettle();
 
-      expect(
-        harness.container.read(scheduledResumeDaoProvider).liveFor('n2'),
-        isNull,
-      );
+      expect(harness.container.read(resumesDataProvider).liveFor('n2'), isNull);
       final card = tester
           .widgetList<SessionCard>(find.byType(SessionCard))
           .firstWhere((card) => card.title == 'Native 2');

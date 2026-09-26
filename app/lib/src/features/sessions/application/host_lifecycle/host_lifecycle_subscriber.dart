@@ -32,6 +32,7 @@ class HostLifecycleSubscriber {
   }) : _log = logger ?? AppLogger.named('sessions.host_lifecycle');
 
   final HostLifecycleSource source;
+
   /// The rows, read to tell the host which ones this app's panes run.
   final SessionReads sessions;
 

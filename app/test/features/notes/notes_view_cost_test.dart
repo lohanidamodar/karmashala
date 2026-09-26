@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
@@ -11,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
 
 /// **What changing session costs the notes list: nothing.**
 ///
@@ -43,20 +40,13 @@ import '../../support/workspace_mirror.dart';
 /// a card that never repaints is worth nothing if it also sends nowhere.
 void main() {
   Future<ProviderContainer> pump(WidgetTester tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
 
-    final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        await server.override(),
-      ],
-    );
+    final container = ProviderContainer(overrides: [await server.override()]);
     addTearDown(container.dispose);
     final sessions = container.read(sessionsDataProvider)
       ..insert(session(title: 'Toolbar rework'))

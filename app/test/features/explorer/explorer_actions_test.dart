@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -19,7 +18,7 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -72,14 +71,14 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-typedef Harness = ({ProviderContainer container, AppDatabase db});
+typedef Harness = ({ProviderContainer container, TestMachine db});
 
 Future<Harness> harness({
   bool installAgent = true,
   String agentId = 'sharing',
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -88,7 +87,7 @@ Future<Harness> harness({
   }
   final container = ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       await server.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -175,7 +174,6 @@ void main() {
       'a session we are still running is reattached, not relaunched',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         final id = await launchLive(h);
         final before = h.container.read(sessionsDataProvider).getAll().length;
@@ -199,7 +197,6 @@ void main() {
       // every resume put the agent back in the repository root — a different
       // directory on a different branch from the work being resumed.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final worktree = path(r'C:\src\demo\.karmashala-worktrees\wt-a');
       serverOf(h.container).sessionRows.insert(stopped(worktree: worktree));
@@ -227,7 +224,6 @@ void main() {
 
     test('a session in no worktree resumes in the repository', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       serverOf(h.container).sessionRows.insert(stopped());
 
@@ -243,7 +239,6 @@ void main() {
       // Starting the agent here would be a *new* conversation wearing this
       // row's title, which is worse than doing nothing.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       serverOf(h.container).sessionRows.insert(stopped(externalId: ''));
 
@@ -262,7 +257,6 @@ void main() {
       // card is still there to click. `_liveTwinOf` is what keeps that click
       // honest: two rows, one conversation, one process.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       serverOf(h.container).sessionRows.insert(stopped());
       await launchLive(h, externalId: 'ext-1');
@@ -283,12 +277,14 @@ void main() {
 
     test('an agent that refused to share says so in plain words', () async {
       final h = await harness(agentId: 'exclusive');
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       // A pane of ours died showing the agent's own refusal — the only certain
       // knowledge we ever get about a process we do not own.
       final id = await launchLive(h, externalId: 'ext-9', agentId: 'exclusive');
-      final paneId = h.container.read(sessionsDataProvider).getById(id)!.paneId!;
+      final paneId = h.container
+          .read(sessionsDataProvider)
+          .getById(id)!
+          .paneId!;
       final instance =
           h.container
                   .read(terminalSessionsControllerProvider.notifier)
@@ -321,7 +317,6 @@ void main() {
       'a session that has been deleted underneath us fails cleanly',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final result = await h.container
@@ -337,7 +332,6 @@ void main() {
   group('starting a session', () {
     test('the + uses the default agent for that environment', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final result = await h.container
@@ -355,7 +349,6 @@ void main() {
       // with no row has none. The owning repository supplies the id and
       // `existingWorktree` supplies the directory.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final worktree = path(r'C:\elsewhere\wt-side');
 
@@ -372,7 +365,6 @@ void main() {
 
     test('no agent installed is a sentence, not an exception', () async {
       final h = await harness(installAgent: false);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final result = await h.container
@@ -386,7 +378,6 @@ void main() {
 
     test('installationsFor lists what the "…with" menu may offer', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final installations = h.container

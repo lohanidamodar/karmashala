@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
@@ -25,7 +24,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/temp_directory.dart';
 
 void main() {
@@ -52,7 +51,6 @@ void main() {
           agentId: agentId,
           transcript: _transcript(agentId: agentId),
         );
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         await h.container.read(sessionRecapServiceProvider).write('s1');
         // Claude and Codex carry the request alone; Antigravity carries it with
@@ -73,7 +71,6 @@ void main() {
         agentId: AgentIds.claudeCode,
         transcript: _transcript(),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await h.container.read(sessionRecapServiceProvider).write('s1');
@@ -90,7 +87,6 @@ void main() {
         agentId: AgentIds.codex,
         transcript: _transcript(agentId: AgentIds.codex),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await h.container.read(sessionRecapServiceProvider).write('s1');
@@ -105,7 +101,6 @@ void main() {
         agentId: AgentIds.antigravity,
         transcript: _transcript(agentId: AgentIds.antigravity),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await h.container.read(sessionRecapServiceProvider).write('s1');
@@ -127,7 +122,6 @@ void main() {
         transcript: _transcript(),
         model: 'haiku',
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await h.container.read(sessionRecapServiceProvider).write('s1');
@@ -151,7 +145,6 @@ void main() {
           agentId: AgentIds.claudeCode,
           transcript: _transcript(padTurns: 60, padBytes: 2000),
         );
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         await h.container.read(sessionRecapServiceProvider).write('s1');
@@ -175,7 +168,6 @@ void main() {
         agentId: AgentIds.claudeCode,
         transcript: _transcript(),
       );
-      addTearDown(h.db.close);
 
       // Launch: the row exists and every surface that would show a recap is
       // read.
@@ -234,7 +226,6 @@ void main() {
           prior: true,
         ),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await expectLater(
@@ -261,7 +252,6 @@ void main() {
       tester,
     ) async {
       final db = _seededDb();
-      addTearDown(db.close);
       SessionRecapDaoWriter.seed(
         db,
         turnCount: 4,
@@ -286,7 +276,6 @@ void main() {
       tester,
     ) async {
       final db = _seededDb();
-      addTearDown(db.close);
       SessionRecapDaoWriter.seed(db, turnCount: 4, writtenAt: testTime);
 
       await tester.pumpWidget(await _card(db: db, turnsNow: 9));
@@ -301,7 +290,6 @@ void main() {
 
     testWidgets('draws nothing at all before anybody asks', (tester) async {
       final db = _seededDb();
-      addTearDown(db.close);
 
       await tester.pumpWidget(await _card(db: db, turnsNow: 4));
       await tester.pump();
@@ -315,7 +303,7 @@ void main() {
 
 typedef RecapHarness = ({
   ProviderContainer container,
-  AppDatabase db,
+  TestMachine db,
   FakeCommandRunner runner,
 });
 
@@ -327,7 +315,7 @@ Future<RecapHarness> harness({
     ChatViewEvidence.transcriptOnDisk,
     prior: true,
   ),
-  AppDatabase? db,
+  TestMachine? db,
   FakeCommandRunner? runner,
 }) async {
   final database = db ?? _seededDb(agentId: agentId);
@@ -343,7 +331,7 @@ Future<RecapHarness> harness({
 
   final container = ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: database),
+      ...fakeTerminalOverrides(machine: database),
       await _serverOf[database]!.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       commandRunnerFactoryProvider.overrideWithValue(
@@ -375,15 +363,15 @@ Future<RecapHarness> harness({
 /// The server each seeded database's workspace lives at.
 final _serverOf = Expando<FakeDataServer>();
 
-AppDatabase _seededDb({String agentId = AgentIds.claudeCode}) {
-  final db = AppDatabase.memory();
-  final server = _serverOf[db] = FakeDataServer()..mirrorInto(db);
-  mirroredServer(db).environmentRows.upsert(windowsEnv());
+TestMachine _seededDb({String agentId = AgentIds.claudeCode}) {
+  final db = TestMachine();
+  final server = _serverOf[db] = FakeDataServer()..runsOn(db);
+  db.server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  mirroredServer(
-    db,
-  ).installationRows.insert(agentInstallation(id: 'a1', agentId: agentId));
+  db.server.installationRows.insert(
+    agentInstallation(id: 'a1', agentId: agentId),
+  );
   server.sessionRows.insert(
     session(id: 's1').copyWith(externalSessionId: 'cli-1'),
   );
@@ -448,7 +436,7 @@ class _FakeLocator implements SessionTranscriptLocator {
 /// what it renders rather than about how a row got there.
 abstract final class SessionRecapDaoWriter {
   static void seed(
-    AppDatabase db, {
+    TestMachine db, {
     required int turnCount,
     required DateTime writtenAt,
   }) {
@@ -465,10 +453,10 @@ abstract final class SessionRecapDaoWriter {
   }
 }
 
-Future<Widget> _card({required AppDatabase db, required int turnsNow}) async =>
+Future<Widget> _card({required TestMachine db, required int turnsNow}) async =>
     ProviderScope(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await _serverOf[db]!.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionChatTranscriptProvider.overrideWith(

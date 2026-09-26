@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/decision_tools.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -18,7 +17,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:agent_cli/process.dart';
 
@@ -29,18 +28,18 @@ import 'package:agent_cli/process.dart';
 /// did something.** Nothing here feeds a conversation to anything.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
   late FakeDataServer fake;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_decision_tools_');
-    db = AppDatabase.memory();
-    fake = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    fake = FakeDataServer()..runsOn(db);
     fake.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     fake.installationRows.insert(agentInstallation());
@@ -49,7 +48,7 @@ void main() {
 
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
@@ -64,7 +63,6 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 

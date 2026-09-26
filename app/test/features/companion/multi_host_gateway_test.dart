@@ -12,12 +12,10 @@ library;
 
 import 'dart:async';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/client.dart' as stored;
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,16 +25,14 @@ import '../remote/transport_harness.dart';
 
 /// One desktop: its own database, bindings and running host service.
 class _Host {
-  _Host(this.db, this.dao, this.fake, this.service);
+  _Host(this.dao, this.fake, this.service);
 
-  final AppDatabase db;
-  final PairedDeviceDao dao;
+  final MemoryPairedDeviceStore dao;
   final FakeRemoteBindings fake;
   final RemoteHostService service;
 
   Future<void> dispose() async {
     await service.stop();
-    db.close();
   }
 }
 
@@ -108,8 +104,7 @@ void main() {
     required String sessionId,
     required String title,
   }) async {
-    final db = AppDatabase.memory();
-    final dao = PairedDeviceDao(db);
+    final dao = MemoryPairedDeviceStore();
     final fake = FakeRemoteBindings()..addSession(sessionId, title: title);
     fake.transcripts[sessionId] = [
       RemoteTranscriptMessage(role: 'agent', text: 'from $title'),
@@ -129,7 +124,7 @@ void main() {
       )..start(),
     );
     await service.start();
-    final host = _Host(db, dao, fake, service);
+    final host = _Host(dao, fake, service);
     hosts.add(host);
     return host;
   }

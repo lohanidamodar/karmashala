@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala_git/git.dart';
 
@@ -17,7 +16,6 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// [GitFiles] with no disk behind it.
 class _MemoryGitFiles implements GitFiles {
@@ -52,10 +50,9 @@ class _MemoryGitFiles implements GitFiles {
 /// one of them.
 void main() {
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\demo');
-  late AppDatabase db;
   late FakeDataServer server;
   late DataClient client;
-  late CheckpointDao dao;
+  late CheckpointsData dao;
   late CheckpointService service;
   late List<String> trees;
   late int ids;
@@ -108,8 +105,7 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     client = await server.connect();
     server.environmentRows.upsert(
       ExecutionEnvironment(
@@ -119,7 +115,7 @@ void main() {
         createdAt: testTime,
       ),
     );
-    dao = CheckpointDao(db);
+    dao = CheckpointsData(client);
     trees = ['tree1'];
     ids = 0;
     service = CheckpointService(
@@ -127,13 +123,12 @@ void main() {
         fallback: FakeCommandRunner(responder: respond),
       ),
       environmentOf: server.environmentRows.getById,
-      dao: dao,
+      records: dao,
       clock: FixedClock(testTime),
       newId: () => 'ckpt${ids + 100}',
       files: _MemoryGitFiles(),
     );
   });
-  tearDown(() => db.close());
 
   /// Bounded pumps, not `pumpAndSettle`: the row spins while the restore is in
   /// flight and a dialog is up over it, so nothing in this tree ever settles.
@@ -152,9 +147,8 @@ void main() {
       ProviderScope(
         overrides: [
           checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
-          databaseProvider.overrideWithValue(db),
           dataClientProvider.overrideWithValue(client),
-          checkpointDaoProvider.overrideWithValue(dao),
+          checkpointsDataProvider.overrideWithValue(dao),
           checkpointServiceProvider.overrideWithValue(service),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],

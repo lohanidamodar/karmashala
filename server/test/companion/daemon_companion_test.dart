@@ -9,6 +9,9 @@ import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:agent_cli/usage.dart'
     show AgentUsage, AgentUsageService, UsageWindow;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataChanges, DataSubscribe, DeviceChanged, DeviceRevoke;
+import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_notes/store.dart';
@@ -17,6 +20,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_companion_server/store.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:test/test.dart';
 import 'package:karmashala_session_engine/store.dart';
@@ -36,6 +40,7 @@ void main() {
   late DaemonCompanion companion;
   late Directory home;
   late _FakeUsage usage;
+  late DataService data;
 
   setUp(() async {
     home = Directory.systemTemp.createTempSync('daemon-companion-');
@@ -84,7 +89,9 @@ void main() {
     registry = SessionRegistry(launcher: launcher);
     events = StreamController<LifecycleEvent>.broadcast();
     usage = _FakeUsage();
+    data = DataService(database);
     companion = DaemonCompanion(
+      data: data,
       database: database,
       registry: registry,
       hostName: 'desk',
@@ -328,11 +335,37 @@ void main() {
       },
     );
 
-    test('a push token is kept in the store', () async {
+    test('a push token is kept in the store, and clients are told the '
+        'device without it', () async {
+      final told = <DataChanges>[];
+      data.open(told.add).handle(const DataSubscribe());
       final client = await dial();
       await client.registerNotifications(token: 'fcm-1', platform: 'android');
 
       expect(PairedDeviceDao(database).getById('pixel')!.pushToken, 'fcm-1');
+      final devices = [
+        for (final batch in told)
+          for (final change in batch.changes)
+            if (change is DeviceChanged) change.device,
+      ];
+      expect(devices, isNotEmpty);
+      expect(
+        jsonEncode([for (final b in told) b.toJson()]),
+        isNot(contains('fcm-1')),
+      );
+    });
+
+    test('a client\'s revoke drops the phone\'s live link', () async {
+      final client = await dial();
+      await client.registerNotifications(token: 'fcm-1', platform: 'android');
+
+      data.open((_) {}).handle(const DeviceRevoke('pixel'));
+
+      expect(PairedDeviceDao(database).getById('pixel')!.deviceKey, isEmpty);
+      await expectLater(
+        client.registerNotifications(token: 'fcm-2', platform: 'android'),
+        throwsA(anything),
+      );
     });
   });
 

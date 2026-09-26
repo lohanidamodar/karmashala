@@ -6,7 +6,7 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/comparison_providers.dart';
-import '../domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'comparison_chrome.dart';
 
 /// Every fan-out that has been run, newest first. Before it a comparison

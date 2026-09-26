@@ -1,5 +1,5 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -15,17 +15,14 @@ import '../terminal/fake_instance.dart';
 /// modelled on state: **count work, never time it.** The suite runs at
 /// `--concurrency=4` beside other work, so a wall-clock assertion over a few
 /// milliseconds is a coin toss, and the units that actually matter here —
-/// database statements, buffer reads, listeners, live instances — are all
+/// data requests, statements, buffer reads, listeners, live instances — are all
 /// countable directly.
 
-/// An [AppDatabase] that records every statement issued through its public
-/// helpers, so a period of the app's life can be priced in statements.
-///
-/// Schema migration runs against the raw handle inside `AppDatabase`'s own
-/// constructor and is therefore not counted, which is what makes a freshly
-/// opened counter read zero.
-class CountingDatabase extends AppDatabase {
-  CountingDatabase() : super(sqlite3.openInMemory());
+/// A [TerminalLayoutStore] that records every statement issued through its
+/// public helpers — its schema is created on the raw handle, so a fresh one
+/// reads zero.
+class CountingLayoutStore extends TerminalLayoutStore {
+  CountingLayoutStore() : super(sqlite3.openInMemory());
 
   final List<String> statements = [];
 
@@ -33,12 +30,9 @@ class CountingDatabase extends AppDatabase {
 
   int get count => statements.length;
 
-  static bool _isRead(String sql) =>
-      sql.trimLeft().toUpperCase().startsWith('SELECT');
-
-  List<String> get reads => statements.where(_isRead).toList();
-
-  List<String> get writes => statements.where((sql) => !_isRead(sql)).toList();
+  List<String> get reads => statements
+      .where((sql) => sql.trimLeft().toUpperCase().startsWith('SELECT'))
+      .toList();
 
   @override
   List<Map<String, Object?>> query(
@@ -125,7 +119,7 @@ class RecordedSchedule {
   }
 }
 
-/// A layout of process-free panes over a real database, driven through the
+/// A layout of process-free panes over a real layout store, driven through the
 /// production [TerminalSessionsController].
 ///
 /// One pane per tab rather than splits: every pane is then addressable, and the
@@ -134,20 +128,20 @@ class ScaleLayout {
   ScaleLayout._(
     this.container,
     this.controller,
-    this.database,
+    this.store,
     this.schedule,
     this.terminalsByPane,
     this.instancesByPane,
   );
 
-  factory ScaleLayout({AppDatabase? database}) {
-    final db = database ?? CountingDatabase();
+  factory ScaleLayout({TerminalLayoutStore? store}) {
+    final db = store ?? CountingLayoutStore();
     final schedule = RecordedSchedule();
     final terminals = <String, CountingTerminal>{};
     final instances = <String, FakeTerminalInstance>{};
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        terminalLayoutStoreProvider.overrideWithValue(db),
         scrollbackAutosaveFactoryProvider.overrideWithValue(
           ({required onTick}) => ScrollbackAutosave(
             onTick: onTick,
@@ -196,7 +190,7 @@ class ScaleLayout {
 
   final ProviderContainer container;
   final TerminalSessionsController controller;
-  final AppDatabase database;
+  final TerminalLayoutStore store;
   final RecordedSchedule schedule;
 
   /// Every terminal the factory has ever built, by pane id — including panes
@@ -223,7 +217,7 @@ class ScaleLayout {
   TerminalSessionsState get state =>
       container.read(terminalSessionsControllerProvider);
 
-  CountingDatabase get counting => database as CountingDatabase;
+  CountingLayoutStore get counting => store as CountingLayoutStore;
 
   /// Opens a tab holding one pane and returns that pane's id.
   String openPane() {
@@ -270,7 +264,7 @@ class ScaleLayout {
   /// rather than through the dao, so a dao that skipped a write it thought it
   /// had made cannot hide it.
   String storedScrollback(String paneId) {
-    final rows = database.query(
+    final rows = store.query(
       'SELECT scrollback FROM terminal_panes WHERE id = ?;',
       [paneId],
     );
@@ -278,29 +272,27 @@ class ScaleLayout {
   }
 
   int get storedPaneRows =>
-      database.query('SELECT COUNT(*) AS n FROM terminal_panes;').first['n']!
+      store.query('SELECT COUNT(*) AS n FROM terminal_panes;').first['n']!
           as int;
 
   int get storedTabRows =>
-      database.query('SELECT COUNT(*) AS n FROM terminal_tabs;').first['n']!
+      store.query('SELECT COUNT(*) AS n FROM terminal_tabs;').first['n']!
           as int;
 
   /// The copy a save takes when it loses something. Bounded rather than
   /// growing: each backup replaces the last.
   int get backupTabRows =>
-      database
-              .query('SELECT COUNT(*) AS n FROM terminal_tabs_backup;')
-              .first['n']!
+      store.query('SELECT COUNT(*) AS n FROM terminal_tabs_backup;').first['n']!
           as int;
 
   int get backupPaneRows =>
-      database
+      store
               .query('SELECT COUNT(*) AS n FROM terminal_panes_backup;')
               .first['n']!
           as int;
 
   void dispose() {
     container.dispose();
-    database.close();
+    store.close();
   }
 }

@@ -1,6 +1,4 @@
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/process.dart';
@@ -18,27 +16,23 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late FakeHostRows<ExecutionEnvironment> environments;
   late FakeHostRows<SshHost> hosts;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     environments = server.environmentRows;
     environments.upsert(windowsEnv());
     environments.upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
     hosts = server.sshHostRows;
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     final workspace = await server.override();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           workspace,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),

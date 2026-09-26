@@ -22,8 +22,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import '../../checkpoints/application/checkpoint_providers.dart'
-    show checkpointDaoProvider;
+import '../../checkpoints/data/checkpoints_data.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
 import 'session_working_directory.dart';
@@ -90,7 +89,7 @@ class SessionExporter {
 
     final transcript = await _transcript(session, agentId);
     final decisions = _decisions(sessionId);
-    final checkpoints = _checkpoints(sessionId);
+    final checkpoints = await _checkpoints(sessionId);
 
     final entries = <ZipEntry>[
       ZipEntry.text(
@@ -231,9 +230,9 @@ class SessionExporter {
     }
   }
 
-  List<Checkpoint> _checkpoints(String sessionId) {
+  Future<List<Checkpoint>> _checkpoints(String sessionId) async {
     try {
-      return _ref.read(checkpointDaoProvider).forSession(sessionId);
+      return await _ref.read(checkpointsDataProvider).forSession(sessionId);
     } on Object {
       return const [];
     }

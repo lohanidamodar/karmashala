@@ -2,20 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
-import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'comparison_fixtures.dart' show worktree;
 
 const _candidates = 9;
@@ -63,11 +60,11 @@ class _AllDirty extends FanOutService {
   );
 }
 
-AppDatabase _seeded(FakeDataServer server) {
-  final db = AppDatabase.memory();
+TestMachine _seeded(FakeDataServer server) {
+  final db = TestMachine();
   server.environmentRows.upsert(windowsEnv());
-  server.mirrorInto(db);
-  ComparisonDao(db).insert(
+  server.runsOn(db);
+  db.server.comparisonRows.insert(
     Comparison(
       id: 'cmp-dirty',
       repositoryId: 'r1',
@@ -109,11 +106,9 @@ void main() {
           'one checkbox row per dirty worktree, each with a three-line '
           'subtitle, in a dialog that did not scroll',
       build: () {
-        final db = _seeded(server);
-        addTearDown(db.close);
+        _seeded(server);
         final container = ProviderContainer(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             dataClientProvider.overrideWithValue(client),
             fanOutServiceProvider.overrideWith(_AllDirty.new),
             commandRunnerFactoryProvider.overrideWithValue(

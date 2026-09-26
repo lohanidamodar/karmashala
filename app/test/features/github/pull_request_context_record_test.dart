@@ -1,16 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/github/application/pull_request_context_service.dart';
 import 'package:karmashala_git/pull_request_context.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// A long paste collapses in the agent's own transcript, so the only place
 /// that can answer "what was it actually told?" is this record. What it keeps
@@ -29,13 +26,11 @@ class _RecordingActions extends SessionActions {
 }
 
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late _RecordingActions actions;
 
   Future<void> build({bool failSend = false}) async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer().mirrorInto(db);
+    final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server
       ..projectRows.insert(project())
@@ -44,7 +39,6 @@ void main() {
     server.sessionRows.insert(session());
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionActionsProvider.overrideWith((ref) {
@@ -60,7 +54,6 @@ void main() {
   setUp(build);
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   PullRequestContextService service() =>

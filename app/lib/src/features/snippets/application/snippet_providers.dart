@@ -1,24 +1,38 @@
+import 'dart:async';
+
+import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_client.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
-import '../data/command_snippet_dao.dart';
-import '../domain/command_snippet.dart';
 
-final commandSnippetDaoProvider = Provider<CommandSnippetDao>(
-  (ref) => CommandSnippetDao(ref.watch(databaseProvider)),
-);
-
-/// Every saved snippet, kept in memory so a surface rebuilds on a write.
+/// Every saved snippet, from this app's copy of the server's, in the table's
+/// order. A write lands in the copy at once and at the server after.
 /// Nothing on the terminal's hot path watches this — `snippet_button_cost_test`.
 class CommandSnippetsController extends Notifier<List<CommandSnippet>> {
+  static final _log = AppLogger.named('snippets');
+
   @override
-  List<CommandSnippet> build() => ref.watch(commandSnippetDaoProvider).list();
+  List<CommandSnippet> build() {
+    final replica = ref.watch(dataClientProvider).snippets;
+    final listening = replica.changes.listen((_) => state = _sorted());
+    ref.onDispose(listening.cancel);
+    return _sorted();
+  }
 
-  CommandSnippetDao get _dao => ref.read(commandSnippetDaoProvider);
+  DataClient get _client => ref.read(dataClientProvider);
 
-  /// Saves a new snippet. [command] is flattened to one line — see
-  /// [singleLine] for why a stored newline would be a submit nobody asked for.
+  List<CommandSnippet> _sorted() => List.unmodifiable(
+    <CommandSnippet>[..._client.snippets.values]..sort(compareSnippets),
+  );
+
+  CommandSnippet? getById(String id) => _client.snippets[id];
+
+  /// Saves a new snippet; the server flattens [command] to one line
+  /// ([singleLine]) and stamps it.
   CommandSnippet add({
     required String label,
     required String command,
@@ -35,8 +49,16 @@ class CommandSnippetsController extends Notifier<List<CommandSnippet>> {
       createdAt: now,
       updatedAt: now,
     );
-    _dao.insert(snippet);
-    state = [...state, snippet];
+    _client.snippets.setLocal(snippet.id, snippet);
+    _send(
+      SnippetAdd(
+        id: snippet.id,
+        label: label,
+        command: command,
+        shellId: shellId,
+        submit: submit,
+      ),
+    );
     return snippet;
   }
 
@@ -47,41 +69,48 @@ class CommandSnippetsController extends Notifier<List<CommandSnippet>> {
     required String? shellId,
     required bool submit,
   }) {
-    final index = state.indexWhere((s) => s.id == id);
-    if (index == -1) return;
-    final now = ref.read(clockProvider).nowUtc();
-    final trimmed = label.trim();
-    final flattened = singleLine(command);
-    _dao.update(
+    final existing = _client.snippets[id];
+    if (existing == null) return;
+    _client.snippets.setLocal(
       id,
-      label: trimmed,
-      command: flattened,
-      shellId: shellId,
-      submit: submit,
-      updatedAt: now,
-    );
-    state = [...state]
-      ..[index] = state[index].copyWith(
-        label: trimmed,
-        command: flattened,
+      existing.copyWith(
+        label: label.trim(),
+        command: singleLine(command),
         shellId: shellId,
         clearShell: shellId == null,
         submit: submit,
-        updatedAt: now,
-      );
+        updatedAt: ref.read(clockProvider).nowUtc(),
+      ),
+    );
+    _send(
+      SnippetEdit(
+        id: id,
+        label: label,
+        command: command,
+        shellId: shellId,
+        submit: submit,
+      ),
+    );
   }
 
   void delete(String id) {
-    _dao.delete(id);
-    state = [
-      for (final snippet in state)
-        if (snippet.id != id) snippet,
-    ];
+    _client.snippets.setLocal(id, null);
+    _send(SnippetDelete(id));
   }
 
-  /// Unique within a run and sortable, the same shape `NotesController` uses:
-  /// a counter rides along with the clock because a fixed clock in a test makes
-  /// two writes in one millisecond a certainty rather than a rarity.
+  /// Sent behind the copy; a refusal is logged and the copy read again.
+  void _send<R>(DataRequest<R> request) => unawaited(
+    _client
+        .write(request, domain: DataDomain.snippets)
+        .then<void>(
+          (_) {},
+          onError: (Object error) =>
+              _log.warning('${request.kind} was refused: $error'),
+        ),
+  );
+
+  /// Unique within a run and sortable: a counter rides along with the clock,
+  /// because a fixed clock in a test makes two writes in one millisecond sure.
   String _newId(DateTime now) =>
       'snippet-${now.microsecondsSinceEpoch}-${_sequence++}';
 

@@ -15,26 +15,25 @@ import 'package:karmashala/src/features/terminal/presentation/session_host_banne
 import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/temp_directory.dart';
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// The app supervises this machine's host while it is open: a host that dies
 /// is started again, and the lifecycle subscriber — with everything that rides
 /// it — attaches to the new one.
 void main() {
   late Directory home;
-  late AppDatabase db;
+  late TestMachine db;
 
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_host_supervision_');
-    db = AppDatabase.memory();
+    db = TestMachine();
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(home);
   });
 
@@ -46,7 +45,7 @@ void main() {
     final source = _Source(host);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         hostBackedLocalPanesProvider.overrideWithValue(true),
         localHostSessionAccessProvider.overrideWithValue(host),
         localHostSupervisorProvider.overrideWith((ref) {

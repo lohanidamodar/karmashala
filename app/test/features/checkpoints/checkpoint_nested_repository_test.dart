@@ -9,6 +9,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_targets.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
@@ -18,13 +19,12 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/temp_directory.dart';
 import '../terminal/fake_instance.dart';
 
@@ -44,7 +44,7 @@ void main() {
   late Directory tmp;
   late String hub;
   late String app;
-  late AppDatabase db;
+  late TestMachine db;
   late AgentHookReports reports;
   late SessionStatusRegistry registry;
   late ProviderContainer container;
@@ -84,15 +84,15 @@ void main() {
     git(app, ['add', '-A']);
     git(app, ['commit', '-q', '-m', 'app']);
 
-    db = AppDatabase.memory();
+    db = TestMachine();
     final clock = FixedClock(testTime);
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
     const envId = localHostEnvironmentId;
     server.projectRows.insert(project(environmentId: envId, path: hub));
     server.repositoryRows.insert(repository(environmentId: envId, path: hub));
     server.installationRows.insert(agentInstallation(environmentId: envId));
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(
         session(
           status: SessionStatus.running,
@@ -122,7 +122,7 @@ void main() {
     var ids = 0;
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(clock),
         agentHookReportsProvider.overrideWithValue(reports),
@@ -131,7 +131,7 @@ void main() {
           CheckpointService(
             runnerFactory: const CommandRunnerFactory(),
             environmentOf: server.environmentRows.getById,
-            dao: CheckpointDao(db),
+            records: CheckpointsData(await server.connect()),
             clock: clock,
             newId: () => 'ckpt${++ids}',
           ),
@@ -144,7 +144,6 @@ void main() {
   tearDown(() {
     registry.dispose();
     container.dispose();
-    db.close();
     removeTempDirectory(tmp);
   });
 
@@ -209,9 +208,10 @@ void main() {
     gaveUpAfter = null;
     final started = DateTime.now();
     final deadline = started.add(waitForCapture);
-    while (CheckpointDao(
-          db,
-        ).forSession('s1').where((c) => c.repository.path == path).length <
+    while (db.server.checkpointRows
+            .forSession('s1')
+            .where((c) => c.repository.path == path)
+            .length <
         count) {
       if (DateTime.now().isAfter(deadline)) {
         gaveUpAfter = DateTime.now().difference(started);
@@ -223,7 +223,7 @@ void main() {
   }
 
   List<Checkpoint> ofRepo(String path) => [
-    for (final c in CheckpointDao(db).forSession('s1'))
+    for (final c in db.server.checkpointRows.forSession('s1'))
       if (c.repository.path == path) c,
   ];
 
@@ -355,7 +355,7 @@ void main() {
       git(worktree, ['init', '-q']);
       git(worktree, ['add', '-A']);
       git(worktree, ['commit', '-q', '-m', 'gone']);
-      final envId = mirroredServer(db).environmentRows.getAll().first.id;
+      final envId = db.server.environmentRows.getAll().first.id;
       final gone = EnvironmentPath(environmentId: envId, path: worktree);
       File(p.join(worktree, 'a.txt')).writeAsStringSync('b\n');
       expect(
@@ -398,8 +398,10 @@ void main() {
   test('pruning leaves a chain git holds, of only the kept trees', () async {
     final service = container.read(checkpointServiceProvider);
     final envId =
-        CheckpointDao(db).latestFor('s1')?.repository.environmentId ??
-        mirroredServer(db).environmentRows.getAll().first.id;
+        latestCheckpointIn(
+          db.server.checkpointRows.forSession('s1'),
+        )?.repository.environmentId ??
+        db.server.environmentRows.getAll().first.id;
     final repo = EnvironmentPath(environmentId: envId, path: app);
     for (var i = 0; i < 3; i++) {
       File(p.join(app, 'main.txt')).writeAsStringSync('v$i\n');
@@ -407,7 +409,10 @@ void main() {
     }
     expect(await service.prune(repo, sessionId: 's1', keep: 1), 2);
 
-    final kept = CheckpointDao(db).forRepository('s1', repo).single;
+    final kept = checkpointChainIn(
+      db.server.checkpointRows.forSession('s1'),
+      repo,
+    ).single;
     final count = Process.runSync('git', [
       '-C',
       app,

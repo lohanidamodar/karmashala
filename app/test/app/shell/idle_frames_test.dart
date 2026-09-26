@@ -20,7 +20,6 @@ import 'package:karmashala/src/features/sessions/application/session_ui_provider
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -31,7 +30,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **An idle app draws nothing.**
 ///
@@ -54,7 +53,7 @@ import '../../support/workspace_mirror.dart';
 /// the shared [StatusSpinnerClock], one timer for every spinner in the app,
 /// running only while a spinner is actually painting.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   /// Set before the container is built, so a case can decide whether the Media
@@ -62,15 +61,15 @@ void main() {
   late Stream<List<SessionMediaItem>> media;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     media = Stream.value(const []);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     for (final id in ['s1', 's2']) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -87,7 +86,7 @@ void main() {
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -127,7 +126,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   Future<void> settle(WidgetTester tester, {int frames = 40}) async {
     for (var i = 0; i < frames; i++) {
@@ -154,7 +152,7 @@ void main() {
           .layout
           .panes
           .single;
-      mirroredServer(db).sessionRows.updatePaneId(id, paneId);
+      db.server.sessionRows.updatePaneId(id, paneId);
     }
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
 

@@ -27,7 +27,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/counting_sessions.dart';
@@ -476,7 +476,7 @@ class _StartWorkspace {
     required this.server,
     required Override data,
   }) {
-    server.mirrorInto(db);
+    server.runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -488,7 +488,7 @@ class _StartWorkspace {
         // Session reads, counted: the unit this file prices since 1c.
         ...countedSessionsOverrides(log),
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           instanceFactory:
               ({
                 required id,
@@ -585,7 +585,7 @@ class _StartWorkspace {
 
   final int sessions;
   final FakeDataServer server;
-  final db = CountingDatabase();
+  final db = CountingMachine();
 
   /// Every read of the sessions copy.
   final log = SessionReadLog();
@@ -682,7 +682,6 @@ class _StartWorkspace {
 
   void dispose() {
     container.dispose();
-    db.close();
   }
 }
 

@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/process.dart';
@@ -15,10 +13,11 @@ import 'package:sqlite3/sqlite3.dart' show sqlite3;
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
+import '../../support/conversation_index_database.dart';
 
 /// The owner's bug, end to end through the real providers.
 ///
@@ -32,15 +31,15 @@ void main() {
   late DataClient client;
   late Directory tmp;
   late String storeHome;
-  late AppDatabase db;
+  late TestMachine db;
 
   const conversation = 'df3c0708-1111-4222-8333-444455556666';
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_wiring_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -48,7 +47,7 @@ void main() {
     server.installationRows.insert(
       agentInstallation(agentId: AgentIds.antigravity),
     );
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -63,7 +62,6 @@ void main() {
     );
   });
   tearDown(() {
-    db.close();
     try {
       tmp.deleteSync(recursive: true);
     } on FileSystemException {
@@ -94,7 +92,7 @@ void main() {
 
   ProviderContainer container() => ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(db),
+      conversationIndexDatabase(),
       dataClientProvider.overrideWithValue(client),
       cliStoreLocatorProvider.overrideWithValue(
         FixedLocator([
@@ -114,7 +112,7 @@ void main() {
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'test me now');
+    expect(db.server.sessionRows.getById('s1')!.title, 'test me now');
   });
 
   test('a phantom row learns its id and its name in one slot', () async {
@@ -127,8 +125,8 @@ void main() {
     File(
       p.join(storeHome, 'conversations', '$conversation.db'),
     ).setLastModifiedSync(testTime.add(const Duration(seconds: 5)));
-    mirroredServer(db).sessionRows.delete('s1');
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.delete('s1');
+    db.server.sessionRows.insert(
       Session(
         id: 's2',
         repositoryId: 'r1',
@@ -148,7 +146,7 @@ void main() {
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    final row = mirroredServer(db).sessionRows.getById('s2')!;
+    final row = db.server.sessionRows.getById('s2')!;
     expect(row.externalSessionId, conversation);
     expect(row.title, 'test me now');
   });
@@ -164,6 +162,6 @@ void main() {
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'New session');
+    expect(db.server.sessionRows.getById('s1')!.title, 'New session');
   });
 }

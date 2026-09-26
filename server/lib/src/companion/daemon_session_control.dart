@@ -5,7 +5,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show PermissionCycleOutcome, cyclePermissionTo;
-import 'package:karmashala_automations/persistence.dart' show CheckoutRows;
+import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';

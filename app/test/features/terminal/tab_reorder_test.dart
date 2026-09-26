@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -28,9 +28,9 @@ import 'fake_instance.dart';
 /// is exactly the thing a mouse user never does.
 
 ProviderContainer harness() {
-  final database = AppDatabase.memory();
+  final database = TerminalLayoutStore.memory();
   addTearDown(database.close);
-  final container = fakeTerminalContainer(database: database);
+  final container = fakeTerminalContainer(layoutStore: database);
   addTearDown(container.dispose);
   return container;
 }

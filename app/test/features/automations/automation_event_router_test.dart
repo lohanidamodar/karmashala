@@ -3,38 +3,36 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/automations/application/automation_event_router.dart';
-import 'package:karmashala/src/features/automations/application/automation_scheduler.dart';
+
 import 'package:karmashala/src/features/automations/application/usage_limit_watcher.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/events.dart';
-import 'package:karmashala_automations/persistence.dart';
+
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_notifications/watched.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'scheduled_resume_harness.dart';
 
-/// Stands in for the runner: the queued row becomes a running one in a new
-/// session, as a real launch would leave it. Starts no agent.
-class _StartingFiring implements AutomationFiring {
+/// Stands in for the server starting a queued event run: the row becomes a
+/// running one in a new session, as its launch would leave it.
+class _StartingFiring {
   _StartingFiring(this._harness);
 
   final ResumeHarness _harness;
   final List<String> started = [];
 
-  @override
-  Future<void> fire(
-    Automation automation,
-    DateTime scheduledFor, {
-    String note = '',
-    AutomationRun? queued,
-  }) async {
+  void start(AutomationRun queued) {
+    final rows = _harness.server.automationRows;
+    if (rows.liveRuns().first.id != queued.id) return;
     final id = 'started-${started.length + 1}';
     started.add(id);
-    _harness.server.sessionRows.insert(session(id: id, title: automation.name));
-    AutomationDao(_harness.db).updateRun(
-      queued!.copyWith(state: AutomationRunState.running, sessionId: id),
+    final rule = rows.getById(queued.automationId)!;
+    _harness.server.sessionRows.insert(session(id: id, title: rule.name));
+    rows.updateRun(
+      queued.copyWith(state: AutomationRunState.running, sessionId: id),
     );
   }
 }
@@ -50,15 +48,12 @@ void main() {
   setUp(() async {
     changes = StreamController<SessionStatusEntry>.broadcast(sync: true);
     h = await ResumeHarness.create(
-      extra: [
-        sessionStatusChangesProvider.overrideWithValue(changes.stream),
-        automationFiringProvider.overrideWith((ref) => firing),
-      ],
+      extra: [sessionStatusChangesProvider.overrideWithValue(changes.stream)],
     );
     firing = _StartingFiring(h);
+    h.server.automationRows.startQueued = firing.start;
     h.addSession();
     h.attachPane('s1');
-    h.scheduler();
     h.container.listen(automationEventRouterProvider, (_, _) {});
   });
 
@@ -67,7 +62,7 @@ void main() {
     await h.dispose();
   });
 
-  AutomationDao dao() => AutomationDao(h.db);
+  FakeAutomationRows dao() => h.server.automationRows;
   AutomationEventRouter router() =>
       h.container.read(automationEventRouterProvider.notifier);
 
@@ -349,20 +344,5 @@ void main() {
         reason: 'no message went in, so no turn is the rule\'s',
       );
     });
-  });
-
-  test('the clock never fires an event rule', () async {
-    rule(action: AutomationEventAction.startSession);
-    // The DAO stores no schedule for one; a row that has one anyway must still
-    // be left to its event.
-    h.db.execute(
-      "UPDATE automations SET cron = '* * * * *' WHERE id = 'rule';",
-    );
-    final scheduler = h.scheduler();
-    expect(h.timer.isArmed, isFalse, reason: 'nothing is due on a clock');
-    h.clock.now = h.now.add(const Duration(days: 2));
-    await scheduler.reconcile();
-    expect(firing.started, isEmpty);
-    expect(dao().runsFor('rule'), isEmpty);
   });
 }

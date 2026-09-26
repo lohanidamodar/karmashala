@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -13,12 +11,12 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/test_machine.dart';
 
 /// **What creating a context costs, counted.**
 ///
@@ -33,17 +31,16 @@ import '../../support/fixtures.dart';
 void main() {
   const projectCount = 31;
 
-  late _CountingDatabase db;
+  late CountingMachine db;
   late ProviderContainer container;
   late FakeDataServer server;
 
   setUp(() async {
-    db = _CountingDatabase();
+    db = CountingMachine();
     server = FakeDataServer(clock: () => testTime);
     server.environmentRows.upsert(windowsEnv());
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -59,7 +56,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   /// The owner's own scale: 31 projects and four contexts.
   Future<void> seed() async {
@@ -154,11 +150,11 @@ void main() {
       reason: 'one write for the context that was created, and nothing else',
     );
     expect(
-      db.statements,
-      0,
+      db.reads,
+      isEmpty,
       reason:
-          'the context is the server\'s to store; the app\'s own database is '
-          'not asked anything, least of all the project list',
+          'the context is the server\'s to store; the app asks it nothing '
+          'back, least of all the project list',
     );
     expect(
       rebuilt,
@@ -193,7 +189,7 @@ void main() {
       'CONTEXT-TYPING projects=$projectCount rows-rebuilt=$rebuilt '
       'statements=${db.statements}',
     );
-    expect(db.statements, 0, reason: 'a keystroke is not a query');
+    expect(db.statements, isEmpty, reason: 'a keystroke is not a request');
     expect(rebuilt, 0, reason: 'a keystroke is not a reason to redraw a list');
   });
 
@@ -208,8 +204,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     for (var i = 0; i < projectCount; i++) {
       server.projectRows.insert(
         Project(
@@ -241,14 +237,14 @@ void main() {
       // A row announced again, unchanged: the panel rebuilds for it.
       server.projectRows.update(server.projectRows.getById('p0')!);
       await tester.pumpAndSettle();
-      return db.statements;
+      return db.count;
     }
 
     final bare = await rebuildCost();
     // "Which agents are installed here" used to be asked once per row on every
     // rebuild: 31 identical queries. A row's menu now asks it when it opens.
     expect(
-      db.matching('FROM agent_installations'),
+      db.statements.where((kind) => kind.startsWith('agents.')).length,
       0,
       reason: 'a rebuild must not resolve menus nobody opened',
     );
@@ -272,44 +268,4 @@ void main() {
           'count query per context, and certainly not one per row',
     );
   });
-}
-
-/// Counts what reaches SQLite; `package:sqlite3` is synchronous, so all of it
-/// runs on the UI isolate inside the frame.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int writes = 0;
-  int reads = 0;
-  final List<String> sql = [];
-
-  int get statements => writes + reads;
-
-  /// How many statements since the last [reset] mentioned [fragment] — so a
-  /// claim about *one* query is checkable without counting every other.
-  int matching(String fragment) =>
-      sql.where((statement) => statement.contains(fragment)).length;
-
-  void reset() {
-    writes = 0;
-    reads = 0;
-    sql.clear();
-  }
-
-  @override
-  void execute(String statement, [List<Object?> params = const []]) {
-    writes++;
-    sql.add(statement);
-    super.execute(statement, params);
-  }
-
-  @override
-  List<Map<String, Object?>> query(
-    String statement, [
-    List<Object?> params = const [],
-  ]) {
-    reads++;
-    sql.add(statement);
-    return super.query(statement, params);
-  }
 }

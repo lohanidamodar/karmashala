@@ -1,5 +1,4 @@
 import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -17,7 +16,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **The three states a pane can be in when it has no git facts, and the words
 /// each one gets.**
@@ -46,7 +45,7 @@ void main() {
   /// phone width is also the realistic narrow-panel width.
   const phone = WindowCell('390x844 (phone)', Size(390, 844));
 
-  late AppDatabase db;
+  late TestMachine db;
 
   const checkout = EnvironmentPath(
     environmentId: 'windows',
@@ -54,16 +53,15 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     client = await server.connect();
   });
-  tearDown(() => db.close());
 
   /// The three errors the panes have to tell apart, as they arrive.
   const notARepository = NotAGitRepository(checkout);
@@ -86,7 +84,7 @@ void main() {
   ProviderContainer containerFailingWith(Object error) {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(client),
         repositoryChangesProvider.overrideWith((ref) async => throw error),
         repoWorktreesProvider.overrideWith((ref) async => throw error),
@@ -221,7 +219,7 @@ void main() {
       // failed alone still has to name which of the three it was.
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           dataClientProvider.overrideWithValue(client),
           repoWorktreesProvider.overrideWith(
             (ref) async => const <GitWorktree>[],
@@ -272,7 +270,7 @@ void main() {
     ) async {
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           dataClientProvider.overrideWithValue(client),
           repoWorktreesProvider.overrideWith(
             (ref) async => const <GitWorktree>[],

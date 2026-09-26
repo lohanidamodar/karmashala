@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
 import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 
@@ -25,14 +23,11 @@ void main() {
       ..physicalSize = const Size(1440, 2400)
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     server = FakeDataServer();
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...deviceBindings,
-        databaseProvider.overrideWithValue(db),
         data,
         hostCanRunSimulatorsProvider.overrideWithValue(canRunSimulators),
         devicesProvider.overrideWith(

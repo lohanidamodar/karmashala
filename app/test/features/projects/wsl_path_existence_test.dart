@@ -2,14 +2,12 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -225,11 +223,9 @@ void main() {
   });
 
   group('projectPathMissingProvider', () {
-    late AppDatabase db;
     late Override data;
 
     setUp(() async {
-      db = AppDatabase.memory();
       final server = FakeDataServer();
       server.environmentRows
         ..upsert(windowsEnv())
@@ -237,12 +233,10 @@ void main() {
         ..upsert(sshEnvFixture());
       data = await server.override();
     });
-    tearDown(() => db.close());
 
     ProviderContainer mount(FakeCommandRunner host) {
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(host),
@@ -295,7 +289,6 @@ void main() {
       final clock = MovableClock(testTime);
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           clockProvider.overrideWithValue(clock),
           hostCommandRunnerProvider.overrideWithValue(host),

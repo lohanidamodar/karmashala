@@ -52,5 +52,8 @@ dependencies:
     path: ../karmashala_store
 
 dev_dependencies:
+  # A real relay the link suites pair and talk through. Test-only.
+  karmashala_relay:
+    path: ../../relay
   lints: ^6.1.0
   test: ^1.31.1

@@ -1,4 +1,4 @@
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -209,10 +209,10 @@ void main() {
 
   group('starting a pane', () {
     test('a restored pane starts nothing until asked, then runs', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
+      final first = fakeTerminalContainer(layoutStore: db);
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
       );
@@ -232,7 +232,10 @@ void main() {
       // background tab, a pane whose process had already exited, or any pane at
       // all with this setting off — arrives in exactly this state and is
       // started by exactly this call. See `pane_restart_on_launch_test.dart`.
-      final next = fakeTerminalContainer(database: db, restoreLivePanes: false);
+      final next = fakeTerminalContainer(
+        layoutStore: db,
+        restoreLivePanes: false,
+      );
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider.notifier);
       expect(
@@ -317,10 +320,10 @@ void main() {
   group('resuming into an existing pane', () {
     test('a dormant agent pane runs the command it is given, above what it '
         'kept', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
+      final first = fakeTerminalContainer(layoutStore: db);
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
       );
@@ -338,7 +341,7 @@ void main() {
       controller.persistLayout();
       first.dispose();
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider.notifier);
       expect(
@@ -373,10 +376,10 @@ void main() {
     });
 
     test('a dormant pane left in the background comes back as a tab', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
+      final first = fakeTerminalContainer(layoutStore: db);
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
       );
@@ -391,7 +394,7 @@ void main() {
       controller.persistLayout();
       first.dispose();
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider.notifier);
       expect(
@@ -465,10 +468,10 @@ void main() {
 
   group('restore', () {
     test('detached sessions come back as background sessions, not tabs', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
+      final first = fakeTerminalContainer(layoutStore: db);
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
       );
@@ -490,7 +493,7 @@ void main() {
       controller.persistLayout();
       first.dispose();
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final state = next.read(terminalSessionsControllerProvider);
 
@@ -509,10 +512,10 @@ void main() {
     });
 
     test('a restored background session can be reopened as a tab', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
+      final first = fakeTerminalContainer(layoutStore: db);
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
       );
@@ -528,7 +531,7 @@ void main() {
       controller.persistLayout();
       first.dispose();
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider.notifier);
 
@@ -540,10 +543,10 @@ void main() {
     });
 
     test('opening and splitting persist without waiting for a close', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
+      final first = fakeTerminalContainer(layoutStore: db);
       addTearDown(first.dispose);
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,

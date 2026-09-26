@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
@@ -10,7 +9,6 @@ import 'package:karmashala/src/features/terminal/application/pane_exit_signal.da
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
-import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,7 +17,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala_session/events.dart';
 
@@ -34,7 +32,7 @@ import 'package:karmashala_session/events.dart';
 /// event and most of them are not a session ending at all; getting that wrong
 /// puts a notification on the screen every time somebody closes a terminal.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late Override data;
   late FakeFollowUpRows followUps;
   late StreamController<AgentStatusReport> reports;
@@ -48,8 +46,8 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     data = await server.override();
     server.projectRows.insert(project());
@@ -60,13 +58,12 @@ void main() {
     reports = StreamController<AgentStatusReport>.broadcast();
     addTearDown(reports.close);
   });
-  tearDown(() => db.close());
 
   /// A verification run nobody ever finished, so a *clean* finish is owed a
   /// follow-up. Without one a completion is a completion and the app should say
   /// nothing at all — see `followUpFor`.
   void abandonedRun({String sessionId = 's1', String id = 'v1'}) {
-    VerificationDao(db).insertRun(
+    db.server.verificationRows.insertRun(
       VerificationRun(
         id: id,
         title: 'the login page still loads',
@@ -83,7 +80,7 @@ void main() {
   ProviderContainer observing() {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentSessionStatusProvider.overrideWith((ref, id) => reports.stream),

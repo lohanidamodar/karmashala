@@ -3,7 +3,6 @@
 /// real code paths rather than a friendlier stand-in.
 library;
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:agent_cli/process.dart';
@@ -22,7 +21,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 
@@ -78,7 +77,7 @@ class _StaticSettings extends SettingsController {
 
 typedef Harness = ({
   ProviderContainer container,
-  AppDatabase db,
+  TestMachine db,
   FakeCommandRunner git,
   FakeDataServer server,
 });
@@ -98,8 +97,8 @@ Harness harness({
   /// A client of [server] for the container to read through.
   required DataClient client,
 }) {
-  final db = AppDatabase.memory();
-  final data = server.mirrorInto(db);
+  final db = TestMachine();
+  final data = server.runsOn(db);
 
   final runner = FakeCommandRunner(
     responder:
@@ -113,7 +112,7 @@ Harness harness({
     overrides: [
       dataClientProvider.overrideWithValue(client),
       ...fakeTerminalOverrides(
-        database: db,
+        machine: db,
         instanceFactory: paneFailsFor.isEmpty
             ? null
             : ({

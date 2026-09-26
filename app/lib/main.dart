@@ -40,6 +40,9 @@ import 'src/features/sessions/application/host_lifecycle/host_lifecycle_provider
 import 'src/features/sessions/application/session_liveness_reconciler.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/terminal/application/local_host_providers.dart';
+import 'src/features/terminal/application/terminal_layout_providers.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart'
+    show TerminalLayoutStore;
 import 'src/features/system/system_integration_service.dart';
 import 'src/features/verification/application/verification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -113,6 +116,8 @@ Future<void> _bootstrap(AppLogger logger) async {
   // probe's own), still opened here for the domains that do not yet go
   // through the server's data API (docs/daemon-architecture.md, slice 1).
   final database = AppDatabase.open(await serverDataDirectory());
+  // The terminal layout is this window's own, beside the app, never the server's.
+  final layoutStore = TerminalLayoutStore.open(await appSupportDirectory());
 
   // Notes, todos and preferences live at this machine's server, started (or
   // adopted) and dialled before anything reads a setting. One that does not
@@ -166,6 +171,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(database),
+      terminalLayoutStoreProvider.overrideWithValue(layoutStore),
       dataClientProvider.overrideWithValue(data),
       localHostSessionAccessProvider.overrideWithValue(hostAccess),
       envVaultProvider.overrideWithValue(envVault),

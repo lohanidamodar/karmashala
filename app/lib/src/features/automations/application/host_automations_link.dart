@@ -7,26 +7,19 @@ import 'package:karmashala_host/lifecycle_client.dart'
 import '../../sessions/application/host_lifecycle/host_lifecycle_source.dart';
 import '../../sessions/application/host_lifecycle/host_lifecycle_subscriber.dart';
 
-/// This app's half of the automations the session host runs: it says it is
-/// the app on every link, runs what the host forwards, hears when the host
-/// wrote rows, and tells it when this app did.
+/// This app's half of the automations the server runs: it says it is the app
+/// on every link and runs what the server forwards. What either writes
+/// reaches the other on the data link.
 class HostAutomationsLink implements HostLinkPeer {
-  HostAutomationsLink({
-    required this.onCall,
-    required this.onHostChanged,
-    AppLogger? logger,
-  }) : _log = logger ?? AppLogger.named('automations.host');
+  HostAutomationsLink({required this.onCall, AppLogger? logger})
+    : _log = logger ?? AppLogger.named('automations.host');
 
   /// Runs one forwarded call; throws to fail it with the error's words.
   final Future<void> Function(AutomationCallMessage call) onCall;
 
-  /// The host wrote automation, run, check, resume or verification rows.
-  final void Function() onHostChanged;
-
   final AppLogger _log;
   HostLifecycleFeed? _feed;
   StreamSubscription<AutomationCallMessage>? _calls;
-  StreamSubscription<void>? _changes;
 
   bool get connected => _feed != null;
 
@@ -35,11 +28,8 @@ class HostAutomationsLink implements HostLinkPeer {
     _stopListening();
     _feed = feed;
     _calls = feed.automationCalls.listen((call) => unawaited(_run(feed, call)));
-    _changes = feed.automationsChanged.listen((_) => onHostChanged());
-    // Every link: the host may be a new one, and it waits for an app.
+    // Every link: the server may be a new one, and it waits for an app.
     feed.noticeAutomations(AutomationNoticeKind.ready);
-    // Whatever the host wrote while no link was open.
-    onHostChanged();
   }
 
   @override
@@ -48,12 +38,7 @@ class HostAutomationsLink implements HostLinkPeer {
     _feed = null;
   }
 
-  /// This app wrote automation rows; the host re-reads and re-arms. Nothing
-  /// while no link is open: the host reads the store when it starts.
-  void notifyChanged() =>
-      _feed?.noticeAutomations(AutomationNoticeKind.changed);
-
-  /// Runs [sessionId]'s checks at the host, or null with no link open.
+  /// Runs [sessionId]'s checks at the server, or null with no link open.
   Future<ChecksRanMessage>? runChecks(String sessionId) =>
       _feed?.runChecks(sessionId);
 
@@ -69,8 +54,6 @@ class HostAutomationsLink implements HostLinkPeer {
 
   void _stopListening() {
     unawaited(_calls?.cancel());
-    unawaited(_changes?.cancel());
     _calls = null;
-    _changes = null;
   }
 }

@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'session_dormant_resume_test.dart'
-    show containerOver, paneOf, seededDatabase, startSession;
+    show containerOver, layoutOf, paneOf, seededDatabase, startSession;
 
 /// Resuming everything a restart left dormant, and what it is allowed to cost.
 ///
@@ -35,7 +35,6 @@ void main() {
   test('resuming four restored sessions is one layout write, where four '
       'separate resumes are four', () async {
     final db = await seededDatabase();
-    addTearDown(db.close);
 
     final first = containerOver(db);
     final sessions = await startFour(first);
@@ -44,7 +43,7 @@ void main() {
     first.dispose();
 
     // --- the bulk verb -------------------------------------------------------
-    final bulkDao = _CountingLayoutDao(db);
+    final bulkDao = _CountingLayoutDao(layoutOf(db));
     final bulk = containerOver(
       db,
       idPrefix: 't-',
@@ -86,7 +85,7 @@ void main() {
     // The number the bulk verb is being measured against, taken rather than
     // assumed: a loop over the single-pane verb writes the whole layout per
     // pane, which is the cost `closeTabs` refused for the same reason.
-    final soloDao = _CountingLayoutDao(db);
+    final soloDao = _CountingLayoutDao(layoutOf(db));
     final solo = containerOver(
       db,
       idPrefix: 'u-',
@@ -112,7 +111,6 @@ void main() {
   test('a frame is handed back between every pane, and not around the '
       'edges', () async {
     final db = await seededDatabase();
-    addTearDown(db.close);
 
     final first = containerOver(db);
     final sessions = await startFour(first);
@@ -144,7 +142,6 @@ void main() {
 
   test('nothing dormant is nothing done, and no frame given up', () async {
     final db = await seededDatabase();
-    addTearDown(db.close);
     var yields = 0;
     final container = containerOver(db, frameYield: () async => yields++);
     addTearDown(container.dispose);
@@ -165,7 +162,6 @@ void main() {
   test('one session that cannot be resumed does not hold the other three '
       'back, and is still reported', () async {
     final db = await seededDatabase();
-    addTearDown(db.close);
 
     final first = containerOver(db);
     final sessions = await startFour(first);

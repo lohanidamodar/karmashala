@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
@@ -13,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **Which plan is the plan, how old it is, and the four ways there is none.**
 ///
@@ -190,14 +188,13 @@ void main() {
       String? externalSessionId = 'ext-1',
       void Function()? onTranscriptSubscribed,
     }) async {
-      final db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
-      addTearDown(db.close);
+      final db = TestMachine();
+      final server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       server.installationRows.insert(agentInstallation(agentId: agentId));
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 's1',
           repositoryId: 'r1',
@@ -213,7 +210,6 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           await server.override(),
-          databaseProvider.overrideWithValue(db),
           sessionChatTranscriptProvider.overrideWith((ref, id) {
             onTranscriptSubscribed?.call();
             return Stream.value(messages);

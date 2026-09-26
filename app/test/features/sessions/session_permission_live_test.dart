@@ -16,12 +16,11 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_session/launch.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// A running session's permission mode is moved in place where the agent
@@ -32,7 +31,7 @@ class _StaticSettings extends SettingsController {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   var status = AgentActivityStatus.idle;
   late StreamController<String> idle;
@@ -41,8 +40,8 @@ void main() {
   setUp(() {
     status = AgentActivityStatus.idle;
     idle = StreamController<String>.broadcast();
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -50,7 +49,6 @@ void main() {
 
   tearDown(() async {
     container.dispose();
-    db.close();
     await idle.close();
   });
 
@@ -59,7 +57,7 @@ void main() {
     return container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),

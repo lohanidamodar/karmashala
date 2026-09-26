@@ -4,3 +4,4 @@ library;
 
 export 'src/domain/command_check.dart';
 export 'src/service/command_check_recorder.dart';
+export 'src/service/verification_records.dart';

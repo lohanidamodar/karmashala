@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -96,7 +95,7 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 10)));
 
   test('the SQLite half of a save', () {
-    final db = AppDatabase.memory();
+    final db = TerminalLayoutStore.memory();
     final dao = TerminalLayoutDao(db);
     final terminal = fill(PerfCorpus.colorizedLs);
     final encoded = encodeScrollback(terminal);

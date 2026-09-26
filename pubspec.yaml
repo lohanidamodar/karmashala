@@ -39,6 +39,7 @@ workspace:
   - packages/karmashala_automations
   - packages/karmashala_browser
   - packages/karmashala_checkpoints
+  - packages/karmashala_comparisons
   - packages/karmashala_companion
   - packages/karmashala_companion_server
   - packages/karmashala_core
@@ -55,6 +56,7 @@ workspace:
   - packages/karmashala_remote
   - packages/karmashala_session
   - packages/karmashala_session_engine
+  - packages/karmashala_snippets
   - packages/karmashala_ssh
   - packages/karmashala_store
   - packages/karmashala_terminal_core

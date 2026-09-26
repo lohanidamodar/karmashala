@@ -2,10 +2,7 @@ import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/test_machine.dart';
 import 'comparison_fixtures.dart';
 
 /// `fanout_list` and `fanout_get`, driven over the real owner-only socket
@@ -21,7 +19,7 @@ import 'comparison_fixtures.dart';
 /// goes through exactly this path.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
 
@@ -29,13 +27,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_fanout_mcp_');
     final data = FakeDataServer();
     db = seedDatabase(server: data);
-    addTearDown(db.close);
-    container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        await data.override(),
-      ],
-    );
+    container = ProviderContainer(overrides: [await data.override()]);
     server = LauncherControlServer(container);
     await server.start(
       bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
@@ -141,7 +133,7 @@ void main() {
   /// a verdict its own session produced, one another session produced, and one
   /// with no producer recorded at all.
   void seedAttributedComparison() {
-    ComparisonDao(db).insert(
+    db.server.comparisonRows.insert(
       Comparison(
         id: 'cmp-attr',
         repositoryId: 'r1',

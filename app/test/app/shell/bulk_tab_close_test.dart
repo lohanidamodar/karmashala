@@ -6,13 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/window_matrix.dart';
+import '../../support/test_machine.dart';
 
 /// VS Code's bulk tab closes, and the one question they ask that a single close
 /// does not.
@@ -23,17 +23,16 @@ import '../../support/window_matrix.dart';
 /// background list is the outcome nobody wants — so a set with anything live in
 /// it asks first, with *end* as the default answer.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   setUp(() {
-    db = AppDatabase.memory();
-    container = fakeTerminalContainer(database: db);
+    db = TestMachine();
+    container = fakeTerminalContainer(machine: db);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   TerminalSessionsController terminals() =>

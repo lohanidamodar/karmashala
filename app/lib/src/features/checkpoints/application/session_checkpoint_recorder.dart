@@ -10,6 +10,7 @@ import '../../sessions/application/decision_recorder.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../domain/checkpoint_title.dart';
 import '../domain/turn_boundary.dart';
+import '../data/checkpoints_data.dart';
 import 'checkpoint_providers.dart';
 import 'checkpoint_settings.dart';
 import 'checkpoint_targets.dart';
@@ -256,8 +257,9 @@ class SessionCheckpointRecorder extends Notifier<int> {
       return;
     }
     final turn = starting
-        ? _beginTurn(sessionId)
-        : _current.remove(sessionId) ?? _beginTurn(sessionId);
+        ? await _beginTurn(sessionId)
+        : _current.remove(sessionId) ?? await _beginTurn(sessionId);
+    if (!ref.mounted) return;
     final hints = ref.read(checkpointTurnHintsProvider);
     final targets = await checkpointTargetsFor(
       ref,
@@ -331,11 +333,10 @@ class SessionCheckpointRecorder extends Notifier<int> {
       // before the edit and is left alone.
       if (reason == CheckpointReason.turnStart &&
           _released.contains(sessionId)) {
-        ref
-            .read(checkpointDaoProvider)
+        await ref
+            .read(checkpointsDataProvider)
             .relabel(checkpoint.id, lateTurnStartLabel(turn.number));
       }
-      ref.read(checkpointsRevisionProvider.notifier).bump();
       _log.info(
         'Checkpoint ${checkpoint.sequence} $when of session $sessionId: '
         '${checkpoint.files.length} files in ${repo.path}.',
@@ -348,17 +349,16 @@ class SessionCheckpointRecorder extends Notifier<int> {
   /// Prunes in batches, so a session at its limit does not re-commit the whole
   /// chain on every turn.
   Future<void> _prune(String sessionId, EnvironmentPath repo, int keep) async {
-    final count = ref
-        .read(checkpointDaoProvider)
-        .forRepository(sessionId, repo)
-        .length;
+    final count = checkpointChainIn(
+      await ref.read(checkpointsDataProvider).forSession(sessionId),
+      repo,
+    ).length;
     if (count <= keep + checkpointPruneSlack(keep) || !ref.mounted) return;
     try {
       final dropped = await ref
           .read(checkpointServiceProvider)
           .prune(repo, sessionId: sessionId, keep: keep);
       if (!ref.mounted) return;
-      ref.read(checkpointsRevisionProvider.notifier).bump();
       _log.info(
         'Pruned $dropped checkpoints of session $sessionId in ${repo.path}, '
         'keeping the newest $keep.',
@@ -368,9 +368,9 @@ class SessionCheckpointRecorder extends Notifier<int> {
     }
   }
 
-  _Turn _beginTurn(String sessionId) {
+  Future<_Turn> _beginTurn(String sessionId) async {
     final last = _lastTurn[sessionId] ?? 0;
-    final stored = ref.read(checkpointDaoProvider).lastTurn(sessionId);
+    final stored = await ref.read(checkpointsDataProvider).lastTurn(sessionId);
     final _Turn turn = (
       number: (last > stored ? last : stored) + 1,
       prompt: ref.read(checkpointTurnHintsProvider).takePrompt(sessionId),
@@ -430,7 +430,6 @@ class SessionCheckpointRecorder extends Notifier<int> {
               );
           if (checkpoint == null || !ref.mounted) continue;
           first ??= checkpoint;
-          ref.read(checkpointsRevisionProvider.notifier).bump();
           _recordIfChosen(
             checkpoint,
             decidedBy: decidedBy,

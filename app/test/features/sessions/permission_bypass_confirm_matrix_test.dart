@@ -1,10 +1,10 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/window_matrix.dart';
 import 'permission_mode_chip_test.dart' show harness, startAgent;
+import '../../support/test_machine.dart';
 
 /// The bypass confirmation names three consequences; every one of them, and
 /// both buttons, must be reachable at the minimum window and at large text.
@@ -21,12 +21,8 @@ void main() {
           externalSessionId: 'ext-1',
         ),
     ];
-    final databases = <AppDatabase>[];
-    addTearDown(() {
-      for (final h in prepared) {
-        h.db.close();
-      }
-    });
+    final databases = <TestMachine>[];
+    addTearDown(() {});
     await expectSurvivesWindowMatrix(
       tester,
       because: 'a warning that restarts a running session',

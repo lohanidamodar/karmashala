@@ -1,6 +1,5 @@
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -28,7 +27,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// The Explorer drawn as a tree: **Project → Session**, and deliberately
@@ -50,7 +49,7 @@ import '../terminal/fake_instance.dart';
 /// the menus and the keyboard's path to them; and the layout at the widths the
 /// pane is actually dragged between.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late FakeCommandRunner git;
 
@@ -71,8 +70,8 @@ void main() {
       EnvironmentPath(environmentId: 'windows', path: path);
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows
@@ -84,7 +83,6 @@ void main() {
     revealHost = FakeCommandRunner();
     discovery = FakeRepositoryDiscoveryService();
   });
-  tearDown(() => db.close);
 
   void addSession(
     String id, {
@@ -94,7 +92,7 @@ void main() {
     String? parent,
     SessionLink? link,
     int minutes = 0,
-  }) => mirroredServer(db).sessionRows.insert(
+  }) => db.server.sessionRows.insert(
     Session(
       id: id,
       repositoryId: repositoryId,
@@ -122,7 +120,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

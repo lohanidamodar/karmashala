@@ -3,7 +3,6 @@ import 'package:agent_cli/read.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -12,7 +11,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/detected_projects_view.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
@@ -39,8 +37,6 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final data =
         await (FakeDataServer()
               ..environmentRows.upsert(localHostEnvironment(testTime)))
@@ -49,7 +45,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(),

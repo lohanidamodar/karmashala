@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:karmashala_ui/code.dart';
 
-import '../../features/scale/scale_harness.dart';
 import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
@@ -24,6 +23,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
 
 const _path = r'C:\repo\lib\counter.dart';
 const _initial = 'void main() {}\n';
@@ -75,22 +75,21 @@ class _Store extends DocumentStore {
 /// never from a read-only viewer, and quitting writes what is pending instead
 /// of asking about it.
 void main() {
-  late CountingDatabase db;
+  late TestMachine db;
   late _Store store;
   late FakeDataServer server;
 
   setUp(() {
     server = FakeDataServer();
-    db = CountingDatabase();
+    db = TestMachine();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     store = _Store();
   });
-  tearDown(() => db.close());
 
   Future<void> settle(WidgetTester tester) async {
     await tester.pump();
@@ -108,7 +107,7 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         documentStoreProvider.overrideWithValue(store),
         commandRunnerFactoryProvider.overrideWithValue(

@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
@@ -19,7 +17,6 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// **What one provider moving costs the file list.**
 ///
@@ -110,7 +107,6 @@ void main() {
   late SessionDelivery delivery;
   late ReviewThreadIndex threads;
   late List<GitWorktree> worktrees;
-  late AppDatabase db;
 
   setUp(() async {
     changes = files;
@@ -124,16 +120,14 @@ void main() {
     worktrees = const [worktree];
     // A real row behind the selection, because the header's picker resolves the
     // checkout it offers to return to.
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     client = await server.connect();
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final container = ProviderContainer(
@@ -141,7 +135,6 @@ void main() {
         // No workbench here, so no diff tab: the real provider would build
         // the terminal controller and leave its autosave timer pending.
         activeDiffFileProvider.overrideWithValue(null),
-        databaseProvider.overrideWithValue(db),
         dataClientProvider.overrideWithValue(client),
         selectedRepositoryIdProvider.overrideWith(_FixedRepository.new),
         repositoryChangesProvider.overrideWith((ref) async {

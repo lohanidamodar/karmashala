@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -56,21 +54,18 @@ import 'package:agent_cli/process.dart';
 ///
 /// Counted, never timed: builds and notifications are countable exactly.
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late FakeDataServer server;
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project(id: 'p1'));
     server.repositoryRows.insert(repository(id: 'r1'));
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -84,7 +79,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   /// A derived `Provider` is flushed by Riverpod's scheduler rather than at the

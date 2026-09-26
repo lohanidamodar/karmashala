@@ -1,6 +1,4 @@
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -22,7 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -70,9 +68,9 @@ void main() {
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
     SessionSurface surface = SessionSurface.pane,
-    required AppDatabase db,
+    required TestMachine db,
   }) async {
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server
       ..projectRows.insert(project())
@@ -92,7 +90,6 @@ void main() {
       ),
     );
     return [
-      databaseProvider.overrideWithValue(db),
       await server.override(),
       clockProvider.overrideWithValue(clock),
       agentSessionStatusProvider.overrideWith(
@@ -123,8 +120,7 @@ void main() {
     SessionStatus rowStatus = SessionStatus.running,
     SessionSurface surface = SessionSurface.pane,
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     final used = clock ?? FixedClock(issued.add(const Duration(seconds: 4)));
     await tester.pumpWidget(
       ProviderScope(
@@ -406,8 +402,7 @@ void main() {
   testWidgets('the strip is pinned above the composer in the chat view', (
     tester,
   ) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -439,8 +434,7 @@ void main() {
   });
 
   testWidgets('survives the window matrix', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     final overrides = await overridesFor(
       messages: [
         call(

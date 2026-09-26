@@ -18,18 +18,18 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/transcript.dart';
 
-import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
 
 /// **A note opens in a workbench tab of its own**, edited with the app's one
 /// code editor and read as rendered markdown.
 void main() {
-  late CountingDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
@@ -37,20 +37,19 @@ void main() {
     server = FakeDataServer();
     data = await server.connect();
     commandKeyIsMeta = false;
-    db = CountingDatabase();
+    db = TestMachine();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   ProviderContainer shellContainer() {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db, layoutStore: layoutStoreOf(db)),
         dataClientProvider.overrideWithValue(data),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -372,7 +371,7 @@ void main() {
   testWidgets('it comes back after a restart', (tester) async {
     final first = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db, layoutStore: layoutStoreOf(db)),
         dataClientProvider.overrideWithValue(data),
       ],
     );
@@ -398,7 +397,7 @@ void main() {
   testWidgets('a restored tab whose note is gone closes', (tester) async {
     final first = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db, layoutStore: layoutStoreOf(db)),
         dataClientProvider.overrideWithValue(data),
       ],
     );

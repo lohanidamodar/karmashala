@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -32,7 +31,7 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **What the owner does**, not what a unit test does.
 ///
@@ -66,14 +65,14 @@ const _resumable = AgentDescriptor(
 );
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -82,7 +81,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
@@ -114,7 +113,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   Future<void> mount(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 800);
@@ -209,7 +207,7 @@ void main() {
   testWidgets('(a) a native session with no live pane never shows chat', (
     tester,
   ) async {
-    mirroredServer(db).sessionRows.insert(stopped());
+    db.server.sessionRows.insert(stopped());
     await mount(tester);
 
     final seen = await framesDuring(
@@ -242,7 +240,7 @@ void main() {
             .livenessNotifier
             .value =
         PaneLiveness.exited;
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(stopped())
       ..updatePaneId('old', paneId);
     await mount(tester);
@@ -257,7 +255,7 @@ void main() {
   });
 
   testWidgets('(c) an imported session never shows chat', (tester) async {
-    mirroredServer(db).importedRows.insertIfAbsent(imported());
+    db.server.importedRows.insertIfAbsent(imported());
     await mount(tester);
 
     final seen = await framesDuring(
@@ -276,7 +274,7 @@ void main() {
     // undo: the CLI never told us this conversation's id, so `openNative`
     // selects the row and starts nothing. Under the old rule that was a
     // permanent landing on the chat interface.
-    mirroredServer(db).sessionRows.insert(stopped(externalId: ''));
+    db.server.sessionRows.insert(stopped(externalId: ''));
     await mount(tester);
 
     final seen = await framesDuring(
@@ -297,7 +295,7 @@ void main() {
   testWidgets('chat is still one labelled tap away', (tester) async {
     // The fix must not be "chat is unreachable". Nothing *lands* there; the
     // toggle still goes there, and stays there.
-    mirroredServer(db).sessionRows.insert(stopped());
+    db.server.sessionRows.insert(stopped());
     await mount(tester);
     await framesDuring(
       tester,

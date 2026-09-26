@@ -7,6 +7,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_settings.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
@@ -18,14 +19,13 @@ import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:logging/logging.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 class _MemoryGitFiles implements GitFiles {
@@ -45,7 +45,7 @@ class _MemoryGitFiles implements GitFiles {
 
 /// When a turn becomes a checkpoint: the status pipeline as it really moves.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late MovableClock clock;
   late AgentHookReports reports;
   late SessionStatusRegistry registry;
@@ -82,16 +82,16 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     clock = MovableClock(testTime);
-    server = FakeDataServer()..mirrorInto(db);
-    server.environmentRows.upsert(
-  localHostEnvironment(clock.nowUtc()),
-);
+    server = FakeDataServer()..runsOn(db);
+    server.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', status: SessionStatus.running));
+    db.server.sessionRows.insert(
+      session(id: 's1', status: SessionStatus.running),
+    );
     tree = 1;
     fixedTree = null;
     failAdd = false;
@@ -111,7 +111,7 @@ void main() {
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         clockProvider.overrideWithValue(clock),
         agentHookReportsProvider.overrideWithValue(reports),
@@ -122,7 +122,7 @@ void main() {
               fallback: FakeCommandRunner(responder: respond),
             ),
             environmentOf: server.environmentRows.getById,
-            dao: CheckpointDao(db),
+            records: CheckpointsData(await server.connect()),
             clock: clock,
             newId: () => 'ckpt${++ids}',
             files: _MemoryGitFiles(),
@@ -136,7 +136,6 @@ void main() {
   tearDown(() {
     registry.dispose();
     container.dispose();
-    db.close();
   });
 
   /// What `LauncherControlServer._startCheckpointRecorder` does.
@@ -163,7 +162,8 @@ void main() {
   }
 
   List<String> reasonsFor(String sessionId) => [
-    for (final c in CheckpointDao(db).forSession(sessionId)) c.reason.name,
+    for (final c in db.server.checkpointRows.forSession(sessionId))
+      c.reason.name,
   ];
 
   test(
@@ -181,7 +181,9 @@ void main() {
   test('a session started after the recorder is checkpointed too', () async {
     startRecorder();
     await pumpEventQueue();
-    mirroredServer(db).sessionRows.insert(session(id: 's2', status: SessionStatus.running));
+    db.server.sessionRows.insert(
+      session(id: 's2', status: SessionStatus.running),
+    );
     container
         .read(sessionsRevisionProvider.notifier)
         .changed(const SessionChange.created('s2'));
@@ -250,7 +252,7 @@ void main() {
       // so it returned at once, the tool wrote, and the "before" snapshot was
       // taken of a tree that already held the change it exists to undo.
       // The hook route finds the session by the CLI's own id.
-      mirroredServer(db).sessionRows.updateExternalSessionId('s1', 'cli-1');
+      db.server.sessionRows.updateExternalSessionId('s1', 'cli-1');
       startRecorder();
       await pumpEventQueue();
       reports.record(
@@ -282,7 +284,7 @@ void main() {
   test('a session whose row is not `running` is checkpointed too', () async {
     // A pane restored after a restart can be live and hooked while its row
     // still carries what the liveness reconciler last wrote.
-    mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.unknown);
+    db.server.sessionRows.updateStatus('s1', SessionStatus.unknown);
     startRecorder();
     await pumpEventQueue();
     await hook('cli-1', AgentActivityStatus.working, 'UserPromptSubmit');
@@ -390,7 +392,7 @@ void main() {
       clock: clock,
     );
     container.updateOverrides([
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       dataClientProvider.overrideWithValue(container.read(dataClientProvider)),
       clockProvider.overrideWithValue(clock),
       agentHookReportsProvider.overrideWithValue(reports),
@@ -406,7 +408,7 @@ void main() {
   });
 
   test('turns are numbered and carry the prompt a hook sent', () async {
-    mirroredServer(db).sessionRows.updateExternalSessionId('s1', 'cli-1');
+    db.server.sessionRows.updateExternalSessionId('s1', 'cli-1');
     startRecorder();
     recordCheckpointHints(
       container,
@@ -423,7 +425,7 @@ void main() {
     fixedTree = null;
     await turn('cli-1');
 
-    final rows = CheckpointDao(db).forSession('s1');
+    final rows = db.server.checkpointRows.forSession('s1');
     expect(
       [for (final c in rows) '${c.reason.name}:${c.turn}'],
       ['turnStart:1', 'turn:1', 'turnStart:2', 'turnStart:4', 'turn:4'],
@@ -444,7 +446,7 @@ void main() {
     startRecorder();
     await turn('cli-1');
     expect(
-      [for (final c in CheckpointDao(db).forSession('s1')) c.turn],
+      [for (final c in db.server.checkpointRows.forSession('s1')) c.turn],
       [1, 1, 2, 2],
     );
   });
@@ -456,7 +458,7 @@ void main() {
       server.repositoryRows.insert(
         repository(id: 'r2', environmentId: 'ssh:h1', path: '/srv/app'),
       );
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(id: 's3', repositoryId: 'r2', status: SessionStatus.running),
       );
       watched = [...watched, watch('s3', 'cli-3')];
@@ -506,7 +508,7 @@ void main() {
       environmentId: 'windows',
       path: r'C:\src\demo\app',
     );
-    final dao = CheckpointDao(db);
+    final dao = db.server.checkpointRows;
     for (var i = 0; i < 59; i++) {
       dao.insert(
         Checkpoint(

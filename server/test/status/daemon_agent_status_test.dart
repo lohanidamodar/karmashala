@@ -16,6 +16,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_companion_server/store.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:test/test.dart';
 import 'package:karmashala_session_engine/store.dart';

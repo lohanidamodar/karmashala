@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_providers.dart';
@@ -18,7 +17,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// Settings → Projects → Worktree setup: where the setting is written, and where its verdict
 /// is read.
@@ -29,7 +27,6 @@ import '../../support/workspace_mirror.dart';
 void main() {
   late FakeDataServer server;
   late DataClient client;
-  late AppDatabase db;
   late ProviderContainer container;
 
   const worktree = EnvironmentPath(
@@ -38,8 +35,7 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
@@ -50,7 +46,7 @@ void main() {
     client = await server.connect();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(),
         dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(
           FixedClock(testTime.add(const Duration(hours: 2))),
@@ -58,10 +54,7 @@ void main() {
       ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   Future<void> pumpPage(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -128,32 +121,28 @@ void main() {
     tester,
   ) async {
     configure();
-    container
-        .read(worktreeSetupDaoProvider)
-        .record(
-          WorktreeSetupReport(
-            repositoryId: 'r1',
-            worktreePath: worktree.path,
-            environmentId: 'wsl:Ubuntu',
-            ranAt: testTime,
-            copies: const [
-              WorktreeCopyVerdict(
-                path: 'macos/Vendor',
-                result: WorktreeCopyResult.failed,
-                reason: 'Copy failed: Permission denied.',
-              ),
-            ],
-            command: const WorktreeCommandVerdict(
-              result: WorktreeCommandResult.failed,
-              reason:
-                  'Exited with code 1. Its output is in the pane it ran in.',
-              command: ['flutter', 'pub', 'get'],
-              paneId: 'pane-1',
-              exitCode: 1,
-            ),
+    server.worktreeRows.record(
+      WorktreeSetupReport(
+        repositoryId: 'r1',
+        worktreePath: worktree.path,
+        environmentId: 'wsl:Ubuntu',
+        ranAt: testTime,
+        copies: const [
+          WorktreeCopyVerdict(
+            path: 'macos/Vendor',
+            result: WorktreeCopyResult.failed,
+            reason: 'Copy failed: Permission denied.',
           ),
-        );
-    container.read(worktreeSetupRevisionProvider.notifier).bump();
+        ],
+        command: const WorktreeCommandVerdict(
+          result: WorktreeCommandResult.failed,
+          reason: 'Exited with code 1. Its output is in the pane it ran in.',
+          command: ['flutter', 'pub', 'get'],
+          paneId: 'pane-1',
+          exitCode: 1,
+        ),
+      ),
+    );
     await pumpPage(tester);
 
     expect(find.textContaining('app-s1'), findsOneWidget);
@@ -172,24 +161,21 @@ void main() {
 
   testWidgets('a clean setup is one quiet line, not a wall', (tester) async {
     configure();
-    container
-        .read(worktreeSetupDaoProvider)
-        .record(
-          WorktreeSetupReport(
-            repositoryId: 'r1',
-            worktreePath: worktree.path,
-            environmentId: 'wsl:Ubuntu',
-            ranAt: testTime,
-            copies: const [
-              WorktreeCopyVerdict(
-                path: '.dart_tool',
-                result: WorktreeCopyResult.copied,
-                reason: 'Copied with `cp -a`.',
-              ),
-            ],
+    server.worktreeRows.record(
+      WorktreeSetupReport(
+        repositoryId: 'r1',
+        worktreePath: worktree.path,
+        environmentId: 'wsl:Ubuntu',
+        ranAt: testTime,
+        copies: const [
+          WorktreeCopyVerdict(
+            path: '.dart_tool',
+            result: WorktreeCopyResult.copied,
+            reason: 'Copied with `cp -a`.',
           ),
-        );
-    container.read(worktreeSetupRevisionProvider.notifier).bump();
+        ],
+      ),
+    );
     await pumpPage(tester);
 
     expect(find.textContaining('set up'), findsOneWidget);
@@ -204,26 +190,22 @@ void main() {
     await pumpPage(tester);
     expect(find.textContaining('needs attention'), findsNothing);
 
-    // What a session launch does: record, then bump. Nothing polls, and the
-    // page is not reopened.
-    container
-        .read(worktreeSetupDaoProvider)
-        .record(
-          WorktreeSetupReport(
-            repositoryId: 'r1',
-            worktreePath: worktree.path,
-            environmentId: 'wsl:Ubuntu',
-            ranAt: testTime,
-            copies: const [
-              WorktreeCopyVerdict(
-                path: 'lib',
-                result: WorktreeCopyResult.refusedTracked,
-                reason: 'refused',
-              ),
-            ],
+    // Another client records it; nothing polls, and the page is not reopened.
+    server.worktreeRows.record(
+      WorktreeSetupReport(
+        repositoryId: 'r1',
+        worktreePath: worktree.path,
+        environmentId: 'wsl:Ubuntu',
+        ranAt: testTime,
+        copies: const [
+          WorktreeCopyVerdict(
+            path: 'lib',
+            result: WorktreeCopyResult.refusedTracked,
+            reason: 'refused',
           ),
-        );
-    container.read(worktreeSetupRevisionProvider.notifier).bump();
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.textContaining('needs attention'), findsOneWidget);
@@ -235,7 +217,8 @@ void main() {
     await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
     expect(find.text('No checkout has a setup yet.'), findsOneWidget);
-    expect(container.read(worktreeSetupDaoProvider).getAll(), isEmpty);
+    await container.read(dataClientProvider).settled();
+    expect(server.worktreeRows.getAll(), isEmpty);
   });
 
   testWidgets('the page is reachable by looking for it in Settings', (

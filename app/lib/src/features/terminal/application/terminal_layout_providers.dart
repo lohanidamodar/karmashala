@@ -2,10 +2,14 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_terminal_runtime/persistence.dart';
 
-import '../../../core/database/database_providers.dart';
+/// This client's own layout store, never the server's: `main` overrides it
+/// with the file in the app-support folder. Without one (a test, a tool) it
+/// is in memory, so nothing on disk is ever touched by accident. Not closed on
+/// dispose: the last save can land during container teardown.
+final terminalLayoutStoreProvider = Provider<TerminalLayoutStore>(
+  (ref) => TerminalLayoutStore.memory(),
+);
 
-/// The layout store, over the application database. The DAO is the package's;
-/// the provider is the app's, the same split every other DAO here uses.
 final terminalLayoutDaoProvider = Provider<TerminalLayoutDao>(
-  (ref) => TerminalLayoutDao(ref.watch(databaseProvider)),
+  (ref) => TerminalLayoutDao(ref.watch(terminalLayoutStoreProvider)),
 );

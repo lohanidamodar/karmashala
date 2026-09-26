@@ -14,9 +14,9 @@ abstract final class PreferenceKeys {
     'conversation_index_generation',
   };
 
-  /// Domains whose keys their own store writes (terminal layout, worktree
-  /// setup) — not a preference, even though they share the table.
-  static const List<String> reservedPrefixes = ['terminal.', 'worktree_setup.'];
+  /// Domains whose keys their own store writes (worktree setup) — not a
+  /// preference, even though they share the table.
+  static const List<String> reservedPrefixes = ['worktree_setup.'];
 
   static final RegExp _shape = RegExp(r'^[\x21-\x7e]+$');
 

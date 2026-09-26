@@ -1,11 +1,9 @@
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
@@ -26,7 +24,7 @@ import '../../support/fakes.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **Every provider the chip's tree caused to exist**, by name — the bill
 /// `session_switch_cost_test.dart` counts the same way.
@@ -92,16 +90,14 @@ void main() {
   Future<ProviderContainer> containerFor({
     String agentId = AgentIds.claudeCode,
     _Subscriptions? observer,
-    void Function(AppDatabase db)? seed,
+    void Function(TestMachine db)? seed,
   }) async {
     final db = seedUsageDatabase(agentId: agentId);
     seed?.call(db);
-    addTearDown(db.close);
-    final data = await mirroredServer(db).override();
+    final data = await db.server.override();
     final container = ProviderContainer(
       observers: [?observer],
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
@@ -878,10 +874,10 @@ void main() {
     service.answer = usageSnapshot(percent: 62);
     final container = await containerFor(
       seed: (db) {
-        mirroredServer(db).installationRows.insert(
+        db.server.installationRows.insert(
           agentInstallation(id: 'a2', agentId: AgentIds.codex),
         );
-        mirroredServer(db).sessionRows
+        db.server.sessionRows
           ..insert(session(id: 's2', agentInstallationId: 'a2'))
           ..insert(session(id: 's3'));
       },

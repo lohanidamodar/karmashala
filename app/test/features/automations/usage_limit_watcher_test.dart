@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/usage_limit_settings.dart';
 
 import 'scheduled_resume_harness.dart';
-import '../../support/workspace_mirror.dart';
 
 /// A turn that ended on a usage limit, per agent, and what the setting makes
 /// of it. The limit evidence is the agent's own: Codex's rollout record, and
@@ -356,7 +355,6 @@ void main() {
 
     test('through real fires, each new limit re-arms it for the next reset — '
         'cycle after cycle, never for now', () async {
-      h.scheduler();
       var resume = h.controller.schedule(
         ResumeRequest.atReset(
           sessionId: 's1',
@@ -376,8 +374,7 @@ void main() {
           percent: 2,
           resetsIn: const Duration(hours: 5),
         );
-        h.timer.fire();
-        await h.settle();
+        await h.fire(resume.id);
         expect(
           h.dao.getById(resume.id)!.state,
           ScheduledResumeState.done,
@@ -398,11 +395,6 @@ void main() {
           again.fireAt,
           h.now.add(const Duration(hours: 3)).add(kResumeResetMargin),
         );
-        // Nothing is due now, so the next tick sends nothing.
-        final sent = h.launcher.requests.length;
-        h.timer.fire();
-        await h.settle();
-        expect(h.launcher.requests, hasLength(sent));
         expect(h.live('s1')!.state, ScheduledResumeState.pending);
         resume = again;
       }
@@ -428,7 +420,7 @@ void main() {
         startsWith('Claude Code hit its 5-hour limit.'),
       );
       expect(
-        mirroredServer(h.db).installationRows.getById('a1')!.agentId,
+        h.server.installationRows.getById('a1')!.agentId,
         AgentIds.claudeCode,
       );
     });

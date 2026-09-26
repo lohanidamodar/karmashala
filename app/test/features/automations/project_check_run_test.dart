@@ -1,15 +1,14 @@
 import 'dart:io';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/application/automation_check_runner.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/automation_runner.dart';
-import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -18,20 +17,17 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
-import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// The checks a checkout says must still pass, run after the automation's
 /// session ends — and never reported as a pass unless one was observed.
 void main() {
   late FakeDataServer server;
-  late AppDatabase db;
   late ProviderContainer container;
   late Directory artifacts;
 
@@ -49,9 +45,9 @@ void main() {
     armedAt: testTime,
   );
 
-  AutomationRun theRun() => AutomationDao(db).runsFor('auto1').single;
+  AutomationRun theRun() => server.automationRows.runsFor('auto1').single;
   List<AutomationCheckVerdict> verdicts() =>
-      AutomationDao(db).checksFor(theRun().id);
+      server.automationRows.checksFor(theRun().id);
 
   void addCheck(String name, List<String> command) => container
       .read(automationControllerProvider)
@@ -78,13 +74,10 @@ void main() {
     }
   }
 
-  /// The agent's own session finishing, which is what sets the checks off.
+  /// The server forwarding `runChecks` for a checkout only this app can run
+  /// commands in — what sets the checks off here.
   Future<void> endTheAgentsSession({bool opensPane = true}) async {
-    container
-        .read(paneExitProvider.notifier)
-        .record(
-          const PaneExit(paneId: 'agent-pane', sessionId: 's1', exitCode: 0),
-        );
+    container.read(automationCheckRunnerProvider).start(theRun());
     await until(
       () => opensPane ? tabCount() > 0 : theRun().checksObservedAt != null,
     );
@@ -102,16 +95,17 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
     artifacts = Directory.systemTemp.createTempSync('automation-checks');
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
-    AutomationDao(db).insert(automation());
-    mirroredServer(db).sessionRows.insert(session(status: SessionStatus.running));
-    AutomationDao(db).insertRun(
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
+    server.automationRows.insert(automation());
+    server.sessionRows.insert(session(status: SessionStatus.running));
+    server.automationRows.insertRun(
       AutomationRun(
         id: 'run1',
         automationId: 'auto1',
@@ -124,19 +118,17 @@ void main() {
     );
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('id-')),
         verificationRootProvider.overrideWithValue(artifacts),
       ],
     );
-    // Watched, not read — the observer's subscriptions are paused otherwise,
-    // which is the failure its own doc warns about.
+    // Mounted as the app mounts it: it hands a check pane's exit to the runner.
     container.listen(automationRunObserverProvider, (_, _) {});
     addTearDown(() {
       container.dispose();
-      db.close();
       if (artifacts.existsSync()) artifacts.deleteSync(recursive: true);
     });
   });
@@ -229,8 +221,11 @@ void main() {
     await endCheckPane(exitCode: 0);
     await container.read(automationCheckRunnerProvider).drain();
 
+    await container.read(dataClientProvider).settled();
     final verdict = verdicts().single;
-    final recorded = VerificationDao(db).getRun(verdict.verificationRunId!)!;
+    final recorded = server.verificationRows.getRun(
+      verdict.verificationRunId!,
+    )!;
     expect(recorded.verdict, verdict.verdict);
     expect(recorded.steps.single.summary, 'flutter test');
   });
@@ -288,14 +283,15 @@ void main() {
       // The later pass does not sit on top of the earlier failure.
       expect(result.run.verdict, VerificationVerdict.fail);
       expect(result.run.reason, contains('not passed: the test suite'));
-      final recorded = VerificationDao(db).getRun(result.run.id)!;
+      await container.read(dataClientProvider).settled();
+      final recorded = server.verificationRows.getRun(result.run.id)!;
       expect(recorded.sessionId, 's1');
       expect(recorded.steps, hasLength(2));
       // Asked for by the session, but not the session's claim.
       expect(recorded.producedBySessionId, kAppVerifierId);
       expect(recorded.attribution, VerdictAttribution.app);
       expect(
-        VerificationDao(db).listRuns(sessionId: 's1'),
+        server.verificationRows.listRuns(sessionId: 's1'),
         hasLength(1),
         reason: 'one batch, one run',
       );

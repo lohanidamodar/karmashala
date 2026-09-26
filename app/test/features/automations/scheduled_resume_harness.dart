@@ -8,11 +8,11 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/automations/application/automation_scheduler.dart';
 import 'package:karmashala/src/features/automations/application/automation_timer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_observer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
-import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala/src/features/automations/application/scheduled_resume_runner.dart';
+import 'package:karmashala/src/features/automations/data/automations_data.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
@@ -22,14 +22,12 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_session/launch.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// Records what would have reached the OS.
 class RecordingPresenter implements NotificationPresenter {
@@ -79,15 +77,13 @@ class ResumeHarness {
     required String agentId,
     required List<Override> extra,
   }) {
-    db = AppDatabase.memory();
     server.environmentRows.upsert(windowsEnv());
-    server.mirrorInto(db);
     server.installationRows.insert(agentInstallation(agentId: agentId));
     clock = MovableClock(DateTime.utc(2026, 9, 17, 12));
     usage = FakeAgentUsageService(clock: clock);
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db, usageService: usage),
+        ...fakeTerminalOverrides(usageService: usage),
         dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('resume-')),
@@ -110,6 +106,7 @@ class ResumeHarness {
     List<Override> extra = const [],
   }) async {
     final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     return ResumeHarness._(
@@ -120,7 +117,6 @@ class ResumeHarness {
     );
   }
 
-  late final AppDatabase db;
   final FakeDataServer server;
   late final MovableClock clock;
   late final FakeAgentUsageService usage;
@@ -132,16 +128,22 @@ class ResumeHarness {
   final Map<String, List<String>> typed = {};
 
   DateTime get now => clock.nowUtc();
-  ScheduledResumeDao get dao => ScheduledResumeDao(db);
+
+  /// This app's copy of the resumes, written through the server.
+  ResumesData get dao => container.read(resumesDataProvider);
   ResumingLauncher get launcher =>
       container.read(sessionLauncherProvider) as ResumingLauncher;
   ScheduledResumeController get controller =>
       container.read(scheduledResumeControllerProvider);
 
-  /// Watched, not read: an unwatched scheduler disarms itself (Riverpod 3).
-  AutomationScheduler scheduler() {
-    container.listen(automationSchedulerProvider, (_, _) {});
-    return container.read(automationSchedulerProvider.notifier);
+  /// The server forwarded resume [id], due: this app fires it.
+  Future<void> fire(String id) async {
+    await settle();
+    final resume = dao.getById(id);
+    if (resume != null) {
+      await container.read(scheduledResumeFiringProvider).fire(resume);
+    }
+    await settle();
   }
 
   void observe() =>
@@ -221,6 +223,5 @@ class ResumeHarness {
   Future<void> dispose() async {
     await reports.close();
     container.dispose();
-    db.close();
   }
 }

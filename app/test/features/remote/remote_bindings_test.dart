@@ -7,7 +7,6 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -24,7 +23,6 @@ import 'package:karmashala/src/features/repositories/application/repository_disc
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -41,13 +39,12 @@ import 'package:karmashala/src/features/sessions/application/session_chat_source
 import 'package:path/path.dart' as ph;
 
 import '../terminal/fake_instance.dart';
-import 'fake_bindings.dart';
 import '../../support/fakes.dart';
 import '../../support/sync_bindings.dart';
 import '../../support/temp_directory.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// The store scan, answered from a map, so nothing here walks the owner's own
@@ -67,7 +64,7 @@ class _FixedLocator implements SessionTranscriptLocator {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late _FixedLocator locator;
@@ -76,8 +73,8 @@ void main() {
   final now = DateTime.utc(2026, 8, 31, 10);
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
       ExecutionEnvironment(
@@ -91,7 +88,7 @@ void main() {
     locator = _FixedLocator();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         sessionTranscriptLocatorProvider.overrideWithValue(locator),
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
@@ -114,7 +111,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   EnvironmentPath path(String p) =>
@@ -189,7 +185,7 @@ void main() {
     final gate = Completer<void>();
     final gatedImport = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         autoImportRunnerProvider.overrideWithValue(
@@ -723,7 +719,7 @@ void main() {
         container.dispose();
         container = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: db),
+            ...fakeTerminalOverrides(machine: db),
             data,
             sessionTranscriptLocatorProvider.overrideWithValue(locator),
             repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
@@ -925,7 +921,7 @@ void main() {
     ProviderContainer withReport(AgentStatusReport? report) {
       final built = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           data,
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
@@ -1234,30 +1230,13 @@ void main() {
     });
   });
 
-  test('push registration lands on the paired-device row', () async {
-    final dao = PairedDeviceDao(db);
-    dao.insert(fakeDevice());
+  test('push registration is the server\'s, never the app\'s', () async {
     final bindings = container.read(remoteHostBindingsProvider);
 
-    await bindings.registerPush(
-      fakeDevice().id,
-      'tok3n',
-      'android',
-      const CompanionPresence(
-        deviceKind: CompanionDeviceKind.phone,
-        visibility: CompanionVisibility.background,
-        focusedSessionId: 's1',
-      ),
+    await expectLater(
+      bindings.registerPush('d', 'tok3n', 'android', CompanionPresence.unknown),
+      throwsA(isA<RemoteApiRefusal>()),
     );
-
-    final row = dao.getById(fakeDevice().id)!;
-    expect(row.pushToken, 'tok3n');
-    expect(row.pushPlatform, 'android');
-    expect(row.presence.deviceKind, CompanionDeviceKind.phone);
-    expect(row.presence.visibility, CompanionVisibility.background);
-    expect(row.presence.focusedSessionId, 's1');
-    // Every reading carries its age (§19); a presence with no time is not one.
-    expect(row.presence.at, isNotNull);
   });
 
   // A question is answered with the option the user picked, never with
@@ -1282,7 +1261,7 @@ void main() {
     }) {
       final built = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           data,
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
@@ -1496,7 +1475,7 @@ void main() {
       highlighted = 0;
       final built = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           data,
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
@@ -1765,7 +1744,7 @@ void main() {
       container.dispose();
       container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           data,
           sessionTranscriptLocatorProvider.overrideWithValue(locator),
           repositoryDiscoveryServiceProvider.overrideWithValue(discovery),

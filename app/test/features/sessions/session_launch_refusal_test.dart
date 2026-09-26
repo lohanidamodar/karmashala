@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -22,7 +21,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -67,10 +66,10 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
 harness() async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -79,7 +78,7 @@ harness() async {
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -104,7 +103,7 @@ String _wrapped(String text, int columns) {
 
 Future<({String id, String pane})> _launch(
   ProviderContainer container,
-  AppDatabase db,
+  TestMachine db,
 ) async {
   final launched = await container
       .read(sessionLauncherProvider)
@@ -203,7 +202,6 @@ void main() {
     test('a pane that died on its command line posts a notice and logs one '
         'line', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final records = _captureLogs();
 
@@ -243,7 +241,6 @@ void main() {
 
     test('an ordinary exit says nothing', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       h.container.listen(sessionLivenessReconcilerProvider, (_, _) {});

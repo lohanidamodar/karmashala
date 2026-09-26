@@ -16,8 +16,8 @@ import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/theme.dart';
 
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _root = '/repo';
 const _path = '/repo/lib/main.dart';
@@ -156,11 +156,10 @@ void main() {
           null,
         ),
       );
-      final db = CountingDatabase();
-      addTearDown(db.close);
+      final db = TestMachine();
       container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           documentStoreProvider.overrideWithValue(
             _MemoryStore('void main() {}\nfinal a = 1;\n', mode: mode),
           ),

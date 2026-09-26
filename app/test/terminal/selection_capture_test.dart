@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -18,7 +17,7 @@ import '../features/terminal/fake_instance.dart';
 import '../support/fake_data_server.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
-import '../support/workspace_mirror.dart';
+import '../support/test_machine.dart';
 
 /// Right-click a terminal selection and keep it: as a todo, or as a note.
 ///
@@ -27,20 +26,19 @@ import '../support/workspace_mirror.dart';
 /// part a tool call gets for free and a pane does not: **which project the text
 /// came from**, and the fact that a plain shell came from none.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   /// A workbench over one plain shell tab, at a desktop size.
   Future<String> pump(WidgetTester tester, {bool notesEnabled = true}) async {
-    db = AppDatabase.memory();
-    addTearDown(db.close);
+    db = TestMachine();
 
     // The server files by where the text came from: s1 is in r1, in p1.
     final server = FakeDataServer(
       clock: () => testTime,
       repositoryOfSession: {'s1': 'r1'},
       projectOfRepository: {'r1': 'p1'},
-    )..mirrorInto(db);
+    )..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.installationRows.insert(agentInstallation());
     server.projectRows.insert(project());
@@ -48,7 +46,7 @@ void main() {
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         notesEnabledProvider.overrideWithValue(notesEnabled),
@@ -82,7 +80,7 @@ void main() {
 
   /// Binds session `s1` — in repository `r1`, project `p1` — to [paneId].
   void runSessionIn(String paneId) {
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(session())
       ..updatePaneId('s1', paneId);
   }

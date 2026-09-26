@@ -4,7 +4,6 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
@@ -19,7 +18,6 @@ import 'package:karmashala/src/features/ssh/presentation/pair_phone_entry.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
@@ -31,11 +29,9 @@ import '../../support/system_health_fakes.dart';
 /// The Explorer's switcher is pinned beside its other items, in
 /// `explorer_scope_test.dart`.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
     server.environmentRows
       ..upsert(windowsEnv())
@@ -52,7 +48,6 @@ void main() {
       ),
     );
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester, Widget body) async {
     tester.view.physicalSize = const Size(1000, 1400);
@@ -62,7 +57,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),

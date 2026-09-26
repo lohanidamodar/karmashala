@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/stream.dart';
@@ -13,22 +11,21 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -40,7 +37,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   test('sessions list is empty until a repository is selected', () {
@@ -66,7 +62,7 @@ void main() {
     expect(sessions.single.id, session.id);
 
     // The engine persisted the started + greeting events.
-    final eventDao = mirroredServer(db).eventRows;
+    final eventDao = db.server.eventRows;
     for (var i = 0; i < 200; i++) {
       if (eventDao.countForSession(session.id) >= 2) break;
       await Future<void>.delayed(const Duration(milliseconds: 5));

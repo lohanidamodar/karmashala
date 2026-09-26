@@ -20,8 +20,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// **What the Explorer's tree costs, counted as table sweeps.**
 ///
@@ -54,8 +54,8 @@ void main() {
   /// [count] projects spread evenly over this machine, a WSL distribution and
   /// a host reached over SSH, all in one context — one header and three
   /// machines whatever the count, so the number below is about the projects.
-  CountingDatabase seed(FakeDataServer server, int count) {
-    final db = CountingDatabase();
+  CountingMachine seed(FakeDataServer server, int count) {
+    final db = CountingMachine();
     final environments = server.environmentRows;
     environments.upsert(windowsEnv());
     environments.upsert(wslEnv());
@@ -93,11 +93,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final server = FakeDataServer();
     final db = seed(server, count);
-    addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

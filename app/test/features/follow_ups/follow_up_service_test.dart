@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_service.dart';
@@ -7,7 +5,6 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/decision_recorder.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/lineage.dart';
-import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,13 +13,13 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// The service that turns "a session ended" into an offer — and, in the last
 /// group, the thing it must never do.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late Override data;
   late ProviderContainer container;
   late FakeDataServer server;
@@ -31,19 +28,15 @@ void main() {
 
   ProviderContainer freshContainer() {
     final made = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        data,
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-      ],
+      overrides: [data, clockProvider.overrideWithValue(FixedClock(testTime))],
     );
     addTearDown(made.dispose);
     return made;
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     data = await server.override();
     server.projectRows.insert(project());
@@ -53,7 +46,6 @@ void main() {
     followUps = server.followUpRows;
     container = freshContainer();
   });
-  tearDown(() => db.close());
 
   FollowUpService service() => container.read(followUpServiceProvider);
 
@@ -74,7 +66,7 @@ void main() {
     VerificationVerdict? verdict,
     String? reason,
   }) {
-    VerificationDao(db).insertRun(
+    db.server.verificationRows.insertRun(
       VerificationRun(
         id: id,
         title: 'the login page still loads',
@@ -85,9 +77,12 @@ void main() {
       ),
     );
     if (verdict != null) {
-      VerificationDao(
-        db,
-      ).finishRun(id, verdict: verdict, reason: reason, finishedAt: testTime);
+      db.server.verificationRows.finishRun(
+        id,
+        verdict: verdict,
+        reason: reason,
+        finishedAt: testTime,
+      );
     }
   }
 

@@ -16,12 +16,11 @@ import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/launch.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// What the phone is offered for a session, and what its pick does: the same
@@ -32,19 +31,21 @@ class _StaticSettings extends SettingsController {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -70,7 +71,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Future<({String id, List<String> keys})> launched() async {
@@ -124,7 +124,10 @@ void main() {
 
     expect(outcome, RemoteConfigureOutcome.now);
     expect(session.keys, ['\x1b[Z', '\x1b[Z']);
-    expect(mirroredServer(db).sessionRows.getById(session.id)!.permissionMode, 'mode=plan');
+    expect(
+      db.server.sessionRows.getById(session.id)!.permissionMode,
+      'mode=plan',
+    );
   });
 
   test('bypass from the phone is refused and nothing is recorded', () async {
@@ -140,7 +143,7 @@ void main() {
     );
     expect(session.keys, isEmpty);
     expect(
-      mirroredServer(db).sessionRows.getById(session.id)!.permissionMode,
+      db.server.sessionRows.getById(session.id)!.permissionMode,
       isNot('mode=bypassPermissions'),
     );
   });

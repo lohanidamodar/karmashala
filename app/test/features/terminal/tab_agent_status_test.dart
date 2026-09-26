@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -29,7 +28,7 @@ import '../../support/fixtures.dart';
 import 'fake_instance.dart';
 import 'package:karmashala_ui/rows.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// The owner: *"in the terminals with an active session, can we add an icon or
 /// something like cmux does that shows whether the session is actually running,
@@ -69,10 +68,10 @@ void _say(
   );
 }
 
-Future<ProviderContainer> harness(AppDatabase db, FakeDataServer server) async {
+Future<ProviderContainer> harness(TestMachine db, FakeDataServer server) async {
   final container = ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       await server.override(),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       availableSystemTerminalsProvider.overrideWith(
@@ -107,10 +106,9 @@ Future<ProviderContainer> harness(AppDatabase db, FakeDataServer server) async {
   return container;
 }
 
-(AppDatabase, FakeDataServer) workspace() {
-  final db = AppDatabase.memory();
-  addTearDown(db.close);
-  final server = FakeDataServer().mirrorInto(db);
+(TestMachine, FakeDataServer) workspace() {
+  final db = TestMachine();
+  final server = FakeDataServer().runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server
     ..projectRows.insert(project())
@@ -121,8 +119,8 @@ Future<ProviderContainer> harness(AppDatabase db, FakeDataServer server) async {
 
 /// Puts a running session row in [paneId], the way a launch or an adoption
 /// would.
-void placeSession(AppDatabase db, String id, String paneId) {
-  mirroredServer(db).sessionRows.insert(
+void placeSession(TestMachine db, String id, String paneId) {
+  db.server.sessionRows.insert(
     session(id: id, status: SessionStatus.running).copyWith(paneId: paneId),
   );
 }

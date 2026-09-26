@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/verification/application/evidence_reader.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
@@ -22,9 +22,6 @@ import 'package:path/path.dart' as p;
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'verification_harness.dart';
-import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
-import 'package:flutter_riverpod/misc.dart' show Override;
 
 final _t0 = DateTime.utc(2026, 8, 30, 12);
 
@@ -33,8 +30,8 @@ final _t0 = DateTime.utc(2026, 8, 30, 12);
 /// `testWidgets` runs its body in a fake-async zone where awaiting real file
 /// I/O never completes — `await Directory.create()` inside a widget test hangs
 /// the run with no timeout and no error, and `tester.runAsync` did not rescue
-/// it either. So the fixtures are written with the DAO (whose SQL is sync) and
-/// `writeAsStringSync`, and the service's own behaviour is covered by
+/// it either. So the fixtures are seeded into the fake server (synchronous)
+/// and written with `writeAsStringSync`, and the service's own behaviour is covered by
 /// `verification_service_test.dart`, which is a plain `test()` and can await.
 ///
 /// That constraint is also why the pane reads evidence through
@@ -46,10 +43,10 @@ final _t0 = DateTime.utc(2026, 8, 30, 12);
 void main() {
   late VerificationHarness h;
 
-  setUp(() => h = VerificationHarness());
+  setUp(() async => h = await VerificationHarness.start());
   tearDown(() => h.dispose());
 
-  /// Writes a run straight into the database, and its files straight to disk.
+  /// Seeds a run at the server, and its files straight to disk.
   VerificationRun seed({
     required String id,
     required String title,
@@ -76,13 +73,10 @@ void main() {
       reason: reason,
       artifactDirectory: directory,
     );
-    h.dao.insertRun(run);
-    for (final step in steps) {
-      h.dao.insertStep(id, step);
-    }
+    final artifacts = <VerificationArtifact>[];
     files.forEach((name, body) {
       File(p.join(directory, name)).writeAsStringSync(body);
-      h.dao.insertArtifact(
+      artifacts.add(
         VerificationArtifact(
           id: '$id:$name',
           runId: id,
@@ -97,7 +91,7 @@ void main() {
       );
     });
     for (final name in missingImages) {
-      h.dao.insertArtifact(
+      artifacts.add(
         VerificationArtifact(
           id: '$id:$name',
           runId: id,
@@ -109,6 +103,9 @@ void main() {
         ),
       );
     }
+    h.server.verificationRows.put(
+      run.copyWith(steps: steps, artifacts: artifacts),
+    );
     return run;
   }
 
@@ -134,7 +131,7 @@ void main() {
     Widget? home,
   }) => ProviderScope(
     overrides: [
-      databaseProvider.overrideWithValue(h.db),
+      dataClientProvider.overrideWithValue(h.client),
       verificationRootProvider.overrideWithValue(h.root),
       verificationEvidenceReaderProvider.overrideWithValue(reader),
       verificationRootReadyProvider.overrideWith((ref) async => h.root),
@@ -150,13 +147,11 @@ void main() {
   Future<void> pump(
     WidgetTester tester, {
     VerificationEvidenceReader reader = const _SyncEvidenceReader(),
-    List<Override> data = const [],
   }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(h.db),
-          ...data,
+          dataClientProvider.overrideWithValue(h.client),
           verificationRootProvider.overrideWithValue(h.root),
           verificationEvidenceReaderProvider.overrideWithValue(reader),
           // Without this the pane waits on path_provider, which has no
@@ -192,7 +187,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(h.db),
+          dataClientProvider.overrideWithValue(h.client),
           verificationRootReadyProvider.overrideWith((ref) => never.future),
           verificationServiceProvider.overrideWithValue(h.service),
           verificationChangesProvider.overrideWithValue(h.changes),
@@ -211,7 +206,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(h.db),
+          dataClientProvider.overrideWithValue(h.client),
           verificationRootProvider.overrideWithValue(h.root),
           verificationEvidenceReaderProvider.overrideWithValue(
             const _SyncEvidenceReader(),
@@ -238,7 +233,7 @@ void main() {
   testWidgets('a renamed session is renamed in the run it verified', (
     tester,
   ) async {
-    final server = FakeDataServer()..mirrorInto(h.db);
+    final server = h.server;
     server.environmentRows.upsert(windowsEnv());
     server
       ..projectRows.insert(project())
@@ -254,8 +249,7 @@ void main() {
       sessionId: 's-1',
       producedBySessionId: 's-2',
     );
-    final data = await tester.runAsync(server.override);
-    await pump(tester, data: [data!]);
+    await pump(tester);
     await tapAndSettle(tester, find.text('a run about a session'));
     expect(find.text('Before the rename'), findsOneWidget);
 
@@ -292,7 +286,7 @@ void main() {
     expect(find.widgetWithText(DestructiveButton, 'Delete'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(h.dao.getRun('run-del'), isNotNull);
+    expect(h.stored('run-del'), isNotNull);
   });
 
   testWidgets('with nothing recorded it says what a run is for', (
@@ -486,6 +480,9 @@ void main() {
 
     await pump(tester);
     await tapAndSettle(tester, find.text('a run whose files were cleaned up'));
+    // The run is asked for, then its screenshot is looked for: two answers.
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.textContaining('not on disk any more'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -731,7 +728,7 @@ class _Recording implements VerificationService {
   final VerificationService delegate;
 
   @override
-  List<VerificationRun> list({int limit = 50, String? sessionId}) =>
+  Future<List<VerificationRun>> list({int limit = 50, String? sessionId}) =>
       delegate.list(limit: limit, sessionId: sessionId);
 
   @override

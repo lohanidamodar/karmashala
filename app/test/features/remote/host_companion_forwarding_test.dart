@@ -7,13 +7,12 @@ import 'package:karmashala/src/features/sessions/application/host_lifecycle/host
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 Future<void> _settle() async {
@@ -26,22 +25,22 @@ Future<void> _settle() async {
 /// can answer over the lifecycle link; this app answers with the same bindings
 /// its own server would, from the same providers the desktop draws.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeHostLifecycle host;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Work'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Work'));
     host = FakeHostLifecycle();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
@@ -56,7 +55,6 @@ void main() {
     );
     addTearDown(() {
       container.dispose();
-      db.close();
     });
     container.listen(hostLifecycleSubscriberProvider, (_, _) {});
     await _settle();

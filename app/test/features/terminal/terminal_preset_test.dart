@@ -1,8 +1,7 @@
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_presets.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
-import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open_item.dart';
@@ -13,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import 'fake_instance.dart';
 
 /// A preset is **the shape and nothing running in it.**
@@ -28,8 +28,8 @@ import 'fake_instance.dart';
 /// and starts four is the useful thing."* So the tab that ends up in front
 /// starts, and every other tab waits until somebody looks at it.
 void main() {
-  ProviderContainer harness({AppDatabase? database}) {
-    final container = fakeTerminalContainer(database: database);
+  ProviderContainer harness() {
+    final container = fakeTerminalContainer();
     addTearDown(container.dispose);
     return container;
   }
@@ -289,10 +289,21 @@ void main() {
   });
 
   group('the store', () {
-    test('a preset survives the round trip, and a second save replaces it', () {
-      final database = AppDatabase.memory();
-      addTearDown(database.close);
-      final container = harness(database: database);
+    Future<(ProviderContainer, FakeDataServer)> served() async {
+      final server = FakeDataServer();
+      final container = fakeTerminalContainer(data: await server.override());
+      addTearDown(container.dispose);
+      return (container, server);
+    }
+
+    List<TerminalPreset> stored(FakeDataServer server) => [
+      for (final row in server.snippetRows.presetsNow())
+        ?TerminalPreset.fromJson(id: row.id, name: row.name, shape: row.shape),
+    ];
+
+    test('a preset survives the round trip, and a second save replaces '
+        'it', () async {
+      final (container, server) = await served();
       final controller = controllerOf(container);
       controller.openTab(
         TerminalProfile.powerShell,
@@ -302,8 +313,9 @@ void main() {
       final saved = container.read(terminalPresetsProvider).save('  Daily  ');
       expect(saved, isNotNull);
       expect(saved!.name, 'Daily', reason: 'the name is trimmed');
+      await container.read(dataClientProvider).settled();
 
-      final read = TerminalPresetDao(database).getAll();
+      final read = stored(server);
       expect(read, hasLength(1));
       expect(read.single.name, 'Daily');
       expect(read.single.paneCount, 1);
@@ -315,48 +327,19 @@ void main() {
         TerminalProfile.commandPrompt,
       );
       final again = container.read(terminalPresetsProvider).save('Daily')!;
-      final after = TerminalPresetDao(database).getAll();
+      await container.read(dataClientProvider).settled();
+      final after = stored(server);
       expect(after, hasLength(1), reason: 'replaced, not duplicated');
       expect(again.id, saved.id, reason: 'and it kept its id');
       expect(after.single.paneCount, 2);
+      expect(container.read(terminalPresetsProvider).all(), hasLength(1));
     });
 
-    test('a row this code cannot parse is skipped, not thrown on', () {
-      final database = AppDatabase.memory();
-      addTearDown(database.close);
-      final dao = TerminalPresetDao(database);
-      final now = DateTime.utc(2026, 9, 9);
-      dao.save(
-        TerminalPreset(
-          id: 'good',
-          name: 'Good',
-          tabs: [
-            PresetTab(
-              layout: PaneLayout.single('a'),
-              focusedPaneId: 'a',
-              panes: const [
-                PresetPane(id: 'a', profileId: TerminalProfile.powerShellId),
-              ],
-            ),
-          ],
-        ),
-        now,
-      );
-      database.execute(
-        'INSERT INTO terminal_presets (id, name, shape, created_at, updated_at) '
-        "VALUES ('bad', 'Bad', 'not json at all', ?, ?);",
-        [now.toIso8601String(), now.toIso8601String()],
-      );
-
-      expect(dao.getAll().map((preset) => preset.name), ['Good']);
-    });
-
-    test('nothing to capture saves nothing', () {
-      final database = AppDatabase.memory();
-      addTearDown(database.close);
-      final container = harness(database: database);
+    test('nothing to capture saves nothing', () async {
+      final (container, server) = await served();
       expect(container.read(terminalPresetsProvider).save('Empty'), isNull);
-      expect(TerminalPresetDao(database).getAll(), isEmpty);
+      await container.read(dataClientProvider).settled();
+      expect(stored(server), isEmpty);
     });
   });
 

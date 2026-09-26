@@ -8,7 +8,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/host_companion_link.dart';
 import 'package:karmashala/src/features/remote/application/host_companion_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
@@ -20,19 +19,17 @@ import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_host/server_config.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala_store/devices.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/memory_server_config.dart';
 import 'fake_bindings.dart';
 
 void main() {
-  late AppDatabase db;
   late FakeRemoteBindings fake;
   late FakeHostLifecycle host;
   late HostCompanionLink link;
-  var devicesChanged = 0;
+  late Map<String, PairedDevice> recorded;
 
   PairedDevice device(String id) => PairedDevice(
     id: id,
@@ -44,18 +41,14 @@ void main() {
   );
 
   setUp(() {
-    db = AppDatabase.memory();
     fake = FakeRemoteBindings()..addSession('s1', title: 'Fix the cart');
     host = FakeHostLifecycle();
-    devicesChanged = 0;
+    recorded = {};
     link = HostCompanionLink(
       bindings: () => fake.bindings,
-      deviceById: PairedDeviceDao(db).getById,
-      onDevicesChanged: () => devicesChanged++,
+      deviceById: (id) async => recorded[id],
     );
   });
-
-  tearDown(() => db.close());
 
   Future<HostLifecycleFeed> attach() async {
     final feed = (await host.open())!;
@@ -163,7 +156,7 @@ void main() {
       expect(pairing.payload.encode(), payload.encode());
       expect(host.pairings.single.relay, 'wss://relay.example.com');
 
-      PairedDeviceDao(db).insert(device('pixel'));
+      recorded['pixel'] = device('pixel');
       host.companionEventLink.add(
         const CompanionEventMessage(
           CompanionEventKind.pairingEnded,
@@ -173,7 +166,6 @@ void main() {
       );
 
       expect((await pairing.done).id, 'pixel');
-      expect(devicesChanged, 1);
     });
 
     test(
@@ -226,12 +218,14 @@ void main() {
     late ProviderContainer container;
     late RemoteAccessController controller;
     late MemoryServerConfigSource server;
+    late FakeDataServer data;
 
     setUp(() async {
       server = MemoryServerConfigSource();
+      data = FakeDataServer();
       container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          await data.override(),
           companionAtHostProvider.overrideWithValue(true),
           hostCompanionLinkProvider.overrideWithValue(link),
           serverConfigIn(server),
@@ -251,7 +245,6 @@ void main() {
         'runs no server of its own', () async {
       await controller.setRemoteAccess(enabled: true);
 
-      expect(controller.service, isNull, reason: 'one server: the host\'s');
       final config = server.config;
       expect(config.companionEnabled, isTrue);
       expect(config.bind, '0.0.0.0');
@@ -294,16 +287,15 @@ void main() {
       expect(server.patches, isEmpty, reason: 'nothing of the app\'s moved');
     });
 
-    test('a revoke is written here and applied by the host', () async {
-      PairedDeviceDao(db).insert(device('pixel'));
+    test('a revoke goes through the server, not a notice', () async {
+      data.deviceRows.insert(device('pixel'));
+      final notices = host.companionNotices.length;
 
-      await controller.revoke(PairedDeviceDao(db).getById('pixel')!);
+      await controller.revoke(device('pixel'));
 
-      expect(PairedDeviceDao(db).getById('pixel')!.revoked, isTrue);
-      expect(
-        host.companionNotices.last.kind,
-        CompanionNoticeKind.devicesChanged,
-      );
+      expect(data.deviceRows.getById('pixel')!.revoked, isTrue);
+      expect(data.deviceRows.applied, ['devices.revoke']);
+      expect(host.companionNotices, hasLength(notices));
     });
 
     test('the desktop\'s news goes to the host', () async {

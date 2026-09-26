@@ -475,7 +475,14 @@ class WorktreeSetupReport {
       creation: WorktreeCreationRecord.fromJson(decoded['creation']),
     );
   }
+
+  /// One row per worktree: a re-run corrects the same fact.
+  String get key => '$repositoryId\n$worktreePath';
 }
+
+/// The runs table's order: the newest first.
+int compareSetupRuns(WorktreeSetupReport a, WorktreeSetupReport b) =>
+    b.ranAt.compareTo(a.ranAt);
 
 /// Splits a typed command line into argv.
 ///

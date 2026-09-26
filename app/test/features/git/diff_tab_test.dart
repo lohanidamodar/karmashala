@@ -15,13 +15,12 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 
-import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **Reading a change happens in a tab; the sidebar only says what changed.**
 ///
@@ -80,27 +79,26 @@ CommandResult _git(CommandRequest request) {
 void main() {
   late FakeDataServer server;
   late DataClient client;
-  late CountingDatabase db;
+  late TestMachine db;
   late FakeCommandRunner git;
 
   setUp(() async {
-    db = CountingDatabase();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     client = await server.connect();
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   ProviderContainer shellContainer() {
     git = FakeCommandRunner(responder: _git);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),

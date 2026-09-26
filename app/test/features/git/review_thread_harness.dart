@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
@@ -15,7 +13,6 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// A repository with a scriptable `git hash-object`, which is the only git call
 /// review threads make.
@@ -27,15 +24,8 @@ import '../../support/workspace_mirror.dart';
 /// worth noticing, since the feature it replaces derived its anchor from the
 /// shape of a rendered diff.
 class ReviewThreadHarness {
-  ReviewThreadHarness._(
-    this.server,
-    this.client, {
-    AppDatabase? database,
-    Map<String, String>? shas,
-  }) : db = database ?? AppDatabase.memory(),
-       shas = shas ?? <String, String>{} {
-    server.mirrorInto(db);
-
+  ReviewThreadHarness._(this.server, this.client, {Map<String, String>? shas})
+    : shas = shas ?? <String, String>{} {
     runner = FakeCommandRunner(
       responder: (request) {
         if (!request.arguments.contains('hash-object')) {
@@ -69,7 +59,6 @@ class ReviewThreadHarness {
 
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('thread-')),
@@ -85,23 +74,14 @@ class ReviewThreadHarness {
 
   /// The project and checkout the threads are on, on a fake server whose
   /// client the container reads the workspace from.
-  static Future<ReviewThreadHarness> create({
-    AppDatabase? database,
-    Map<String, String>? shas,
-  }) async {
+  static Future<ReviewThreadHarness> create({Map<String, String>? shas}) async {
     final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    return ReviewThreadHarness._(
-      server,
-      await server.connect(),
-      database: database,
-      shas: shas,
-    );
+    return ReviewThreadHarness._(server, await server.connect(), shas: shas);
   }
 
-  final AppDatabase db;
   final FakeDataServer server;
 
   /// For a container of the test's own that reads the same workspace.
@@ -120,8 +100,5 @@ class ReviewThreadHarness {
   ReviewThreadService get service =>
       container.read(reviewThreadServiceProvider);
 
-  void dispose() {
-    container.dispose();
-    db.close();
-  }
+  void dispose() => container.dispose();
 }

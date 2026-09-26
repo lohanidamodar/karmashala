@@ -5,13 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/snippet_tools.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
-import 'package:karmashala/src/features/snippets/data/command_snippet_dao.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
 import 'package:karmashala/src/features/snippets/presentation/snippet_dialogs.dart';
 import 'package:karmashala/src/features/snippets/presentation/snippets_settings_page.dart';
@@ -21,7 +19,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -34,31 +31,26 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 /// else in the app appears on it without the page being reopened, which is the
 /// other half of the same report ("I added one and it didn't show up").
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
     // The settings screen's Terminal page resolves the default shell against
     // the environments, and the nav can reach it from here.
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db, data: data),
+        ...fakeTerminalOverrides(data: data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   Future<void> pumpPage(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -259,7 +251,7 @@ void main() {
     // Everything that *picks* a snippet filters this one out — it fits no pane
     // by design. The management page is the only place it can be seen at all,
     // which is the point of it being here.
-    CommandSnippetDao(db).insert(
+    server.snippetRows.insert(
       CommandSnippet(
         id: 'sn-future',
         label: 'From a later build',
@@ -324,7 +316,7 @@ void main() {
   });
 
   testWidgets('the page survives phone and desktop widths', (tester) async {
-    CommandSnippetDao(db).insert(
+    server.snippetRows.insert(
       CommandSnippet(
         id: 'sn-long',
         // Long on purpose: a fixed row would find its overflow here first.
@@ -349,7 +341,7 @@ void main() {
       build: () {
         final scope = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: db, data: data),
+            ...fakeTerminalOverrides(data: data),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],
         );

@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -25,7 +24,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **What a project costs per recorded checkout**, at the size the owner's
@@ -133,21 +132,20 @@ void main() {
   /// the ordinary project worse" control; 69 is the owner's real number.
   const scale = [1, 10, 69];
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late _ProbeRunner git;
   late _ProbeFiles files;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.installationRows.insert(agentInstallation());
     git = _ProbeRunner(responder: _git);
     files = _ProbeFiles();
   });
-  tearDown(() => db.close());
 
   /// [count] checkouts in one project: the hub itself, then sibling clones
   /// beside it — the shape a rescan of a workspace hub records. Each is an
@@ -171,7 +169,7 @@ void main() {
         ),
       );
     }
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 'n0',
         repositoryId: 'r0',
@@ -198,7 +196,7 @@ void main() {
   void seedOnePerCheckout(int count) {
     seed(count);
     for (var i = 1; i < count; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r$i',
@@ -231,7 +229,7 @@ void main() {
         // rest of the suite takes `noGitFiles` and never touches a disk.
         await server.override(),
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           frameGatedProbes: true,
           gitFiles: files,
         ),
@@ -605,7 +603,7 @@ void main() {
         repository(id: 'r0', name: 'hub', path: r'C:\hub'),
       );
       for (var i = 0; i < worktrees; i++) {
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           Session(
             id: 'w$i',
             repositoryId: 'r0',
@@ -630,7 +628,7 @@ void main() {
           // The neutral gate the rest of the suite takes — see
           // `headlessProbeGate`. This container has no widget tree.
           await server.override(),
-          ...fakeTerminalOverrides(database: db, gitFiles: files),
+          ...fakeTerminalOverrides(machine: db, gitFiles: files),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
           commandRunnerFactoryProvider.overrideWithValue(

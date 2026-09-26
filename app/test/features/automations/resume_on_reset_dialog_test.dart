@@ -10,7 +10,6 @@ import 'package:karmashala_ui/theme.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'scheduled_resume_harness.dart';
-import '../../support/workspace_mirror.dart';
 
 void main() {
   late ResumeHarness h;
@@ -151,8 +150,8 @@ void main() {
   testWidgets('an SSH session offers a chosen time only, and says why', (
     tester,
   ) async {
-    mirroredServer(h.db).environmentRows.upsert(sshEnvFixture());
-    mirroredServer(h.db).installationRows.insert(
+    h.server.environmentRows.upsert(sshEnvFixture());
+    h.server.installationRows.insert(
       agentInstallation(
         id: 'a-ssh',
         agentId: AgentIds.codex,

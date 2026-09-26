@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
@@ -31,20 +30,18 @@ import 'package:agent_cli/process.dart';
 /// here that writes a `\r` for a snippet the user did not mark is the bug.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
   late ProviderContainer container;
   late LauncherControlServer server;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_snippet_tools_');
-    db = AppDatabase.memory();
     final data =
         await (FakeDataServer()
               ..environmentRows.upsert(localHostEnvironment(testTime)))
             .override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(data: data, database: db),
+        ...fakeTerminalOverrides(data: data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
@@ -58,7 +55,6 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 

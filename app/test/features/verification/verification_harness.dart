@@ -1,13 +1,16 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_devices/devices.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
-import 'package:karmashala_verification/store.dart';
+import 'package:karmashala/src/features/verification/data/verification_data.dart';
+import 'package:karmashala_devices/devices.dart';
+import 'package:karmashala_verification/artifacts.dart';
+import 'package:karmashala_verification/verification.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../browser/fake_browser.dart';
 
 /// A 1×1 PNG, so an artifact written by a test is a real image.
@@ -126,15 +129,19 @@ class FakeAdb {
   }
 }
 
-/// Everything a verification-service test needs, wired to fakes.
+/// Everything a verification-service test needs, wired to fakes: the runs are
+/// kept by a [FakeDataServer], the evidence files in a temp folder.
 class VerificationHarness {
-  VerificationHarness({DateTime Function()? now, String Function()? newId})
-    : root = Directory.systemTemp.createTempSync('verify-run') {
-    db = AppDatabase.memory();
-    dao = VerificationDao(db);
+  VerificationHarness._(
+    this.server,
+    this.client, {
+    DateTime Function()? now,
+    String Function()? newId,
+  }) : root = Directory.systemTemp.createTempSync('verify-run') {
+    data = VerificationData(client);
     store = VerificationArtifactStore(root);
     service = VerificationService(
-      dao,
+      data,
       store,
       browserOf: () => browser.service,
       adbOf: () => adb.service,
@@ -144,11 +151,29 @@ class VerificationHarness {
     );
   }
 
+  /// A harness over a fresh fake server, its client primed.
+  static Future<VerificationHarness> start({
+    DateTime Function()? now,
+    String Function()? newId,
+  }) async {
+    final server = FakeDataServer();
+    return VerificationHarness._(
+      server,
+      await server.connect(),
+      now: now,
+      newId: newId,
+    );
+  }
+
   final Directory root;
-  late final AppDatabase db;
-  late final VerificationDao dao;
+  final FakeDataServer server;
+  final DataClient client;
+  late final VerificationData data;
   late final VerificationArtifactStore store;
   late final VerificationService service;
+
+  /// The run as the server holds it, whole.
+  VerificationRun? stored(String id) => server.verificationRows.getRun(id);
 
   /// The signal the service publishes into, held here so a widget test can
   /// override `verificationChangesProvider` with the same one. Without that the
@@ -165,7 +190,6 @@ class VerificationHarness {
   Future<void> dispose() async {
     await service.dispose();
     await changes.dispose();
-    db.close();
     if (root.existsSync()) root.deleteSync(recursive: true);
   }
 }

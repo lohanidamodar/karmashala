@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
@@ -67,31 +67,33 @@ void main() {
     }
   }
 
-  ProviderContainer relaunch(AppDatabase db, {bool hostBacked = true}) =>
-      ProviderContainer(
-        overrides: [
-          ...fakeTerminalOverrides(database: db),
-          hostBackedLocalPanesProvider.overrideWithValue(hostBacked),
-          localHostSessionAccessProvider.overrideWithValue(
-            LocalHostSessionAccess(
-              paths: paths,
-              executable: LocalHostExecutable(executableDirectory: home.path),
-              // Asking what survived must never start a host.
-              startServe: (_) async {
-                starts++;
-                throw StateError('a host was started to ask what survived');
-              },
-            ),
-          ),
-        ],
-      );
+  ProviderContainer relaunch(
+    TerminalLayoutStore db, {
+    bool hostBacked = true,
+  }) => ProviderContainer(
+    overrides: [
+      ...fakeTerminalOverrides(layoutStore: db),
+      hostBackedLocalPanesProvider.overrideWithValue(hostBacked),
+      localHostSessionAccessProvider.overrideWithValue(
+        LocalHostSessionAccess(
+          paths: paths,
+          executable: LocalHostExecutable(executableDirectory: home.path),
+          // Asking what survived must never start a host.
+          startServe: (_) async {
+            starts++;
+            throw StateError('a host was started to ask what survived');
+          },
+        ),
+      ),
+    ],
+  );
 
   /// Opens three tabs and quits: [background] and [unhosted] behind the active
   /// [foreground]. Returns their pane ids.
   ({String background, String unhosted, String foreground}) closeWithThreeTabs(
-    AppDatabase db,
+    TerminalLayoutStore db,
   ) {
-    final container = fakeTerminalContainer(database: db);
+    final container = fakeTerminalContainer(layoutStore: db);
     final controller = container.read(
       terminalSessionsControllerProvider.notifier,
     );
@@ -113,7 +115,7 @@ void main() {
   }
 
   test('a background pane the host kept running comes back running', () async {
-    final db = AppDatabase.memory();
+    final db = TerminalLayoutStore.memory();
     addTearDown(db.close);
     final panes = closeWithThreeTabs(db);
     await hostRunning([hostSessionIdFor(paneId: panes.background)]);
@@ -145,7 +147,7 @@ void main() {
   });
 
   test('a host that is not running is not started to ask', () async {
-    final db = AppDatabase.memory();
+    final db = TerminalLayoutStore.memory();
     addTearDown(db.close);
     final panes = closeWithThreeTabs(db);
     // No host listening at all.
@@ -167,7 +169,7 @@ void main() {
   });
 
   test('with host-backed panes off, the host is not consulted', () async {
-    final db = AppDatabase.memory();
+    final db = TerminalLayoutStore.memory();
     addTearDown(db.close);
     final panes = closeWithThreeTabs(db);
     await hostRunning([hostSessionIdFor(paneId: panes.background)]);

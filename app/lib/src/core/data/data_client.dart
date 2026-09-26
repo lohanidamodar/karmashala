@@ -4,17 +4,27 @@ import 'dart:math' as math;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_comparisons/comparisons.dart'
+    show Comparison, sameComparison;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_verification/verification.dart'
+    show VerificationRun, sameVerificationHeader;
 import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_git/git.dart'
+    show ReviewThread, WorktreeSetup, WorktreeSetupReport;
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_remote/remote.dart'
+    show PairedDevice, samePairedDevice;
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 
+import 'automations_copy.dart';
 import 'keyed_replica.dart';
 
 /// The domains this app reads through the server.
@@ -30,6 +40,22 @@ enum DataDomain {
 
   /// Agent installations and the saved accounts (without credentials).
   agents,
+
+  /// Paired devices (phones), without their keys or push tokens.
+  pairings,
+
+  /// Worktree setups and their runs, review threads.
+  worktrees,
+
+  /// Command snippets and saved terminal presets.
+  snippets,
+
+  /// Automations, their runs and checks, project checks, scheduled resumes.
+  automations,
+
+  /// Verification run headers and fan-out comparisons. Checkpoints are
+  /// asked for per session, not copied.
+  evidence,
 }
 
 /// How this app reaches the server's data now.
@@ -121,6 +147,10 @@ class DataClient {
 
   final notes = KeyedReplica<Note>();
   final todos = KeyedReplica<Todo>();
+
+  /// Automations, the runs worth holding and their checks, origin chains,
+  /// project checks, verification switches and the resumes worth holding.
+  final automations = AutomationsCopy();
   final preferences = KeyedReplica<String>();
 
   /// The workspace domain, one copy per table.
@@ -151,6 +181,35 @@ class DataClient {
   final installations = KeyedReplica<AgentInstallation>();
   final claudeAccounts = KeyedReplica<ClaudeAccount>(_sameClaude);
   final codexAccounts = KeyedReplica<CodexAccount>(_sameCodex);
+
+  /// The paired devices, **without their keys or push tokens**.
+  final devices = KeyedReplica<PairedDevice>(samePairedDevice);
+
+  /// The git side tables: each checkout's worktree setup (by repository id),
+  /// every worktree's setup verdict (by `WorktreeSetupReport.key`) and every
+  /// review thread with its comments.
+  final worktreeSetups = KeyedReplica<WorktreeSetup>();
+  final worktreeRuns = KeyedReplica<WorktreeSetupReport>(sameSetupReport);
+  final reviewThreads = KeyedReplica<ReviewThread>(sameReviewThread);
+
+  /// The command snippets and the saved terminal presets.
+  final snippets = KeyedReplica<CommandSnippet>();
+  final presets = KeyedReplica<StoredPreset>();
+
+  /// Every verification run's header (no steps, no evidence rows: those are
+  /// asked for), and every fan-out comparison with its candidates.
+  final verificationRuns = KeyedReplica<VerificationRun>(
+    sameVerificationHeader,
+  );
+  final comparisons = KeyedReplica<Comparison>(sameComparison);
+
+  final _evidenceChanges = StreamController<EvidenceChange>.broadcast(
+    sync: true,
+  );
+
+  /// Checkpoints recorded or pruned and runs that gained evidence, here or
+  /// by another client — what a view of rows not copied reads again on.
+  Stream<EvidenceChange> get evidenceChanges => _evidenceChanges.stream;
 
   /// The key [knownHosts] keeps a trusted key under.
   static String knownHostKey(String host, int port) => '$host:$port';
@@ -285,24 +344,94 @@ class DataClient {
 
   /// Reads [domain] again, whole — after a write this app made to its rows
   /// some other way (a project deleted clears their filing).
-  Future<void> resync(DataDomain domain) async {
-    switch (domain) {
-      case DataDomain.notes:
-        _replaceNotes(await send(const NotesList()));
-      case DataDomain.todos:
-        _replaceTodos(await send(const TodosList()));
-      case DataDomain.preferences:
-        _replacePreferences(await send(const PreferencesGet()));
-      case DataDomain.workspace:
-        _replaceWorkspace(await send(const WorkspaceList()));
-      case DataDomain.sessions:
-        _replaceSessions(await send(const SessionsList()));
-      case DataDomain.environments:
-        _replaceEnvironments(await send(const EnvironmentsList()));
-      case DataDomain.agents:
-        _replaceAgents(await send(const AgentsList()));
-    }
-  }
+  Future<void> resync(DataDomain domain) async => (await _read(domain, send))();
+
+  /// Reads [domain] whole through [send]; the callback replaces its copy.
+  Future<void Function()> _read(
+    DataDomain domain,
+    Future<DataReply<R>> Function<R>(DataRequest<R> request) send,
+  ) => switch (domain) {
+    DataDomain.notes => _then(send(const NotesList()), _replaceNotes),
+    DataDomain.todos => _then(send(const TodosList()), _replaceTodos),
+    DataDomain.preferences => _then(
+      send(const PreferencesGet()),
+      _replacePreferences,
+    ),
+    DataDomain.workspace => _then(
+      send(const WorkspaceList()),
+      _replaceWorkspace,
+    ),
+    DataDomain.sessions => _then(send(const SessionsList()), _replaceSessions),
+    DataDomain.environments => _then(
+      send(const EnvironmentsList()),
+      _replaceEnvironments,
+    ),
+    DataDomain.agents => _then(send(const AgentsList()), _replaceAgents),
+    DataDomain.automations => _then(
+      send(const AutomationsList()),
+      (reply) => automations.replace(reply.value, reply.revision),
+    ),
+    DataDomain.pairings => _then(
+      send(const DevicesList()),
+      (reply) => devices.replaceAll({
+        for (final device in reply.value) device.id: device,
+      }, reply.revision),
+    ),
+    DataDomain.worktrees => _then(send(const WorktreesList()), (reply) {
+      final WorktreesSnapshot(:setups, :runs, :threads) = reply.value;
+      worktreeSetups.replaceAll(setups, reply.revision);
+      worktreeRuns.replaceAll({for (final r in runs) r.key: r}, reply.revision);
+      reviewThreads.replaceAll({
+        for (final t in threads) t.id: t,
+      }, reply.revision);
+    }),
+    DataDomain.evidence =>
+      Future.wait([
+        _then(
+          send(const VerificationRuns()),
+          (reply) => verificationRuns.replaceAll({
+            for (final run in reply.value) run.id: run,
+          }, reply.revision),
+        ),
+        _then(
+          send(const ComparisonsList()),
+          (reply) => comparisons.replaceAll({
+            for (final c in reply.value) c.id: c,
+          }, reply.revision),
+        ),
+      ]).then(
+        (replace) => () {
+          for (final apply in replace) {
+            apply();
+          }
+        },
+      ),
+    DataDomain.snippets => _then(send(const SnippetsList()), (reply) {
+      snippets.replaceAll({
+        for (final s in reply.value.snippets) s.id: s,
+      }, reply.revision);
+      presets.replaceAll({
+        for (final p in reply.value.presets) p.id: p,
+      }, reply.revision);
+    }),
+  };
+
+  static Future<void Function()> _then<R>(
+    Future<DataReply<R>> reply,
+    void Function(DataReply<R> reply) replace,
+  ) => reply.then(
+    (reply) =>
+        () => replace(reply),
+  );
+
+  /// The order a snapshot primes the copies in: the sessions last, so a
+  /// reader primed by their rows finds what they name (the workspace, where
+  /// agents run, the agents) in place.
+  static final List<DataDomain> _primeOrder = [
+    for (final domain in DataDomain.values)
+      if (domain != DataDomain.sessions) domain,
+    DataDomain.sessions,
+  ];
 
   /// Dials now rather than at the next backoff step — the person pressed
   /// Retry, or the server was just started again.
@@ -533,6 +662,24 @@ class DataClient {
 
   void _onChanges(DataChanges batch) => _batch(() => _applyChanges(batch));
 
+  void _applyEvidence(EvidenceChange change, int revision) {
+    switch (change) {
+      case VerificationRunChanged(:final run):
+        verificationRuns.applyAt(run.id, run, revision);
+      case VerificationRunRemoved(:final id):
+        verificationRuns.applyAt(id, null, revision);
+      case ComparisonChanged(:final comparison):
+        comparisons.applyAt(comparison.id, comparison, revision);
+      case ComparisonRemoved(:final id):
+        comparisons.applyAt(id, null, revision);
+      case CheckpointRecorded() ||
+          CheckpointsPruned() ||
+          VerificationEvidenceAdded():
+        break;
+    }
+    if (!_evidenceChanges.isClosed) _evidenceChanges.add(change);
+  }
+
   void _applyChanges(DataChanges batch) {
     for (final change in batch.changes) {
       switch (change) {
@@ -548,10 +695,42 @@ class DataClient {
           preferences.applyAt(key, value, batch.revision);
         case final RowChange row:
           applyRow(row, batch.revision);
+          if (row is RepositoryRemoved) {
+            automations.checkoutRemoved(row.id, batch.revision);
+          }
+        case final AutomationsChange change:
+          automations.apply(change, batch.revision);
         case final SessionDomainChange change:
           applySessionChange(change, batch.revision);
+          if (change is SessionRowRemoved) {
+            automations.sessionRemoved(change.id, batch.revision);
+          }
+        case DeviceChanged(:final device):
+          devices.applyAt(device.id, device, batch.revision);
+        case DeviceRemoved(:final id):
+          devices.applyAt(id, null, batch.revision);
         case final HostsDomainChange change:
           applyHostsChange(change, batch.revision);
+        case WorktreeSetupChanged(:final repositoryId, :final setup):
+          worktreeSetups.applyAt(repositoryId, setup, batch.revision);
+        case WorktreeRunRecorded(:final report):
+          worktreeRuns.applyAt(report.key, report, batch.revision);
+        case ReviewThreadChanged(:final thread):
+          reviewThreads.applyAt(thread.id, thread, batch.revision);
+        case WorktreeRunRemoved(:final key):
+          worktreeRuns.applyAt(key, null, batch.revision);
+        case ReviewThreadRemoved(:final id):
+          reviewThreads.applyAt(id, null, batch.revision);
+        case SnippetChanged(:final snippet):
+          snippets.applyAt(snippet.id, snippet, batch.revision);
+        case SnippetRemoved(:final id):
+          snippets.applyAt(id, null, batch.revision);
+        case PresetChanged(:final preset):
+          presets.applyAt(preset.id, preset, batch.revision);
+        case PresetRemoved(:final id):
+          presets.applyAt(id, null, batch.revision);
+        case final EvidenceChange change:
+          _applyEvidence(change, batch.revision);
       }
     }
   }
@@ -570,23 +749,12 @@ class DataClient {
       waiter.timer.cancel();
       waiter.go(endpoint);
     }
-    final snapshot = await Future.wait([
-      endpoint.send(const NotesList()),
-      endpoint.send(const TodosList()),
-      endpoint.send(const PreferencesGet()),
-      endpoint.send(const WorkspaceList()),
-      endpoint.send(const SessionsList()),
-      endpoint.send(const EnvironmentsList()),
-      endpoint.send(const AgentsList()),
+    final replace = await Future.wait([
+      for (final domain in _primeOrder) _read(domain, endpoint.send),
     ]);
-    _replaceNotes(snapshot[0] as DataReply<List<Note>>);
-    _replaceTodos(snapshot[1] as DataReply<List<Todo>>);
-    _replacePreferences(snapshot[2] as DataReply<Map<String, String>>);
-    _replaceWorkspace(snapshot[3] as DataReply<WorkspaceSnapshot>);
-    // Where agents run and the agents before the sessions that name them.
-    _replaceEnvironments(snapshot[5] as DataReply<EnvironmentsSnapshot>);
-    _replaceAgents(snapshot[6] as DataReply<AgentsSnapshot>);
-    _replaceSessions(snapshot[4] as DataReply<SessionsSnapshot>);
+    for (final apply in replace) {
+      apply();
+    }
     _setConnection(const DataConnection(DataLinkState.connected));
   }
 
@@ -702,9 +870,11 @@ class DataClient {
     unawaited(_connectionChanges.close());
     unawaited(_batchEnds.close());
     unawaited(_usageRecorded.close());
+    unawaited(_evidenceChanges.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());
+    automations.dispose();
     for (final replica in <KeyedReplica<Object>>[
       workspaces,
       projects,
@@ -722,6 +892,14 @@ class DataClient {
       installations,
       claudeAccounts,
       codexAccounts,
+      devices,
+      worktreeSetups,
+      worktreeRuns,
+      reviewThreads,
+      snippets,
+      presets,
+      verificationRuns,
+      comparisons,
     ]) {
       unawaited(replica.dispose());
     }

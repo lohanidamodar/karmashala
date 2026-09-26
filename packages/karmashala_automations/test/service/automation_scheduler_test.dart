@@ -1,4 +1,5 @@
 import 'package:karmashala_automations/karmashala_automations.dart';
+import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -41,17 +42,6 @@ class _NoResumes implements ScheduledResumeFiring {
       fired.add(resume.id);
 }
 
-class _Chore implements SchedulerChore {
-  DateTime? due;
-  var started = 0;
-  @override
-  DateTime? nextDue({required DateTime availableSince}) => due;
-  @override
-  void startIfDue(DateTime now, {required DateTime availableSince}) {
-    if (due != null && !due!.isAfter(now)) started++;
-  }
-}
-
 void main() {
   // A 03:00 cron occurrence, in the machine's own zone.
   final due = DateTime(2026, 9, 25, 3);
@@ -60,29 +50,26 @@ void main() {
   late DateTime now;
   late ManualAutomationTimer timer;
   late _RecordingFiring firing;
-  late _Chore chore;
+
   var ids = 0;
 
-  AutomationScheduler scheduler({bool firesAutomations = true}) =>
-      AutomationScheduler(
-        automations: dao,
-        resumes: ScheduledResumeDao(db),
-        sessionOf: (_) => null,
-        firing: firing,
-        resumeFiring: _NoResumes(),
-        timer: timer,
-        now: () => now,
-        newId: () => 'id-${++ids}',
-        chores: [chore],
-        firesAutomations: firesAutomations,
-      );
+  AutomationScheduler scheduler() => AutomationScheduler(
+    automations: dao,
+    resumes: ScheduledResumeDao(db),
+    sessionOf: (_) => null,
+    firing: firing,
+    resumeFiring: _NoResumes(),
+    timer: timer,
+    now: () => now,
+    newId: () => 'id-${++ids}',
+  );
 
   setUp(() {
     db = fixtureDatabase();
     dao = AutomationDao(db);
     timer = ManualAutomationTimer();
     firing = _RecordingFiring(dao, () => now);
-    chore = _Chore();
+
     dao.insert(
       fixtureAutomation(
         armedAt: due.subtract(const Duration(hours: 1)).toUtc(),
@@ -155,20 +142,6 @@ void main() {
       expect(firing.fired.single.queuedId, 'queued-by-the-app');
     },
   );
-
-  test('where another process fires automations, only chores ride the '
-      'timer', () async {
-    now = due.add(const Duration(minutes: 5)).toUtc();
-    chore.due = now.add(const Duration(minutes: 30));
-    final chores = scheduler(firesAutomations: false);
-    await chores.start();
-    expect(firing.fired, isEmpty);
-    expect(dao.runsFor('auto1'), isEmpty);
-    expect(timer.armedFor, const Duration(minutes: 30));
-    now = chore.due!;
-    await chores.reconcile();
-    expect(chore.started, 1);
-  });
 
   test('a stopped scheduler arms nothing and fires nothing', () async {
     now = due.add(const Duration(minutes: 5)).toUtc();

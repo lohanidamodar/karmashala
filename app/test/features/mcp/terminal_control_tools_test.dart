@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -15,6 +14,7 @@ import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
 
 /// The terminal tools, called over the MCP endpoint and checked against the
 /// controller they are supposed to have driven.
@@ -24,20 +24,20 @@ import 'package:agent_cli/process.dart';
 /// answered plausibly while opening nothing fails.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_term_tools_');
-    db = AppDatabase.memory();
+    db = TestMachine();
     final data =
         await (FakeDataServer()
               ..environmentRows.upsert(localHostEnvironment(testTime)))
             .override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(data: data, database: db),
+        ...fakeTerminalOverrides(data: data, machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
@@ -51,7 +51,6 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 

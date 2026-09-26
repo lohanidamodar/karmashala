@@ -1,8 +1,5 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
-import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
 import 'package:karmashala_verification/verification.dart';
@@ -14,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'comparison_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// A comparison's *outcome* is a verdict being acted on.
 ///
@@ -126,13 +123,10 @@ void main() {
   });
 
   group('the outcome carries it on screen', () {
-    Future<void> pumpList(WidgetTester tester, AppDatabase db) async =>
+    Future<void> pumpList(WidgetTester tester, TestMachine db) async =>
         tester.pumpWidget(
           ProviderScope(
-            overrides: [
-              databaseProvider.overrideWithValue(db),
-              await server.override(),
-            ],
+            overrides: [await server.override()],
             child: MaterialApp(
               home: Scaffold(
                 body: ComparisonList(onOpen: (_) {}, onNew: () {}),
@@ -142,9 +136,9 @@ void main() {
         );
 
     /// Rewrites the winner's producer, which is the only thing under test.
-    AppDatabase seedWithProducer(String? producerSessionId) {
+    TestMachine seedWithProducer(String? producerSessionId) {
       final db = seedDatabase(server: server);
-      ComparisonDao(db).updateEvidence(
+      db.server.comparisonRows.updateEvidence(
         'cand-win',
         CandidateEvidence(
           verdict: EvidenceVerdict.passed,
@@ -159,7 +153,6 @@ void main() {
       tester,
     ) async {
       final db = seedWithProducer('s-win');
-      addTearDown(db.close);
 
       await pumpList(tester, db);
 
@@ -175,7 +168,6 @@ void main() {
       tester,
     ) async {
       final db = seedWithProducer(null);
-      addTearDown(db.close);
 
       await pumpList(tester, db);
 
@@ -185,7 +177,6 @@ void main() {
 
     testWidgets('an unsettled comparison claims no verifier', (tester) async {
       final db = seedDatabase(merged: false, server: server);
-      addTearDown(db.close);
 
       await pumpList(tester, db);
 
@@ -197,13 +188,11 @@ void main() {
   group('the merge confirmation says who graded what is being merged', () {
     /// The merge action needs a live session row behind the candidate;
     /// `resultsFor` returns nothing without one, and the button stays off.
-    AppDatabase seedMergeable(String? producerSessionId) {
+    TestMachine seedMergeable(String? producerSessionId) {
       final db = seedDatabase(merged: false, server: server);
       server.installationRows.insert(agentInstallation());
-      mirroredServer(
-        db,
-      ).sessionRows.insert(session(id: 's-win', title: 'The winner'));
-      ComparisonDao(db).updateEvidence(
+      db.server.sessionRows.insert(session(id: 's-win', title: 'The winner'));
+      db.server.comparisonRows.updateEvidence(
         'cand-win',
         CandidateEvidence(
           verdict: EvidenceVerdict.passed,
@@ -214,13 +203,10 @@ void main() {
       return db;
     }
 
-    Future<void> openMergeDialog(WidgetTester tester, AppDatabase db) async {
+    Future<void> openMergeDialog(WidgetTester tester, TestMachine db) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            await server.override(),
-          ],
+          overrides: [await server.override()],
           child: MaterialApp(
             home: Scaffold(
               body: ComparisonView(comparisonId: 'cmp-1', onBack: () {}),
@@ -236,7 +222,6 @@ void main() {
       tester,
     ) async {
       final db = seedMergeable('s-win');
-      addTearDown(db.close);
 
       await openMergeDialog(tester, db);
 
@@ -251,7 +236,6 @@ void main() {
       tester,
     ) async {
       final db = seedMergeable(null);
-      addTearDown(db.close);
 
       await openMergeDialog(tester, db);
 

@@ -124,7 +124,9 @@ class SnippetControlTools {
     if (id == null || id.isEmpty) {
       throw ArgumentError('id is required. snippets_list has the ids.');
     }
-    final snippet = _container.read(commandSnippetDaoProvider).getById(id);
+    final snippet = _container
+        .read(commandSnippetsProvider.notifier)
+        .getById(id);
     if (snippet == null) {
       throw StateError('No snippet with id $id.');
     }

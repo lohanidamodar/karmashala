@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -22,14 +21,12 @@ Widget givenMinimumWindow(Widget child) => Align(
 void main() {
   Future<ProviderContainer> prepared() async {
     final server = FakeDataServer();
-    final db = seedDatabase(server: server);
+    seedDatabase(server: server);
     server.installationRows
       ..insert(agentInstallation(id: 'a1', agentId: 'claudeCode'))
       ..insert(agentInstallation(id: 'a2', agentId: 'codex'));
-    addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

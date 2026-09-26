@@ -7,12 +7,10 @@ library;
 
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/pairing.dart' hide PairingException;
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
@@ -31,8 +29,7 @@ void main() {
   /// test whose whole point is that the LAN leg finds nobody.
   late int lanPort;
   late int silentLanPort;
-  late AppDatabase db;
-  late PairedDeviceDao dao;
+  late MemoryPairedDeviceStore dao;
   late FakeRemoteBindings fake;
   RelayServer? relay;
   late Uri relayUri;
@@ -51,8 +48,7 @@ void main() {
   setUp(() async {
     lanPort = await freeBeaconPort();
     silentLanPort = await freeBeaconPort();
-    db = AppDatabase.memory();
-    dao = PairedDeviceDao(db);
+    dao = MemoryPairedDeviceStore();
     fake = FakeRemoteBindings()..addSession('s1');
     relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     relayUri = Uri.parse('http://127.0.0.1:${relay!.port}');
@@ -73,7 +69,6 @@ void main() {
     service = null;
     await relay?.close();
     relay = null;
-    db.close();
   });
 
   Future<RemoteHostService> startService({Uri? relayOverride}) async {

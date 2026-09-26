@@ -55,7 +55,6 @@ void main() {
   Future<ProviderContainer> barContainer() async {
     final server = FakeDataServer();
     final db = seedUsageDatabase(server: server);
-    addTearDown(db.close);
     // A name long enough to compete for the row's width at 720px, which is
     // where a second chip's arrival is felt.
     server.repositoryRows.insert(
@@ -65,7 +64,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db, usageService: service),
+        ...fakeTerminalOverrides(machine: db, usageService: service),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
         settingsControllerProvider.overrideWith(

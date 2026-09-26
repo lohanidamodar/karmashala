@@ -4,8 +4,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
@@ -45,12 +43,9 @@ void main() {
   Future<SessionTranscriptLocator> locatorWith({
     List<DetectedSession> scanned = const [],
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         cliStoreLocatorProvider.overrideWithValue(
           FixedLocator([

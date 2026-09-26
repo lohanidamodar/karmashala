@@ -1,6 +1,4 @@
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
@@ -28,7 +26,6 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// Acting on a follow-up from the attention inbox.
 ///
@@ -130,7 +127,6 @@ class _RecordingService extends SessionHandoffService {
 }
 
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late Override workspace;
   late FakeDataServer server;
@@ -138,15 +134,13 @@ void main() {
 
   setUp(() async {
     service = null;
-    db = AppDatabase.memory();
-    server = FakeDataServer().mirrorInto(db)
+    server = FakeDataServer()
       ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     workspace = await server.override();
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   final somewhereToGo = SessionContinuation(
     targets: [_target(_prompting, id: 'a1')],
@@ -166,7 +160,6 @@ void main() {
   Widget inbox(SessionContinuation continuation) {
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         workspace,
         clockProvider.overrideWithValue(
           FixedClock(testTime.add(const Duration(hours: 2))),

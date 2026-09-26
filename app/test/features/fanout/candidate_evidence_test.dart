@@ -1,11 +1,12 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
-import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fake_data_server.dart';
 
 /// Fan-out's verdict column reads the verification feature's runs.
 ///
@@ -13,18 +14,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// every session, so a comparison could only ever show the copy frozen into its
 /// own row — a run that passed after the comparison was made never appeared.
 void main() {
-  late AppDatabase db;
-  late VerificationDao dao;
+  late FakeVerificationRows dao;
+  late DataClient client;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    dao = VerificationDao(db);
+  setUp(() async {
+    final server = FakeDataServer();
+    dao = server.verificationRows;
+    client = await server.connect();
   });
-  tearDown(() => db.close());
 
   ProviderContainer container() {
     final c = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [dataClientProvider.overrideWithValue(client)],
     );
     addTearDown(c.dispose);
     return c;

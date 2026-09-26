@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/terminal_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -13,6 +12,7 @@ import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
 
 /// `terminal_run` waiting for the command it typed.
 ///
@@ -27,11 +27,11 @@ import 'package:agent_cli/process.dart';
 /// `terminal_control_tools_test.dart` covers) because these tests have to drive
 /// the shell's replies *while* a call is in flight.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   Future<void> open({required bool shellIntegration}) async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     final data =
         await (FakeDataServer()
               ..environmentRows.upsert(localHostEnvironment(testTime)))
@@ -40,7 +40,7 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(
           data: data,
-          database: db,
+          machine: db,
           shellIntegration: shellIntegration,
         ),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -50,7 +50,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   TerminalControlTools tools() => TerminalControlTools(container);

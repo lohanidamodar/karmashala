@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
@@ -268,8 +268,8 @@ void main() {
       final renderObjects = <int, int>{};
 
       for (final n in scale) {
-        final database = AppDatabase.memory();
-        final container = fakeTerminalContainer(database: database);
+        final database = TerminalLayoutStore.memory();
+        final container = fakeTerminalContainer(layoutStore: database);
         final controller = container.read(
           terminalSessionsControllerProvider.notifier,
         );
@@ -370,8 +370,8 @@ void main() {
       final parsed = <int, int>{};
 
       for (final n in switchScale) {
-        final database = AppDatabase.memory();
-        final container = fakeTerminalContainer(database: database);
+        final database = TerminalLayoutStore.memory();
+        final container = fakeTerminalContainer(layoutStore: database);
         final controller = container.read(
           terminalSessionsControllerProvider.notifier,
         );
@@ -482,8 +482,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      final database = AppDatabase.memory();
-      final container = fakeTerminalContainer(database: database);
+      final database = TerminalLayoutStore.memory();
+      final container = fakeTerminalContainer(layoutStore: database);
       addTearDown(container.dispose);
       addTearDown(database.close);
       final controller = container.read(
@@ -675,7 +675,7 @@ void main() {
       final exitCount = <int, int>{};
 
       for (final n in scale) {
-        final database = AppDatabase.memory();
+        final database = TerminalLayoutStore.memory();
         final dao = _ProbeSessions([for (var i = 0; i < n; i++) sessionRow(i)]);
         // Built with the override in it rather than layered on a child
         // container: this codebase declares no provider `dependencies`, so a
@@ -683,7 +683,7 @@ void main() {
         // initialised, and the counter would read zero however wrong the code.
         final container = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: database),
+            ...fakeTerminalOverrides(layoutStore: database),
             sessionsDataProvider.overrideWithValue(dao),
           ],
         );
@@ -815,9 +815,9 @@ void main() {
       final exitCount = <int, int>{};
 
       for (final n in scale) {
-        final database = AppDatabase.memory();
+        final database = TerminalLayoutStore.memory();
         final container = ProviderContainer(
-          overrides: fakeTerminalOverrides(database: database),
+          overrides: fakeTerminalOverrides(layoutStore: database),
         );
         final controller = container.read(
           terminalSessionsControllerProvider.notifier,

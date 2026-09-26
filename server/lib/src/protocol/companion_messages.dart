@@ -140,9 +140,6 @@ enum CompanionNoticeKind {
   /// A new inbox item worth a push for phones with no live link.
   attention,
 
-  /// A paired-device row was renamed, re-granted or revoked in the app.
-  devicesChanged,
-
   /// The pairing dialog closed: the window's secret dies with it.
   pairingCancelled,
 }
@@ -199,12 +196,9 @@ class CompanionNoticeMessage extends HostMessage {
   }
 }
 
-/// What the host's companion tells the app.
+/// What the host's companion tells the app. Device rows it writes reach every
+/// client on the data channel (`DeviceChanged`), not here.
 enum CompanionEventKind {
-  /// Paired-device rows moved — paired, seen, a generation advanced, a push
-  /// token registered — so lists re-read.
-  devicesChanged,
-
   /// The pairing window [CompanionEventMessage.requestId] opened is over:
   /// [CompanionEventMessage.deviceId] paired, or it ended with
   /// [CompanionEventMessage.error].

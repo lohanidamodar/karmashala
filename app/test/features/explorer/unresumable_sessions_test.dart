@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -27,7 +26,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
@@ -120,15 +119,17 @@ void main() {
   // The server the last [seededDatabase] filled.
   late FakeDataServer server;
 
-  AppDatabase seededDatabase({bool withCodex = false}) {
-    final db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+  TestMachine seededDatabase({bool withCodex = false}) {
+    final db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation(agentId: 'claudeish'));
     if (withCodex) {
-      server.installationRows.insert(agentInstallation(id: 'a2', agentId: 'codexish'));
+      server.installationRows.insert(
+        agentInstallation(id: 'a2', agentId: 'codexish'),
+      );
     }
     return db;
   }
@@ -137,7 +138,7 @@ void main() {
   late _CountingLocator locator;
 
   Future<ProviderContainer> containerOver(
-    AppDatabase db, {
+    TestMachine db, {
     bool locatable = true,
     List<AgentAdapter> agents = const [
       ClaudeCodeAdapter(descriptor: _claudeish),
@@ -156,7 +157,7 @@ void main() {
     ]);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(clock),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -224,7 +225,6 @@ void main() {
   group('what the review finds', () {
     test('a row whose conversation was never written is removable', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       final id = seedDeadRow(container);
@@ -242,7 +242,6 @@ void main() {
 
     test('a row whose conversation is on disk is not offered', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       final id = seedDeadRow(container);
@@ -260,7 +259,6 @@ void main() {
         'removable', () async {
       // The stopped WSL distribution, and the reason `unknown` exists.
       final db = seededDatabase();
-      addTearDown(db.close);
       final container = await containerOver(db, locatable: false);
       final id = seedDeadRow(container);
 
@@ -279,7 +277,6 @@ void main() {
       () async {
         // Located, asked, and it had no `projects` directory to read.
         final db = seededDatabase();
-        addTearDown(db.close);
         Directory(storeHome()).createSync(recursive: true);
         final container = await containerOver(db);
         seedDeadRow(container);
@@ -297,7 +294,6 @@ void main() {
       // The row and the store look exactly like a dead one — the transcript is
       // written when something is *said*. Only its age says otherwise.
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       await startSession(container);
@@ -311,7 +307,6 @@ void main() {
 
     test('a session we can see running is not offered however old', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       final id = await startSession(container);
@@ -333,7 +328,6 @@ void main() {
 
     test('an agent that mints its own id is never judged', () async {
       final db = seededDatabase(withCodex: true);
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(
         db,
@@ -362,7 +356,6 @@ void main() {
 
     test('no candidate means no store is read at all', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       await startSession(container);
@@ -381,7 +374,6 @@ void main() {
 
     test('one refresh reads the stores once, whatever the row count', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       for (var i = 0; i < 25; i++) {
@@ -401,7 +393,6 @@ void main() {
   group('removing', () {
     test('deletes the removable rows and leaves the uncertain ones', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       // Two rows, one store: readable so the first is `absent`, and a second
       // row in an environment the sweep never read so it stays `unknown`.
       server.environmentRows.upsert(wslEnv());
@@ -450,7 +441,6 @@ void main() {
       'an id the reading never judged cannot be removed through it',
       () async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         final container = await containerOver(db);
         final live = await startSession(container);
@@ -472,7 +462,6 @@ void main() {
 
     test('removing nothing removes nothing', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       seedDeadRow(container, id: 'dead-1');
@@ -488,7 +477,6 @@ void main() {
   group('starting a conversation in the row instead', () {
     test('keeps the row and re-makes the promise', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       final id = seedDeadRow(container, title: 'Refactor the parser');
@@ -520,7 +508,6 @@ void main() {
       'is a create, not a resume — the CLI is never told to resume',
       () async {
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         final container = await containerOver(db);
         final id = seedDeadRow(container);
@@ -545,7 +532,6 @@ void main() {
 
     test('a launch that both restarts and resumes is refused', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
       final id = seedDeadRow(container);
@@ -576,7 +562,6 @@ void main() {
         // the reuse would silently prefer the resume, giving the user a resume of
         // a conversation they asked to replace.
         final db = seededDatabase();
-        addTearDown(db.close);
         final container = await containerOver(db, locatable: false);
         final id = seedDeadRow(container);
 
@@ -611,7 +596,6 @@ void main() {
         // The guard against abandoning a live conversation: the row is busy, so
         // reuse is refused and the launch is an ordinary create.
         final db = seededDatabase();
-        addTearDown(db.close);
         emptyStore();
         final container = await containerOver(db);
         final live = await startSession(container);
@@ -637,7 +621,6 @@ void main() {
       // The mirror of the removal guard, and it matters as much: an
       // unreachable store may still hold that conversation.
       final db = seededDatabase();
-      addTearDown(db.close);
       final container = await containerOver(db, locatable: false);
       final id = seedDeadRow(container);
 
@@ -654,7 +637,6 @@ void main() {
 
     test('a restart naming nothing is an ordinary create', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final container = await containerOver(db);
 

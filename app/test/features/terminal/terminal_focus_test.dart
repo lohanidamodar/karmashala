@@ -1,5 +1,4 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// Making a terminal pane the active one must make it *typable*.
 ///
@@ -20,9 +20,8 @@ import 'fake_instance.dart';
 /// a pane becomes the active one.
 void main() {
   ProviderContainer panelContainer() {
-    final database = AppDatabase.memory();
-    addTearDown(database.close);
-    final container = fakeTerminalContainer(database: database);
+    final database = TestMachine();
+    final container = fakeTerminalContainer(machine: database);
     addTearDown(container.dispose);
     return container;
   }

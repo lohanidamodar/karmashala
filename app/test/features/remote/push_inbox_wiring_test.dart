@@ -1,29 +1,22 @@
-/// Attention-inbox news → the push fan-out: new items push, listed items
-/// do not repeat, imported and delivery kinds stay on the desktop.
+/// Attention-inbox news → the server's companion, which pushes it: new items
+/// are told, listed items do not repeat, imported and delivery kinds stay on
+/// the desktop. (The sealed push itself is the companion server's, tested in
+/// `packages/karmashala_companion_server/test/link/`.)
 library;
 
-import 'dart:convert';
-import 'dart:typed_data';
-import '../../support/memory_server_config.dart';
-
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala_companion_server/karmashala_companion_server.dart';
-import 'package:karmashala_store/devices.dart';
-import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_remote/push.dart';
-import 'package:karmashala_relay/karmashala_relay.dart';
-import 'package:cryptography/cryptography.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/remote/application/host_companion_link.dart';
+import 'package:karmashala/src/features/remote/application/host_companion_providers.dart';
+import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
+import 'package:karmashala_host/lifecycle_client.dart';
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/watched.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/fake_host_lifecycle.dart';
+import '../../support/memory_server_config.dart';
 import 'fake_bindings.dart';
-import 'transport_harness.dart';
-
-final Uint8List _key = Uint8List.fromList(List.generate(32, (i) => i));
 
 InboxItem _item(
   String openId, {
@@ -43,140 +36,69 @@ InboxItem _item(
 
 AttentionInbox _inbox(List<InboxItem> items) => AttentionInbox(items: items);
 
-Future<void> _eventually(
-  bool Function() condition, {
-  String reason = 'condition never held',
-}) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 5));
-  while (!condition()) {
-    if (DateTime.now().isAfter(deadline)) fail(reason);
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-  }
-}
-
 void main() {
-  late AppDatabase db;
-  late PairedDeviceDao dao;
-  late ProviderContainer container;
-  late RelayServer relay;
+  late FakeHostLifecycle host;
+  late HostCompanionLink link;
   late RemoteAccessController controller;
-  late List<({Uri url, String raw})> posts;
+
+  List<CompanionNoticeMessage> attention() => [
+    for (final notice in host.companionNotices)
+      if (notice.kind == CompanionNoticeKind.attention) notice,
+  ];
 
   setUp(() async {
-    db = AppDatabase.memory();
-    dao = PairedDeviceDao(db);
-    posts = [];
-    relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
+    host = FakeHostLifecycle();
     final fake = FakeRemoteBindings()..addSession('s1');
-    container = ProviderContainer(
+    link = HostCompanionLink(
+      bindings: () => fake.bindings,
+      deviceById: (_) async => null,
+    );
+    final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
-        remoteAccessControllerProvider.overrideWith(
-          (ref) => RemoteAccessController(
-            ref,
-            serviceFactory: (relayUri) => RemoteHostService(
-              devices: dao,
-              hostId: DeviceId.parse('11111111222222223333333344444444'),
-              bindings: fake.bindings,
-              relay: relayUri,
-              lanPort: 0,
-              advertise: false,
-              transcriptPollInterval: Duration.zero,
-              relayFactory: (relay, rendezvous) => RelayTransport(
-                endpoint: RelayTransport.endpointFor(relay, rendezvous),
-                backoff: fastBackoff(),
-                heartbeat: const Duration(milliseconds: 500),
-              )..start(),
-              pushPost: (url, jsonBody) async {
-                posts.add((url: url, raw: jsonBody));
-                return url.path.endsWith('/register')
-                    ? (status: 204, body: '')
-                    : (status: 202, body: 'accepted\n');
-              },
-            ),
-          ),
-        ),
+        await FakeDataServer().override(),
+        serverConfigIn(MemoryServerConfigSource()),
+        companionAtHostProvider.overrideWithValue(true),
+        hostCompanionLinkProvider.overrideWithValue(link),
+        remoteAccessControllerProvider.overrideWith(RemoteAccessController.new),
       ],
     );
+    addTearDown(container.dispose);
     controller = container.read(remoteAccessControllerProvider);
-
-    dao.insert(
-      PairedDevice(
-        id: 'a' * 32,
-        name: 'OPPO',
-        deviceKey: _key,
-        capabilities: CapabilitySet.all,
-        generation: 1,
-        createdAt: DateTime.utc(2026, 8, 31),
-        pushToken: 'fcm-oppo-1',
-        pushPlatform: 'android',
-      ),
-    );
-    setRemoteAccessNow(container, enabled: true);
-    setRemoteAccessNow(container, relayUrl: 'http://127.0.0.1:${relay.port}');
-    await controller.sync();
+    link.attached((await host.open())!);
   });
 
-  tearDown(() async {
-    await controller.shutdown();
-    container.dispose();
-    await relay.close();
-    db.close();
-  });
-
-  test('a new finished item becomes one sealed push', () async {
+  test('a new finished item is told to the server once', () {
     controller.onInboxChanged(AttentionInbox.empty, _inbox([_item('s1')]));
 
-    await _eventually(() => posts.length == 2);
-    expect(
-      [for (final p in posts) p.url.path],
-      ['/v1/push/register', '/v1/push'],
-    );
-    final body = jsonDecode(posts[1].raw) as Map<String, Object?>;
-    final opened = await openPushPayload(
-      deviceKey: SecretKeyData(_key),
-      sealed: base64Url.decode(body['payload']! as String),
-    );
-    expect(opened['sessionId'], 's1');
-    expect(opened['title'], 'Fix the tests');
-    expect(opened['kind'], 'finished');
+    final told = attention().single;
+    expect(told.sessionId, 's1');
+    expect(told.title, 'Fix the tests');
+    expect(told.attention, 'finished');
   });
 
-  test('only the newly arrived item is pushed', () async {
+  test('only the newly arrived item is told', () {
     final already = _item('s1');
     controller.onInboxChanged(
       _inbox([already]),
       _inbox([_item('s2', kind: InboxItemKind.failed), already]),
     );
 
-    await _eventually(() => posts.length == 2);
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(posts.length, 2, reason: 'the listed item must not re-push');
-    final body = jsonDecode(posts[1].raw) as Map<String, Object?>;
-    final opened = await openPushPayload(
-      deviceKey: SecretKeyData(_key),
-      sealed: base64Url.decode(body['payload']! as String),
+    expect(
+      [for (final n in attention()) (n.sessionId, n.attention)],
+      [('s2', 'failed')],
     );
-    expect(opened['sessionId'], 's2');
-    expect(opened['kind'], 'failed');
   });
 
-  test('needs-approval news carries the wire word needs_approval', () async {
+  test('needs-approval news carries the wire word needs_approval', () {
     controller.onInboxChanged(
       AttentionInbox.empty,
       _inbox([_item('s1', kind: InboxItemKind.needsApproval)]),
     );
 
-    await _eventually(() => posts.length == 2);
-    final body = jsonDecode(posts[1].raw) as Map<String, Object?>;
-    final opened = await openPushPayload(
-      deviceKey: SecretKeyData(_key),
-      sealed: base64Url.decode(body['payload']! as String),
-    );
-    expect(opened['kind'], 'needs_approval');
+    expect(attention().single.attention, 'needs_approval');
   });
 
-  test('imported sessions and delivery kinds stay on the desktop', () async {
+  test('imported sessions and delivery kinds stay on the desktop', () {
     controller.onInboxChanged(
       AttentionInbox.empty,
       _inbox([
@@ -187,17 +109,13 @@ void main() {
       ]),
     );
 
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    expect(posts, isEmpty);
+    expect(attention(), isEmpty);
   });
 
-  test('with remote access off, inbox news drops quietly', () async {
-    setRemoteAccessNow(container, enabled: false);
-    await controller.sync();
-
+  test('with no link to the server, inbox news drops quietly', () {
+    link.detached();
     controller.onInboxChanged(AttentionInbox.empty, _inbox([_item('s1')]));
 
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(posts, isEmpty);
+    expect(attention(), isEmpty);
   });
 }

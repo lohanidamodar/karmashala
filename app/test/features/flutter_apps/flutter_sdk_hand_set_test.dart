@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -298,13 +296,11 @@ void main() {
   });
 
   group('the setting reaches the reading, and invalidates the old one', () {
-    late AppDatabase db;
     late FakeDataServer server;
     late ProviderContainer container;
     late FakeCommandRunner runner;
 
     setUp(() async {
-      db = AppDatabase.memory();
       server = FakeDataServer();
       final data = await server.override();
       runner = FakeCommandRunner(environmentId: 'env')
@@ -321,7 +317,6 @@ void main() {
               );
       container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           clockProvider.overrideWithValue(FixedClock(_now)),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -330,7 +325,6 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      addTearDown(db.close);
     });
 
     test('a saved path is what the next reading measures', () async {
@@ -385,10 +379,7 @@ void main() {
         // have re-run discovery. It reads the same answer back.
         await pumpEventQueue();
         final reopened = ProviderContainer(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            await server.override(),
-          ],
+          overrides: [await server.override()],
         );
         addTearDown(reopened.dispose);
         expect(

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -34,7 +33,7 @@ import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/temp_directory.dart';
 
@@ -234,7 +233,7 @@ class _StaticSettings extends SettingsController {
 
 typedef Harness = ({
   ProviderContainer container,
-  AppDatabase db,
+  TestMachine db,
   FakeDataServer server,
 });
 
@@ -255,8 +254,8 @@ Future<Harness> harness({
   SessionWaitState waitState = SessionWaitState.done,
   SessionBlock? blockedOn,
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -283,7 +282,7 @@ Future<Harness> harness({
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
@@ -356,14 +355,14 @@ String writeTranscript(List<(String, String)> turns) {
 /// [mode] null is a session that never chose one and follows the Settings
 /// default — the state a continuation has to be able to hand down.
 void seedSession(
-  AppDatabase db, {
+  TestMachine db, {
   String id = 'src',
   String installationId = 'a1',
   String? externalSessionId = 'cli-1',
   EnvironmentPath? workingDirectory,
   String? mode = askStored,
 }) {
-  mirroredServer(db).sessionRows.insert(
+  db.server.sessionRows.insert(
     session(
       id: id,
       agentInstallationId: installationId,
@@ -378,7 +377,6 @@ void main() {
       'offers every installed agent, marking the one already running it',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db);
 
@@ -395,7 +393,6 @@ void main() {
 
     test('refuses a target that cannot be handed an opening prompt', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -412,7 +409,6 @@ void main() {
 
     test('carries the session mode, refusing to escalate it', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -441,7 +437,6 @@ void main() {
               const AgentPermissions(newSessions: bypassStored),
             ),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, mode: null);
 
@@ -462,7 +457,6 @@ void main() {
       'a session that no longer exists offers nothing rather than throwing',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         expect(
           h.container.read(sessionHandoffServiceProvider).targetsFor('gone'),
@@ -479,7 +473,6 @@ void main() {
         ('agent', 'Done, in lib/a.dart.'),
       ]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -512,7 +505,6 @@ void main() {
 
     test('a transcript that cannot be located is stated, not faked', () async {
       final h = await harness(transcriptPath: null);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -539,7 +531,6 @@ void main() {
         // The other half of the same distinction: no external id means the CLI
         // never opened a conversation, which is genuinely "nothing was said".
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, externalSessionId: null);
 
@@ -560,7 +551,6 @@ void main() {
 
     test('git refusing to answer is an admission, not a clean tree', () async {
       final h = await harness(repoState: null);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -577,7 +567,7 @@ void main() {
 
   group('the decision record in the packet', () {
     void record(
-      AppDatabase db, {
+      TestMachine db, {
       String sessionId = 'src',
       DecisionKind kind = DecisionKind.approachRejected,
       String summary = 'The isolate pool deadlocked on Windows.',
@@ -585,7 +575,7 @@ void main() {
       String? originId,
       String? decidedBy = 'Forker CLI',
       int minute = 0,
-    }) => mirroredServer(db).decisionRows.append(
+    }) => db.server.decisionRows.append(
       DecisionRecord(
         sessionId: sessionId,
         kind: kind,
@@ -600,7 +590,6 @@ void main() {
     test('carries what the session decided, ahead of what it said', () async {
       final path = writeTranscript([('user', 'Parse the header.')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
       record(h.db);
@@ -650,7 +639,6 @@ void main() {
       final h = await harness(
         transcriptPath: writeTranscript([('user', 'Hi.')]),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -674,7 +662,6 @@ void main() {
         for (var i = 0; i < 80; i++) ('user', 'turn $i ${'.' * 200}'),
       ]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -713,20 +700,16 @@ void main() {
       required String childId,
       required SessionLink link,
     }) async {
-      final child = mirroredServer(h.db).sessionRows.getById(childId)!;
+      final child = h.db.server.sessionRows.getById(childId)!;
       expect(child.parentSessionId, 'src');
       expect(child.parentLink, link);
       // The old session is untouched — not ended, not detached, not marked.
-      expect(
-        mirroredServer(h.db).sessionRows.getById('src')!.status,
-        session().status,
-      );
+      expect(h.db.server.sessionRows.getById('src')!.status, session().status);
     }
 
     test('starts the target through the launcher and links the two', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -757,7 +740,6 @@ void main() {
     test('runs under the mode the user picked for the target', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -780,9 +762,7 @@ void main() {
       expect(launch.arguments, isNot(contains('--careful')));
       // And it is stamped on the row, so the next resume runs under it too.
       expect(
-        mirroredServer(
-          h.db,
-        ).sessionRows.getById(result.session.id)!.permissionMode,
+        h.db.server.sessionRows.getById(result.session.id)!.permissionMode,
         bypassStored,
       );
     });
@@ -798,7 +778,6 @@ void main() {
             const AgentPermissions(newSessions: bypassStored),
           ),
         );
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, mode: null);
 
@@ -816,9 +795,7 @@ void main() {
             .agentLaunch!;
         expect(launch.arguments, contains('--trust-me'));
         expect(
-          mirroredServer(
-            h.db,
-          ).sessionRows.getById(result.session.id)!.permissionMode,
+          h.db.server.sessionRows.getById(result.session.id)!.permissionMode,
           isNull,
         );
       },
@@ -827,7 +804,6 @@ void main() {
     test('a picked mode the target cannot express is not escalated', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -850,16 +826,13 @@ void main() {
       expect(launch.arguments, contains('--careful'));
       expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
-        mirroredServer(
-          h.db,
-        ).sessionRows.getById(result.session.id)!.permissionMode,
+        h.db.server.sessionRows.getById(result.session.id)!.permissionMode,
         askStored,
       );
     });
 
     test('refuses a target that cannot receive the packet', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -880,14 +853,13 @@ void main() {
         ),
       );
       // Nothing was created for a launch that must not happen.
-      expect(mirroredServer(h.db).sessionRows.getAll(), hasLength(1));
+      expect(h.db.server.sessionRows.getAll(), hasLength(1));
     });
 
     test(
       'refuses an empty instruction, saying why it is the user\'s part',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db);
 
@@ -916,7 +888,6 @@ void main() {
       'a native fork runs the CLI\'s own fork arguments, not a packet',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db);
 
@@ -924,9 +895,7 @@ void main() {
         expect(service.forkPlanFor('src').kind, SessionForkKind.native);
 
         final result = await service.forkSession(sessionId: 'src');
-        final child = mirroredServer(
-          h.db,
-        ).sessionRows.getById(result.session.id)!;
+        final child = h.db.server.sessionRows.getById(result.session.id)!;
         expect(child.parentLink, SessionLink.fork);
         expect(child.title, 'Work (fork)');
 
@@ -946,7 +915,6 @@ void main() {
 
     test('a fork runs under the mode the user picked for it', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -962,10 +930,7 @@ void main() {
       expect(launch.arguments, isNot(contains('--careful')));
       // The branch runs under the picked mode; the session it came from is
       // left on its own.
-      expect(
-        mirroredServer(h.db).sessionRows.getById('src')!.permissionMode,
-        askStored,
-      );
+      expect(h.db.server.sessionRows.getById('src')!.permissionMode, askStored);
     });
 
     test(
@@ -977,7 +942,6 @@ void main() {
             const AgentPermissions(newSessions: bypassStored),
           ),
         );
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, mode: null);
 
@@ -994,9 +958,7 @@ void main() {
         // parent follows the setting, so the branch does too. Stamping what the
         // default said today would freeze the branch the moment it was made.
         expect(
-          mirroredServer(
-            h.db,
-          ).sessionRows.getById(result.session.id)!.permissionMode,
+          h.db.server.sessionRows.getById(result.session.id)!.permissionMode,
           isNull,
         );
       },
@@ -1004,7 +966,6 @@ void main() {
 
     test('a fork stamps a mode that had to be reduced to fit the agent', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       // A row naming a mode this build of Forker does not have — what a newer
       // build, or a row written before a mode was withdrawn, leaves behind.
@@ -1032,23 +993,20 @@ void main() {
       expect(launch.arguments, contains('--careful'));
       expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
-        mirroredServer(
-          h.db,
-        ).sessionRows.getById(result.session.id)!.permissionMode,
+        h.db.server.sessionRows.getById(result.session.id)!.permissionMode,
         askStored,
       );
     });
 
     test('a second fork of the same conversation is numbered', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
       final service = h.container.read(sessionHandoffServiceProvider);
       await service.forkSession(sessionId: 'src');
       final second = await service.forkSession(sessionId: 'src');
       expect(
-        mirroredServer(h.db).sessionRows.getById(second.session.id)!.title,
+        h.db.server.sessionRows.getById(second.session.id)!.title,
         'Work (fork 2)',
       );
     });
@@ -1058,7 +1016,6 @@ void main() {
       () async {
         final path = writeTranscript([('user', 'hello')]);
         final h = await harness(transcriptPath: path);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, externalSessionId: null);
 
@@ -1068,9 +1025,7 @@ void main() {
         expect(plan.explanation, contains('never learned its id for this one'));
 
         final result = await service.forkSession(sessionId: 'src');
-        final child = mirroredServer(
-          h.db,
-        ).sessionRows.getById(result.session.id)!;
+        final child = h.db.server.sessionRows.getById(result.session.id)!;
         // Still a fork in the lineage — that is what the user asked for and got.
         expect(child.parentLink, SessionLink.fork);
 
@@ -1092,7 +1047,6 @@ void main() {
       'an agent that declares no fork is refused before anything runs',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, installationId: 'a2');
 
@@ -1108,7 +1062,7 @@ void main() {
             ),
           ),
         );
-        expect(mirroredServer(h.db).sessionRows.getAll(), hasLength(1));
+        expect(h.db.server.sessionRows.getAll(), hasLength(1));
       },
     );
   });
@@ -1117,7 +1071,6 @@ void main() {
     test('a handoff and a fork show up on the parent, told apart', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
       final service = h.container.read(sessionHandoffServiceProvider);
@@ -1129,7 +1082,7 @@ void main() {
       );
       final forked = await service.forkSession(sessionId: 'src');
 
-      final dao = mirroredServer(h.db).sessionRows;
+      final dao = h.db.server.sessionRows;
       expect(dao.parentOf('src'), isNull, reason: 'the source is a root');
       // Both children hang off the same parent and are distinguishable, which
       // is the whole reason the link kind is stored rather than inferred: the
@@ -1148,7 +1101,6 @@ void main() {
     test('the child knows what it came from, and by which route', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -1160,15 +1112,13 @@ void main() {
             instruction: 'Take over.',
           );
 
-      final child = mirroredServer(
-        h.db,
-      ).sessionRows.getById(handed.session.id)!;
+      final child = h.db.server.sessionRows.getById(handed.session.id)!;
       expect(child.parentSessionId, 'src');
       expect(child.parentLink, SessionLink.handoff);
       expect(
-        mirroredServer(
-          h.db,
-        ).installationRows.getById(child.agentInstallationId)!.agentId,
+        h.db.server.installationRows
+            .getById(child.agentInstallationId)!
+            .agentId,
         'forker',
       );
       // Phrased child-first so a sidebar can render it as a sentence without
@@ -1186,7 +1136,6 @@ void main() {
 
     test('a native fork continues in the source session\'s directory', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
 
@@ -1201,9 +1150,7 @@ void main() {
       expect(launch.workingDirectory, subdirectory);
       // A fork of a session that has no worktree still has none: the directory
       // is where the work is, not a claim about how it is checked out.
-      final child = mirroredServer(
-        h.db,
-      ).sessionRows.getById(forked.session.id)!;
+      final child = h.db.server.sessionRows.getById(forked.session.id)!;
       expect(child.worktree, isNull);
       expect(child.useWorktree, isFalse);
       expect(child.workingDirectory, elsewhere);
@@ -1212,7 +1159,6 @@ void main() {
     test('a handoff continues in the source session\'s directory', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
 
@@ -1235,7 +1181,6 @@ void main() {
       // `intoNewWorktree` is the user asking for a clean checkout. Carrying the
       // source directory across would put the branch back where it came from.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
 
@@ -1249,9 +1194,7 @@ void main() {
           .agentLaunch!;
       expect(launch.workingDirectory, isNot(subdirectory));
       expect(
-        mirroredServer(
-          h.db,
-        ).sessionRows.getById(forked.session.id)!.useWorktree,
+        h.db.server.sessionRows.getById(forked.session.id)!.useWorktree,
         isTrue,
       );
     });
@@ -1259,7 +1202,6 @@ void main() {
     test('the packet names the directory the work is actually in', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = await harness(transcriptPath: path);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
 
@@ -1284,7 +1226,6 @@ void main() {
     // agent reading the brief and reading a placeholder.
     final path = writeTranscript([('user', 'hello')]);
     final h = await harness(transcriptPath: path);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     seedSession(h.db);
 
@@ -1334,7 +1275,6 @@ void main() {
         transcriptPath: writeTranscript([('user', 'hello')]),
         packetDirectory: dir,
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -1383,7 +1323,6 @@ void main() {
         transcriptPath: writeTranscript([('user', 'hello')]),
         packetDirectory: dir,
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -1410,7 +1349,6 @@ void main() {
         transcriptPath: writeTranscript([('user', 'hello')]),
         packetDirectory: dir,
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -1471,7 +1409,6 @@ void main() {
         transcriptPath: path,
         sourceAnswer: 'Progress: the header parses. Next: the body.',
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -1506,7 +1443,6 @@ void main() {
         transcriptPath: path,
         waitState: SessionWaitState.timeout,
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 
@@ -1546,7 +1482,6 @@ void main() {
           text: 'Allow the write?',
         ),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
 

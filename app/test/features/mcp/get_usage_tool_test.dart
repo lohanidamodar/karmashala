@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -25,11 +24,9 @@ void main() {
     FakeAgentUsageService service,
   ) async {
     final server = FakeDataServer();
-    final db = seedUsageDatabase(agentId: agentId, server: server);
-    addTearDown(db.close);
+    seedUsageDatabase(agentId: agentId, server: server);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentUsageServiceProvider.overrideWithValue(service),

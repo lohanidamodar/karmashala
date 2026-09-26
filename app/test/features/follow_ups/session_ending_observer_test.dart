@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
@@ -14,13 +12,11 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala_session/events.dart';
 
 /// The live half of the signal: what the observer does with a status change in
 /// a session whose row still says `running`.
 void main() {
-  late AppDatabase db;
   late Override data;
   late FakeFollowUpRows followUps;
   late StreamController<AgentStatusReport> reports;
@@ -34,8 +30,7 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     data = await server.override();
     server.projectRows.insert(project());
@@ -46,13 +41,11 @@ void main() {
     reports = StreamController<AgentStatusReport>.broadcast();
     addTearDown(reports.close);
   });
-  tearDown(() => db.close());
 
   /// Mounts the observer over a status stream this test drives by hand.
   Future<ProviderContainer> observing() async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentSessionStatusProvider.overrideWith((ref, id) => reports.stream),

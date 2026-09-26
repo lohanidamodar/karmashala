@@ -6,19 +6,25 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
 import 'package:karmashala_automations/check_runner.dart';
-import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/records.dart';
+import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala_checkpoints/store.dart';
 import 'package:karmashala_core/util.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show CheckpointRecorded, DataChange, VerificationRunChanged;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/command_checks.dart';
+import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:path/path.dart' as p;
 
 import '../domain/session_registry.dart';
+import '../data/told_automations.dart';
 import '../domain/uuid.dart';
 import '../protocol/messages.dart';
 import 'automation_app_relay.dart';
@@ -37,15 +43,15 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 /// Automations and checks in the daemon: the one scheduler, the runs it
 /// starts in sessions it owns, their verdicts when those sessions end, and
-/// the checks after — with the app told of every write, and asked only for
-/// what it alone can do.
+/// the checks after — every write told to every client ([tell]), and the app
+/// asked only for what it alone can do.
 class DaemonAutomations implements AutomationHandler {
   DaemonAutomations({
     required AppDatabase database,
     required SessionRegistry registry,
     required String dataDirectory,
     required SessionMcpAccessPoint mcp,
-    required void Function() announce,
+    required void Function(List<DataChange> changes) tell,
     void Function(String sessionId)? sessionWritten,
     DateTime Function()? clock,
     String Function()? newId,
@@ -57,12 +63,12 @@ class DaemonAutomations implements AutomationHandler {
     Duration firstRunPromptWithin = const Duration(minutes: 3),
     void Function(String message)? log,
   }) : _db = database,
-       _announce = announce,
+       _tell = tell,
        _log = log ?? _ignore {
     final now = clock ?? _utcNow;
     final ids = newId ?? newUuid;
-    final automations = AutomationDao(database);
-    final resumes = ScheduledResumeDao(database);
+    final automations = ToldAutomations(AutomationDao(database), _told);
+    final resumes = ToldResumes(ScheduledResumeDao(database), _told);
     final projectChecks = ProjectCheckDao(database);
     final sessions = SessionDao(database);
     final rows = CheckoutRows(database);
@@ -80,7 +86,10 @@ class DaemonAutomations implements AutomationHandler {
         stopping: () => _stopped,
       ),
       recorder: CommandCheckRecorder(
-        VerificationDao(database),
+        StoreVerificationRecords(
+          VerificationDao(database),
+          onRecorded: (run) => tell([VerificationRunChanged(run)]),
+        ),
         VerificationArtifactStore(
           Directory(p.join(dataDirectory, 'verification')),
         ),
@@ -104,7 +113,10 @@ class DaemonAutomations implements AutomationHandler {
             CheckpointService(
               runnerFactory: const CommandRunnerFactory(),
               environmentOf: rows.environment,
-              dao: CheckpointDao(database),
+              records: StoreCheckpointRecords(
+                CheckpointDao(database),
+                onRecorded: (c) => tell([CheckpointRecorded(c)]),
+              ),
               clock: _FunctionClock(now),
               newId: ids,
             ),
@@ -186,10 +198,26 @@ class DaemonAutomations implements AutomationHandler {
   }
 
   final AppDatabase _db;
-  final void Function() _announce;
+  final void Function(List<DataChange> changes) _tell;
   final void Function(String message) _log;
   late final SessionDao _sessions;
-  late final AutomationDao _automations;
+  late final AutomationRecords _automations;
+  final _pending = <DataChange>[];
+
+  /// One write this server made itself; told with the rest of its turn.
+  void _told(DataChange change) {
+    if (_pending.isEmpty) {
+      scheduleMicrotask(() {
+        final batch = [..._pending];
+        _pending.clear();
+        _tell(batch);
+      });
+    }
+    _pending.add(change);
+  }
+
+  /// A client wrote automation rows: re-arm, and start what can start.
+  void written() => unawaited(_reconcile());
 
   final AutomationAppRelay relay = AutomationAppRelay();
   late final DaemonCheckoutFacts facts;
@@ -209,7 +237,7 @@ class DaemonAutomations implements AutomationHandler {
   /// idle) before its process ends. Settling still waits for the process.
   final Map<String, HostedAgentStatus> runAgentStatus = {};
   var _stopped = false;
-  var _announcing = false;
+  var _arming = false;
 
   static void _ignore(String _) {}
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -273,16 +301,14 @@ class DaemonAutomations implements AutomationHandler {
     scheduler.arm();
   }
 
-  /// Many writes in one turn are one frame to the app, and one re-arm: a run
-  /// that finished moves an interval's next occurrence.
+  /// Many writes in one turn are one re-arm: a run that finished moves an
+  /// interval's next occurrence.
   void _changed() {
-    if (_announcing || _stopped) return;
-    _announcing = true;
+    if (_arming || _stopped) return;
+    _arming = true;
     scheduleMicrotask(() {
-      _announcing = false;
-      if (_stopped) return;
-      scheduler.arm();
-      _announce();
+      _arming = false;
+      if (!_stopped) scheduler.arm();
     });
   }
 
@@ -295,8 +321,6 @@ class DaemonAutomations implements AutomationHandler {
     switch (notice.kind) {
       case AutomationNoticeKind.ready:
         relay.adopt(owner, send);
-      case AutomationNoticeKind.changed:
-        unawaited(_reconcile());
     }
   }
 

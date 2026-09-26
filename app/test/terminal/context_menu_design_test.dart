@@ -6,7 +6,6 @@ import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -15,6 +14,7 @@ import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dar
 
 import '../features/terminal/fake_instance.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import '../support/test_machine.dart';
 
 /// The terminal's three right-click menus draw the *house* menu row.
 ///
@@ -32,17 +32,16 @@ void main() {
   // about is that the menu shows the chord it really binds.
   setUp(() => commandKeyIsMeta = false);
 
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   setUp(() {
-    db = AppDatabase.memory();
-    container = fakeTerminalContainer(database: db);
+    db = TestMachine();
+    container = fakeTerminalContainer(machine: db);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   TerminalSessionsController terminals() =>

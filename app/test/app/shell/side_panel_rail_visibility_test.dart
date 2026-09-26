@@ -10,7 +10,6 @@ import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/icons.dart';
 
 import '../../features/terminal/fake_instance.dart';
@@ -18,25 +17,26 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
+import '../../support/conversation_index_database.dart';
 
 /// Hiding surfaces from the side panel's rail, the way VS Code's activity bar
 /// does it: a right-click lists every surface with a check, a hidden one stays
 /// reachable everywhere else, and opening it puts its glyph back while open.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
     commandKeyIsMeta = false;
     server = FakeDataServer();
-    db = AppDatabase.memory();
+    db = TestMachine();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
   });
   tearDown(() {
     commandKeyIsMeta = false;
-    db.close();
   });
 
   const wide = Size(1440, 900);
@@ -51,7 +51,8 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
         data,
         attentionCountProvider.overrideWith((ref) => ref.watch(_attention)),
       ],
@@ -143,7 +144,8 @@ void main() {
       );
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          conversationIndexDatabase(),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
         ],
       );

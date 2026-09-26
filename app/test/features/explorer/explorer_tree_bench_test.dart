@@ -28,8 +28,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
-import '../scale/scale_harness.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **The Explorer at 500 projects and 5,000 sessions: what is built, and how
@@ -50,9 +49,9 @@ const _contexts = 10;
 const _rowBound = 90;
 
 void main() {
-  CountingDatabase seed(FakeDataServer server) {
-    final db = CountingDatabase();
-    server.mirrorInto(db);
+  CountingMachine seed(FakeDataServer server) {
+    final db = CountingMachine();
+    server.runsOn(db);
     server.environmentRows.upsert(posixEnv());
     server.installationRows.insert(agentInstallation());
     for (var c = 0; c < _contexts; c++) {
@@ -62,8 +61,7 @@ void main() {
     }
     final projects = server.projectRows;
     final repositories = server.repositoryRows;
-    final sessions = mirroredServer(db).sessionRows;
-    db.execute('BEGIN');
+    final sessions = db.server.sessionRows;
     for (var p = 0; p < _projects; p++) {
       final path = '/Users/me/Documents/projects/client-$p/workspace-$p';
       projects.insert(
@@ -92,22 +90,22 @@ void main() {
         );
       }
     }
-    db.execute('COMMIT');
     return db;
   }
 
-  Future<({ProviderContainer container, CountingDatabase db, int firstUs})>
-  pump(WidgetTester tester, {required int open}) async {
+  Future<({ProviderContainer container, CountingMachine db, int firstUs})> pump(
+    WidgetTester tester, {
+    required int open,
+  }) async {
     tester.view.physicalSize = const Size(320, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final server = FakeDataServer();
     final db = seed(server);
-    addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -148,11 +146,8 @@ void main() {
     return (container: container, db: db, firstUs: watch.elapsedMicroseconds);
   }
 
-  /// The follow-up service judges every ended session once per launch, with a
-  /// statement each (`follow_up_service.dart`). It is the launch's cost and not
-  /// the tree's, so it is counted apart.
-  int explorerStatements(CountingDatabase db) =>
-      db.statements.where((sql) => !sql.contains('verification_runs')).length;
+  /// What the tree issued against the store.
+  int explorerStatements(CountingMachine db) => db.statements.length;
 
   int rows(WidgetTester tester) =>
       tester.widgetList(find.byType(ExplorerTreeRow)).length;
@@ -268,7 +263,7 @@ void main() {
           card.title: identityHashCode(card),
       };
       final before = identities();
-      mirroredServer(harness.db).sessionRows.updateStatus(target.id, SessionStatus.idle);
+      harness.db.server.sessionRows.updateStatus(target.id, SessionStatus.idle);
       harness.db.reset();
       final tick = Stopwatch()..start();
       harness.container
@@ -281,7 +276,7 @@ void main() {
       // And nine more, there and back, because one frame is mostly noise.
       final ticks = Stopwatch()..start();
       for (var i = 0; i < 9; i++) {
-        mirroredServer(harness.db).sessionRows.updateStatus(
+        harness.db.server.sessionRows.updateStatus(
           target.id,
           i.isEven ? SessionStatus.completed : SessionStatus.idle,
         );

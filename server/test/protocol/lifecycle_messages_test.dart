@@ -29,7 +29,7 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 25, 10, 0, 30);
 
   test('the feed\'s frame types, and the bump that reshaped `watch`', () {
-    expect(kProtocolVersion, 14);
+    expect(kProtocolVersion, 15);
     expect(MessageType.watch.code, 0x17);
     expect(MessageType.watching.code, 0x18);
     expect(MessageType.lifecycle.code, 0x19);

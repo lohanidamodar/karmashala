@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
@@ -14,7 +12,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
 
 /// The checkouts a session spans, as the app reads and changes them. The
 /// rules — primary first, one project only, the primary never taken off, the
@@ -22,13 +19,11 @@ import '../../support/workspace_mirror.dart';
 /// (server/test/data/sessions_handler_test.dart); these are what the app
 /// shows and sends.
 void main() {
-  late AppDatabase db;
   late SessionRepositoriesService service;
   late FakeDataServer server;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project(id: 'p1'))
@@ -46,7 +41,6 @@ void main() {
       workspace: WorkspaceData(client),
     );
   });
-  tearDown(() => db.close());
 
   test('attach adds a repository from the same project', () async {
     await service.attach('s1', 'r2');
@@ -77,12 +71,7 @@ void main() {
 
   group('the Add repo menu', () {
     Future<void> pump(WidgetTester tester) async {
-      final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          await server.override(),
-        ],
-      );
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
       container.read(selectedSessionIdProvider.notifier).select('s1');
       await tester.pumpWidget(

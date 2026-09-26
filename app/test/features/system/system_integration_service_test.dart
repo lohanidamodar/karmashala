@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/system/launcher_hotkey.dart';
 import 'package:karmashala/src/features/system/native_status.dart';
@@ -27,7 +25,6 @@ void main() {
   /// platform channel, which needs a binding these tests do not have.
   Future<void> Function()? osQuit;
 
-  late AppDatabase db;
   late ProviderContainer container;
   late FakeNatives natives;
   late SystemIntegrationService service;
@@ -53,10 +50,7 @@ void main() {
   }
 
   setUp(() {
-    db = AppDatabase.memory();
-    container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
-    );
+    container = ProviderContainer(overrides: []);
     natives = FakeNatives();
     quitCalls = [];
     terminalViews = TerminalViewGate();
@@ -64,7 +58,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   group('initialization', () {

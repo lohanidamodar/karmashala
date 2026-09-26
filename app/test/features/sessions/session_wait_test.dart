@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -17,7 +16,7 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:agent_cli/process.dart';
 
@@ -28,7 +27,7 @@ import 'package:agent_cli/process.dart';
 /// the property under test as much as any assertion is: a wait that needed a
 /// sleep to finish would be a poll wearing a different name.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late StreamController<AgentStatusReport> reports;
   late Completer<void> deadline;
@@ -53,15 +52,15 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Helper'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Helper'));
 
     reports = StreamController<AgentStatusReport>.broadcast();
     deadline = Completer<void>();
@@ -70,7 +69,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // A fixed inbox. The real controller listens to half the app to decide
         // what has been seen, and none of that is what these tests are about.
@@ -90,7 +89,6 @@ void main() {
   tearDown(() {
     reports.close();
     container.dispose();
-    db.close();
   });
 
   /// Attaches a live pane to [sessionId], so the session counts as running.
@@ -106,7 +104,7 @@ void main() {
         .layout
         .panes
         .first;
-    mirroredServer(db).sessionRows.updatePaneId(sessionId, paneId);
+    db.server.sessionRows.updatePaneId(sessionId, paneId);
     return paneId;
   }
 

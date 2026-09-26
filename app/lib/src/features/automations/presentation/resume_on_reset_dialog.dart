@@ -76,7 +76,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
     super.initState();
     final settings = ref.read(settingsControllerProvider);
     final existing = _single
-        ? ref.read(scheduledResumeDaoProvider).liveFor(widget.sessionIds.single)
+        ? ref.read(resumesDataProvider).liveFor(widget.sessionIds.single)
         : null;
     var message = settings.resumeMessage;
     if (_single) {

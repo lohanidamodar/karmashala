@@ -15,11 +15,10 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// A live transcript is re-read whole on every poll, so every tick hands the
@@ -122,16 +121,15 @@ void main() {
     final polls = StreamController<List<TranscriptMessage>>();
     addTearDown(polls.close);
 
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
-    addTearDown(db.close);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(
       agentInstallation(agentId: AgentIds.claudeCode),
     );
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -153,7 +151,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => const <SystemTerminal>[],

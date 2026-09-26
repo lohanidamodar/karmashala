@@ -7,9 +7,10 @@ import 'package:path/path.dart' as p;
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_verification/command_checks.dart';
-import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/verification.dart';
 
+import '../data/verification_data.dart';
 import 'verification_recorder.dart';
 
 export 'package:karmashala_verification/command_checks.dart' show CommandCheck;
@@ -44,7 +45,7 @@ class VerificationChangeSignal {
 /// sink goes on the app's single browser and adb services.
 class VerificationService {
   VerificationService(
-    this._dao,
+    this._data,
     this._store, {
     required this.browserOf,
     required this.adbOf,
@@ -56,7 +57,7 @@ class VerificationService {
        _newId = newId ?? _timestampId,
        _now = now ?? _utcNow;
 
-  final VerificationDao _dao;
+  final VerificationData _data;
   final VerificationArtifactStore _store;
 
   /// The app's single browser driver — a run installs its sink on this exact
@@ -116,9 +117,9 @@ class VerificationService {
       startedAt: _now(),
       artifactDirectory: directory.path,
     );
-    _dao.insertRun(run);
+    await _data.start(run);
 
-    final recorder = VerificationRecorder(_dao, _store, run: run, now: _now);
+    final recorder = VerificationRecorder(_data, _store, run: run, now: _now);
     _recorder = recorder;
     _changed();
 
@@ -199,7 +200,7 @@ class VerificationService {
     }
   }
 
-  /// Waits for every queued artifact write to land; steps are already durable.
+  /// Waits for every queued step and artifact write to land.
   Future<void> flush() => _recorder?.drain() ?? Future<void>.value();
 
   /// Adds a step the agent wrote itself.
@@ -255,7 +256,7 @@ class VerificationService {
   );
 
   late final CommandCheckRecorder _commandChecks = CommandCheckRecorder(
-    _dao,
+    _data,
     _store,
     newId: _newId,
     now: _now,
@@ -286,18 +287,16 @@ class VerificationService {
       await recorder.drain();
     }
 
-    _dao.finishRun(
+    final finished = await _data.finish(
       run.id,
-      finishedAt: _now(),
       verdict: verdict,
       reason: reason?.trim(),
       producedBySessionId: producedBySessionId,
     );
     _recorder = null;
-    final finished = _dao.getRun(run.id)!;
     await _writeReport(finished);
     _changed();
-    return _dao.getRun(run.id)!;
+    return finished;
   }
 
   /// Collected without being asked, at the end. Each piece is guarded alone.
@@ -394,26 +393,31 @@ class VerificationService {
   }
 
   /// Runs newest first, with steps and artifacts — every caller shows a count.
-  List<VerificationRun> list({int limit = 50, String? sessionId}) => [
-    for (final run in _dao.listRuns(limit: limit, sessionId: sessionId))
-      run.copyWith(
-        steps: _dao.stepsFor(run.id),
-        artifacts: _dao.artifactsFor(run.id),
-      ),
-  ];
+  /// Every read waits for this service's own queued writes first.
+  Future<List<VerificationRun>> list({
+    int limit = 50,
+    String? sessionId,
+  }) async {
+    await flush();
+    return _data.recent(limit: limit, sessionId: sessionId);
+  }
 
-  VerificationRun? get(String id) => _dao.getRun(id);
+  Future<VerificationRun?> get(String id) async {
+    await flush();
+    return _data.get(id);
+  }
 
   /// A run by id or unambiguous prefix; it refuses when several match.
-  VerificationRun? find(String idOrPrefix) {
-    final exact = _dao.getRun(idOrPrefix);
+  Future<VerificationRun?> find(String idOrPrefix) async {
+    final exact = await get(idOrPrefix);
     if (exact != null) return exact;
-    final matches = _dao.findByPrefix(idOrPrefix);
-    return matches.length == 1 ? _dao.getRun(matches.single.id) : null;
+    final matches = await _data.matching(idOrPrefix);
+    return matches.length == 1 ? _data.get(matches.single.id) : null;
   }
 
   /// Every run whose id starts with [prefix] — for explaining a failed [find].
-  List<VerificationRun> matching(String prefix) => _dao.findByPrefix(prefix);
+  Future<List<VerificationRun>> matching(String prefix) =>
+      _data.matching(prefix);
 
   /// The bytes of one artifact, or null when the file is gone.
   Future<List<int>?> readArtifact(VerificationArtifact artifact) =>
@@ -421,21 +425,21 @@ class VerificationService {
 
   String pathOf(VerificationArtifact artifact) => _store.pathOf(artifact);
 
-  void attachToSession(String runId, String? sessionId) {
-    _dao.updateSessionId(runId, sessionId);
+  Future<void> attachToSession(String runId, String? sessionId) async {
+    await _data.attach(runId, sessionId);
     _changed();
   }
 
   Future<void> delete(String id) async {
     if (_recorder?.run.id == id) await abandon();
-    _dao.deleteRun(id);
+    await _data.delete(id);
     await _store.deleteRun(id);
     _changed();
   }
 
   /// Writes the run's markdown report and returns its path.
   Future<String> export(String id) async {
-    final run = _dao.getRun(id);
+    final run = await _data.get(id);
     if (run == null) {
       throw VerificationException('No verification run with id $id.');
     }

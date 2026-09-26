@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/workspaces/application/workspaces_contro
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/presentation/context_color_dialog.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -30,13 +29,14 @@ import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// **A context is told from a project by more than its capitals.** Every
 /// group header rests on a tinted band with a hairline under it and a gap
 /// above it between groups; a context the owner has coloured wears the dot in
 /// its header's glyph column and on its chip, and the colour is kept.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   void seed() {
@@ -71,17 +71,16 @@ void main() {
   }
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TestMachine();
     server = FakeDataServer();
     seed();
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> newContainer() async {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

@@ -1,27 +1,12 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
-import '../../../core/util/clock_provider.dart';
 import '../../terminal/application/pane_exit_signal.dart';
-import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
+import '../data/worktree_setup_data.dart';
 import 'git_providers.dart';
 
-final worktreeSetupDaoProvider = Provider<WorktreeSetupDao>(
-  (ref) => WorktreeSetupDao(ref.watch(databaseProvider)),
-);
-
-/// Bumped by every setup write, watched by every read of one: the writer is not
-/// the surface, and nothing here polls (§19).
-class WorktreeSetupRevision extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  void bump() => state = state + 1;
-}
-
-final worktreeSetupRevisionProvider =
-    NotifierProvider<WorktreeSetupRevision, int>(WorktreeSetupRevision.new);
+export '../data/worktree_setup_data.dart'
+    show WorktreeSetupData, worktreeSetupDataProvider;
 
 /// Turns "running in a pane" into a verdict. Must be *watched*: Riverpod pauses
 /// a provider's subscriptions while nothing listens, and this then hears none.
@@ -44,44 +29,42 @@ final worktreeSetupExitObserverProvider =
       WorktreeSetupExitObserver.new,
     );
 
-/// Every configured checkout, by repository id. Watches the revision rather
-/// than the table, so a setup that ran while the page is open appears without
-/// a reopen and without a timer.
-final worktreeSetupsProvider = Provider<Map<String, WorktreeSetup>>((ref) {
-  ref.watch(worktreeSetupRevisionProvider);
-  return ref.watch(worktreeSetupDaoProvider).getAll();
-});
+/// Re-reads [ref]'s provider whenever a setup or a verdict changed, here or at
+/// another client — nothing polls (§19).
+WorktreeSetupData _following(Ref ref) {
+  final data = ref.watch(worktreeSetupDataProvider);
+  final listening = data.changes.listen((_) => ref.invalidateSelf());
+  ref.onDispose(listening.cancel);
+  return data;
+}
+
+/// Every configured checkout, by repository id.
+final worktreeSetupsProvider = Provider<Map<String, WorktreeSetup>>(
+  (ref) => _following(ref).getAll(),
+);
 
 /// The recorded verdicts for one checkout's worktrees, newest first.
 final worktreeSetupRunsProvider =
-    Provider.family<List<WorktreeSetupReport>, String>((ref, repositoryId) {
-      ref.watch(worktreeSetupRevisionProvider);
-      return ref.watch(worktreeSetupDaoProvider).runsFor(repositoryId);
-    });
+    Provider.family<List<WorktreeSetupReport>, String>(
+      (ref, repositoryId) => _following(ref).runsFor(repositoryId),
+    );
 
 /// The newest worktree creations across every checkout.
-final recentWorktreeRunsProvider = Provider<List<WorktreeSetupReport>>((ref) {
-  ref.watch(worktreeSetupRevisionProvider);
-  return ref.watch(worktreeSetupDaoProvider).recentRuns();
-});
+final recentWorktreeRunsProvider = Provider<List<WorktreeSetupReport>>(
+  (ref) => _following(ref).recentRuns(),
+);
 
-/// Writes the setting, and tells everything reading it.
+/// Writes the setting through the server.
 class WorktreeSetupController {
   WorktreeSetupController(this._ref);
 
   final Ref _ref;
 
-  void save(String repositoryId, WorktreeSetup setup) {
-    _ref
-        .read(worktreeSetupDaoProvider)
-        .save(repositoryId, setup, _ref.read(clockProvider).nowUtc());
-    _ref.read(worktreeSetupRevisionProvider.notifier).bump();
-  }
+  void save(String repositoryId, WorktreeSetup setup) =>
+      _ref.read(worktreeSetupDataProvider).save(repositoryId, setup);
 
-  void clear(String repositoryId) {
-    _ref.read(worktreeSetupDaoProvider).clear(repositoryId);
-    _ref.read(worktreeSetupRevisionProvider.notifier).bump();
-  }
+  void clear(String repositoryId) =>
+      _ref.read(worktreeSetupDataProvider).clear(repositoryId);
 }
 
 final worktreeSetupControllerProvider = Provider<WorktreeSetupController>(

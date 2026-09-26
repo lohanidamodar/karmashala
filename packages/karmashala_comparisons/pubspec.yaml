@@ -1,0 +1,27 @@
+name: karmashala_comparisons
+description: >-
+  Fan-out comparisons: one prompt, several agents, and what came of it — the
+  values, their wire shape and the rules a client's copy follows; the DAO
+  (`store.dart`) is the server's alone. No providers and no UI.
+version: 0.1.0
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # EnvironmentPath, where a candidate's worktree is.
+  agent_cli:
+    path: ../agent_cli
+  # The fanout_comparisons and fanout_candidates tables.
+  karmashala_store:
+    path: ../karmashala_store
+  # Who produced a candidate's verdict.
+  karmashala_verification:
+    path: ../karmashala_verification
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

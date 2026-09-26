@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
@@ -67,7 +66,7 @@ void main() {
   group('a disk that has stopped accepting writes', () {
     test('rolls the whole save back and loses nothing', () {
       final disk = DegradedDatabase();
-      final layout = ScaleLayout(database: disk);
+      final layout = ScaleLayout(store: disk);
       addTearDown(layout.dispose);
       final panes = layout.openPanes(2, linesPerPane: 40);
       layout.settle();
@@ -117,7 +116,7 @@ void main() {
       // pane whose row was rolled back must not be skipped for ever by a dao
       // that thinks it wrote it.
       final disk = DegradedDatabase();
-      final layout = ScaleLayout(database: disk);
+      final layout = ScaleLayout(store: disk);
       addTearDown(layout.dispose);
       final panes = layout.openPanes(2, linesPerPane: 40);
       layout.settle();
@@ -147,7 +146,7 @@ void main() {
 
     test('leaves the layout usable, and restorable', () {
       final disk = DegradedDatabase();
-      final layout = ScaleLayout(database: disk);
+      final layout = ScaleLayout(store: disk);
       addTearDown(layout.dispose);
       final panes = layout.openPanes(3, linesPerPane: 40);
       layout.settle();
@@ -179,7 +178,7 @@ void main() {
 
     test('does not answer one refusal with a storm of retries', () {
       final disk = DegradedDatabase();
-      final layout = ScaleLayout(database: disk);
+      final layout = ScaleLayout(store: disk);
       addTearDown(layout.dispose);
       final panes = layout.openPanes(10, linesPerPane: 40);
       layout.settle();
@@ -211,7 +210,7 @@ void main() {
       addTearDown(disk.close);
 
       // A layout the user has, written by a healthy app.
-      final first = ScaleLayout(database: disk);
+      final first = ScaleLayout(store: disk);
       final panes = first.openPanes(3, linesPerPane: 40);
       first.settle();
       final stored = [for (final pane in panes) first.storedScrollback(pane)];
@@ -224,7 +223,7 @@ void main() {
       // to destroy the layout on the way out.
       disk.failing = 'FROM terminal_tabs ORDER BY ordinal';
       logged.clear();
-      final second = ScaleLayout(database: disk);
+      final second = ScaleLayout(store: disk);
       addTearDown(second.container.dispose);
       expect(second.state.tabs, isEmpty);
       expect(
@@ -271,7 +270,7 @@ void main() {
 
     test('costs one autosave tick one pane, not all of them', () {
       final disk = DegradedDatabase();
-      final layout = ScaleLayout(database: disk);
+      final layout = ScaleLayout(store: disk);
       addTearDown(layout.dispose);
       final panes = layout.openPanes(6, linesPerPane: 40);
       expect(layout.controller.hasDirtyScrollback, isTrue);
@@ -301,7 +300,7 @@ void main() {
 
     test('and the backlog drains rather than being dropped', () {
       final disk = DegradedDatabase();
-      final layout = ScaleLayout(database: disk);
+      final layout = ScaleLayout(store: disk);
       addTearDown(layout.dispose);
       final panes = layout.openPanes(6, linesPerPane: 40);
       disk.writeDelay = perWrite;
@@ -325,7 +324,7 @@ void main() {
       // behind asks for the 1 s cadence rather than whatever idle tick was
       // armed.
       final disk = DegradedDatabase();
-      final layout = ScaleLayout(database: disk);
+      final layout = ScaleLayout(store: disk);
       addTearDown(layout.dispose);
       final panes = layout.openPanes(3, linesPerPane: 40);
       layout.settle();
@@ -353,10 +352,10 @@ void main() {
 /// rows in the same transaction have already been written — the only shape in
 /// which a rollback can be got wrong.
 ///
-/// `BEGIN`/`COMMIT`/`ROLLBACK` go through `AppDatabase`'s private handle rather
+/// `BEGIN`/`COMMIT`/`ROLLBACK` go through `TerminalLayoutStore`'s private handle rather
 /// than [execute], so a refused statement still rolls back exactly as it would
 /// against a real disk that failed one write.
-class DegradedDatabase extends AppDatabase {
+class DegradedDatabase extends TerminalLayoutStore {
   DegradedDatabase() : super(sqlite3.openInMemory());
 
   /// Statements containing this are refused. Null while the disk is healthy.

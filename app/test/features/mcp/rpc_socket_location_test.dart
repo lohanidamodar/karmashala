@@ -3,10 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
 /// An instance whose data directory is too deep for a socket still gives its
@@ -19,19 +17,14 @@ import 'package:path/path.dart' as p;
 /// call through. `debug_run.bat -Fresh` puts it at 127 bytes on Windows.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
   late ProviderContainer container;
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('rsl');
-    db = AppDatabase.memory();
-    container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
-    );
+    container = ProviderContainer(overrides: []);
   });
   tearDown(() {
     container.dispose();
-    db.close();
     try {
       tmp.deleteSync(recursive: true);
     } on FileSystemException {

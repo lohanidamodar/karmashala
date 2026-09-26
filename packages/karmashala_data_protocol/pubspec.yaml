@@ -32,11 +32,30 @@ dependencies:
     path: ../karmashala_git
   karmashala_projects:
     path: ../karmashala_projects
+  # Command snippets and saved terminal presets.
+  karmashala_snippets:
+    path: ../karmashala_snippets
+  # Paired devices, as a client is told them (no key, no push token).
+  karmashala_remote:
+    path: ../karmashala_remote
+  # Automations, their runs and checks, scheduled resumes and project checks.
+  karmashala_automations:
+    path: ../karmashala_automations
+  # Checkpoints (metadata only), verification runs and comparisons.
+  karmashala_checkpoints:
+    path: ../karmashala_checkpoints
+  karmashala_comparisons:
+    path: ../karmashala_comparisons
+  karmashala_verification:
+    path: ../karmashala_verification
   # The sessions domain's values its requests carry: a session and the
   # change a client asks of it, its records, and the imported history.
   karmashala_session:
     path: ../karmashala_session
 
 dev_dependencies:
+  # `VerificationVerdict`, in the automations envelope test.
+  karmashala_core:
+    path: ../karmashala_core
   lints: ^6.1.0
   test: ^1.31.1

@@ -3,10 +3,13 @@ import 'dart:io';
 
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/fake_data_server.dart';
 
 void main() {
   late Directory root;
@@ -354,9 +357,11 @@ void main() {
   group('the provider that the app actually uses', () {
     late ProviderContainer container;
     late RepoFileIndex index;
+    late FakeDataServer server;
 
-    setUp(() {
-      container = ProviderContainer();
+    setUp(() async {
+      server = FakeDataServer();
+      container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
       index = container.read(repoFileIndexProvider);
     });
@@ -379,9 +384,25 @@ void main() {
       await index.index(root.path);
       expect(index.isFresh(root.path), isTrue);
 
-      // What the checkpoint recorder bumps when an agent turn ends having
-      // actually changed the tree.
-      container.read(checkpointsRevisionProvider.notifier).bump();
+      // A checkpoint recorded — by this app or another client — is a tree
+      // that moved.
+      server.checkpointRows.insert(
+        Checkpoint(
+          id: 'c1',
+          sessionId: 's1',
+          repository: EnvironmentPath(
+            environmentId: 'windows',
+            path: root.path,
+          ),
+          sequence: 0,
+          treeSha: 't',
+          commitSha: 'c',
+          parentCommitSha: null,
+          headSha: null,
+          reason: CheckpointReason.turn,
+          createdAt: DateTime.utc(2026),
+        ),
+      );
 
       expect(index.isFresh(root.path), isFalse);
     });

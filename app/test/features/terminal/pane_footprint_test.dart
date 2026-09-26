@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -18,14 +18,14 @@ import 'fake_instance.dart';
 /// for every never-opened pane on every tick — the measurement becoming the
 /// cost it was added to find.
 void main() {
-  late AppDatabase db;
+  late TerminalLayoutStore db;
   late ProviderContainer container;
   late TerminalSessionsController controller;
 
   setUp(() {
     WidgetsFlutterBinding.ensureInitialized();
-    db = AppDatabase.memory();
-    container = fakeTerminalContainer(database: db);
+    db = TerminalLayoutStore.memory();
+    container = fakeTerminalContainer(layoutStore: db);
     controller = container.read(terminalSessionsControllerProvider.notifier);
   });
 
@@ -82,7 +82,10 @@ void main() {
     controller.persistLayout();
     container.dispose();
 
-    final next = fakeTerminalContainer(database: db, restoreLivePanes: false);
+    final next = fakeTerminalContainer(
+      layoutStore: db,
+      restoreLivePanes: false,
+    );
     addTearDown(next.dispose);
     final restored = next.read(terminalSessionsControllerProvider.notifier);
     final paneId = next

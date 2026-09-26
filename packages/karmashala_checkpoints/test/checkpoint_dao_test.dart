@@ -1,5 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala_checkpoints/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 

@@ -1,4 +1,5 @@
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_companion_server/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 

@@ -6,7 +6,6 @@ import 'package:agent_cli/read.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala/src/core/probe/probe_mode.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -17,9 +16,10 @@ import 'package:karmashala/src/features/agents/application/agent_skill_installat
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/features/remote/application/host_companion_link.dart';
+import 'package:karmashala/src/features/remote/application/host_companion_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -27,8 +27,6 @@ import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:path/path.dart' as p;
 import '../../support/memory_server_config.dart';
 
@@ -37,8 +35,9 @@ import '../../features/system/fake_native_adapters.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/fake_host_lifecycle.dart';
 
 /// Every store the locator would have found, pointed at a temporary home.
 class _StubLocator implements CliStoreLocator {
@@ -92,14 +91,14 @@ final _refProvider = Provider<Ref>((ref) => ref);
 /// against a temporary "agent store", and each has a non-probe twin proving the
 /// same fixture *can* observe the write — so a pass is not an empty fixture.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late Directory home;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
@@ -107,13 +106,13 @@ void main() {
     home = Directory.systemTemp.createTempSync('karmashala_probe_fx_');
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(home);
   });
 
-  String localEnvironmentId() => mirroredServer(
-    db,
-  ).environmentRows.getAll().firstWhere((e) => isLocalHost(e.kind)).id;
+  String localEnvironmentId() => db.server.environmentRows
+      .getAll()
+      .firstWhere((e) => isLocalHost(e.kind))
+      .id;
 
   String claudeStore() => p.join(home.path, '.claude');
   File hookConfig() => File(p.join(claudeStore(), 'settings.json'));
@@ -134,7 +133,6 @@ void main() {
   }) {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         probeModeProvider.overrideWithValue(
@@ -328,39 +326,33 @@ void main() {
 
   group('remote access and the local relay', () {
     late LocalRelayService relay;
-    late int factoryCalls;
+    late FakeHostLifecycle host;
 
-    ProviderContainer remoteContainer(bool probe) {
+    Future<ProviderContainer> remoteContainer(bool probe) async {
       relay = LocalRelayService(
         bindAddress: '127.0.0.1',
         interfaces: () async => [(name: 'lo', ip: '127.0.0.1')],
       );
       addTearDown(relay.stop);
-      factoryCalls = 0;
+      host = FakeHostLifecycle();
       final fake = FakeRemoteBindings();
-      return containerWith(
+      final link = HostCompanionLink(
+        bindings: () => fake.bindings,
+        deviceById: (_) async => null,
+      );
+      final container = containerWith(
         probe: probe,
         extra: [
           localRelayServiceProvider.overrideWithValue(relay),
+          companionAtHostProvider.overrideWithValue(true),
+          hostCompanionLinkProvider.overrideWithValue(link),
           remoteAccessControllerProvider.overrideWith(
-            (ref) => RemoteAccessController(
-              ref,
-              serviceFactory: (relayUri) {
-                factoryCalls++;
-                return RemoteHostService(
-                  devices: PairedDeviceDao(db),
-                  hostId: DeviceId.parse('11111111222222223333333344444444'),
-                  bindings: fake.bindings,
-                  relay: relayUri,
-                  lanPort: 0,
-                  advertise: false,
-                  transcriptPollInterval: Duration.zero,
-                );
-              },
-            ),
+            RemoteAccessController.new,
           ),
         ],
       );
+      link.attached((await host.open())!);
+      return container;
     }
 
     Future<RemoteAccessController> enableEverything(
@@ -376,23 +368,25 @@ void main() {
     }
 
     test('the fixture sees an ordinary instance bind the relay', () async {
-      final controller = await enableEverything(remoteContainer(false));
+      await enableEverything(await remoteContainer(false));
 
       expect(relay.isRunning, isTrue);
-      expect(controller.isRunning, isTrue);
+      expect(host.companionAttaches.last, isNotNull);
     });
 
-    test('a probe binds no relay, starts no host and cannot pair', () async {
-      final controller = await enableEverything(remoteContainer(true));
+    test(
+      'a probe binds no relay, tells the server none and cannot pair',
+      () async {
+        final controller = await enableEverything(await remoteContainer(true));
 
-      expect(relay.isRunning, isFalse);
-      expect(controller.isRunning, isFalse);
-      expect(factoryCalls, 0, reason: 'no LAN listener, beacon or relay dial');
-      expect(
-        () => controller.beginPairing(capabilities: CapabilitySet.all),
-        throwsStateError,
-      );
-    });
+        expect(relay.isRunning, isFalse);
+        expect(host.companionAttaches.last, isNull);
+        expect(
+          () => controller.beginPairing(capabilities: CapabilitySet.all),
+          throwsStateError,
+        );
+      },
+    );
   });
 
   group('the control server', () {

@@ -104,18 +104,23 @@ class Checkpoint {
     return total;
   }
 
-  Checkpoint copyWith({List<FileChange>? files}) => Checkpoint(
+  Checkpoint copyWith({
+    List<FileChange>? files,
+    int? sequence,
+    String? label,
+    ({String commit, String? parent})? commits,
+  }) => Checkpoint(
     id: id,
     sessionId: sessionId,
     repository: repository,
-    sequence: sequence,
+    sequence: sequence ?? this.sequence,
     treeSha: treeSha,
-    commitSha: commitSha,
-    parentCommitSha: parentCommitSha,
+    commitSha: commits?.commit ?? commitSha,
+    parentCommitSha: commits == null ? parentCommitSha : commits.parent,
     headSha: headSha,
     reason: reason,
     createdAt: createdAt,
-    label: label,
+    label: label ?? this.label,
     files: files ?? this.files,
     turn: turn,
     prompt: prompt,

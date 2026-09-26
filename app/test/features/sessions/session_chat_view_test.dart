@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -16,7 +14,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -99,9 +97,8 @@ void main() {
     String? located,
     AgentRegistry? registry,
   }) async {
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
-    addTearDown(db.close);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -122,7 +119,6 @@ void main() {
     final locator = _CountingLocator(located);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
         sessionTranscriptLocatorProvider.overrideWithValue(locator),

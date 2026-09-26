@@ -6,10 +6,9 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -17,14 +16,13 @@ import '../terminal/fake_instance.dart';
 /// terminal bar in a 1440px window is no wider for being in one (§6).
 void main() {
   Future<double> chipWidth(WidgetTester tester, Size window) async {
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
-    addTearDown(db.close);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation(agentId: AgentIds.codex));
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: repository().id,
@@ -47,7 +45,7 @@ void main() {
       ProviderScope(
         overrides: [
           data,
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
         ],
         child: const MaterialApp(

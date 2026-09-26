@@ -2,13 +2,11 @@
 /// proof the fake is not load-bearing anywhere between pixel and protocol.
 library;
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_companion/screens.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +18,6 @@ import 'companion_test_support.dart';
 void main() {
   testWidgets('the session list renders the host\'s real sessions through '
       'the real gateway', (tester) async {
-    late AppDatabase db;
     late RemoteHostService service;
     late RelayServer relay;
     late RemoteCompanionGateway gateway;
@@ -28,8 +25,7 @@ void main() {
     // Everything real-async — sockets, the relay, pairing — runs inside
     // runAsync; the widget pumps stay in the test zone.
     await tester.runAsync(() async {
-      db = AppDatabase.memory();
-      final dao = PairedDeviceDao(db);
+      final dao = MemoryPairedDeviceStore();
       final fake = FakeRemoteBindings()..addSession('s1');
       relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
       final relayUri = Uri.parse('http://127.0.0.1:${relay.port}');
@@ -110,7 +106,6 @@ void main() {
         await gateway.close();
         await service.stop();
         await relay.close();
-        db.close();
       });
     }
   });

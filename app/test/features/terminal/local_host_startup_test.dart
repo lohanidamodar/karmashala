@@ -12,35 +12,34 @@ import 'package:karmashala/src/features/terminal/application/local_host_startup.
 import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_host/lifecycle_client.dart' show HookEndpoint;
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/temp_directory.dart';
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// The session host is started as the app starts, whatever the panes setting
 /// (the app's data lives there) — before the agents' hooks are installed and before the
 /// lifecycle subscriber dials — so the first session's first turn is heard.
 void main() {
   late Directory home;
-  late AppDatabase db;
+  late TestMachine db;
   late List<String> events;
 
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_host_startup_');
-    db = AppDatabase.memory();
+    db = TestMachine();
     events = [];
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(home);
   });
 
   ProviderContainer containerWith(_Access? access, {bool hostBacked = true}) {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         hostBackedLocalPanesProvider.overrideWithValue(hostBacked),
         localHostSessionAccessProvider.overrideWithValue(access),
         // The real source would dial [access]'s socket; this one records it.

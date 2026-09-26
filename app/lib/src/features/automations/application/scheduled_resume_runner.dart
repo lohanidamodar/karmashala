@@ -23,7 +23,6 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/scheduler.dart'
     show ScheduledResumeFiring;
-import 'automation_scheduler.dart';
 import 'scheduled_resume_providers.dart';
 import 'unattended_preflight.dart';
 
@@ -46,7 +45,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
   Future<void> fire(ScheduledResume resume, {String note = ''}) async {
     // Claimed in the store, so two ticks cannot both resume one session.
     final claimed = _ref
-        .read(scheduledResumeDaoProvider)
+        .read(resumesDataProvider)
         .transition(
           resume.id,
           from: resume.state,
@@ -442,13 +441,8 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
           );
       unawaited(recording);
     }
+    // The server starts what waited behind this checkout once it hears.
     _ref.read(resumeAnnouncerProvider).announce(ended, session);
-    final repositoryId = session?.repositoryId;
-    if (repositoryId != null && state != ScheduledResumeState.pending) {
-      unawaited(
-        _ref.read(automationSchedulerProvider.notifier).drain(repositoryId),
-      );
-    }
   }
 
   static String _join(List<String> parts) =>

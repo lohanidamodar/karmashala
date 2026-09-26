@@ -17,6 +17,7 @@ import '../../sessions/application/session_working_directory.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
 import '../../verification/application/verification_providers.dart';
+import '../../verification/data/verification_data.dart';
 import 'automation_providers.dart';
 import 'host_automations.dart';
 import 'unattended_preflight.dart';
@@ -99,8 +100,8 @@ class PaneCheckCommandRunner implements CheckCommandRunner {
   }
 }
 
-/// A checkout's project checks, run in this app's visible panes: where there
-/// is no session host, and for a checkout the host cannot run commands in.
+/// A checkout's project checks, run in this app's visible panes: for a
+/// checkout the server cannot run commands in (WSL, SSH).
 class AutomationCheckRunner {
   AutomationCheckRunner(this._ref) : _panes = PaneCheckCommandRunner(_ref);
 
@@ -108,19 +109,18 @@ class AutomationCheckRunner {
   final PaneCheckCommandRunner _panes;
 
   late final ProjectCheckRunner _runner = ProjectCheckRunner(
-    automations: _ref.read(automationDaoProvider),
-    checks: _ref.read(projectCheckDaoProvider),
+    automations: _ref.read(automationsDataProvider),
+    checks: _ref.read(projectChecksDataProvider),
     facts: _ref.read(checkoutFactsProvider),
     commands: _panes,
     recorder: CommandCheckRecorder(
-      _ref.read(verificationDaoProvider),
+      _ref.read(verificationDataProvider),
       _ref.read(verificationArtifactStoreProvider),
       newId: () => verificationRunId(DateTime.now()),
       now: () => _ref.read(clockProvider).nowUtc(),
       onChanged: () => _ref.read(verificationChangesProvider).bump(),
     ),
     now: () => _ref.read(clockProvider).nowUtc(),
-    onChanged: () => _ref.read(automationsRevisionProvider.notifier).bump(),
     log: AppLogger.named('automations').debug,
   );
 
@@ -173,7 +173,7 @@ class RunningSessionChecks extends Notifier<Set<String>> {
   Set<String> build() => const {};
 
   /// Runs [sessionId]'s checks unless they are already running: in sessions
-  /// the host owns where it can, else in this app's panes.
+  /// the server owns where it can, else in this app's panes.
   Future<SessionChecks?> run(String sessionId) async {
     if (state.contains(sessionId)) return null;
     state = {...state, sessionId};
@@ -190,7 +190,6 @@ class RunningSessionChecks extends Notifier<Set<String>> {
 
   /// The host's answer, or null when this app runs them itself.
   Future<({SessionChecks? value})?> _atHost(String sessionId) async {
-    if (!ref.read(automationsAtHostProvider)) return null;
     final asked = ref.read(hostAutomationsLinkProvider).runChecks(sessionId);
     if (asked == null) return null;
     final answer = await asked;
@@ -204,9 +203,9 @@ class RunningSessionChecks extends Notifier<Set<String>> {
           answer.message ?? 'The session host could not run it.',
         );
       case ChecksRunOutcome.ran:
-        final run = ref
-            .read(verificationDaoProvider)
-            .getRun(answer.verificationRunId ?? '');
+        final run = await ref
+            .read(verificationDataProvider)
+            .get(answer.verificationRunId ?? '');
         if (run == null) return (value: null);
         // The host kept the per-check lines as the run's steps.
         return (value: (checks: const <CommandCheck>[], run: run));

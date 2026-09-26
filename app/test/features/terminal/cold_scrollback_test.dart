@@ -1,4 +1,4 @@
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -16,9 +16,9 @@ import 'fake_instance.dart';
 /// and stay readable to the status sources while it is away.
 void main() {
   ({ProviderContainer container, TerminalSessionsController controller}) open({
-    AppDatabase? database,
+    TerminalLayoutStore? database,
   }) {
-    final container = fakeTerminalContainer(database: database);
+    final container = fakeTerminalContainer(layoutStore: database);
     addTearDown(container.dispose);
     return (
       container: container,
@@ -96,7 +96,7 @@ void main() {
   });
 
   test('a detached session keeps its scrollback across a restart', () {
-    final database = AppDatabase.memory();
+    final database = TerminalLayoutStore.memory();
     addTearDown(database.close);
 
     final app = open(database: database);
@@ -121,7 +121,7 @@ void main() {
   test(
     'the autosave stores a parked pane without re-encoding an empty buffer',
     () {
-      final database = AppDatabase.memory();
+      final database = TerminalLayoutStore.memory();
       addTearDown(database.close);
 
       final app = open(database: database);
@@ -144,7 +144,7 @@ void main() {
   );
 
   test('a restored pane nobody opens never parses its scrollback', () {
-    final database = AppDatabase.memory();
+    final database = TerminalLayoutStore.memory();
     addTearDown(database.close);
 
     final app = open(database: database);
@@ -188,7 +188,7 @@ void main() {
     // stored scrollback, parsed on every Explorer tap. It is also the wrong
     // question there: that text is the previous run's, so a refusal in it says
     // nothing about who holds the conversation now.
-    final database = AppDatabase.memory();
+    final database = TerminalLayoutStore.memory();
     addTearDown(database.close);
 
     final app = open(database: database);

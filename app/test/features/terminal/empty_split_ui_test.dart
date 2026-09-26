@@ -1,5 +1,4 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -11,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// The face of an empty split, and the two ways to fill one.
 ///
@@ -19,9 +19,8 @@ import 'fake_instance.dart';
 /// works from the keyboard, because a drag-only feature is one some people
 /// cannot use at all.
 ProviderContainer workbenchContainer() {
-  final database = AppDatabase.memory();
-  addTearDown(database.close);
-  final container = fakeTerminalContainer(database: database);
+  final database = TestMachine();
+  final container = fakeTerminalContainer(machine: database);
   addTearDown(container.dispose);
   return container;
 }

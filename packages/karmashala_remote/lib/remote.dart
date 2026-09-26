@@ -5,6 +5,8 @@ library;
 
 export 'src/domain/companion_presence.dart';
 export 'src/domain/paired_device.dart';
+export 'src/domain/paired_device_json.dart';
+export 'src/domain/paired_device_store.dart';
 export 'src/domain/remote_notes.dart';
 export 'src/domain/remote_payloads.dart';
 export 'src/domain/remote_session_options.dart';

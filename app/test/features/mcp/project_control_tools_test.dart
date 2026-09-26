@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -27,7 +25,6 @@ import '../../support/fake_data_server.dart';
 void main() {
   late Directory tmp;
   late Directory work;
-  late AppDatabase db;
   late ProviderContainer container;
   late LauncherControlServer server;
   late FakeDataServer fake;
@@ -35,15 +32,13 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_project_tools_');
     work = Directory.systemTemp.createTempSync('karmashala_project_work_');
-    db = AppDatabase.memory();
     fake = FakeDataServer(clock: () => testTime);
     fake.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
 
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -69,7 +64,6 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     for (final directory in [tmp, work]) {
       if (directory.existsSync()) directory.deleteSync(recursive: true);
     }

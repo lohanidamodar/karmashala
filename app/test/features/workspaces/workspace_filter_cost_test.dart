@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/process.dart';
@@ -12,11 +10,11 @@ import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/test_machine.dart';
 
 /// **What switching contexts costs, counted.**
 ///
@@ -51,16 +49,15 @@ void main() {
     data = await server.connect();
   });
 
-  _CountingDatabase newDatabase() {
-    final db = _CountingDatabase();
+  CountingMachine newDatabase() {
+    final db = CountingMachine();
     server.environmentRows.upsert(windowsEnv());
     return db;
   }
 
-  ProviderContainer mount(_CountingDatabase db) {
+  ProviderContainer mount(CountingMachine db) {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         dataClientProvider.overrideWithValue(data),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -74,7 +71,7 @@ void main() {
   /// owner's are — and one of them selected, so the repositories provider is
   /// live and would issue a query the moment anything made it recompute.
   Future<({ProviderContainer container, List<String> workspaceIds})> seeded(
-    _CountingDatabase db,
+    CountingMachine db,
     int count,
   ) async {
     final container = mount(db);
@@ -134,7 +131,6 @@ void main() {
     for (final count in scale) {
       test('$count projects', () async {
         final db = newDatabase();
-        addTearDown(db.close);
         final (:container, :workspaceIds) = await seeded(db, count);
         final scopeOf = container.read(workspaceScopeProvider.notifier);
         db.reset();
@@ -155,11 +151,11 @@ void main() {
 
         await pumpEventQueue();
         measured[count] = _Cost(
-          statements: db.statements,
+          statements: db.count,
           settingsWrites: server.requests
               .where((kind) => kind == 'preferences.set')
               .length,
-          reads: db.reads,
+          reads: db.reads.length,
           projectsExamined: count * 4,
         );
 
@@ -214,7 +210,6 @@ void main() {
   group('assigning one project', () {
     test('costs one write and no re-read, at any scale', () async {
       final db = newDatabase();
-      addTearDown(db.close);
       final (:container, :workspaceIds) = await seeded(db, 31);
       db.reset();
       server.requests.clear();
@@ -229,8 +224,8 @@ void main() {
         reason: 'one write for the row that moved, not one per project',
       );
       expect(
-        db.statements,
-        0,
+        db.reads,
+        isEmpty,
         reason:
             'the server files the project and answers with the one row it '
             'wrote; the app re-reads nothing — whatever the scale',
@@ -267,35 +262,4 @@ class _Cost {
       '(statements: $statements, settings writes: $settingsWrites, '
       'reads: $reads, '
       'in-memory passes over: $projectsExamined)';
-}
-
-/// Counts what reaches SQLite. `package:sqlite3` is synchronous, so every one
-/// of these runs on the UI isolate inside the frame.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int writes = 0;
-  int reads = 0;
-
-  int get statements => writes + reads;
-
-  void reset() {
-    writes = 0;
-    reads = 0;
-  }
-
-  @override
-  void execute(String sql, [List<Object?> params = const []]) {
-    writes++;
-    super.execute(sql, params);
-  }
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    reads++;
-    return super.query(sql, params);
-  }
 }

@@ -2,14 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
-import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
-import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
@@ -20,7 +17,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// Settings → Automations: where one is armed, paused, deleted, and where
 /// "did it run last night" is answered.
@@ -30,7 +26,6 @@ import '../../support/workspace_mirror.dart';
 /// ran, and the reason it did not has to be the same sentence the write path
 /// would have thrown.
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
 
   final now = DateTime.utc(2026, 9, 9, 9);
@@ -53,12 +48,12 @@ void main() {
   );
 
   void arm([Automation? automation]) =>
-      AutomationDao(db).insert(automation ?? nightly());
+      serverOf(container).automationRows.insert(automation ?? nightly());
 
   void makeReady() {
     container
-        .read(projectCheckDaoProvider)
-        .setVerificationEnabled('r1', enabled: true, now: testTime);
+        .read(projectChecksDataProvider)
+        .setVerification('r1', enabled: true);
     container.read(automationControllerProvider).addCheck(
       'r1',
       'the test suite',
@@ -67,7 +62,7 @@ void main() {
   }
 
   void record(AutomationRunState state, String reason, {String id = 'run1'}) =>
-      AutomationDao(db).insertRun(
+      serverOf(container).automationRows.insertRun(
         AutomationRun(
           id: id,
           automationId: 'auto1',
@@ -79,15 +74,16 @@ void main() {
       );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
       ],
@@ -95,7 +91,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Future<void> pumpPage(WidgetTester tester, {Size? size}) async {
@@ -130,9 +125,9 @@ void main() {
   ) async {
     arm();
     arm(nightly(id: 'auto2', name: 'Paused sweep', enabled: false));
-    mirroredServer(db).sessionRows.insert(session(title: 'Fix the login'));
+    serverOf(container).sessionRows.insert(session(title: 'Fix the login'));
     container
-        .read(scheduledResumeDaoProvider)
+        .read(resumesDataProvider)
         .replaceFor(
           ScheduledResume(
             id: 'res1',
@@ -300,7 +295,7 @@ void main() {
     tester,
   ) async {
     makeReady();
-    AutomationDao(db).insert(
+    serverOf(container).automationRows.insert(
       nightly().copyWith(schedule: const AutomationSchedule.cron('@daily')),
     );
     await pumpPage(tester);
@@ -395,17 +390,17 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Nightly sweep?'), findsOneWidget);
-    expect(AutomationDao(db).getById('auto1'), isNotNull);
+    expect(serverOf(container).automationRows.getById('auto1'), isNotNull);
 
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(AutomationDao(db).getById('auto1'), isNotNull);
+    expect(serverOf(container).automationRows.getById('auto1'), isNotNull);
 
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(DestructiveButton, 'Delete'));
     await tester.pumpAndSettle();
-    expect(AutomationDao(db).getById('auto1'), isNull);
+    expect(serverOf(container).automationRows.getById('auto1'), isNull);
     expect(find.text('Nightly sweep'), findsNothing);
   });
 
@@ -415,7 +410,10 @@ void main() {
     await pumpPage(tester);
     await tester.tap(find.text('Pause'));
     await tester.pumpAndSettle();
-    expect(AutomationDao(db).getById('auto1')!.enabled, isFalse);
+    expect(
+      serverOf(container).automationRows.getById('auto1')!.enabled,
+      isFalse,
+    );
     expect(find.text('Resume'), findsOneWidget);
   });
 
@@ -433,7 +431,7 @@ void main() {
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
     expect(find.text('flutter test'), findsOneWidget);
-    expect(container.read(projectCheckDaoProvider).countFor('r1'), 1);
+    expect(container.read(projectChecksDataProvider).countFor('r1'), 1);
   });
 
   testWidgets('an empty check is refused before it can be added', (

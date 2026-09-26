@@ -42,7 +42,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **What one keystroke into a focused terminal pane costs the app around it.**
 ///
@@ -108,7 +108,7 @@ import '../../support/workspace_mirror.dart';
 /// `chatTranscriptPollingProvider`, and the two cases at the bottom of this
 /// file that pin both halves: it stops working, and it is still there.
 void main() {
-  late CountingDatabase db;
+  late CountingMachine db;
   late FakeDataServer server;
   late Override data;
   late FakeCommandRunner git;
@@ -143,8 +143,8 @@ void main() {
   final typed = <String>[];
 
   setUp(() async {
-    db = CountingDatabase();
-    server = FakeDataServer()..mirrorInto(db);
+    db = CountingMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     terminals.clear();
     chatSubscriptions.clear();
@@ -159,7 +159,7 @@ void main() {
     // plus a third nothing in this file ever touches, which is what makes a
     // fan-out visible as a per-row bill.
     for (final id in ['s1', 's2', 's3']) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -180,7 +180,7 @@ void main() {
       overrides: [
         data,
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           instanceFactory: _countingFactory(terminals),
         ),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -233,7 +233,6 @@ void main() {
     addTearDown(container.dispose);
     addTearDown(widgets.stop);
   });
-  tearDown(() => db.close());
 
   /// A bounded settle. `pumpAndSettle` never returns against the whole shell —
   /// something always has a frame scheduled — and the measurement only needs
@@ -268,7 +267,7 @@ void main() {
           .layout
           .panes
           .single;
-      mirroredServer(db).sessionRows.updatePaneId(id, paneId);
+      db.server.sessionRows.updatePaneId(id, paneId);
     }
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
 
@@ -287,7 +286,7 @@ void main() {
     await container.read(explorerActionsProvider).openNative('s1');
     await settle(tester);
 
-    final paneId = mirroredServer(db).sessionRows.getById('s1')!.paneId!;
+    final paneId = db.server.sessionRows.getById('s1')!.paneId!;
     final instance = controller.instanceFor(paneId)!;
     // The guard against a false green, and the reason this file can claim a
     // zero at all: a fake pane has no PTY, so without this nothing proves the
@@ -721,7 +720,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           data,
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           chatTranscriptPollIntervalProvider.overrideWithValue(
             const Duration(milliseconds: 5),

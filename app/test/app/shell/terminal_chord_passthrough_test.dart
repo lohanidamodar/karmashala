@@ -3,7 +3,6 @@ import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/conversation_index_database.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -34,19 +34,18 @@ void main() {
   // chord *does*, which is the same on every platform.
   setUp(() => commandKeyIsMeta = false);
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     data = await server.override();
   });
-  tearDown(() => db.close());
 
   /// Boots the whole shell, focuses the terminal pane the workbench opens, and
   /// hands back the container plus everything the pane's process was sent.
@@ -79,7 +78,12 @@ void main() {
         null,
       ),
     );
-    final container = fakeTerminalContainer(database: db, data: data);
+    final container = ProviderContainer(
+      overrides: [
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db, data: data),
+      ],
+    );
     addTearDown(container.dispose);
     // Applied before the first frame, the way a saved setting arrives.
     for (final entry in chordOverrides.entries) {

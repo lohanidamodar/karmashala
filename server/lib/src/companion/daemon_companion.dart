@@ -10,8 +10,9 @@ import 'package:agent_cli/read.dart'
 import 'package:agent_cli/usage.dart' show AgentUsageService, UsageSample;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
-import 'package:karmashala_automations/persistence.dart' show CheckoutRows;
+import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_companion_server/store.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart'
     show DiscoveredRepository, Repository;
@@ -98,6 +99,11 @@ class DaemonCompanion implements CompanionHandler {
     _usage =
         usageService ??
         AgentUsageService(storeLocator: _stores, clock: const SystemClock());
+    // A client's rename, grant or revoke reaches the phones' live links.
+    _dataService.onDevicesWritten = () {
+      final service = _service;
+      if (service != null) unawaited(service.reconcileDevices());
+    };
     final directory = dataDirectory;
     attachments = directory == null
         ? null
@@ -209,7 +215,6 @@ class DaemonCompanion implements CompanionHandler {
 
   CompanionConfig _config = CompanionConfig.off;
   RemoteHostService? _service;
-  void Function(HostMessage)? _appSend;
   Future<void> _chain = Future<void>.value();
   StreamSubscription<LifecycleEvent>? _events;
   StreamSubscription<HostedAgentStatus>? _statuses;
@@ -256,6 +261,7 @@ class DaemonCompanion implements CompanionHandler {
           registry: registry,
           facts: facts,
           newId: _newId,
+          record: _dataService.recordWorktreeSetup,
         ),
       ),
     );
@@ -485,7 +491,6 @@ class DaemonCompanion implements CompanionHandler {
     Uri? localRelay,
     void Function(HostMessage) send,
   ) {
-    _appSend = send;
     app.adopt(owner, send);
     return _serialised(() {
       _localRelay = localRelay;
@@ -527,8 +532,6 @@ class DaemonCompanion implements CompanionHandler {
           kind: kind,
           detail: notice.detail,
         );
-      case CompanionNoticeKind.devicesChanged:
-        await service.reconcileDevices();
       case CompanionNoticeKind.pairingCancelled:
         await service.cancelPairing();
     }
@@ -539,7 +542,6 @@ class DaemonCompanion implements CompanionHandler {
     final wasApp = app.isApp(owner);
     app.detach(owner);
     if (!wasApp) return;
-    _appSend = null;
     // The app's embedded relay closed with it; nothing waits there any more.
     await _serialised(() {
       _localRelay = null;
@@ -610,9 +612,8 @@ class DaemonCompanion implements CompanionHandler {
     await service?.stop();
   }
 
-  void _devicesChanged() => _appSend?.call(
-    const CompanionEventMessage(CompanionEventKind.devicesChanged),
-  );
+  /// Rows this companion wrote itself, told to every client without secrets.
+  void _devicesChanged() => _dataService.announceDevices();
 
   void _sessionsMoved() {
     final service = _service;

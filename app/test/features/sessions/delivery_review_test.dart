@@ -1,7 +1,6 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -13,7 +12,6 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
-import 'package:karmashala_verification/store.dart';
 import 'package:karmashala/src/features/verification/domain/session_verdict.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala/src/features/verification/presentation/review_invitation.dart';
@@ -22,7 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -49,13 +47,13 @@ import '../terminal/fake_instance.dart';
 /// press goes through `ReviewSessionService` rather than a second path the
 /// strip invented — which is what keeps the permission cap on it.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -71,7 +69,6 @@ void main() {
         ),
       );
   });
-  tearDown(() => db.close());
 
   /// Nowhere to continue to: this file is about the review, not the handoff.
   final noContinuation = SessionContinuation(
@@ -87,7 +84,7 @@ void main() {
   );
 
   void insertSession({SessionStatus status = SessionStatus.idle}) =>
-      mirroredServer(db).sessionRows.insert(session(id: 's1', status: status));
+      db.server.sessionRows.insert(session(id: 's1', status: status));
 
   /// A run against session `s1`, open unless [verdict] is given.
   void insertRun({
@@ -95,7 +92,7 @@ void main() {
     VerificationVerdict? verdict,
     DateTime? startedAt,
   }) {
-    final dao = VerificationDao(db);
+    final dao = db.server.verificationRows;
     dao.insertRun(
       VerificationRun(
         id: id,
@@ -121,7 +118,7 @@ void main() {
   Widget strip({bool hostedOnTerminal = false}) => ProviderScope(
     overrides: [
       dataClientProvider.overrideWithValue(data),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('revsid')),
       // Nothing here may shell out: a press launches a real session over fake
@@ -195,9 +192,10 @@ void main() {
       'can read', (tester) async {
     insertSession();
     insertRun(id: 'v1');
-    db.execute(
-      'UPDATE verification_runs SET finished_at = ?, verdict = ? WHERE id = ?;',
-      ['2026-01-02T03:10:00.000Z', 'flaky', 'v1'],
+    // A verdict word this build cannot read arrives as none on a finished run.
+    db.server.verificationRows.finishRun(
+      'v1',
+      finishedAt: DateTime.utc(2026, 1, 2, 3, 10),
     );
     await pump(tester);
 
@@ -248,7 +246,7 @@ void main() {
 
     // The standing rule, asserted where it is easiest to break: the offer is
     // computed on every rebuild and starts nothing by existing.
-    expect(mirroredServer(db).sessionRows.getAll(), hasLength(1));
+    expect(db.server.sessionRows.getAll(), hasLength(1));
   });
 
   testWidgets('the press is the say-so, and it goes through the one review '
@@ -261,9 +259,9 @@ void main() {
 
     // Launched by `ReviewSessionService`, not by anything the strip invented:
     // the row it writes is the one that carries the capped permission.
-    final review = mirroredServer(
-      db,
-    ).sessionRows.getAll().firstWhere((s) => s.id != 's1');
+    final review = db.server.sessionRows.getAll().firstWhere(
+      (s) => s.id != 's1',
+    );
     expect(review.parentSessionId, 's1');
     expect(review.parentLink, SessionLink.spawn);
     expect(review.agentInstallationId, 'a2');

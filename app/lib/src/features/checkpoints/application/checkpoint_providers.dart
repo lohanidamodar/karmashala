@@ -1,7 +1,6 @@
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -10,16 +9,13 @@ import '../../git/application/parsed_diff.dart';
 import 'package:agent_cli/process.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-
-final checkpointDaoProvider = Provider<CheckpointDao>(
-  (ref) => CheckpointDao(ref.watch(databaseProvider)),
-);
+import '../data/checkpoints_data.dart';
 
 final checkpointServiceProvider = Provider<CheckpointService>(
   (ref) => CheckpointService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     environmentOf: ref.watch(environmentsDataProvider).getById,
-    dao: ref.watch(checkpointDaoProvider),
+    records: ref.watch(checkpointsDataProvider),
     clock: ref.watch(clockProvider),
     newId: () => ref.read(idGeneratorProvider).newId(),
   ),
@@ -35,11 +31,18 @@ EnvironmentPath? checkpointTargetFor(Ref ref, String sessionId) {
   return ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
 }
 
-/// Bumped whenever a checkpoint is written, so views refresh without polling.
+/// Moves whenever a checkpoint is recorded or pruned — here or by another
+/// client — so views refresh without polling.
 class CheckpointsRevisionController extends Notifier<int> {
   @override
-  int build() => 0;
-  void bump() => state = state + 1;
+  int build() {
+    final listening = ref
+        .watch(checkpointsDataProvider)
+        .changes
+        .listen((_) => state = state + 1);
+    ref.onDispose(listening.cancel);
+    return 0;
+  }
 }
 
 final checkpointsRevisionProvider =
@@ -49,14 +52,13 @@ final checkpointsRevisionProvider =
 
 /// Checkpoints for [sessionId], newest first. `autoDispose` and read only by
 /// the panel: it re-reads when the revision moves, never on a tick.
-final sessionCheckpointsProvider = Provider.autoDispose
-    .family<List<Checkpoint>, String>((ref, sessionId) {
+final sessionCheckpointsProvider = FutureProvider.autoDispose
+    .family<List<Checkpoint>, String>((ref, sessionId) async {
       ref.watch(checkpointsRevisionProvider);
-      return ref
-          .watch(checkpointDaoProvider)
-          .forSession(sessionId)
-          .reversed
-          .toList();
+      final chain = await ref
+          .watch(checkpointsDataProvider)
+          .forSession(sessionId);
+      return chain.reversed.toList();
     });
 
 /// What [checkpoint] changed, read from git once and parsed once. A future in

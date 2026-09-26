@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
@@ -49,7 +48,6 @@ class _CannedService extends WorktreeCleanupService {
 }
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late ProviderContainer container;
   late _CannedService service;
@@ -67,7 +65,6 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -100,17 +97,14 @@ void main() {
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(),
         data,
         clockProvider.overrideWithValue(clock),
         worktreeCleanupServiceProvider.overrideWithValue(service),
       ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   Future<void> pumpPage(WidgetTester tester, Size size) async {
     tester.view.physicalSize = size;

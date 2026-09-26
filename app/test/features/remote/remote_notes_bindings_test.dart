@@ -1,11 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/remote/application/remote_notes_bindings.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
@@ -13,21 +11,17 @@ import '../../support/fixtures.dart';
 /// `notes.get` on the desktop: the notes and todos the panels show, in their
 /// order, with project names rather than ids.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
   });
-  tearDown(() => db.close());
 
   Future<RemoteNotesSnapshot> read({bool notesEnabled = true}) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         notesEnabledProvider.overrideWithValue(notesEnabled),
       ],

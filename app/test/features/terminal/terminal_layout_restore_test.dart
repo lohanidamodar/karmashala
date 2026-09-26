@@ -1,4 +1,4 @@
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -30,10 +30,10 @@ void main() {
 
   group('layout persistence', () {
     test('a saved layout comes back as tabs, panes and scrollback', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
+      final first = fakeTerminalContainer(layoutStore: db);
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
       );
@@ -52,7 +52,10 @@ void main() {
       // With the launch restart off, which is the shape this test is about:
       // what the *store* round-trips, uncoloured by what is then done with it.
       // That a live pane comes back live is `pane_restart_on_launch_test.dart`.
-      final next = fakeTerminalContainer(database: db, restoreLivePanes: false);
+      final next = fakeTerminalContainer(
+        layoutStore: db,
+        restoreLivePanes: false,
+      );
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       final restoredController = next.read(
@@ -84,7 +87,7 @@ void main() {
     });
 
     test('a corrupt stored layout falls back to no tabs, not a crash', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       db.execute(
         'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
@@ -92,7 +95,7 @@ void main() {
         ['bad', 0, 'not-json', null, 1, '2026-01-01T00:00:00.000Z'],
       );
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
     });
@@ -100,10 +103,10 @@ void main() {
     test(
       'a pane whose profile no longer resolves is dropped, tab survives',
       () {
-        final db = AppDatabase.memory();
+        final db = TerminalLayoutStore.memory();
         addTearDown(db.close);
 
-        final first = fakeTerminalContainer(database: db);
+        final first = fakeTerminalContainer(layoutStore: db);
         final controller = first.read(
           terminalSessionsControllerProvider.notifier,
         );
@@ -126,7 +129,7 @@ void main() {
           paneId,
         ]);
 
-        final next = fakeTerminalContainer(database: db);
+        final next = fakeTerminalContainer(layoutStore: db);
         addTearDown(next.dispose);
         final restored = next.read(terminalSessionsControllerProvider);
         expect(restored.tabs.length, 1);
@@ -148,10 +151,10 @@ void main() {
     });
 
     test('closing every tab clears the stored layout', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
@@ -187,10 +190,10 @@ void main() {
     });
 
     test('autosave writes only the panes whose buffers changed', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
-      final container = fakeTerminalContainer(database: db);
+      final container = fakeTerminalContainer(layoutStore: db);
       addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,

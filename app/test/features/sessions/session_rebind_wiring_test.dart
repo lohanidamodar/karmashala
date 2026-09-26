@@ -4,8 +4,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
@@ -19,7 +17,6 @@ import 'package:karmashala_session/session.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:agent_cli/process.dart';
 
@@ -31,7 +28,6 @@ import 'package:agent_cli/process.dart';
 /// finished while its agent worked. Nothing noticed, because adoption skips
 /// any pane the app launched itself.
 void main() {
-  late AppDatabase db;
   late AgentHookReports reports;
   late FakeDataServer server;
   ProviderContainer? current;
@@ -42,8 +38,7 @@ void main() {
       current?.read(sessionsDataProvider) ?? server.sessionRows;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
@@ -53,8 +48,6 @@ void main() {
     current = null;
     reports = AgentHookReports();
   });
-
-  tearDown(() => db.close());
 
   /// A row in a pane the app launched, on conversation `cli-<id>`.
   void launched(String id, {required String paneId}) =>
@@ -86,7 +79,6 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(clock ?? FixedClock(testTime)),
         agentHookReportsProvider.overrideWithValue(reports),
         adoptablePanesProvider.overrideWithValue(

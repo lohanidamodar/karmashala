@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
@@ -13,7 +12,7 @@ import 'package:karmashala/src/features/sessions/application/session_outcome_wri
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -210,15 +209,15 @@ void main() {
   });
 
   group('writing the row', () {
-    late AppDatabase db;
+    late TestMachine db;
     // The writer's own copy of the server's rows; seeded at the server.
     late SessionsData dao;
     late SessionOutcomeWriter writer;
     late FakeDataServer server;
 
     setUp(() async {
-      db = AppDatabase.memory();
-      server = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
@@ -228,8 +227,6 @@ void main() {
       dao = await sessionsOf(server);
       writer = SessionOutcomeWriter(sessionDao: dao);
     });
-
-    tearDown(() => db.close());
 
     void live(String id, {SessionStatus status = SessionStatus.running}) =>
         server.sessionRows.insert(
@@ -339,7 +336,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           await server.override(),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],
       );
@@ -397,7 +394,7 @@ void main() {
         container = ProviderContainer(
           overrides: [
             await server.override(),
-            ...fakeTerminalOverrides(database: db),
+            ...fakeTerminalOverrides(machine: db),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],
         );

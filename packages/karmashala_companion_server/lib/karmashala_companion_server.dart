@@ -1,7 +1,6 @@
 /// The desk end of a phone's link. The session host runs the server and
 /// answers from the store and its screens; a connected desktop app answers
-/// what only it can, over calls the host forwards. Where there is no host, the
-/// app runs the same server itself.
+/// what only it can, over calls the host forwards.
 library;
 
 export 'src/domain/agent_options.dart';
@@ -22,6 +21,6 @@ export 'src/service/screen_transcripts.dart';
 export 'src/service/sessions_at_rest.dart';
 export 'src/service/usage_snapshot.dart';
 export 'src/store/companion_attachment_store.dart';
-export 'src/store/host_identity.dart';
+export 'src/store/memory_paired_devices.dart';
 export 'src/store/workspace_names.dart';
 export 'src/store/workspace_rows.dart';

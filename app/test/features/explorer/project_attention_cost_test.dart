@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -8,12 +6,11 @@ import 'package:karmashala/src/features/explorer/application/session_diff_stat.d
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// What one attention-inbox publication costs across project headers.
 ///
@@ -25,9 +22,8 @@ void main() {
     test(
       '$count projects: one waiting session recomputes one summary',
       () async {
-        final db = _CountingDatabase();
-        addTearDown(db.close);
-        final server = FakeDataServer()..mirrorInto(db);
+        final db = CountingMachine();
+        final server = FakeDataServer()..runsOn(db);
         server.environmentRows.upsert(windowsEnv());
         server.installationRows.insert(agentInstallation());
         for (var i = 0; i < count; i++) {
@@ -57,7 +53,6 @@ void main() {
 
         final container = ProviderContainer(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             await server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],
@@ -76,7 +71,7 @@ void main() {
             subscription.close();
           }
         });
-        db.queries = 0;
+        db.reset();
 
         const watched = WatchedSession(
           key: AgentSessionKey('claudeCode', 'external-0'),
@@ -101,34 +96,17 @@ void main() {
 
         // ignore: avoid_print
         print(
-          'PROJECT-ATTENTION-COST projects=$count queries=${db.queries} '
+          'PROJECT-ATTENTION-COST projects=$count requests=${db.count} '
           'published=${published.length}',
         );
         // The session counts come from this app's copy of the server's rows
-        // since slice 1c, so no summary asks the database anything; what is
+        // since slice 1c, so no summary asks the server anything; what is
         // left to count is which headers moved.
-        expect(db.queries, 0, reason: 'the sessions are read from the copy');
-        expect(
-          published,
-          ['p0'],
-          reason: 'one project changed, so unrelated summaries must not move',
-        );
+        expect(db.count, 0, reason: 'the sessions are read from the copy');
+        expect(published, [
+          'p0',
+        ], reason: 'one project changed, so unrelated summaries must not move');
       },
     );
-  }
-}
-
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int queries = 0;
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    queries++;
-    return super.query(sql, params);
   }
 }

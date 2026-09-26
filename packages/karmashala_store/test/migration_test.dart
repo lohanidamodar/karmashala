@@ -14,9 +14,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 58);
+    expect(db.schemaVersion, 59);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 58);
+    expect(version, 59);
     final indexes = db.query("PRAGMA index_list('sessions');");
     expect(indexes.map((row) => row['name']), contains('idx_sessions_pane'));
     expect(
@@ -71,8 +71,6 @@ void main() {
         'imported_sessions',
         'claude_accounts',
         'codex_accounts',
-        'terminal_tabs',
-        'terminal_panes',
         'ssh_hosts',
         'ssh_known_hosts',
         'fanout_comparisons',
@@ -134,29 +132,16 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 58);
+    expect(db.schemaVersion, 59);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });
 
-  test('v9 gives terminal_tabs the detached flag, defaulted off', () {
-    final columns = db
-        .query('PRAGMA table_info(terminal_tabs);')
-        .map((r) => r['name']! as String)
-        .toList();
-    expect(columns, contains('detached'));
-
-    // An old row written without the column must read back as "a real tab",
-    // never as a background session that vanishes from the tab bar.
-    db.execute(
-      'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
-      'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
-      ['t', 0, '{"type":"leaf","id":"p"}', 'p', 1, '2026-01-01T00:00:00.000Z'],
-    );
-    expect(
-      db.query('SELECT detached FROM terminal_tabs;').single['detached'],
-      0,
-    );
+  test('v59 leaves the terminal layout to each client', () {
+    // Presets are shared, and stay.
+    expect(tableNames().where((name) => name.startsWith('terminal_')), [
+      'terminal_presets',
+    ]);
   });
 
   test('v11 gives sessions a nullable permission mode with no default', () {

@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:karmashala_store/database.dart';
+
+import '../service/automation_records.dart';
 import '../domain/project_check.dart';
 
 /// The per-checkout verification the unattended gate refuses without: whether
 /// it is on, and what it runs.
-class ProjectCheckDao {
+class ProjectCheckDao implements ProjectCheckRecords {
   ProjectCheckDao(this._db);
 
   final AppDatabase _db;
@@ -14,6 +16,7 @@ class ProjectCheckDao {
 
   /// Whether verification is on for [repositoryId]. No row means off, not
   /// unknown: reading a checkout's silence as consent is what the gate stops.
+  @override
   bool isVerificationEnabled(String repositoryId) {
     final rows = _db.query(
       'SELECT enabled FROM project_verification WHERE repository_id = ?;',
@@ -33,6 +36,7 @@ class ProjectCheckDao {
     [repositoryId, intFromBool(enabled), isoFromDate(now)],
   );
 
+  @override
   Set<String> verifiedRepositories() => {
     for (final row in _db.query(
       'SELECT repository_id FROM project_verification WHERE enabled = 1;',
@@ -57,6 +61,7 @@ class ProjectCheckDao {
   void delete(String id) =>
       _db.execute('DELETE FROM project_checks WHERE id = ?;', [id]);
 
+  @override
   List<ProjectCheck> forRepository(String repositoryId) => _db
       .query(
         'SELECT * FROM project_checks WHERE repository_id = ? '
@@ -66,8 +71,20 @@ class ProjectCheckDao {
       .map(_check)
       .toList();
 
+  ProjectCheck? getById(String id) {
+    final rows = _db.query('SELECT * FROM project_checks WHERE id = ?;', [id]);
+    return rows.isEmpty ? null : _check(rows.first);
+  }
+
+  /// Every checkout's checks, in each checkout's order.
+  List<ProjectCheck> all() => _db
+      .query('SELECT * FROM project_checks ORDER BY created_at, id;')
+      .map(_check)
+      .toList();
+
   /// How many checks [repositoryId] has. One query, because the gate asks this
   /// on every arm and every fire and never needs the commands themselves.
+  @override
   int countFor(String repositoryId) {
     final rows = _db.query(
       'SELECT COUNT(*) AS n FROM project_checks WHERE repository_id = ?;',

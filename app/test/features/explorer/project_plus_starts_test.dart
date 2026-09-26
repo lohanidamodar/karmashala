@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
@@ -10,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
@@ -31,12 +30,12 @@ import '../terminal/fake_instance.dart';
 void main() {
   const plus = 'Start a session here with the default agent';
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
-  AppDatabase seed({bool withAgent = true}) {
-    final database = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(database);
+  TestMachine seed({bool withAgent = true}) {
+    final database = TestMachine();
+    server = FakeDataServer()..runsOn(database);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(name: 'Alpha', path: r'C:\src\alpha'));
     server.repositoryRows.insert(
@@ -46,12 +45,10 @@ void main() {
     return database;
   }
 
-  tearDown(() => db.close());
-
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         // A session card asks git what its checkout has changed, and the
         // picker asks it which rows are worktrees. Neither may spawn one.
@@ -93,7 +90,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NewSessionDialog), findsNothing);
-    final started = mirroredServer(db).sessionRows.getByRepository('r1');
+    final started = db.server.sessionRows.getByRepository('r1');
     expect(started, hasLength(1));
     expect(
       started.single.agentInstallationId,
@@ -127,7 +124,7 @@ void main() {
 
     expect(find.byType(NewSessionDialog), findsOneWidget);
     expect(
-      mirroredServer(db).sessionRows.getByRepository('r1'),
+      db.server.sessionRows.getByRepository('r1'),
       isEmpty,
       reason: 'the dialog has not been told to start anything yet',
     );
@@ -155,7 +152,7 @@ void main() {
           'the defaults could not answer "which agent", so the button asks '
           'rather than guessing',
     );
-    expect(mirroredServer(db).sessionRows.getByRepository('r1'), isEmpty);
+    expect(db.server.sessionRows.getByRepository('r1'), isEmpty);
     expect(find.textContaining('No agent is installed in'), findsOneWidget);
   });
 }

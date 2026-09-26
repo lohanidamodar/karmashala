@@ -21,7 +21,6 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 
@@ -29,7 +28,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// A disk that is a map, and keeps what it was asked for. A branch name is
@@ -69,7 +68,7 @@ class HeadFiles implements GitFiles {
 /// repository, on this machine, for a row that is built, and again only when
 /// something that moves a branch has happened.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late HeadFiles files;
   late FakeCommandRunner git;
@@ -122,7 +121,7 @@ void main() {
     add('mono', 'mono', '/w/mono', repositories: ['/w/mono/a', '/w/mono/b']);
     add('distro', 'distro', '/home/me/distro', environmentId: 'wsl:Ubuntu');
     add('relay', 'relay', '/srv/relay', environmentId: 'ssh:h1');
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r-app-0',
@@ -137,8 +136,8 @@ void main() {
   }
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     files = HeadFiles({
       '/w/app/.git/HEAD': 'ref: refs/heads/main\n',
       '/w/app-polish/.git': 'gitdir: /w/app/.git/worktrees/app-polish\n',
@@ -159,7 +158,6 @@ void main() {
           : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
     );
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(
     WidgetTester tester, {
@@ -175,7 +173,7 @@ void main() {
     alsoSeed?.call();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db, gitFiles: files),
+        ...fakeTerminalOverrides(machine: db, gitFiles: files),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

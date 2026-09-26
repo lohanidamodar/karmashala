@@ -2,8 +2,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -32,7 +30,6 @@ import '../../support/fixtures.dart';
 /// Counted, never timed: a scan either happened or it did not, and that is
 /// deterministic on any machine.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late ProviderContainer container;
   late int scans;
@@ -41,15 +38,13 @@ void main() {
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     scans = 0;
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(),
@@ -66,7 +61,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   void seed({int projects = 3}) {
     for (var i = 0; i < projects; i++) {

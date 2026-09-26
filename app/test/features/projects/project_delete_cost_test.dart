@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -14,12 +12,12 @@ import 'package:karmashala/src/features/projects/application/cli_store_purge.dar
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/temp_directory.dart';
+import '../../support/test_machine.dart';
 
 /// **What deleting a project costs, counted.**
 ///
@@ -58,8 +56,8 @@ void main() {
   /// A workspace of [count] imported sessions in one project, half Claude and
   /// half Codex, each with a real transcript and a real index entry — so the
   /// store work being counted is the work the app really does.
-  _CountingDatabase seed(int count) {
-    final db = _CountingDatabase();
+  CountingMachine seed(int count) {
+    final db = CountingMachine();
     // Not mirrored: the rows are the server's, and every `DELETE` counted
     // below is one this app issued itself.
     server = FakeDataServer(clock: () => testTime);
@@ -112,12 +110,11 @@ void main() {
   }
 
   Future<({ProviderContainer container, CliSessionMutator mutator})> mount(
-    _CountingDatabase db,
+    CountingMachine db,
   ) async {
     final mutator = CliSessionMutator();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(mutator),
@@ -133,7 +130,6 @@ void main() {
     for (final count in scale) {
       test('$count sessions', () async {
         final db = seed(count);
-        addTearDown(db.close);
         final (:container, :mutator) = await mount(db);
 
         var publishes = 0;
@@ -153,7 +149,6 @@ void main() {
           storeScans: mutator.storeScans,
           indexEntriesRead: mutator.indexEntriesRead,
           indexWrites: mutator.indexWrites,
-          rowDeletes: db.rowDeletes,
           serverDeletes: server.requests
               .skip(asked)
               .where((kind) => kind.endsWith('.delete'))
@@ -198,17 +193,12 @@ void main() {
       }
 
       // The server's cascade removes every session and history row, so the
-      // delete is one request — and no per-session `DELETE` of this app's own.
+      // delete is one request.
       for (final count in scale) {
         expect(
           measured[count]!.serverDeletes,
           1,
           reason: 'at $count sessions: the project, whose cascade is the rest',
-        );
-        expect(
-          measured[count]!.rowDeletes,
-          lessThanOrEqualTo(2),
-          reason: 'at $count sessions: nothing per session in this app',
         );
       }
 
@@ -230,7 +220,6 @@ class _Cost {
     required this.storeScans,
     required this.indexEntriesRead,
     required this.indexWrites,
-    required this.rowDeletes,
     required this.serverDeletes,
     required this.publishes,
   });
@@ -238,35 +227,13 @@ class _Cost {
   final int storeScans;
   final int indexEntriesRead;
   final int indexWrites;
-  final int rowDeletes;
   final int serverDeletes;
   final int publishes;
 
   @override
   String toString() =>
       '(scans: $storeScans, entries: $indexEntriesRead, '
-      'indexWrites: $indexWrites, rowDeletes: $rowDeletes, '
+      'indexWrites: $indexWrites, '
       'serverDeletes: $serverDeletes, '
       'publishes: $publishes)';
-}
-
-/// Counts the statements a delete issues. `package:sqlite3` is synchronous, so
-/// each one of these runs on the UI isolate inside the frame.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int rowDeletes = 0;
-  int statements = 0;
-
-  void reset() {
-    rowDeletes = 0;
-    statements = 0;
-  }
-
-  @override
-  void execute(String sql, [List<Object?> params = const []]) {
-    statements++;
-    if (sql.trimLeft().toUpperCase().startsWith('DELETE')) rowDeletes++;
-    super.execute(sql, params);
-  }
 }

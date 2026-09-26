@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart' show CodexStoreServerClient;
@@ -10,10 +8,8 @@ import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.d
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
@@ -30,7 +26,6 @@ import 'package:karmashala/src/features/agents/data/agents_data.dart';
 /// the thread id as `externalSessionId`, and `thread/name/set` wants nothing
 /// else, so this costs no walk over the CLI stores.
 void main() {
-  late AppDatabase db;
   late EnvironmentsData environments;
   late AgentInstallationsData installations;
   late FakeCodexAppServer server;
@@ -38,10 +33,9 @@ void main() {
   late FakeDataServer data;
 
   setUp(() async {
-    db = AppDatabase(sqlite3.openInMemory());
     server = FakeCodexAppServer();
     runner = FakeCommandRunner(processFactory: (_) => server);
-    data = FakeDataServer()..mirrorInto(db);
+    data = FakeDataServer();
     environments = EnvironmentsData(await data.connect());
     installations = AgentInstallationsData(await data.connect());
     data.environmentRows.upsert(windowsEnv());
@@ -49,7 +43,6 @@ void main() {
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
   });
-  tearDown(() => db.close());
 
   void seedSession({
     String agentId = AgentIds.codex,
@@ -64,7 +57,6 @@ void main() {
   Future<ProviderContainer> mount() async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await data.override(),
         agentStoreServersProvider.overrideWithValue(
           AgentStoreServers(
@@ -149,7 +141,6 @@ void main() {
       seedSession();
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await data.override(),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),

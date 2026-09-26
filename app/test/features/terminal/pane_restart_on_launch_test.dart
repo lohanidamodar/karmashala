@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -88,7 +88,7 @@ void main() {
 
   group('a pane that was live at close', () {
     test('comes back running, with its history above the new process', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       final paneId = _closeWith(db, (container, controller) {
@@ -98,7 +98,7 @@ void main() {
         );
       }).single;
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       final instance = next
@@ -115,14 +115,17 @@ void main() {
     });
 
     test('is not restarted when the setting is off', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       final paneId = _closeWith(db, (container, controller) {
         controller.openTab(TerminalProfile.powerShell);
       }).single;
 
-      final next = fakeTerminalContainer(database: db, restoreLivePanes: false);
+      final next = fakeTerminalContainer(
+        layoutStore: db,
+        restoreLivePanes: false,
+      );
       addTearDown(next.dispose);
       expect(
         next.read(terminalSessionsControllerProvider).livenessOf(paneId),
@@ -133,7 +136,7 @@ void main() {
 
   group('a pane that was not running at close', () {
     test('one whose process had already exited stays a record', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       final paneId = _closeWith(db, (container, controller) {
@@ -142,7 +145,7 @@ void main() {
         (pane as FakeTerminalInstance).exitWith(1);
       }).single;
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       expect(
         next.read(terminalSessionsControllerProvider).livenessOf(paneId),
@@ -151,7 +154,7 @@ void main() {
     });
 
     test('one the user never started stays a record over two restarts', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       // Closed while dead, so the first restore leaves it dormant...
@@ -164,14 +167,14 @@ void main() {
 
       // ...and that dormant pane's own save must not claim it was running,
       // or the second launch would start what the first correctly did not.
-      final second = fakeTerminalContainer(database: db);
+      final second = fakeTerminalContainer(layoutStore: db);
       expect(
         second.read(terminalSessionsControllerProvider).livenessOf(paneId),
         PaneLiveness.restored,
       );
       second.dispose();
 
-      final third = fakeTerminalContainer(database: db);
+      final third = fakeTerminalContainer(layoutStore: db);
       addTearDown(third.dispose);
       expect(
         third.read(terminalSessionsControllerProvider).livenessOf(paneId),
@@ -182,7 +185,7 @@ void main() {
 
   group('scope', () {
     test('only the tab that was active starts; the others keep their Start', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       late String background;
@@ -200,7 +203,7 @@ void main() {
         ).single;
       });
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       expect(restored.livenessOf(foreground), PaneLiveness.live);
@@ -208,7 +211,7 @@ void main() {
     });
 
     test('every pane of the active tab starts, not only the focused one', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       final panes = _closeWith(db, (container, controller) {
@@ -219,7 +222,7 @@ void main() {
         );
       });
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       expect(panes.length, 2);
@@ -229,7 +232,7 @@ void main() {
     });
 
     test('a detached session is not started — it is in no tab at all', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       late String paneId;
@@ -241,7 +244,7 @@ void main() {
         controller.closeTab(tabId);
       });
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       expect(restored.detached.map((s) => s.paneId), [paneId]);
@@ -251,7 +254,7 @@ void main() {
 
   group('an agent pane', () {
     /// A live agent pane and a live shell, both in the active tab, at close.
-    List<String> closeWithAnAgentAndAShell(AppDatabase db) =>
+    List<String> closeWithAnAgentAndAShell(TerminalLayoutStore db) =>
         _closeWith(db, (container, controller) {
           controller.openAgentTab(
             const AgentPaneLaunch(
@@ -268,11 +271,11 @@ void main() {
         });
 
     test('never starts itself, while the shell beside it does', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       final panes = closeWithAnAgentAndAShell(db);
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       final controller = next.read(terminalSessionsControllerProvider.notifier);
@@ -292,11 +295,14 @@ void main() {
     });
 
     test('is equally not started with the setting off', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       final panes = closeWithAnAgentAndAShell(db);
 
-      final next = fakeTerminalContainer(database: db, restoreLivePanes: false);
+      final next = fakeTerminalContainer(
+        layoutStore: db,
+        restoreLivePanes: false,
+      );
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       for (final pane in panes) {
@@ -307,7 +313,7 @@ void main() {
 
   group('a pane that cannot start', () {
     test('says so, rather than looking like a shell waiting for input', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
       final paneId = _closeWith(db, (container, controller) {
         controller.openTab(TerminalProfile.powerShell);
@@ -315,7 +321,7 @@ void main() {
 
       final next = ProviderContainer(
         overrides: fakeTerminalOverrides(
-          database: db,
+          layoutStore: db,
           instanceFactory: _failedSpawnFactory,
         ),
       );
@@ -341,7 +347,7 @@ void main() {
     test(
       'a factory that throws costs the pane its process, not the layout',
       () {
-        final db = AppDatabase.memory();
+        final db = TerminalLayoutStore.memory();
         addTearDown(db.close);
         final paneId = _closeWith(db, (container, controller) {
           controller.openTab(TerminalProfile.powerShell);
@@ -349,7 +355,7 @@ void main() {
 
         final next = ProviderContainer(
           overrides: fakeTerminalOverrides(
-            database: db,
+            layoutStore: db,
             instanceFactory: _throwingFactory,
           ),
         );
@@ -379,7 +385,7 @@ void main() {
 void _restoreOnActivateTests() {
   group('a background tab', () {
     test('starts what it was left running, when it is opened', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       late String background;
@@ -391,7 +397,7 @@ void _restoreOnActivateTests() {
         controller.openTab(TerminalProfile.commandPrompt);
       });
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       expect(
@@ -412,7 +418,7 @@ void _restoreOnActivateTests() {
 
     test('costs nothing while nobody opens it', () {
       // The whole reason the launch rule stopped at the active tab.
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       late String background;
@@ -424,7 +430,7 @@ void _restoreOnActivateTests() {
         controller.openTab(TerminalProfile.commandPrompt);
       });
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
 
       expect(
@@ -438,7 +444,7 @@ void _restoreOnActivateTests() {
       // starting one re-runs its recorded command — tokens spent and tools run
       // because a tab was clicked — and steals the pane a proper `--resume` is
       // looking for.
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       late String agentPane;
@@ -457,7 +463,7 @@ void _restoreOnActivateTests() {
         controller.openTab(TerminalProfile.commandPrompt);
       });
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       next.read(terminalSessionsControllerProvider.notifier).activateTab(tabId);
 
@@ -468,7 +474,7 @@ void _restoreOnActivateTests() {
     });
 
     test('does not start a pane the user had already stopped', () {
-      final db = AppDatabase.memory();
+      final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
       late String pane;
@@ -481,7 +487,7 @@ void _restoreOnActivateTests() {
         controller.openTab(TerminalProfile.commandPrompt);
       });
 
-      final next = fakeTerminalContainer(database: db);
+      final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       next.read(terminalSessionsControllerProvider.notifier).activateTab(tabId);
 
@@ -494,14 +500,14 @@ void _restoreOnActivateTests() {
 }
 
 List<String> _closeWith(
-  AppDatabase db,
+  TerminalLayoutStore db,
   void Function(
     ProviderContainer container,
     TerminalSessionsController controller,
   )
   body,
 ) {
-  final container = fakeTerminalContainer(database: db);
+  final container = fakeTerminalContainer(layoutStore: db);
   final controller = container.read(
     terminalSessionsControllerProvider.notifier,
   );

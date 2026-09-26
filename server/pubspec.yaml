@@ -33,6 +33,9 @@ dependencies:
   # The base checkpoint an automation run is undone to.
   karmashala_checkpoints:
     path: ../packages/karmashala_checkpoints
+  # Fan-out comparisons: the server keeps their tables.
+  karmashala_comparisons:
+    path: ../packages/karmashala_comparisons
   karmashala_core:
     path: ../packages/karmashala_core
   karmashala_git:
@@ -97,6 +100,9 @@ dependencies:
   # its only caller, against the store the app passes with `--data-dir`.
   karmashala_session_engine:
     path: ../packages/karmashala_session_engine
+  # Command snippets and saved presets: their DAOs, behind the data API.
+  karmashala_snippets:
+    path: ../packages/karmashala_snippets
   karmashala_store:
     path: ../packages/karmashala_store
   path: ^1.9.1

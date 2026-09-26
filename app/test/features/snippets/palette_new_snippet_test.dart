@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -11,10 +10,11 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/test_machine.dart';
+import '../../support/conversation_index_database.dart';
 
 /// The palette's "New command snippet…" writes the snippet the user wrote.
 ///
@@ -34,26 +34,28 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 /// test is the whole reason to keep it that way: nothing else notices, because
 /// the exception is swallowed by the dialog's own future.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late Override data;
 
+  late TestMachine db;
+
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    // Quick Open catches up the conversation index, still in the store (1f).
+    db = TestMachine();
+    server = FakeDataServer();
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     data = await server.override();
   });
-  tearDown(() => db.close());
 
   testWidgets('"New command snippet…" in the palette actually saves one', (
     tester,
   ) async {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db, data: data),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db, data: data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );

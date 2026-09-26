@@ -5,7 +5,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
-import '../../verification/application/verification_providers.dart';
+import '../../verification/data/verification_data.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -160,7 +160,7 @@ class FollowUpService {
   }
 
   List<VerificationRun> _runsFor(String sessionId) =>
-      _ref.read(verificationDaoProvider).listRuns(sessionId: sessionId);
+      _ref.read(verificationDataProvider).headersOf(sessionId);
 
   /// The source's **own words** for what was left, or null, which renders as
   /// "not recorded". The framing around a quote is ours; the sentence never is.

@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -11,7 +10,7 @@ import 'fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// What a terminal tab is called.
@@ -60,14 +59,14 @@ void main() {
   });
 
   group('through the controller', () {
-    late AppDatabase db;
+    late TestMachine db;
     late ProviderContainer container;
     late TerminalSessionsController controller;
 
     setUp(() async {
-      db = AppDatabase.memory();
+      db = TestMachine();
       // A session row has foreign keys into all of these.
-      final server = FakeDataServer().mirrorInto(db);
+      final server = FakeDataServer().runsOn(db);
       server.environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
@@ -77,7 +76,7 @@ void main() {
       server.installationRows.insert(agentInstallation());
       container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
         ],
       );
@@ -85,7 +84,6 @@ void main() {
     });
     tearDown(() {
       container.dispose();
-      db.close();
     });
 
     test('renaming a session renames its tab, with no reopen', () {

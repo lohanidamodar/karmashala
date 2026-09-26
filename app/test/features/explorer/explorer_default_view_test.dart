@@ -4,21 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **The Explorer's default view, as a reader perceives it**, frozen: every
 /// semantics node under the panel with its words and its rectangle.
@@ -38,12 +36,12 @@ import '../../support/workspace_mirror.dart';
 const _goldenPath = 'test/features/explorer/explorer_default_view.golden.txt';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.installationRows.insert(agentInstallation());
     server.projectRows
@@ -71,7 +69,7 @@ void main() {
       ('s2', 'r1', SessionStatus.completed),
       ('s3', 'r2', SessionStatus.running),
     ]) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: repo,
@@ -84,7 +82,6 @@ void main() {
       );
     }
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -92,7 +89,6 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),

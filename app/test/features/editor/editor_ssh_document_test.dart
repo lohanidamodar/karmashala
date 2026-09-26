@@ -26,8 +26,8 @@ import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_remote_files.dart';
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _remote = '/home/me/app/lib/main.dart';
 final _id = documentIdOf(
@@ -255,15 +255,14 @@ void main() {
   });
 
   group('in the app', () {
-    late CountingDatabase db;
+    late TestMachine db;
 
     Future<void> mount(WidgetTester tester, {bool view = false}) async {
-      db = CountingDatabase();
-      addTearDown(db.close);
+      db = TestMachine();
       files = _host();
       container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           documentStoreProvider.overrideWithValue(
             DocumentStore(sources: _Sources(SftpDocumentSource(files))),
           ),

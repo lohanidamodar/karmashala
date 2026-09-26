@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
@@ -18,7 +19,7 @@ void main() {
     db = AppDatabase.memory();
     root = Directory.systemTemp.createTempSync('command-checks');
     recorder = CommandCheckRecorder(
-      VerificationDao(db),
+      StoreVerificationRecords(VerificationDao(db)),
       VerificationArtifactStore(root),
       newId: () => 'run-${++ids}',
       now: () => at,

@@ -7,7 +7,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/mcp/terminal_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -18,7 +17,7 @@ import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../features/terminal/fake_instance.dart';
-import '../support/workspace_mirror.dart';
+import '../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// **Does a WSL pane report its own command boundaries?**
@@ -131,14 +130,14 @@ void main() {
   }, timeout: const Timeout(Duration(seconds: 120)));
 
   test('terminal_run gets a real exit code out of a WSL pane', () async {
-    final db = AppDatabase.memory();
-    mirroredServer(db).environmentRows.upsert(
-  localHostEnvironment(const SystemClock().nowUtc()),
-);
+    final db = TestMachine();
+    db.server.environmentRows.upsert(
+      localHostEnvironment(const SystemClock().nowUtc()),
+    );
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           shellIntegration: true,
           // The production factory, so the pane is built by the same code the
           // app runs — including `ptyLaunchFor`'s integrated WSL branch.
@@ -146,7 +145,6 @@ void main() {
         ),
       ],
     );
-    addTearDown(db.close);
     addTearDown(container.dispose);
 
     final controller = container.read(

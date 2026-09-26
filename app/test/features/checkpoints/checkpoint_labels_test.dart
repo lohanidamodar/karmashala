@@ -10,13 +10,12 @@ import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala/src/features/mcp/checkpoint_tools.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// What the Checkpoints panel says about a turn, and about having none.
@@ -223,22 +222,22 @@ void main() {
   });
 
   group('panel', () {
-    late AppDatabase db;
+    late TestMachine db;
     late ProviderContainer container;
 
     setUp(() async {
-      db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      final server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+        localHostEnvironment(FixedClock(testTime).nowUtc()),
+      );
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       server.installationRows.insert(agentInstallation());
-      mirroredServer(db).sessionRows.insert(session());
+      db.server.sessionRows.insert(session());
       container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
           clockProvider.overrideWithValue(FixedClock(now)),
@@ -247,7 +246,6 @@ void main() {
     });
     tearDown(() {
       container.dispose();
-      db.close();
     });
 
     Future<void> pumpPanel(WidgetTester tester) async {
@@ -269,7 +267,7 @@ void main() {
     testWidgets('rows show the turn, the prompt, lines and repository', (
       tester,
     ) async {
-      final dao = CheckpointDao(db);
+      final dao = db.server.checkpointRows;
       dao.insert(
         checkpoint(
           reason: CheckpointReason.turnStart,
@@ -302,7 +300,7 @@ void main() {
     test(
       'checkpoint_list gives an agent the panel\'s title, warning and all',
       () async {
-        CheckpointDao(db).insert(
+        db.server.checkpointRows.insert(
           checkpoint(
             reason: CheckpointReason.turnStart,
             prompt: 'Change the app',

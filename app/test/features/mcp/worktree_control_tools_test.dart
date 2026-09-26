@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -16,7 +15,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 
@@ -30,7 +29,7 @@ import '../terminal/fake_instance.dart';
 /// only once its branch is merged **and** pushed.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
   late FakeCommandRunner git;
@@ -82,14 +81,14 @@ branch refs/heads/$worktreeBranch
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_worktree_tools_');
-    db = AppDatabase.memory();
+    db = TestMachine();
     // Pinned to Windows, not left to the host. Every path in these fixtures is
     // a Windows one (`C:\src\demo\app`), and `worktreePathFor` picks its
     // separator from the *environment's* kind — correctly, since a Mac's
     // checkouts are POSIX paths. Inserting the host's own environment made the
     // two disagree: on a Mac `p.dirname(r'C:\src\demo\app')` is `.`, so the
     // worktree landed at `./.karmashala-worktrees/C:\src\demo\app-mcp`.
-    final fake = FakeDataServer()..mirrorInto(db);
+    final fake = FakeDataServer()..runsOn(db);
     fake.environmentRows.upsert(
       ExecutionEnvironment(
         id: localHostEnvironmentId,
@@ -104,7 +103,7 @@ branch refs/heads/$worktreeBranch
       repository(id: 'r2', name: 'app-feature', path: worktreeRowPath),
     );
     fake.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(
         id: 's1',
         title: 'Work',
@@ -164,7 +163,7 @@ branch refs/heads/$worktreeBranch
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           gitFiles: PlainFolders(plainFolders),
         ),
         await fake.override(),
@@ -184,7 +183,6 @@ branch refs/heads/$worktreeBranch
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
@@ -474,7 +472,7 @@ branch refs/heads/$worktreeBranch
           .layout
           .panes
           .first;
-      mirroredServer(db).sessionRows.updatePaneId('s1', paneId);
+      db.server.sessionRows.updatePaneId('s1', paneId);
 
       final result = await callTool('worktree_remove', {'repositoryId': 'r2'});
 

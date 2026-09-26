@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -25,7 +24,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **Showing one agent's sessions, or two, without losing the rest.**
@@ -51,14 +50,14 @@ void main() {
   /// conversation — the owner's shape in miniature.
   late FakeDataServer server;
 
-  AppDatabase seed({
+  TestMachine seed({
     bool withAntigravity = true,
     bool retiredAgent = false,
     bool failed = false,
     String importedCli = AgentIds.claudeCode,
   }) {
-    final db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    final db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     // The server seeds its built-in sections; the fake starts with none.
     for (final (id, name, kind, position) in const [
       ('section-pinned', 'Pinned', 'pinned', 0),
@@ -81,7 +80,7 @@ void main() {
     agents.insert(
       agentInstallation(id: 'a-agy', agentId: AgentIds.antigravity),
     );
-    final sessions = mirroredServer(db).sessionRows;
+    final sessions = db.server.sessionRows;
     final status = failed ? SessionStatus.failed : SessionStatus.running;
     sessions.insert(
       session(
@@ -127,7 +126,7 @@ void main() {
         ),
       );
     }
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i-claude',
         repositoryId: 'r1',
@@ -145,10 +144,10 @@ void main() {
     return db;
   }
 
-  Future<ProviderContainer> mount(AppDatabase db) async {
+  Future<ProviderContainer> mount(TestMachine db) async {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -250,7 +249,6 @@ void main() {
   group("a project's rows", () {
     test('are everything until somebody narrows them', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db);
 
       expect(shown(container), [
@@ -264,7 +262,6 @@ void main() {
 
     test('narrow to one agent, and say how many that cost', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db);
       narrowTo(container, {AgentIds.codex});
 
@@ -280,7 +277,6 @@ void main() {
 
     test('narrow to two, which is the case a section cannot answer', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db);
       narrowTo(container, {AgentIds.codex, AgentIds.antigravity});
 
@@ -289,7 +285,6 @@ void main() {
 
     test('classify imported history rather than exempting it', () async {
       final db = seed();
-      addTearDown(db.close);
       final container = await mount(db);
       narrowTo(container, {AgentIds.claudeCode});
 
@@ -312,7 +307,6 @@ void main() {
 
     test('never hide a session whose agent the workspace cannot name', () async {
       final db = seed(retiredAgent: true);
-      addTearDown(db.close);
       final container = await mount(db);
       narrowTo(container, {AgentIds.codex});
 
@@ -327,7 +321,6 @@ void main() {
 
     test('never hide an agent the registry has never heard of', () async {
       final db = seed(importedCli: 'someOtherCli');
-      addTearDown(db.close);
       final container = await mount(db);
       narrowTo(container, {AgentIds.codex});
 
@@ -345,7 +338,6 @@ void main() {
 
     test('intersect rather than compete', () async {
       final db = seed(withAntigravity: false, failed: true);
-      addTearDown(db.close);
       final container = await mount(db);
       container
           .read(explorerSectionsProvider.notifier)
@@ -372,7 +364,6 @@ void main() {
       'and a section the filter emptied folds away like any other',
       () async {
         final db = seed(withAntigravity: false, failed: true);
-        addTearDown(db.close);
         final container = await mount(db);
         await container.pump();
 
@@ -403,7 +394,7 @@ void main() {
   });
 
   group('the header', () {
-    Future<ProviderContainer> pump(WidgetTester tester, AppDatabase db) async {
+    Future<ProviderContainer> pump(WidgetTester tester, TestMachine db) async {
       tester.view.physicalSize = const Size(460, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -425,7 +416,6 @@ void main() {
       tester,
     ) async {
       final db = seed();
-      addTearDown(db.close);
       final container = await pump(tester, db);
 
       expect(find.text('Codex work'), findsOneWidget);
@@ -454,7 +444,6 @@ void main() {
       tester,
     ) async {
       final db = seed();
-      addTearDown(db.close);
       final container = await pump(tester, db);
       // Off, so the tooltip is about the agents alone — the two clauses are
       // asserted separately rather than as one brittle sentence.
@@ -487,7 +476,6 @@ void main() {
       tester,
     ) async {
       final db = seed(withAntigravity: false);
-      addTearDown(db.close);
       final container = await pump(tester, db);
 
       narrowTo(container, {AgentIds.antigravity});

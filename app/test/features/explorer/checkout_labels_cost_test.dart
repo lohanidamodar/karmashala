@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
@@ -120,18 +118,15 @@ class _GatedRunner extends FakeCommandRunner {
 }
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late _GatedRunner git;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Demo', path: _hub));
     git = _GatedRunner();
   });
-  tearDown(() => db.close());
 
   void insert(List<(String, String)> rows) {
     final dao = server.repositoryRows;
@@ -143,7 +138,6 @@ void main() {
   Future<ProviderContainer> containerWith(GitFiles files) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),

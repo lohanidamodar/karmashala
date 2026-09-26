@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:karmashala_terminal_core/grid.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -22,7 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
@@ -44,15 +43,15 @@ class _StaticSettings extends SettingsController {
   Settings build() => _settings;
 }
 
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
 harness({
   String agentId = AgentIds.claudeCode,
   AgentActivityStatus status = AgentActivityStatus.idle,
   AgentActivityStatus Function()? statusNow,
   Stream<String>? becameIdle,
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -60,7 +59,7 @@ harness({
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
@@ -119,7 +118,6 @@ void main() {
     'idle and slash-capable: the command is sent and the row is written',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
 
@@ -145,7 +143,6 @@ void main() {
     'working: nothing is typed, and the override is still recorded',
     () async {
       final h = await harness(status: AgentActivityStatus.working);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
 
@@ -172,7 +169,6 @@ void main() {
     // `unknown` is the ordinary answer for a session with no hooks, and a key
     // we are not sure lands at a prompt is a key we do not send.
     final h = await harness(status: AgentActivityStatus.unknown);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
 
@@ -188,7 +184,6 @@ void main() {
     'just resumed, no hook yet: the agent\'s own idle footer is enough',
     () async {
       final h = await harness(status: AgentActivityStatus.unknown);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
       final paneId = h.container
@@ -212,7 +207,6 @@ void main() {
 
   test('just resumed, mid-turn on screen: still nothing is typed', () async {
     final h = await harness(status: AgentActivityStatus.unknown);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
     final paneId = h.container
@@ -235,7 +229,6 @@ void main() {
 
   test('an open prompt is not typed into either', () async {
     final h = await harness(status: AgentActivityStatus.awaitingApproval);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
 
@@ -250,7 +243,6 @@ void main() {
     'Codex, idle: its own picker is opened, since /model takes no argument',
     () async {
       final h = await harness(agentId: AgentIds.codex);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container, agentId: AgentIds.codex);
 
@@ -274,7 +266,6 @@ void main() {
       agentId: AgentIds.codex,
       status: AgentActivityStatus.working,
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container, agentId: AgentIds.codex);
 
@@ -291,7 +282,6 @@ void main() {
     final idle = StreamController<String>.broadcast();
     addTearDown(idle.close);
     final h = await harness(statusNow: () => status, becameIdle: idle.stream);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
     h.container.read(pendingLiveSwitchesProvider);
@@ -319,7 +309,6 @@ void main() {
 
   test('a session nothing is running is deferred, not refused', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
     // The pane exits: the row is still there and still ours to configure.
@@ -347,7 +336,6 @@ void main() {
 
   test('handing the session back to the default clears the row', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
     final launcher = h.container.read(sessionLauncherProvider);
@@ -377,7 +365,6 @@ void main() {
       final h = await harness(
         status: live ? AgentActivityStatus.idle : AgentActivityStatus.working,
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
       final launcher = h.container.read(sessionLauncherProvider);
@@ -425,7 +412,6 @@ void main() {
 
   test('a session that never chose passes no model flag at all', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final result = await h.container
         .read(sessionLauncherProvider)

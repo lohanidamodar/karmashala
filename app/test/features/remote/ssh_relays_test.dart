@@ -5,7 +5,6 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
@@ -15,7 +14,6 @@ import 'package:karmashala/src/features/remote/relay_local/local_relay_service.d
 import 'package:karmashala/src/features/remote/relay_local/relay_endpoints.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala_store/database.dart';
 import '../../support/memory_server_config.dart';
 
 import '../../support/fake_data_server.dart';
@@ -79,15 +77,12 @@ SshRelayReading _reading(SshRelayStatus status, {bool withUrl = true}) =>
     );
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late _Access access;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer();
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> containerWith({
     _Setup? setup,
@@ -96,7 +91,6 @@ void main() {
   }) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         localRelayStatusProvider.overrideWithValue(
           const LocalRelayStatus.stopped(),

@@ -11,13 +11,11 @@ import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
-import '../../support/workspace_mirror.dart';
 
 /// Automatic worktree cleanup against **real git in a temporary repository**:
 /// each refusal is proven by a worktree a rule matches and that is still on
@@ -29,7 +27,6 @@ void main() {
   late Directory tmp;
   late String root;
   late String main;
-  late AppDatabase db;
   late String envId;
   late MovableClock clock;
   late WorktreeService worktrees;
@@ -84,10 +81,9 @@ void main() {
     git(main, ['add', '-A']);
     git(main, ['commit', '-q', '-m', 'init']);
 
-    db = AppDatabase.memory();
     // Well past the one-day grace, unless a case winds it back.
     clock = MovableClock(DateTime.now().toUtc().add(const Duration(days: 3)));
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
     server.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
     envId = localHostEnvironmentId;
     worktrees = WorktreeService(
@@ -104,7 +100,6 @@ void main() {
   });
 
   tearDown(() {
-    db.close();
     removeTempDirectory(tmp);
   });
 

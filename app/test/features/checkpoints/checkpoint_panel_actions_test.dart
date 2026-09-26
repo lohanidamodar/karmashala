@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala_git/git.dart';
@@ -15,7 +15,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// [GitFiles] with no disk behind it, keeping the patch that was written.
@@ -45,7 +45,7 @@ class _CountingService extends CheckpointService {
   _CountingService({
     required super.runnerFactory,
     required super.environmentOf,
-    required super.dao,
+    required super.records,
     required super.clock,
     required super.newId,
     super.files,
@@ -66,7 +66,7 @@ class _CountingService extends CheckpointService {
 /// an agent and by nobody else. Both now have a control, and both go through
 /// the same service and recorder the tools call — never around them.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late FakeCommandRunner runner;
   late _MemoryGitFiles files;
@@ -129,22 +129,22 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1'));
+    db.server.sessionRows.insert(session(id: 's1'));
     trees = ['tree1'];
     ids = 0;
     runner = FakeCommandRunner(responder: respond);
     files = _MemoryGitFiles();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -152,7 +152,7 @@ void main() {
           service = _CountingService(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
             environmentOf: server.environmentRows.getById,
-            dao: CheckpointDao(db),
+            records: CheckpointsData(await server.connect()),
             clock: FixedClock(testTime),
             newId: () => 'ckpt${++ids}',
             files: files,
@@ -163,7 +163,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   List<List<String>> gitCalls() => [
@@ -211,7 +210,7 @@ void main() {
       await tester.tap(find.byTooltip('Capture the working tree now'));
       await settle(tester);
 
-      expect(CheckpointDao(db).forSession('s1'), hasLength(1));
+      expect(db.server.checkpointRows.forSession('s1'), hasLength(1));
       expect(find.textContaining('Captured checkpoint 1'), findsOneWidget);
       // The list is behind the revision the recorder bumps, so it refreshes
       // without anything polling.
@@ -227,7 +226,7 @@ void main() {
       await tester.tap(find.byTooltip('Capture the working tree now'));
       await settle(tester);
 
-      expect(CheckpointDao(db).forSession('s1'), hasLength(1));
+      expect(db.server.checkpointRows.forSession('s1'), hasLength(1));
       expect(find.textContaining(kNothingToCapture), findsOneWidget);
     });
   });

@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -22,7 +21,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// What the Explorer costs as a workspace grows.
@@ -45,13 +44,13 @@ import '../terminal/fake_instance.dart';
 /// visible card in debug — and not O(rows). Collapsing the project (no cards)
 /// costs a third of the same rebuild, which is where that split comes from.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late FakeCommandRunner git;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows.insert(
@@ -60,14 +59,13 @@ void main() {
     server.installationRows.insert(agentInstallation());
     git = FakeCommandRunner(responder: _git);
   });
-  tearDown(() => db.close());
 
   /// The owner's shape: a handful of native sessions and a long tail of
   /// imported CLI history, all on one repository.
   void seed(int count) {
     final natives = count ~/ 16 + 1;
     for (var i = 0; i < natives; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -81,7 +79,7 @@ void main() {
       );
     }
     for (var i = natives; i < count; i++) {
-      mirroredServer(db).importedRows.insertIfAbsent(
+      db.server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i$i',
           repositoryId: 'r1',
@@ -112,7 +110,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

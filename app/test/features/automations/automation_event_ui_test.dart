@@ -8,18 +8,14 @@ import 'package:karmashala/src/features/automations/presentation/automation_dial
 import 'package:karmashala/src/features/automations/presentation/automation_dry_run_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala_automations/automations.dart';
-import 'package:karmashala_automations/persistence.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// Where a person arms an event rule, reads what it will do, and rehearses it.
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   final now = DateTime.utc(2026, 9, 21, 9);
 
@@ -44,16 +40,17 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
-    mirroredServer(db).sessionRows.insert(session(title: 'Fix the login'));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
+    server.sessionRows.insert(session(title: 'Fix the login'));
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
       ],
@@ -61,7 +58,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Future<void> pump(WidgetTester tester, Widget child, {Size? size}) async {
@@ -118,13 +114,9 @@ void main() {
 
     await tester.tap(find.text('Arm'));
     await tester.pumpAndSettle();
-    final stored = AutomationDao(db).getAll().single;
+    final stored = serverOf(container).automationRows.getAll().single;
     expect(stored.trigger?.kind, AutomationEventKind.turnFinished);
     expect(stored.trigger?.action, AutomationEventAction.messageSession);
-    final row = db.query('SELECT * FROM automations;').single;
-    expect(row['cron'], isNull);
-    expect(row['fires_at'], isNull, reason: 'no schedule a clock could fire');
-    expect(row['every_seconds'], isNull);
   });
 
   testWidgets('starting a session instead asks for the agent again', (
@@ -146,7 +138,7 @@ void main() {
   testWidgets('the card says what the rule does and its limits', (
     tester,
   ) async {
-    AutomationDao(db).insert(eventRule());
+    serverOf(container).automationRows.insert(eventRule());
     await pump(tester, const SingleChildScrollView(child: AutomationsPage()));
     expect(
       find.text(
@@ -163,10 +155,10 @@ void main() {
   testWidgets('a dry run shows what would fire, and changes nothing', (
     tester,
   ) async {
-    AutomationDao(db).insert(eventRule());
-    AutomationDao(
-      db,
-    ).insert(eventRule(id: 'ev2', name: 'Asleep', enabled: false));
+    serverOf(container).automationRows.insert(eventRule());
+    serverOf(container).automationRows.insert(
+      eventRule(id: 'ev2', name: 'Asleep', enabled: false),
+    );
     await pump(tester, AutomationDryRunDialog(automation: eventRule()));
 
     expect(find.text('Would fire · Keep going'), findsOneWidget);
@@ -187,7 +179,7 @@ void main() {
       findsOneWidget,
     );
 
-    expect(AutomationDao(db).runsFor('ev1'), isEmpty);
+    expect(serverOf(container).automationRows.runsFor('ev1'), isEmpty);
     expect(
       container.read(automationRateLimiterProvider).allows('ev1', now),
       isTrue,
@@ -196,7 +188,7 @@ void main() {
   });
 
   testWidgets('both surfaces fit a phone and a desktop', (tester) async {
-    AutomationDao(db).insert(eventRule());
+    serverOf(container).automationRows.insert(eventRule());
     for (final size in const [Size(390, 844), Size(1440, 900)]) {
       await pump(
         tester,

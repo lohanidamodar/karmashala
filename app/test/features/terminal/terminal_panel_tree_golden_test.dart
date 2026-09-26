@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
 import 'package:karmashala_media/media.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -26,6 +25,7 @@ import 'package:xterm2/xterm.dart';
 
 import '../../support/fakes.dart';
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// The terminal panel's rendered widget tree, frozen for its main states.
 ///
@@ -151,8 +151,7 @@ void main() {
     TerminalInstanceFactory? instanceFactory,
     bool shellIntegration = false,
   }) {
-    final database = AppDatabase.memory();
-    addTearDown(database.close);
+    final database = TestMachine();
     // Nothing here may write to the user's own recordings folder: starting a
     // recording resolves the destination, and a pane ending mid-recording
     // writes the cast out of its own `dispose`.
@@ -167,7 +166,7 @@ void main() {
     final result = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(
-          database: database,
+          machine: database,
           instanceFactory: instanceFactory,
           shellIntegration: shellIntegration,
         ),

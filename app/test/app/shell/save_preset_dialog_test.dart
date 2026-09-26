@@ -6,26 +6,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../features/terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// Naming a preset from a tab's menu: the name comes back, and the field's
 /// controller goes with the dialog rather than outliving it.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   setUp(() {
-    db = AppDatabase.memory();
-    container = fakeTerminalContainer(database: db);
+    db = TestMachine();
+    container = fakeTerminalContainer(machine: db);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   /// Every [TextEditingController] created while [body] runs, and whether each

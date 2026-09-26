@@ -74,7 +74,7 @@ class _AutomationDryRunDialogState
         .where((session) => !session.isArchived)
         .toList();
     final names = {
-      for (final rule in ref.read(automationDaoProvider).eventRules())
+      for (final rule in ref.read(automationsDataProvider).eventRules())
         rule.id: rule.name,
     };
     final event = _event();

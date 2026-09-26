@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 import 'package:karmashala/src/features/media/presentation/session_image_dialog.dart';
@@ -19,6 +18,7 @@ import 'package:xterm2/xterm.dart';
 import '../media/session_media_fixture.dart';
 import 'fake_instance.dart';
 import '../../support/temp_directory.dart';
+import '../../support/test_machine.dart';
 
 /// Ctrl+clicking the `[Image #6]` an agent CLI prints into a pane.
 ///
@@ -40,21 +40,20 @@ import '../../support/temp_directory.dart';
 void main() {
   const sessionId = 'S1';
 
-  late AppDatabase db;
+  late TestMachine db;
   late Directory dir;
   late File picture;
   late _RecordingLookup lookup;
   late _RecordingLinkActions actions;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TestMachine();
     dir = Directory.systemTemp.createTempSync('terminal_image_link');
     picture = File('${dir.path}/pasted-3.png')..writeAsBytesSync(tinyPngBytes);
     lookup = _RecordingLookup();
     actions = _RecordingLinkActions();
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(dir);
   });
 
@@ -64,7 +63,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           instanceFactory:
               ({
                 required String id,

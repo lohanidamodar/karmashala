@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_adoption_service.dart';
@@ -12,7 +11,7 @@ import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/agents/data/agents_data.dart';
@@ -33,7 +32,7 @@ class _MovableClock implements Clock {
 }
 
 typedef Harness = ({
-  AppDatabase db,
+  TestMachine db,
   SessionAdoptionService service,
   SessionsData sessions,
   ImportedSessionsData imported,
@@ -97,11 +96,11 @@ late ImportedSessionsData imported;
 late EnvironmentsData environments;
 late AgentInstallationsData installations;
 
-Harness harness({AppDatabase? database, bool installAgents = true}) {
-  final db = database ?? AppDatabase.memory();
+Harness harness({TestMachine? database, bool installAgents = true}) {
+  final db = database ?? TestMachine();
   if (database == null) {
     server.environmentRows.upsert(windowsEnv());
-    server.mirrorInto(db);
+    server.runsOn(db);
     if (installAgents) {
       server.installationRows
         ..insert(agentInstallation(agentId: AgentIds.claudeCode))
@@ -365,9 +364,9 @@ void main() {
     });
 
     test('an agent with no installation in the repository\'s environment', () {
-      final db = AppDatabase.memory();
+      final db = TestMachine();
       server.environmentRows.upsert(windowsEnv());
-      server.mirrorInto(db);
+      server.runsOn(db);
       final h = harness(database: db);
       typeCommand(h, 'pane-1', 'cmd-0', 'claude');
 
@@ -517,7 +516,7 @@ void main() {
 
     test('a row with no pane is rejoined and goes back to running', () {
       final h = harness();
-      mirroredServer(h.db).sessionRows.insert(
+      h.db.server.sessionRows.insert(
         session(
           id: 'old',
           status: SessionStatus.completed,
@@ -535,7 +534,7 @@ void main() {
 
     test('a row already naming a pane is left where it is', () {
       final h = harness();
-      mirroredServer(h.db).sessionRows.insert(
+      h.db.server.sessionRows.insert(
         session(
           id: 'live',
           status: SessionStatus.running,

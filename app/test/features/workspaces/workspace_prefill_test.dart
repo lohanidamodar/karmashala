@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/process.dart';
@@ -21,17 +19,14 @@ import '../../support/fixtures.dart';
 /// The prefill is a *guess*: it is offered, it is overridable, and it never
 /// touches a project that already exists.
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late FakeDataServer server;
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
     server.environmentRows.upsert(windowsEnv());
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('new-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -45,7 +40,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   /// A context holding one project, so the folder has something to be near.
   Future<Workspace> seedGames() async {

@@ -1,4 +1,5 @@
 import 'package:karmashala_automations/karmashala_automations.dart';
+import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';

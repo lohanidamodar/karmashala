@@ -8,8 +8,6 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -52,23 +50,19 @@ import '../../support/fixtures.dart';
 /// three levels of the tree (SETTLED, "The Explorer is two levels"), and they
 /// are ratcheted here like the others.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'))
       ..insert(project(id: 'p2', name: 'Beta', path: r'C:\src\beta'));
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> container() async {
     final c = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),

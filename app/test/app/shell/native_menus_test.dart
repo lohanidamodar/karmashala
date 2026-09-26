@@ -9,14 +9,13 @@ import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_ssh/host.dart'
     show HostDeployment, HostDeploymentStatus;
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show HostSupervision, HostSupervisionPhase;
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -47,15 +46,15 @@ Iterable<PlatformMenuItem> _all(Iterable<PlatformMenuItem> items) sync* {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late _CapturedMenus captured;
   late PlatformMenuDelegate original;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
@@ -66,11 +65,10 @@ void main() {
   });
   tearDown(() {
     WidgetsBinding.instance.platformMenuDelegate = original;
-    db.close();
   });
 
   Future<ProviderContainer> pumpMac(WidgetTester tester) async {
-    final container = fakeTerminalContainer(database: db, data: data);
+    final container = fakeTerminalContainer(machine: db, data: data);
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -129,7 +127,7 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets('elsewhere the window keeps its own menu bar', (tester) async {
-    final container = fakeTerminalContainer(database: db, data: data);
+    final container = fakeTerminalContainer(machine: db, data: data);
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -175,7 +173,7 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db, data: data),
+        ...fakeTerminalOverrides(machine: db, data: data),
         localHostSupervisionProvider.overrideWith((ref) => supervision.stream),
       ],
     );

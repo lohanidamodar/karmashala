@@ -10,13 +10,13 @@ import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
 import 'package:karmashala_ui/code.dart';
 
-import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
 
 /// Ctrl+S from a note's focused body on a desktop platform. `note_tab_test`
 /// runs on the test default (Android), where `re_editor` binds no shortcuts,
@@ -26,19 +26,18 @@ void main() {
     tester,
   ) async {
     commandKeyIsMeta = false;
-    final db = CountingDatabase();
-    addTearDown(db.close);
+    final db = TestMachine();
     final server = FakeDataServer();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

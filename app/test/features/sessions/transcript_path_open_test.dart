@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -20,7 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// What a click on a path in the conversation actually does — and, the headline
 /// requirement, what **rendering** one costs.
@@ -31,7 +29,7 @@ import '../../support/workspace_mirror.dart';
 void main() {
   const repoRoot = r'C:\src\demo\app';
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeCommandRunner host;
   late List<String> probed;
   late FileSystemEntityType answer;
@@ -48,7 +46,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -66,14 +64,12 @@ void main() {
   }
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     host = FakeCommandRunner();
     probed = [];
     answer = FileSystemEntityType.file;
   });
-
-  tearDown(() => db.close());
 
   /// Pumps the conversation over one agent message.
   ///
@@ -92,7 +88,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           sessionTranscriptProvider.overrideWith(
             (ref, id) => Stream.value([

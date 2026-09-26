@@ -90,3 +90,12 @@ class FakeCheckoutFacts implements CheckoutFacts {
   PermissionSelection resumePermission(String agentId, String? sessionMode) =>
       descriptor(agentId)!.launch.permission.resolveStored(sessionMode);
 }
+
+/// A resume firing that starts nothing.
+class NoResumeFiring implements ScheduledResumeFiring {
+  final fired = <String>[];
+
+  @override
+  Future<void> fire(ScheduledResume resume, {String note = ''}) async =>
+      fired.add(resume.id);
+}

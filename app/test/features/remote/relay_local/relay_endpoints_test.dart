@@ -3,8 +3,6 @@
 /// to the dialog's own provider — the shape here is the contract.
 library;
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
@@ -36,17 +34,9 @@ const _running = LocalRelayStatus(
 );
 
 void main() {
-  late AppDatabase db;
-
-  setUp(() => db = AppDatabase.memory());
-  tearDown(() => db.close());
-
   ProviderContainer containerWith(LocalRelayStatus status) {
     final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        localRelayStatusProvider.overrideWithValue(status),
-      ],
+      overrides: [localRelayStatusProvider.overrideWithValue(status)],
     );
     addTearDown(container.dispose);
     return container;

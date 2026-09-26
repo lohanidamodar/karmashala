@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'package:karmashala_automations/store.dart';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/command_checks.dart';
+import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:test/test.dart';
@@ -60,7 +62,7 @@ void main() {
       facts: FakeCheckoutFacts(),
       commands: commands,
       recorder: CommandCheckRecorder(
-        VerificationDao(db),
+        StoreVerificationRecords(VerificationDao(db)),
         VerificationArtifactStore(artifacts),
         newId: () => 'vr-${++ids}',
         now: () => fixtureTime,

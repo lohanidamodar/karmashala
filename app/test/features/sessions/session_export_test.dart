@@ -2,18 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_export.dart';
 import 'package:karmashala_session/events.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
 
 /// An export is a formatter over what Karmashala already recorded. Its one
 /// job beyond that is to be honest about the parts it could not read — an
@@ -33,7 +30,6 @@ class _Locator implements SessionTranscriptLocator {
 }
 
 void main() {
-  AppDatabase? db;
   late Directory temp;
   ProviderContainer? container;
   late FakeDataServer server;
@@ -42,9 +38,7 @@ void main() {
     String? transcriptPath,
     bool seedRow = true,
   }) async {
-    final opened = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(opened);
-    db = opened;
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     if (seedRow) {
       server.projectRows.insert(project());
@@ -59,7 +53,6 @@ void main() {
     return ProviderContainer(
       overrides: [
         await server.override(),
-        databaseProvider.overrideWithValue(opened),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionTranscriptLocatorProvider.overrideWithValue(
           _Locator(transcriptPath),
@@ -72,8 +65,6 @@ void main() {
   tearDown(() {
     container?.dispose();
     container = null;
-    db?.close();
-    db = null;
     temp.deleteSync(recursive: true);
   });
 

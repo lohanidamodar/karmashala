@@ -1,14 +1,11 @@
 import 'dart:typed_data';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
@@ -68,25 +65,21 @@ class _FakeAccess extends RemoteAccessController {
 }
 
 void main() {
-  late AppDatabase db;
   late _FakeAccess fake;
   late MemoryServerConfigSource server;
   late FakeDataServer data;
   late DataClient dataClient;
 
   setUp(() async {
-    db = AppDatabase.memory();
     data = FakeDataServer();
     dataClient = await data.connect();
     server = MemoryServerConfigSource();
   });
-  tearDown(() => db.close());
 
   Widget app({
     LocalRelayStatus relayStatus = const LocalRelayStatus.stopped(),
   }) => ProviderScope(
     overrides: [
-      databaseProvider.overrideWithValue(db),
       dataClientProvider.overrideWithValue(dataClient),
       serverConfigIn(server),
       localRelayStatusProvider.overrideWithValue(relayStatus),
@@ -180,7 +173,7 @@ void main() {
   });
 
   testWidgets('devices are listed with last-seen and revoke', (tester) async {
-    PairedDeviceDao(db).insert(device());
+    data.deviceRows.insert(device());
     await tester.pumpWidget(app());
     await enableRemoteAccess(tester);
 
@@ -190,8 +183,8 @@ void main() {
     await tester.tap(find.text('Revoke'));
     await tester.pumpAndSettle();
 
-    // The real revoke path ran against the store (service off): key deleted.
-    final revoked = PairedDeviceDao(db).getById('a' * 32)!;
+    // The real revoke went through the server: its key is deleted.
+    final revoked = data.deviceRows.getById('a' * 32)!;
     expect(revoked.revoked, isTrue);
     expect(revoked.deviceKey, isEmpty);
     expect(find.text('Revoked'), findsOneWidget);
@@ -200,7 +193,7 @@ void main() {
 
   testWidgets('renaming a device stores the new name, and the dialog closes '
       'cleanly', (tester) async {
-    PairedDeviceDao(db).insert(device());
+    data.deviceRows.insert(device());
     await tester.pumpWidget(app());
     await enableRemoteAccess(tester);
 
@@ -220,14 +213,14 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(AlertDialog), findsNothing);
-    expect(PairedDeviceDao(db).getById('a' * 32)!.name, 'Work phone');
+    expect(data.deviceRows.getById('a' * 32)!.name, 'Work phone');
     expect(find.text('Work phone'), findsOneWidget);
   });
 
   testWidgets('a revoked device keeps its row but offers no revoke', (
     tester,
   ) async {
-    PairedDeviceDao(db).insert(device(id: 'b', revoked: true));
+    data.deviceRows.insert(device(id: 'b', revoked: true));
     await tester.pumpWidget(app());
     await enableRemoteAccess(tester);
 
@@ -369,7 +362,7 @@ void main() {
   testWidgets('a device row names its relay, and says when it is parked', (
     tester,
   ) async {
-    PairedDeviceDao(db).insert(device(relayUrl: kLocalRelayMarker));
+    data.deviceRows.insert(device(relayUrl: kLocalRelayMarker));
     await tester.pumpWidget(app());
     await enableRemoteAccess(tester);
 

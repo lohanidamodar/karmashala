@@ -23,8 +23,6 @@ import '../../sessions/application/session_status_providers.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import 'automation_check_runner.dart';
 import 'automation_providers.dart';
-import 'automation_scheduler.dart';
-import 'host_automations.dart';
 import 'unattended_preflight.dart';
 
 export 'package:karmashala_automations/runner.dart' show AutomationRunner;
@@ -82,24 +80,23 @@ class AppAutomationLauncher implements AutomationSessionLauncher {
   }
 }
 
-/// Firing an automation in this app: where there is no session host, and for
-/// a checkout the host forwards because only this app can start there.
+/// Firing an automation in this app: a checkout the server forwards because
+/// only this app can start there (WSL, SSH). Recorded through the server.
 final automationRunnerProvider = Provider<AutomationRunner>(
   (ref) => AutomationRunner(
-    automations: ref.watch(automationDaoProvider),
+    automations: ref.watch(automationsDataProvider),
     preflight: ref.watch(unattendedPreflightProvider),
     facts: ref.watch(checkoutFactsProvider),
     checkpoints: AppBaseCheckpoint(ref),
     launcher: AppAutomationLauncher(ref),
     now: () => ref.read(clockProvider).nowUtc(),
     newId: () => ref.read(idGeneratorProvider).newId(),
-    onChanged: () => ref.read(automationsRevisionProvider.notifier).bump(),
   ),
 );
 
 /// Turns "the automation's session ended" into the run's verdict for the
-/// sessions this app speaks for: every one without a host, and only those off
-/// this machine (SSH) where a host settles its own. Must be watched.
+/// sessions off this machine (SSH): the server settles its own. Must be
+/// watched.
 class AutomationRunObserver extends Notifier<int> {
   static final _log = AppLogger.named('automations');
 
@@ -116,33 +113,26 @@ class AutomationRunObserver extends Notifier<int> {
     });
 
     final sessions = ref.read(sessionsDataProvider);
-    final atHost = ref.watch(automationsAtHostProvider);
     final followsHost = ref.watch(sessionFollowsHostFactsProvider);
     final onThisMachine = ref.watch(sessionRunsOnThisMachineProvider);
-    // What the store records, this app settles — all of it without a host,
-    // only what is off this machine where the host settles its own.
-    final bool Function(Session)? owns = atHost
-        ? (session) => !onThisMachine(session)
-        : null;
+    bool owns(Session session) => !onThisMachine(session);
     // What a pane or a live status says only counts for a row no host speaks
     // for: a pane exit there may be a host restart.
     bool oursById(String sessionId) {
       final row = sessions.getById(sessionId);
       if (row == null) return true;
-      return !followsHost(row) && (owns?.call(row) ?? true);
+      return !followsHost(row) && owns(row);
     }
 
+    final automations = ref.read(automationsDataProvider);
     final settler = AutomationRunSettler(
-      automations: ref.read(automationDaoProvider),
+      automations: automations,
       sessionOf: sessions.getById,
       runChecks: ref.read(automationCheckRunnerProvider).start,
-      drain: (repositoryId) =>
-          ref.read(automationSchedulerProvider.notifier).drain(repositoryId),
+      // The server starts what waits once it hears the run settled.
+      drain: (_) async {},
       now: () => ref.read(clockProvider).nowUtc(),
-      onChanged: () {
-        _revision++;
-        ref.read(automationsRevisionProvider.notifier).bump();
-      },
+      onChanged: () => _revision++,
       log: _log.warning,
     );
 
@@ -160,7 +150,7 @@ class AutomationRunObserver extends Notifier<int> {
     });
 
     // The only crash report for a session without host facts.
-    for (final run in ref.read(automationDaoProvider).liveRuns()) {
+    for (final run in automations.liveRuns()) {
       if (run.state != AutomationRunState.running) continue;
       final sessionId = run.sessionId;
       if (sessionId == null) continue;

@@ -9,9 +9,9 @@ import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
 
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 class _Store extends DocumentStore {
   _Store(this.mode);
@@ -45,12 +45,11 @@ void main() {
     WidgetTester tester,
     DocumentMode mode,
   ) async {
-    final db = CountingDatabase();
-    addTearDown(db.close);
+    final db = TestMachine();
     final store = _Store(mode);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         documentStoreProvider.overrideWithValue(store),
       ],
     );
@@ -117,12 +116,11 @@ void main() {
     });
 
     testWidgets('the controller persists it', (tester) async {
-      final db = CountingDatabase();
-      addTearDown(db.close);
+      final db = TestMachine();
       final server = FakeDataServer();
       final first = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
         ],
       );
@@ -134,7 +132,7 @@ void main() {
 
       final second = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
         ],
       );

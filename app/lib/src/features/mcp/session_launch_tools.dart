@@ -439,7 +439,7 @@ class SessionLaunchTools {
   }) async {
     if (sessionId == null) throw ArgumentError('Missing sessionId.');
     final checkpoints = _container.read(checkpointServiceProvider);
-    final checkpoint = _forkCheckpoint(
+    final checkpoint = await _forkCheckpoint(
       checkpoints,
       sessionId: sessionId,
       checkpointId: checkpointId,
@@ -486,7 +486,6 @@ class SessionLaunchTools {
           '${conflict.safetyCheckpoint?.id}.',
         );
       }
-      _container.read(checkpointsRevisionProvider.notifier).bump();
     }
 
     final launched = await handoff.forkSession(
@@ -535,19 +534,19 @@ class SessionLaunchTools {
 
   /// The checkpoint the caller named, by id or by turn. Refuses rather than
   /// guessing: a checkpoint of another session is not a smaller right answer.
-  Checkpoint _forkCheckpoint(
+  Future<Checkpoint> _forkCheckpoint(
     CheckpointService service, {
     required String sessionId,
     String? checkpointId,
     int? turn,
-  }) {
+  }) async {
     if ((checkpointId == null) == (turn == null)) {
       throw ArgumentError(
         'Name exactly one of checkpointId or turn. checkpoint_list shows both.',
       );
     }
     if (checkpointId != null) {
-      final checkpoint = service.byId(checkpointId);
+      final checkpoint = await service.byId(checkpointId);
       if (checkpoint == null) {
         throw StateError('No checkpoint with id $checkpointId.');
       }
@@ -559,7 +558,7 @@ class SessionLaunchTools {
       }
       return checkpoint;
     }
-    final chain = service.forSession(sessionId);
+    final chain = await service.forSession(sessionId);
     final checkpoint = checkpointAtTurn(chain, turn!);
     if (checkpoint == null) {
       final available = forkableTurns(chain);

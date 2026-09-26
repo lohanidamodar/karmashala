@@ -4,8 +4,6 @@
 /// and is overridable without touching the dialog.
 library;
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,19 +11,14 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/memory_server_config.dart';
 
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
 
   setUp(() {
-    db = AppDatabase.memory();
-    container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
-    );
+    container = ProviderContainer(overrides: []);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   test('defaults to one Internet entry carrying the default relay', () {
@@ -52,7 +45,6 @@ void main() {
     );
     final overridden = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         pairingRelayEndpointsProvider.overrideWith(
           (ref) => [
             local,

@@ -2,8 +2,6 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:async';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -26,7 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -70,20 +68,20 @@ void main() {
   );
 
   late int subscriptions;
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
   setUp(() async {
     subscriptions = 0;
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -98,15 +96,12 @@ void main() {
     );
   });
 
-  tearDown(() => db.close());
-
   // Inferred, because Riverpod's `Override` is not an exported type.
   // ignore: strict_top_level_inference
   overrides({
     required List<TranscriptMessage> messages,
     required Clock clock,
   }) => [
-    databaseProvider.overrideWithValue(db),
     dataClientProvider.overrideWithValue(data),
     clockProvider.overrideWithValue(clock),
     agentSessionStatusProvider.overrideWith(

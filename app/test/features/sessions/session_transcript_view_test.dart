@@ -1,8 +1,6 @@
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -24,7 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -32,9 +30,6 @@ void main() {
   testWidgets('renders user and agent messages from the transcript', (
     tester,
   ) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-
     final events = [
       SessionEvent(
         id: 1,
@@ -57,7 +52,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           sessionTranscriptProvider.overrideWith(
             (ref, id) => Stream.value(events),
           ),
@@ -85,8 +79,6 @@ void main() {
     // The engine records `tool.call` with the adapter's `name`/`input`
     // (`parseClaudeMessage`), and the view used to drop it — so a session's
     // commands were invisible in the one place the owner reads them.
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
 
     final events = [
       SessionEvent(
@@ -102,7 +94,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           sessionTranscriptProvider.overrideWith(
             (ref, id) => Stream.value(events),
           ),
@@ -129,16 +120,15 @@ void main() {
     required bool inAPane,
     List<SystemTerminal> terminals = const [],
   }) async {
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
-    addTearDown(db.close);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(
       agentInstallation(agentId: AgentIds.antigravity),
     );
-    final dao = mirroredServer(db).sessionRows
+    final dao = db.server.sessionRows
       ..insert(
         Session(
           id: 's1',
@@ -155,7 +145,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         availableSystemTerminalsProvider.overrideWith((ref) async => terminals),
         sessionDeliveryProvider.overrideWith(
           (ref, _) async => SessionDelivery.unknown,
@@ -252,8 +242,6 @@ void main() {
     // Tab returned one of them. Six turns is enough to overflow 720x560; each
     // carries a "Copy message" and a "Save as note" button, which are the
     // stops that move.
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
 
     final events = [
       for (var i = 0; i < 6; i++)
@@ -273,7 +261,6 @@ void main() {
       tester,
       build: () => ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           sessionTranscriptProvider.overrideWith(
             (ref, id) => Stream.value(events),
           ),

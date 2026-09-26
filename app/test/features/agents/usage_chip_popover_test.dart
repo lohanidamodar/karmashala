@@ -4,26 +4,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/charts.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'usage_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// The chip's hover card: meters with countdowns and pace, a sparkline where
 /// there is history, and the plain sentence kept for screen readers.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late MovableClock clock;
   late FakeAgentUsageService service;
 
@@ -31,21 +29,19 @@ void main() {
 
   setUp(() async {
     db = seedUsageDatabase();
-    data = await mirroredServer(db).override();
+    data = await db.server.override();
     clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);
   });
-  tearDown(() => db.close());
 
   List<Override> overrides() => [
-    databaseProvider.overrideWithValue(db),
     data,
     clockProvider.overrideWithValue(clock),
     agentUsageServiceProvider.overrideWithValue(service),
   ];
 
   void seedHistory() {
-    final dao = mirroredServer(db).usageRows;
+    final dao = db.server.usageRows;
     for (var i = 0; i < 6; i++) {
       dao.insert(
         UsageSample(

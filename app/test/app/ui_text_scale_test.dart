@@ -2,7 +2,6 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../features/terminal/fake_instance.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
-import '../support/workspace_mirror.dart';
+import '../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -44,22 +43,21 @@ void main() {
   });
 
   group('through the app root', () {
-    late AppDatabase db;
+    late TestMachine db;
     late FakeDataServer server;
     late Override data;
 
     setUp(() async {
-      db = AppDatabase.memory();
-      server = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
       data = await server.override();
     });
-    tearDown(() => db.close());
 
     testWidgets('a menu-bar label follows the setting', (tester) async {
-      final container = fakeTerminalContainer(database: db, data: data);
+      final container = fakeTerminalContainer(machine: db, data: data);
       addTearDown(container.dispose);
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;

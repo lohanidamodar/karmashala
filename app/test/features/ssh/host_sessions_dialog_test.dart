@@ -9,13 +9,13 @@ import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.da
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_host_box.dart';
+import '../../support/test_machine.dart';
 
 class _Access extends RemoteAccessController {
   _Access(super.ref);
@@ -49,9 +49,8 @@ class _Sessions implements HostSessionsService {
 }
 
 void main() {
-  late AppDatabase db;
-  setUp(() => db = AppDatabase.memory());
-  tearDown(() => db.close());
+  late TestMachine db;
+  setUp(() => db = TestMachine());
 
   HostDeployment cannotInstall() => HostDeployment(
     status: HostDeploymentStatus.cannotInstall,
@@ -61,7 +60,7 @@ void main() {
 
   Widget dialog(FakeHostBox box, _Sessions sessions) => ProviderScope(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       remoteAccessControllerProvider.overrideWith(_Access.new),
       hostSessionsServiceProvider.overrideWithValue(sessions),

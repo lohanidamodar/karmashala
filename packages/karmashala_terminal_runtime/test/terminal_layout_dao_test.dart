@@ -1,16 +1,16 @@
 import 'dart:convert';
+import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  late AppDatabase db;
+  late TerminalLayoutStore db;
   late TerminalLayoutDao dao;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TerminalLayoutStore.memory();
     dao = TerminalLayoutDao(db);
   });
   tearDown(() => db.close());
@@ -44,13 +44,35 @@ void main() {
     );
   }
 
-  test('the schema reaches v7 with the terminal tables', () {
-    expect(db.schemaVersion, greaterThanOrEqualTo(7));
+  test('the local store holds the layout tables and their backups', () {
     final tables = db.query(
-      "SELECT name FROM sqlite_master WHERE type = 'table' "
-      "AND name IN ('terminal_tabs', 'terminal_panes');",
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",
     );
-    expect(tables.length, 2);
+    expect(
+      [for (final t in tables) t['name']],
+      [
+        'layout_metadata',
+        'terminal_panes',
+        'terminal_panes_backup',
+        'terminal_tabs',
+        'terminal_tabs_backup',
+      ],
+    );
+  });
+
+  test('a file store keeps the layout across opens', () {
+    final dir = Directory.systemTemp.createTempSync('layout_store');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final first = TerminalLayoutStore.open(dir);
+    TerminalLayoutDao(first)
+      ..saveLayout([tab()], activeTabId: 'tab1')
+      ..savePaneGrid((columns: 80, rows: 24));
+    first.close();
+    final second = TerminalLayoutStore.open(dir);
+    addTearDown(second.close);
+    final dao = TerminalLayoutDao(second);
+    expect(dao.loadLayout().tabs.single.panes, hasLength(2));
+    expect(dao.loadPaneGrid(), (columns: 80, rows: 24));
   });
 
   group('whether a pane was running (v26)', () {

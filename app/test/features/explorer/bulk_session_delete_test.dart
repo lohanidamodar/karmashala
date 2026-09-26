@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -24,7 +22,6 @@ import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
@@ -62,20 +59,17 @@ void main() {
       ..writeAsStringSync(jsonEncode({'sessionId': externalId}));
   }
 
-  late AppDatabase db;
   late FakeDataServer server;
   late _StoreDetection detection;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     detection = _StoreDetection([]);
   });
-  tearDown(() => db.close());
 
   /// A native row, with a real transcript the store scan can find.
   void addNative(String id, {required String title}) {
@@ -133,7 +127,6 @@ void main() {
     final effective = mutator ?? CliSessionMutator();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(effective),
@@ -312,8 +305,14 @@ void main() {
 
       // The rows all left the workspace regardless — that half never depended
       // on the store, and it is the half that can be undone.
-      expect(container.read(sessionsDataProvider).getByRepository('r1'), isEmpty);
-      expect(container.read(importedSessionsProvider).getByRepository('r1'), isEmpty);
+      expect(
+        container.read(sessionsDataProvider).getByRepository('r1'),
+        isEmpty,
+      );
+      expect(
+        container.read(importedSessionsProvider).getByRepository('r1'),
+        isEmpty,
+      );
 
       await bulk.settled;
       for (final external in ['ext-n0', 'cli-i0', 'cli-i1']) {
@@ -379,7 +378,6 @@ void main() {
       final presenter = _RecordingPresenter();
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           cliSessionMutatorProvider.overrideWithValue(

@@ -8,8 +8,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import '../../checkpoints/application/checkpoint_providers.dart'
-    show checkpointDaoProvider;
+import '../../checkpoints/data/checkpoints_data.dart';
 import '../../cli_detection/application/agent_store_server_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
@@ -70,7 +69,9 @@ class SessionChangedFilesService {
       );
     }
 
-    final checkpoints = _ref.read(checkpointDaoProvider).forSession(sessionId);
+    final checkpoints = await _ref
+        .read(checkpointsDataProvider)
+        .forSession(sessionId);
     if (checkpoints.isEmpty) {
       return SessionChangedFilesReport(
         outcome: SessionChangedFilesOutcome.nothingCanAnswer,

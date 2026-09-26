@@ -457,7 +457,7 @@ class _DeviceRow extends ConsumerWidget {
   Future<void> _rename(BuildContext context, WidgetRef ref) async {
     final name = await RenameDeviceDialog.show(context, device.name);
     if (name == null) return;
-    ref.read(remoteAccessControllerProvider).rename(device, name);
+    await ref.read(remoteAccessControllerProvider).rename(device, name);
   }
 
   Future<void> _permissions(BuildContext context, WidgetRef ref) async {

@@ -167,7 +167,7 @@ class InventoryTools {
 
     // Read-only: an agent can see a resume is waiting, never arm one.
     final resumes = {
-      for (final resume in _container.read(scheduledResumeDaoProvider).live())
+      for (final resume in _container.read(resumesDataProvider).live())
         resume.sessionId: resume,
     };
 

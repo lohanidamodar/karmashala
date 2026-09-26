@@ -14,7 +14,10 @@ import 'package:karmashala/src/features/git/application/checkout_probe_queue.dar
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart'
+    show TerminalLayoutStore;
 import 'package:karmashala_terminal_runtime/recording.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
@@ -289,17 +292,28 @@ void giveShellHistory(TerminalInstance instance) {
   }
 }
 
-/// A container whose terminals are fakes, optionally over a real in-memory
-/// database so persistence can be exercised.
+/// One layout store per [machine] (a test's database, say), so a second
+/// container over it — a restart — restores what the first saved.
+TerminalLayoutStore layoutStoreOf(Object machine) =>
+    _layoutStores[machine] ??= TerminalLayoutStore.memory();
+
+final _layoutStores = Expando<TerminalLayoutStore>();
+
+/// A container whose terminals are fakes, optionally over a [layoutStore] a
+/// test reads back or hands to a second container.
 /// [data] is the fake server's client override (`await server.override()`),
 /// where the test reads anything the server keeps.
 ProviderContainer fakeTerminalContainer({
   AppDatabase? database,
+  Object? machine,
+  TerminalLayoutStore? layoutStore,
   Override? data,
   bool restoreLivePanes = true,
 }) => ProviderContainer(
   overrides: fakeTerminalOverrides(
     database: database,
+    machine: machine,
+    layoutStore: layoutStore,
     data: data,
     restoreLivePanes: restoreLivePanes,
   ),
@@ -313,6 +327,8 @@ ProviderContainer fakeTerminalContainer({
 // ignore: strict_top_level_inference
 fakeTerminalOverrides({
   AppDatabase? database,
+  Object? machine,
+  TerminalLayoutStore? layoutStore,
   Override? data,
   TerminalInstanceFactory? instanceFactory,
   AgentUsageService? usageService,
@@ -349,6 +365,15 @@ fakeTerminalOverrides({
     // tidiness question.
     gitFilesProvider.overrideWithValue(gitFiles ?? noGitFiles),
     if (database != null) databaseProvider.overrideWithValue(database),
+    // A second container over the same machine (a restart) finds the layout
+    // the first saved.
+    if (layoutStore ??
+            switch (machine ?? database) {
+              final Object key => layoutStoreOf(key),
+              null => null,
+            }
+        case final store?)
+      terminalLayoutStoreProvider.overrideWithValue(store),
     // The server's data (environments, installations, sessions, …): a fake
     // server's client when the test seeds one.
     ?data,

@@ -5,13 +5,12 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// **Every side-panel surface closes the same way.**
@@ -96,14 +95,13 @@ void main() {
   testWidgets('every offered surface can be closed from its header', (
     tester,
   ) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final server = FakeDataServer()..mirrorInto(db);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     final container = fakeTerminalContainer(
-      database: db,
+      machine: db,
       data: await server.override(),
     );
     addTearDown(container.dispose);

@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:sqlite3/sqlite3.dart';
 
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// What reading already-loaded native-session terminal tails costs in SQL.
 ///
@@ -15,10 +14,9 @@ import '../terminal/fake_instance.dart';
 /// lookups.
 void main() {
   test('terminal tails add no database statement per watched session', () {
-    final db = _CountingDatabase();
-    final container = fakeTerminalContainer(database: db);
+    final db = CountingMachine();
+    final container = fakeTerminalContainer(machine: db);
     addTearDown(container.dispose);
-    addTearDown(db.close);
 
     // Mount the controller before measuring; its two bootstrap reads are an
     // app-lifetime cost, not work a status cycle causes.
@@ -32,7 +30,7 @@ void main() {
     print('STATUS-TAIL sessions=100 statements=${db.statements}');
     expect(
       db.statements,
-      0,
+      isEmpty,
       reason: 'the loader already read these rows; the tail needs only paneId',
     );
   });
@@ -41,26 +39,3 @@ void main() {
 final _tailProvider = Provider.family<List<String>, String>(
   (ref, paneId) => sessionTerminalTailForPane(ref, paneId),
 );
-
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int statements = 0;
-
-  void reset() => statements = 0;
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    statements++;
-    return super.query(sql, params);
-  }
-
-  @override
-  void execute(String sql, [List<Object?> params = const []]) {
-    statements++;
-    super.execute(sql, params);
-  }
-}

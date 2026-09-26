@@ -1,8 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/application/toolchain_readings.dart';
@@ -23,11 +21,8 @@ void main() {
     // The Flutter row is answered by `FlutterSdkReadings`, which reads the
     // hand-set SDK paths out of settings — so this needs a database even
     // though nothing here stores anything.
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),

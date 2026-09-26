@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/model_picker.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -12,15 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// real database: the question is what the *preference* ends up as, and a
 /// frozen fake settings object cannot answer that.
 void main() {
-  late AppDatabase db;
-
-  setUp(() => db = AppDatabase.memory());
-  tearDown(() => db.close());
-
   Future<ProviderContainer> pump(WidgetTester tester) async {
-    final container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
-    );
+    final container = ProviderContainer(overrides: []);
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(

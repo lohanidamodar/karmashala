@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -20,7 +18,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/features/environments/data/environments_data.dart';
@@ -36,7 +33,6 @@ import 'package:karmashala/src/features/environments/data/environments_data.dart
 /// driven by the agent's own stream closing, which on quit never happens — so
 /// the agent CLIs outlived the app that started them.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late Override data;
   late SessionsData sessions;
@@ -44,8 +40,7 @@ void main() {
   late DataClient client;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     data = await server.override();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -55,7 +50,6 @@ void main() {
     sessions = SessionsData(client);
     records = SessionRecordsData(client);
   });
-  tearDown(() => db.close());
 
   SessionEngine buildEngine(ChatProtocolResolver resolver) => SessionEngine(
     sessions: sessions,
@@ -137,7 +131,6 @@ void main() {
       final adapter = _RecordingAdapter(gate: gate.future);
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           chatProtocolResolverProvider.overrideWithValue((_) => adapter),
         ],
@@ -176,11 +169,7 @@ void main() {
         gate: gate.future,
       );
       final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          data,
-          sshConnectionPoolProvider.overrideWithValue(pool),
-        ],
+        overrides: [data, sshConnectionPoolProvider.overrideWithValue(pool)],
       );
       container.read(sshConnectionPoolProvider);
       final lifecycle = AppLifecycle(container);

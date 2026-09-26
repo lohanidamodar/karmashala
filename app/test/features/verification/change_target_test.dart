@@ -9,7 +9,7 @@ import 'verification_tools_test.dart' show textOf;
 void main() {
   late VerificationHarness h;
 
-  setUp(() => h = VerificationHarness());
+  setUp(() async => h = await VerificationHarness.start());
   tearDown(() => h.dispose());
 
   group('a change is a third kind of target', () {
@@ -84,7 +84,7 @@ void main() {
         verdict: VerificationVerdict.pass,
         reason: 'Nothing wrong found.',
       );
-      final stored = h.dao.getRun(started.id)!;
+      final stored = h.stored(started.id)!;
       expect(stored.target.kind, VerificationTargetKind.change);
       expect(stored.sessionId, 'work-1');
       expect(stored.producedBySessionId, 'review-1');

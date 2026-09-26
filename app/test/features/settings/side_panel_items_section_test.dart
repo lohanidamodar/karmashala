@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
@@ -14,7 +13,6 @@ import 'package:karmashala/src/features/settings/presentation/settings_row.dart'
 import 'package:karmashala/src/features/settings/presentation/side_panel_items_section.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
@@ -26,20 +24,16 @@ import 'package:agent_cli/process.dart';
 /// Settings › Appearance › Side panel: the rail's checklist where a person who
 /// never right-clicks the rail will look for it.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   Future<ProviderContainer> prepared() async {
-    db = AppDatabase.memory();
-    addTearDown(db.close);
     server = FakeDataServer(clock: () => testTime);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

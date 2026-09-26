@@ -5,8 +5,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -20,7 +18,7 @@ import 'package:karmashala/src/features/sessions/application/session_chat_source
 import 'package:karmashala_session/delivery.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -58,7 +56,7 @@ class _FixedLocator implements SessionTranscriptLocator {
 /// Claude transcript is a file this test wrote into a temp directory, and the
 /// git fallback is the checkpoint chain, which is already in the database.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late EnvironmentsData environments;
   late AgentInstallationsData installations;
   late FakeDataServer server;
@@ -69,7 +67,7 @@ void main() {
   late List<CommandRequest> started;
 
   /// The pool the app itself uses, over a runner that hands back scripted JSON.
-  AgentStoreServers poolFor(AppDatabase db) => AgentStoreServers(
+  AgentStoreServers poolFor(TestMachine db) => AgentStoreServers(
     runnerFactory: FakeCommandRunnerFactory(
       fallback: FakeCommandRunner(
         processFactory: (request) {
@@ -84,7 +82,6 @@ void main() {
 
   ProviderContainer containerFor() => ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(db),
       dataClientProvider.overrideWithValue(data),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       agentStoreServersProvider.overrideWith((ref) {
@@ -117,7 +114,7 @@ void main() {
   }
 
   void checkpoint(List<FileChange> files, {int sequence = 1}) {
-    CheckpointDao(db).insert(
+    db.server.checkpointRows.insert(
       Checkpoint(
         id: 'ck$sequence',
         sessionId: 's1',
@@ -141,8 +138,8 @@ void main() {
       container.read(sessionChangedFilesServiceProvider).read('s1');
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     environments = EnvironmentsData(data);
     installations = AgentInstallationsData(data);
@@ -157,7 +154,6 @@ void main() {
   });
 
   tearDown(() {
-    db.close();
     removeTempDirectory(tmp);
   });
 
@@ -165,9 +161,9 @@ void main() {
   /// filed under.
   void codexSession({String environmentId = 'windows'}) {
     installAgent(AgentIds.codex, environmentId: environmentId);
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
+    db.server.sessionRows.insert(
+      session().copyWith(externalSessionId: 'thread-1'),
+    );
   }
 
   group('Codex answers out of its own turns', () {
@@ -263,7 +259,7 @@ void main() {
       'a session that has not named a thread yet says that, not nothing',
       () async {
         codexSession();
-        mirroredServer(db).sessionRows.updateExternalSessionId('s1', '');
+        db.server.sessionRows.updateExternalSessionId('s1', '');
         final container = containerFor();
         addTearDown(container.dispose);
 
@@ -340,9 +336,9 @@ void main() {
   group('Claude Code answers out of its own transcript', () {
     setUp(() {
       installAgent(AgentIds.claudeCode);
-      mirroredServer(
-        db,
-      ).sessionRows.insert(session().copyWith(externalSessionId: 'conv-1'));
+      db.server.sessionRows.insert(
+        session().copyWith(externalSessionId: 'conv-1'),
+      );
     });
 
     String transcript(List<Map<String, Object?>> lines) {
@@ -426,9 +422,9 @@ void main() {
   group('an agent that keeps no record falls back to git', () {
     setUp(() {
       installAgent(AgentIds.antigravity);
-      mirroredServer(
-        db,
-      ).sessionRows.insert(session().copyWith(externalSessionId: 'ag-1'));
+      db.server.sessionRows.insert(
+        session().copyWith(externalSessionId: 'ag-1'),
+      );
     });
 
     test(
@@ -540,9 +536,9 @@ void main() {
   group('when the agent record fails, git still answers, and says why', () {
     test('Codex could not be read, so the checkpoints did', () async {
       installAgent(AgentIds.codex);
-      mirroredServer(
-        db,
-      ).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
+      db.server.sessionRows.insert(
+        session().copyWith(externalSessionId: 'thread-1'),
+      );
       codex = FakeCodexAppServer(
         reply: (_, id, method, params) => jsonEncode({
           'error': {'code': -32600, 'message': 'thread not loaded'},

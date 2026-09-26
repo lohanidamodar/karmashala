@@ -4,21 +4,21 @@ import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
 import '../domain/verification_target.dart';
 import '../store/verification_artifact_store.dart';
-import '../store/verification_dao.dart';
+import 'verification_records.dart';
 
 /// Writes the gates Karmashala ran itself as verification runs. Takes no
-/// recording slot, so it can never clobber a run an agent has open — which is
-/// what lets the app and the session host both use it on one store.
+/// recording slot, so it can never clobber a run an agent has open. The files
+/// are written first; the run, its steps and artifacts go in one record.
 class CommandCheckRecorder {
   CommandCheckRecorder(
-    this._dao,
+    this._records,
     this._store, {
     required this._newId,
     required this._now,
     void Function()? onChanged,
   }) : _onChanged = onChanged ?? _nothing;
 
-  final VerificationDao _dao;
+  final VerificationRecords _records;
   final VerificationArtifactStore _store;
   final String Function() _newId;
   final DateTime Function() _now;
@@ -77,25 +77,22 @@ class CommandCheckRecorder {
       artifactDirectory: directory.path,
       steps: steps,
     );
-    _dao.insertRun(run);
-    for (final step in steps) {
-      _dao.insertStep(id, step);
-    }
-    for (final (i, check) in checks.indexed) {
-      if (check.output.trim().isEmpty) continue;
-      final artifact = await _store.writeText(
-        runId: id,
-        name: 'output-${i + 1}',
-        kind: VerificationArtifactKind.other,
-        label: check.name,
-        text: check.output,
-        stepOrdinal: i + 1,
-        at: finishedAt,
-      );
-      _dao.insertArtifact(artifact);
-    }
+    final artifacts = [
+      for (final (i, check) in checks.indexed)
+        if (check.output.trim().isNotEmpty)
+          await _store.writeText(
+            runId: id,
+            name: 'output-${i + 1}',
+            kind: VerificationArtifactKind.other,
+            label: check.name,
+            text: check.output,
+            stepOrdinal: i + 1,
+            at: finishedAt,
+          ),
+    ];
+    final stored = await _records.record(run.copyWith(artifacts: artifacts));
     _onChanged();
-    return _dao.getRun(id) ?? run;
+    return stored;
   }
 
   /// Records one gate. An exit code nobody saw is `inconclusive`, never a pass.
@@ -146,22 +143,21 @@ class CommandCheckRecorder {
       artifactDirectory: directory.path,
       steps: <VerificationStep>[step],
     );
-    _dao.insertRun(run);
-    _dao.insertStep(id, step);
-    if (output.trim().isNotEmpty) {
-      final artifact = await _store.writeText(
-        runId: id,
-        name: 'output',
-        kind: VerificationArtifactKind.other,
-        label: line,
-        text: output,
-        stepOrdinal: 1,
-        at: finishedAt,
-      );
-      _dao.insertArtifact(artifact);
-    }
+    final artifacts = [
+      if (output.trim().isNotEmpty)
+        await _store.writeText(
+          runId: id,
+          name: 'output',
+          kind: VerificationArtifactKind.other,
+          label: line,
+          text: output,
+          stepOrdinal: 1,
+          at: finishedAt,
+        ),
+    ];
+    final stored = await _records.record(run.copyWith(artifacts: artifacts));
     _onChanged();
-    return _dao.getRun(id) ?? run;
+    return stored;
   }
 }
 

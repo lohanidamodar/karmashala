@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -16,7 +15,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// Delivery news, and the inbox it lands in.
 ///
@@ -146,17 +145,17 @@ void main() {
   });
 
   group('the inbox it lands in', () {
-    late AppDatabase db;
+    late TestMachine db;
     late FakeDataServer server;
 
     setUp(() {
-      db = AppDatabase.memory();
-      server = FakeDataServer().mirrorInto(db)
+      db = TestMachine();
+      server = FakeDataServer().runsOn(db)
         ..environmentRows.upsert(windowsEnv())
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
       server.installationRows.insert(agentInstallation());
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 's1',
           repositoryId: 'r1',
@@ -169,12 +168,11 @@ void main() {
         ),
       );
     });
-    tearDown(() => db.close());
 
     Future<ProviderContainer> harness() async {
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],

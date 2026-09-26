@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
@@ -14,7 +12,6 @@ import '../../support/fixtures.dart';
 import 'session_media_fixture.dart';
 import '../../support/temp_directory.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// Turning a `[Image #6]` printed in a pane into the picture it names — or into
 /// a sentence saying why it cannot.
@@ -29,13 +26,11 @@ import '../../support/workspace_mirror.dart';
 /// `session_media_providers_test.dart` is: it is the one kind that names its
 /// own transcript file. Everything downstream of "here is the file" is shared.
 void main() {
-  late AppDatabase db;
   late Directory dir;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer().mirrorInto(db)
+    server = FakeDataServer()
       ..environmentRows.upsert(windowsEnv())
       ..environmentRows.upsert(wslEnv())
       ..projectRows.insert(project())
@@ -43,7 +38,6 @@ void main() {
     dir = Directory.systemTemp.createTempSync('image_lookup');
   });
   tearDown(() {
-    db.close();
     removeTempDirectory(dir);
   });
 
@@ -65,7 +59,6 @@ void main() {
   Future<ProviderContainer> containerFor() async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         sessionMediaCacheRootProvider.overrideWith(
           (ref) async => Directory('${dir.path}/cache')..createSync(),

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -16,13 +15,14 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// A launched session actually being told the tools exist — the gap this whole
@@ -43,15 +43,19 @@ void main() {
   /// The server each seeded database's workspace lives at.
   final serverOf = Expando<FakeDataServer>();
 
-  AppDatabase seededDatabase() {
-    final db = AppDatabase.memory();
-    final server = serverOf[db] = FakeDataServer()..mirrorInto(db);
-    mirroredServer(db).environmentRows
+  /// Each seeded database's machine keeps one layout store across restarts.
+  final layoutOf = Expando<TerminalLayoutStore>();
+
+  TestMachine seededDatabase() {
+    final db = TestMachine();
+    final server = serverOf[db] = FakeDataServer()..runsOn(db);
+    layoutOf[db] = TerminalLayoutStore.memory();
+    db.server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    mirroredServer(db).installationRows
+    db.server.installationRows
       ..insert(agentInstallation(agentId: AgentIds.claudeCode))
       ..insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
     return db;
@@ -61,14 +65,14 @@ void main() {
   /// container over one database is what a restart *is*, and two generators
   /// counting from zero would hand out ids the first run already used.
   Future<ProviderContainer> containerOver(
-    AppDatabase db, {
+    TestMachine db, {
     SessionMcp? mcp,
     String idPrefix = 's-',
     FakeCommandRunner? runner,
   }) async => ProviderContainer(
     overrides: [
       await serverOf[db]!.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db, layoutStore: layoutOf[db]),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
       agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
@@ -81,7 +85,7 @@ void main() {
   );
 
   Future<
-    ({ProviderContainer container, AppDatabase db, FakeCommandRunner runner})
+    ({ProviderContainer container, TestMachine db, FakeCommandRunner runner})
   >
   harness({SessionMcp? mcp}) async {
     final db = seededDatabase();
@@ -142,7 +146,6 @@ void main() {
       final h = await harness(
         mcp: _FixedMcp(configPath: '/mnt/c/x/session.json'),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(
@@ -154,7 +157,6 @@ void main() {
     test('Codex is handed the URL, and no file is asked for', () async {
       final mcp = _FixedMcp(configPath: '/mnt/c/x/session.json');
       final h = await harness(mcp: mcp);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final args = await paneArguments(
@@ -175,7 +177,6 @@ void main() {
       () async {
         final mcp = _FixedMcp(configPath: '/mnt/c/x/session.json');
         final h = await harness(mcp: mcp);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final launched = await h.container
@@ -199,7 +200,6 @@ void main() {
       // "Open this in Windows Terminal instead" must produce the same agent, on
       // the same endpoint, speaking as the same session.
       final h = await harness(mcp: _FixedMcp(configPath: r'C:\x\session.json'));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await h.container
@@ -234,7 +234,6 @@ void main() {
   group('a restarted pane is re-armed, not replayed', () {
     test('it is given the endpoint that exists now', () async {
       final db = seededDatabase();
-      addTearDown(db.close);
 
       final first = await containerOver(
         db,
@@ -284,7 +283,6 @@ void main() {
       // Codex carries the URL itself, so both halves of the staleness — the
       // port and the token — are visible in one argument.
       final db = seededDatabase();
-      addTearDown(db.close);
 
       final first = await containerOver(
         db,
@@ -323,7 +321,6 @@ void main() {
         // pane without its tools is a smaller loss than a pane that will not
         // open. Never a stale flag instead.
         final db = seededDatabase();
-        addTearDown(db.close);
 
         final first = await containerOver(
           db,
@@ -353,29 +350,31 @@ void main() {
       // the MCP flag inside `arguments`. Installing the fix has to repair
       // those, not merely stop writing new ones.
       final db = seededDatabase();
-      addTearDown(db.close);
 
       final first = await containerOver(db);
       final paneId = (await launchIn(first)).paneId!;
       first.read(terminalSessionsControllerProvider.notifier).persistLayout();
       first.dispose();
 
-      db.execute('UPDATE terminal_panes SET launch_command = ? WHERE id = ?;', [
-        jsonEncode({
-          'agentId': AgentIds.claudeCode,
-          'executable': 'claude',
-          'arguments': [
-            r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
-                r'\karmashala\mcp\session-95659659.json',
-            '--permission-mode',
-            'manual',
-            '--session-id',
-            's-0',
-          ],
-          'sessionId': 's-0',
-        }),
-        paneId,
-      ]);
+      layoutOf[db]!.execute(
+        'UPDATE terminal_panes SET launch_command = ? WHERE id = ?;',
+        [
+          jsonEncode({
+            'agentId': AgentIds.claudeCode,
+            'executable': 'claude',
+            'arguments': [
+              r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
+                  r'\karmashala\mcp\session-95659659.json',
+              '--permission-mode',
+              'manual',
+              '--session-id',
+              's-0',
+            ],
+            'sessionId': 's-0',
+          }),
+          paneId,
+        ],
+      );
 
       final next = await containerOver(db, idPrefix: 't-');
       addTearDown(next.dispose);
@@ -393,7 +392,6 @@ void main() {
   group('nothing changes when there is nothing to say', () {
     test('no control server means the launch of yesterday', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(await paneArguments(h.container), [
@@ -410,7 +408,6 @@ void main() {
         // What a session over SSH gets, and a WSL session on a host with no
         // switch: the provisioner answers null and the command line is untouched.
         final h = await harness(mcp: _FixedMcp(access: null));
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         expect(await paneArguments(h.container), [
@@ -426,7 +423,6 @@ void main() {
       // The one rule that outranks everything else here: a session that opens
       // without its tools is a smaller loss than a session that does not open.
       final h = await harness(mcp: _ThrowingMcp());
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       expect(await paneArguments(h.container), [
@@ -450,7 +446,6 @@ void main() {
         if (tmp.existsSync()) tmp.deleteSync(recursive: true);
       });
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final server = LauncherControlServer(h.container);

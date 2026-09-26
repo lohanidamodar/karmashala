@@ -100,6 +100,9 @@ dependencies:
   # restores one; the session host takes an automation's base. Pure Dart.
   karmashala_checkpoints:
     path: ../packages/karmashala_checkpoints
+  # Fan-out comparisons as values; the server keeps them.
+  karmashala_comparisons:
+    path: ../packages/karmashala_comparisons
   # What is asking for the user's attention, as values: the key a session is
   # followed by, the attention kinds and the inbox that queues them, the status
   # and delivery transitions, the policy that decides whether a change is worth
@@ -115,6 +118,9 @@ dependencies:
   # the `SessionDao` and the recorder that writes hosted rows. Pure Dart.
   karmashala_session_engine:
     path: ../packages/karmashala_session_engine
+  # Command snippets and saved presets, as the server keeps them.
+  karmashala_snippets:
+    path: ../packages/karmashala_snippets
   # Reaching a machine over SSH and running the session host on it: the
   # connection and its pool, the host key policy, the SSH command runner, the
   # deployer and the remote file browser. Not the DAOs — the package takes a

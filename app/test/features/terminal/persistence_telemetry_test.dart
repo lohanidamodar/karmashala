@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// What persistence owes, reported so it can be watched.
 ///
@@ -16,20 +16,19 @@ import 'fake_instance.dart';
 /// happened is reported as unrecorded rather than as a zero that reads like a
 /// measurement.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late TerminalSessionsController controller;
 
   setUp(() {
     WidgetsFlutterBinding.ensureInitialized();
-    db = AppDatabase.memory();
-    container = fakeTerminalContainer(database: db);
+    db = TestMachine();
+    container = fakeTerminalContainer(machine: db);
     controller = container.read(terminalSessionsControllerProvider.notifier);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   String openSecondPane() {

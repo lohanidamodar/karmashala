@@ -1,16 +1,13 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// What one sweep costs, counted in round trips rather than timed — to the
@@ -36,9 +33,8 @@ void main() {
     test(
       '$count ended sessions: a quiet sweep is a constant few reads',
       () async {
-        final db = _CountingDatabase();
-        addTearDown(db.close);
-        final server = FakeDataServer()..mirrorInto(db);
+        final db = CountingMachine();
+        final server = FakeDataServer()..runsOn(db);
         server.environmentRows.upsert(windowsEnv());
         server.projectRows.insert(project());
         server.repositoryRows.insert(repository());
@@ -50,7 +46,6 @@ void main() {
 
         final container = ProviderContainer(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             await server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],
@@ -66,7 +61,7 @@ void main() {
         expect(server.followUpRows.open(), hasLength(count.clamp(0, 200)));
 
         final rows = sessions.getAll();
-        db.queries = 0;
+        db.reset();
         final asked = server.requests.length;
         for (var pass = 0; pass < 5; pass++) {
           service.sweep(rows);
@@ -79,23 +74,8 @@ void main() {
           0,
           reason: '$count sessions: ${server.requests.skip(asked)}',
         );
-        expect(db.queries, 0, reason: '$count sessions');
+        expect(db.count, 0, reason: '$count sessions');
       },
     );
-  }
-}
-
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int queries = 0;
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    queries++;
-    return super.query(sql, params);
   }
 }

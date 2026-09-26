@@ -1,6 +1,5 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/frame_yield.dart';
@@ -23,7 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -67,9 +66,16 @@ class _StaticSettings extends SettingsController {
 /// sees the same workspace.
 final _clients = Expando<DataClient>();
 
-Future<AppDatabase> seededDatabase() async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+/// This machine's layout store, one per seeded database, so a restart finds
+/// what the first run saved.
+final _layouts = Expando<TerminalLayoutStore>();
+
+TerminalLayoutStore layoutOf(TestMachine db) =>
+    _layouts[db] ??= TerminalLayoutStore.memory();
+
+Future<TestMachine> seededDatabase() async {
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -87,14 +93,14 @@ Future<AppDatabase> seededDatabase() async {
 /// `Override` is a sealed type its public library does not export, so it
 /// cannot be written down as a parameter type.
 ProviderContainer containerOver(
-  AppDatabase db, {
+  TestMachine db, {
   String idPrefix = 's-',
   TerminalLayoutDao? layoutDao,
   Future<void> Function()? frameYield,
 }) => ProviderContainer(
   overrides: [
     dataClientProvider.overrideWithValue(_clients[db]!),
-    ...fakeTerminalOverrides(database: db),
+    ...fakeTerminalOverrides(machine: db, layoutStore: layoutOf(db)),
     clockProvider.overrideWithValue(FixedClock(testTime)),
     hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
     commandRunnerFactoryProvider.overrideWithValue(FakeCommandRunnerFactory()),
@@ -145,7 +151,6 @@ void main() {
   test('a session restored from disk resumes in the pane it came back in, '
       'not beside it', () async {
     final db = await seededDatabase();
-    addTearDown(db.close);
 
     final first = containerOver(db);
     final sessionId = await startSession(first);
@@ -202,7 +207,6 @@ void main() {
     // was restored into it, and it is a record of a process that failed or was
     // ended rather than history waiting to be continued.
     final db = await seededDatabase();
-    addTearDown(db.close);
     final container = containerOver(db);
     addTearDown(container.dispose);
 
@@ -232,7 +236,6 @@ void main() {
 
   test('a session with no pane at all still gets one', () async {
     final db = await seededDatabase();
-    addTearDown(db.close);
     final container = containerOver(db);
     addTearDown(container.dispose);
 
@@ -261,7 +264,6 @@ void main() {
     // must not change: the double-writer refusal, the archive guard and the
     // permission chip all read it, and a restored pane is not a process.
     final db = await seededDatabase();
-    addTearDown(db.close);
 
     final first = containerOver(db);
     final sessionId = await startSession(first);
@@ -292,7 +294,6 @@ void main() {
     test('resumes a restored agent pane instead of running its opening '
         'prompt again', () async {
       final db = await seededDatabase();
-      addTearDown(db.close);
 
       final first = containerOver(db);
       final sessionId = await startSession(
@@ -349,7 +350,6 @@ void main() {
 
     test('says so when the pane is not one of our sessions', () async {
       final db = await seededDatabase();
-      addTearDown(db.close);
       final container = containerOver(db);
       addTearDown(container.dispose);
 

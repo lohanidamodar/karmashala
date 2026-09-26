@@ -3,7 +3,8 @@ import 'package:karmashala_session/session.dart';
 
 import '../domain/automation.dart';
 import '../domain/unattended_gate.dart';
-import '../store/project_check_dao.dart';
+
+import 'automation_records.dart';
 import 'checkout_facts.dart';
 
 /// The one place a fire is checked against the unattended rules — lookups
@@ -12,7 +13,7 @@ class UnattendedPreflight {
   const UnattendedPreflight({required this._facts, required this._checks});
 
   final CheckoutFacts _facts;
-  final ProjectCheckDao _checks;
+  final ProjectCheckRecords _checks;
 
   /// The gate's inputs for [automation], re-read on every call.
   UnattendedGateInput inputFor(Automation automation) => _input(

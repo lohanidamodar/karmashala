@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
@@ -20,7 +18,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
 import 'package:agent_cli/read.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// What installing the agents' status hooks costs the **isolate**, and what it
 /// costs a store home that does not answer.
@@ -172,21 +170,20 @@ void main() {
   });
 
   group('the sweep across environments', () {
-    late AppDatabase db;
+    late TestMachine db;
     late Override data;
     late Directory root;
 
     setUp(() async {
-      db = AppDatabase.memory();
-      FakeDataServer().mirrorInto(db);
-      mirroredServer(db).environmentRows.upsert(
+      db = TestMachine();
+      FakeDataServer().runsOn(db);
+      db.server.environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
       root = Directory.systemTemp.createTempSync('karmashala_hooksweep_');
-      data = await mirroredServer(db).override();
+      data = await db.server.override();
     });
     tearDown(() {
-      db.close();
       removeTempDirectory(root);
     });
 
@@ -198,14 +195,14 @@ void main() {
       int stores = 2,
     }) {
       final wsl = wslEnv();
-      mirroredServer(db).environmentRows.upsert(wsl);
-      final local = mirroredServer(
-        db,
-      ).environmentRows.getAll().firstWhere((e) => isLocalHost(e.kind)).id;
+      db.server.environmentRows.upsert(wsl);
+      final local = db.server.environmentRows
+          .getAll()
+          .firstWhere((e) => isLocalHost(e.kind))
+          .id;
       final ids = [local, wsl.id].take(stores).toList();
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           cliStoreLocatorProvider.overrideWith(
             (ref) => _StubLocator([

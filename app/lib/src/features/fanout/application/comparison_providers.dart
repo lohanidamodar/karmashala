@@ -1,32 +1,30 @@
+import 'dart:async';
+
+import 'package:karmashala_comparisons/comparisons.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
 import '../../automations/application/automation_check_runner.dart';
 import '../../verification/application/verification_providers.dart';
+import '../../verification/data/verification_data.dart';
 import 'package:karmashala_verification/verification.dart';
-import '../data/comparison_dao.dart';
-import '../domain/comparison.dart';
+import '../data/comparisons_data.dart';
 
-/// Provides the [ComparisonDao].
-final comparisonDaoProvider = Provider<ComparisonDao>(
-  (ref) => ComparisonDao(ref.watch(databaseProvider)),
-);
-
-/// Looks up a verification verdict for a candidate's session. Reads the DAO,
-/// not the service, and the column falls back to the copy on the candidate.
+/// Looks up a verification verdict for a candidate's session. Reads the copied
+/// run headers, not the service; the column falls back to the candidate's own.
 typedef CandidateEvidenceLookup = CandidateEvidence? Function(String sessionId);
 
 final candidateEvidenceProvider = Provider<CandidateEvidenceLookup>((ref) {
   // A new run is a new answer: without this a column kept its old verdict
   // until something else rebuilt it.
   ref.watch(verificationRevisionProvider);
-  final dao = ref.watch(verificationDaoProvider);
+  final runs = ref.watch(verificationDataProvider);
   return (sessionId) {
     // Newest first. An open run is not evidence of anything yet, and — as on
     // the strip (`SessionVerdict.of`) — the newest verdict someone other than
     // the author produced wins over any newer one the candidate gave itself.
     final finished = [
-      for (final run in dao.listRuns(sessionId: sessionId))
+      for (final run in runs.headersOf(sessionId))
         if (run.verdict != null) run,
     ];
     final chosen =
@@ -86,14 +84,24 @@ Future<int> runCandidateChecks(
   return results.nonNulls.length;
 }
 
-/// The comparisons list, and the one operation on it that is not a fan-out.
-/// A `Notifier`, because every mutation goes through [FanOutService].
+/// The comparisons list, from this app's copy, and the one operation on it
+/// that is not a fan-out. Follows every change, here or at another client.
 class ComparisonsController extends Notifier<List<Comparison>> {
-  @override
-  List<Comparison> build() => _read();
+  static final _log = AppLogger.named('fanout');
 
-  List<Comparison> _read() =>
-      ref.read(comparisonDaoProvider).getAll(includeArchived: includeArchived);
+  @override
+  List<Comparison> build() {
+    final listening = ref
+        .watch(comparisonsDataProvider)
+        .changes
+        .listen((_) => state = _read());
+    ref.onDispose(listening.cancel);
+    return _read();
+  }
+
+  List<Comparison> _read() => ref
+      .read(comparisonsDataProvider)
+      .getAll(includeArchived: includeArchived);
 
   /// Whether archived comparisons are in [state]. Off by default: an archived
   /// comparison is one the user has finished with.
@@ -106,10 +114,15 @@ class ComparisonsController extends Notifier<List<Comparison>> {
     reload();
   }
 
-  void archive(String comparisonId, {bool archived = true}) {
-    ref.read(comparisonDaoProvider).setArchived(comparisonId, archived);
-    reload();
-  }
+  void archive(String comparisonId, {bool archived = true}) => unawaited(
+    ref
+        .read(comparisonsDataProvider)
+        .archive(comparisonId, archived: archived)
+        .then<void>(
+          (_) {},
+          onError: (Object error) => _log.warning('Not archived: $error'),
+        ),
+  );
 }
 
 final comparisonsProvider =
@@ -117,8 +130,8 @@ final comparisonsProvider =
       ComparisonsController.new,
     );
 
-/// One comparison, re-read from the database. Returns `null` once it is gone.
+/// One comparison, from the copy. Returns `null` once it is gone.
 final comparisonProvider = Provider.family<Comparison?, String>((ref, id) {
   ref.watch(comparisonsProvider);
-  return ref.read(comparisonDaoProvider).getById(id);
+  return ref.read(comparisonsDataProvider).getById(id);
 });

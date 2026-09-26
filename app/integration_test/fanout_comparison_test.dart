@@ -7,7 +7,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
 import 'package:karmashala_environments/store.dart';

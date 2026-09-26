@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_observer.dart';
@@ -17,7 +16,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 const String _appPubspec = '''
 name: demo
@@ -35,7 +34,7 @@ const EnvironmentPath _project = EnvironmentPath(
 
 /// `flutter analyze` and `flutter test` as checks the app runs and records.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late Directory artifacts;
 
@@ -65,14 +64,14 @@ void main() {
 
   setUp(() async {
     artifacts = Directory.systemTemp.createTempSync('karmashala-gate-test');
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db, data: await server.override()),
+        ...fakeTerminalOverrides(machine: db, data: await server.override()),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
             fallback: FakeCommandRunner(
@@ -91,7 +90,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
     if (artifacts.existsSync()) artifacts.deleteSync(recursive: true);
   });
 
@@ -107,7 +105,7 @@ void main() {
               .instanceFor(paneId)!
           as FakeTerminalInstance;
 
-  List<VerificationRun> recorded() =>
+  Future<List<VerificationRun>> recorded() =>
       container.read(verificationServiceProvider).list();
 
   test(
@@ -143,7 +141,7 @@ void main() {
     paneOf(paneId).exitWith(0);
     await settle();
 
-    final run = recorded().single;
+    final run = (await recorded()).single;
     expect(run.verdict, VerificationVerdict.pass);
     expect(run.title, 'flutter analyze · /home/me/app');
     expect(loop().byPane(paneId)!.verificationRunId, run.id);
@@ -157,7 +155,7 @@ void main() {
     paneOf(paneId).exitWith(1);
     await settle();
 
-    final run = recorded().single;
+    final run = (await recorded()).single;
     expect(run.verdict, VerificationVerdict.fail);
     expect(run.reason, contains('exited 1'));
     final artifact = File(
@@ -171,7 +169,7 @@ void main() {
     final outcome = await loop().pubGet(_project);
     paneOf(outcome.run!.paneId).exitWith(0);
     await settle();
-    expect(recorded(), isEmpty);
+    expect(await recorded(), isEmpty);
     // The exit is still noted on the run: it is history, just not a verdict.
     expect(loop().byPane(outcome.run!.paneId)!.exitCode, 0);
   });
@@ -189,7 +187,7 @@ void main() {
         .single;
     paneOf(paneId).exitWith(1);
     await settle();
-    expect(recorded(), isEmpty);
+    expect(await recorded(), isEmpty);
   });
 
   test('a second gate of the same kind while one is live is refused', () async {
@@ -217,7 +215,7 @@ void main() {
       final broken = await loop().gate(_project, FlutterCommandKind.analyze);
       paneOf(broken.run!.paneId).exitWith(1);
       await settle();
-      expect(recorded(), isEmpty);
+      expect(await recorded(), isEmpty);
 
       // An errored queue would swallow every exit after it, silently.
       File(artifacts.path).deleteSync();
@@ -225,8 +223,8 @@ void main() {
       final next = await loop().gate(_project, FlutterCommandKind.test);
       paneOf(next.run!.paneId).exitWith(0);
       await settle();
-      expect(recorded(), hasLength(1));
-      expect(recorded().single.verdict, VerificationVerdict.pass);
+      expect(await recorded(), hasLength(1));
+      expect((await recorded()).single.verdict, VerificationVerdict.pass);
     },
   );
 }

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -17,13 +16,12 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
@@ -90,25 +88,6 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-/// Counts the SQL the reading issues. `package:sqlite3` is synchronous, so each
-/// statement runs on the UI isolate inside the frame.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  int statements = 0;
-
-  void reset() => statements = 0;
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    statements++;
-    return super.query(sql, params);
-  }
-}
-
 class _CountingLocator extends CliStoreLocator {
   _CountingLocator(this.stores)
     : super(runnerFor: ((_) => FakeCommandRunner()));
@@ -171,9 +150,8 @@ void main() {
 
   /// One reading over [rows] dead sessions, returning what it cost.
   Future<_Cost> readingOver(int rows) async {
-    final db = _CountingDatabase();
-    final server = FakeDataServer()..mirrorInto(db);
-    addTearDown(db.close);
+    final db = CountingMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.environmentRows.upsert(wslEnv());
     server.projectRows.insert(project());
@@ -197,7 +175,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -245,7 +223,7 @@ void main() {
       locates: locator.calls,
       listings: index.listings,
       singleProbes: listings.where((l) => l.startsWith('single/')).length,
-      statements: db.statements,
+      statements: db.count,
     );
   }
 
@@ -287,9 +265,9 @@ void main() {
           '120 rows cost ${many.statements} statements against '
           '${one.statements} for one — something in the path reads per row',
     );
-    // A sanity floor, so a reading that somehow issued no SQL at all cannot
-    // pass by being equally free at every size.
-    expect(one.statements, greaterThan(0));
+    // No floor: the rows come from the data client and the layout is the
+    // client's own store, so a reading may issue no SQL here at all; the
+    // `removable` check above is what proves it did the work.
     expect(one.statements, lessThan(12));
   });
 
@@ -298,9 +276,8 @@ void main() {
     () async {
       // 120 rows, none of which ever made a promise: the free half answers on
       // its own and the disk is never opened.
-      final db = _CountingDatabase();
-      final server = FakeDataServer()..mirrorInto(db);
-      addTearDown(db.close);
+      final db = CountingMachine();
+      final server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
@@ -315,7 +292,7 @@ void main() {
       final listings = <String>[];
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -359,7 +336,7 @@ void main() {
       expect(listings, isEmpty);
       // Fewer than a reading that swept, because the sweep's own environment
       // read never happened — and in no case per row.
-      expect(db.statements, lessThan(12));
+      expect(db.count, lessThan(12));
       expect(container.read(unresumableSessionsProvider).hasRun, isTrue);
     },
   );

@@ -7,22 +7,19 @@ import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
 import '../domain/missed_fires.dart';
 import '../domain/scheduled_resume.dart';
-import '../store/automation_dao.dart';
-import '../store/scheduled_resume_dao.dart';
 import 'automation_firing.dart';
+import 'automation_records.dart';
 import 'automation_timer.dart';
-import 'scheduler_chore.dart';
 
 /// Longest a single timer is armed for, after which it re-arms: a schedule six
 /// months out is not one `Timer` across a suspend.
 const Duration kMaxTimerDelay = Duration(hours: 24);
 
-/// One armed timer for the next occurrence across every automation, every
-/// scheduled resume and every chore; nothing polls. Runs in the session host
-/// when there is one, else in the app.
+/// One armed timer for the next occurrence across every automation and every
+/// scheduled resume; nothing polls. Runs in the server.
 class AutomationScheduler {
   AutomationScheduler({
-    required AutomationDao automations,
+    required AutomationRecords automations,
     required this._resumes,
     required this._sessionOf,
     required this._firing,
@@ -30,8 +27,6 @@ class AutomationScheduler {
     required this._timer,
     required DateTime Function() now,
     required this._newId,
-    this._chores = const [],
-    this.firesAutomations = true,
     void Function()? onChanged,
     void Function(String sessionId)? onResumeChanged,
     void Function(ScheduledResume ended)? onResumeEnded,
@@ -43,15 +38,14 @@ class AutomationScheduler {
        _onResumeEnded = onResumeEnded ?? _nothingEnded,
        availableSince = availableSince ?? now();
 
-  final AutomationDao _dao;
-  final ScheduledResumeDao _resumes;
+  final AutomationRecords _dao;
+  final ResumeRecords _resumes;
   final Session? Function(String sessionId) _sessionOf;
   final AutomationFiring _firing;
   final ScheduledResumeFiring _resumeFiring;
   final AutomationTimer _timer;
   final DateTime Function() _now;
   final String Function() _newId;
-  final List<SchedulerChore> _chores;
   final void Function() _onChanged;
   final void Function(String sessionId) _onResumeChanged;
   final void Function(ScheduledResume ended) _onResumeEnded;
@@ -59,10 +53,6 @@ class AutomationScheduler {
   static void _nothing() {}
   static void _nothingFor(String _) {}
   static void _nothingEnded(ScheduledResume _) {}
-
-  /// False where another process (the session host) fires automations and
-  /// resumes: this one then keeps only its [SchedulerChore]s on the timer.
-  final bool firesAutomations;
 
   /// When this process started watching (a rebuilt scheduler is handed the
   /// first one's). Only an occurrence due before it was missed to downtime;
@@ -99,10 +89,6 @@ class AutomationScheduler {
       if (soonest == null || at.isBefore(soonest!)) soonest = at;
     }
 
-    for (final chore in _chores) {
-      consider(chore.nextDue(availableSince: availableSince));
-    }
-    if (!firesAutomations) return soonest;
     for (final automation in _scheduled) {
       final next = _nextFor(automation, after);
       if (next != null && (soonest == null || next.isBefore(soonest!))) {
@@ -171,12 +157,6 @@ class AutomationScheduler {
   Future<void> reconcile() async {
     if (_stopped) return;
     final now = _now();
-    if (!firesAutomations) {
-      for (final chore in _chores) {
-        chore.startIfDue(now, availableSince: availableSince);
-      }
-      return;
-    }
     var changed = _reapOverrunning(now);
     for (final automation in _scheduled) {
       final decision = missedFireDecision(
@@ -232,9 +212,6 @@ class AutomationScheduler {
     }
     if (await _reconcileResumes(now)) changed = true;
     if (_stopped) return;
-    for (final chore in _chores) {
-      chore.startIfDue(now, availableSince: availableSince);
-    }
     if (changed) _onChanged();
   }
 
@@ -420,14 +397,7 @@ class AutomationScheduler {
   );
 
   String _alreadyRunningReason(AutomationRun live) =>
-      live.state == AutomationRunState.running
-      ? 'This automation was still running the occurrence due '
-            '${live.scheduledFor.toLocal()}, so this one was not started. One '
-            'run of an automation at a time — the same prompt twice over is '
-            'not the schedule doing its job.'
-      : 'This automation already had the occurrence due '
-            '${live.scheduledFor.toLocal()} waiting for its checkout, so this '
-            'one was not queued behind it as well.';
+      alreadyRunningReason(live);
 
   void _recordMissed(Automation automation, MissedFires missed, DateTime now) {
     _dao.insertRun(
@@ -473,63 +443,20 @@ class AutomationScheduler {
     }
   }
 
-  /// Starts an event rule's session under a scheduled fire's rules. [run] is
-  /// written before the fire so its origin chain survives a queue.
-  Future<void> startEventRun(Automation automation, AutomationRun run) async {
-    final queued = queueEventRun(automation, run);
-    if (queued == null || queued.state != AutomationRunState.queued) return;
-    if (_liveInCheckout(automation.repositoryId)?.id != queued.id) return;
-    await _firing.fire(
-      automation,
-      run.scheduledFor,
-      note: run.reason,
-      queued: queued,
-    );
-    _onChanged();
-  }
-
   /// Writes an event rule's [run] as `queued` (or `missed` when the rule is
   /// already running one) without firing it; a scheduler that drains the
   /// checkout starts it. Returns the row written.
-  AutomationRun? queueEventRun(Automation automation, AutomationRun run) {
-    final live = _dao.liveRunOf(automation.id);
-    if (live != null) {
-      final missed = run.copyWith(
-        state: AutomationRunState.missed,
-        reason: _alreadyRunningReason(live),
-      );
-      _dao.insertRun(missed);
-      _onChanged();
-      return missed;
-    }
-    final busy = _liveInCheckout(automation.repositoryId);
-    final queued = run.copyWith(
-      state: AutomationRunState.queued,
-      reason: busy == null ? run.reason : queuedReason(busy),
-    );
-    _dao.insertRun(queued);
+  AutomationRun queueEventRun(Automation automation, AutomationRun run) {
+    final written = queueEventRunIn(_dao, automation, run);
     _onChanged();
-    return queued;
+    return written;
   }
 
   /// What a queued row says, in the words the page shows.
-  String queuedReason(AutomationRun owner) {
-    final name = _dao.getById(owner.automationId)?.name ?? 'another automation';
-    final what = owner.state == AutomationRunState.running
-        ? '"$name" is running there'
-        : '"$name" is already waiting for it';
-    return 'This checkout is busy: $what. One unattended run owns a checkout '
-        'at a time, so this one is waiting rather than racing it.';
-  }
+  String queuedReason(AutomationRun owner) => queuedReasonIn(_dao, owner);
 
-  /// The run that holds or is waiting on [repositoryId], oldest first.
-  AutomationRun? _liveInCheckout(String repositoryId) {
-    for (final run in _dao.liveRuns()) {
-      final automation = _dao.getById(run.automationId);
-      if (automation?.repositoryId == repositoryId) return run;
-    }
-    return null;
-  }
+  AutomationRun? _liveInCheckout(String repositoryId) =>
+      liveInCheckout(_dao, repositoryId);
 
   /// Starts the oldest waiting run for [repositoryId] when the checkout is
   /// free. Called when a run settles; this is what makes the queue a queue.
@@ -591,3 +518,61 @@ String missedResumeReason(Duration lateBy) {
       'resume within ${kMissedFireGrace.inMinutes} minutes is caught up '
       'unasked — resume it now if you still want it.';
 }
+
+/// Writes an event rule's [run] into [records]: `queued` behind whatever holds
+/// its checkout, or `missed` when the rule already has a run live. Returns the
+/// row written; whichever scheduler drains the checkout starts it.
+AutomationRun queueEventRunIn(
+  AutomationRecords records,
+  Automation automation,
+  AutomationRun run,
+) {
+  final live = records.liveRunOf(automation.id);
+  if (live != null) {
+    final missed = run.copyWith(
+      state: AutomationRunState.missed,
+      reason: alreadyRunningReason(live),
+    );
+    records.insertRun(missed);
+    return missed;
+  }
+  final busy = liveInCheckout(records, automation.repositoryId);
+  final queued = run.copyWith(
+    state: AutomationRunState.queued,
+    reason: busy == null ? run.reason : queuedReasonIn(records, busy),
+  );
+  records.insertRun(queued);
+  return queued;
+}
+
+/// The run that holds or is waiting on [repositoryId], oldest first.
+AutomationRun? liveInCheckout(AutomationRecords records, String repositoryId) {
+  for (final run in records.liveRuns()) {
+    if (records.getById(run.automationId)?.repositoryId == repositoryId) {
+      return run;
+    }
+  }
+  return null;
+}
+
+/// What a row queued behind [owner] says, in the words the page shows.
+String queuedReasonIn(AutomationRecords records, AutomationRun owner) {
+  final name =
+      records.getById(owner.automationId)?.name ?? 'another automation';
+  final what = owner.state == AutomationRunState.running
+      ? '"$name" is running there'
+      : '"$name" is already waiting for it';
+  return 'This checkout is busy: $what. One unattended run owns a checkout '
+      'at a time, so this one is waiting rather than racing it.';
+}
+
+/// Why an occurrence was not started beside [live], the rule's own run.
+String alreadyRunningReason(AutomationRun live) =>
+    live.state == AutomationRunState.running
+    ? 'This automation was still running the occurrence due '
+          '${live.scheduledFor.toLocal()}, so this one was not started. One '
+          'run of an automation at a time — the same prompt twice over is '
+          'not the schedule doing its job.'
+    : 'This automation already had the occurrence due '
+          '${live.scheduledFor.toLocal()} waiting for its checkout, so this '
+          'one was not queued behind it as well.';

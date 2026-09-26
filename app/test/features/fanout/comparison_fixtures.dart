@@ -1,11 +1,9 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// A comparison in the state that matters: merged, one candidate's worktree
 /// deleted, one agent that never started. Shared by the view and the MCP tests
@@ -80,12 +78,12 @@ Comparison seededComparison({bool merged = true}) => Comparison(
 /// The comparison in a database, its project and repository seeded on
 /// [server] (a fresh one when omitted) and mirrored in for the foreign keys;
 /// a container that reads the workspace takes `await server.override()`.
-AppDatabase seedDatabase({bool merged = true, FakeDataServer? server}) {
-  final db = AppDatabase.memory();
-  (server ?? FakeDataServer()).mirrorInto(db)
+TestMachine seedDatabase({bool merged = true, FakeDataServer? server}) {
+  final db = TestMachine();
+  (server ?? FakeDataServer()).runsOn(db)
     ..environmentRows.upsert(windowsEnv())
     ..projectRows.insert(project())
     ..repositoryRows.insert(repository());
-  ComparisonDao(db).insert(seededComparison(merged: merged));
+  db.server.comparisonRows.insert(seededComparison(merged: merged));
   return db;
 }

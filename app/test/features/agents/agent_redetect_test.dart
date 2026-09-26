@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -35,7 +33,6 @@ const _registry = AgentRegistry([
 ]);
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late ProviderContainer container;
 
@@ -85,13 +82,11 @@ void main() {
   setUp(() async {
     installed = {'claude': '2.1.0'};
     reachable = true;
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -104,7 +99,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   AgentInstallationsController notifier() =>

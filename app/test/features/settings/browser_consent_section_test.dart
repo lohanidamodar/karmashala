@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/settings/presentation/permissions_page.dart';
@@ -18,28 +16,19 @@ import 'package:agent_cli/process.dart';
 /// this is not decoration: it is the only path by which `browser_evaluate` ever
 /// becomes available, and the only place a grant can be taken back.
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime)
       ..projectRows.insert(project())
       ..projectRows.insert(project(id: 'p2', name: 'Other', path: r'C:\src\o'));
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
   });
 
-  tearDown(() => db.close());
-
   Future<ProviderContainer> pump(WidgetTester tester) async {
-    final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        await server.override(),
-      ],
-    );
+    final container = ProviderContainer(overrides: [await server.override()]);
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(

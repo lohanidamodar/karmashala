@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/mcp/session_tools.dart';
@@ -27,7 +26,7 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../sessions/fixture_menu_screen.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala_session/events.dart';
@@ -48,7 +47,7 @@ const _silent = AgentDescriptor(
 
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer fake;
   late ProviderContainer container;
   late LauncherControlServer server;
@@ -86,15 +85,15 @@ void main() {
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_session_tools_');
-    db = AppDatabase.memory();
-    fake = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    fake = FakeDataServer()..runsOn(db);
     fake.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     fake.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Work'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Work'));
 
     statusLookup = (_) => null;
     waitSubscribed = Completer<void>();
@@ -106,7 +105,7 @@ void main() {
     waitDeadline = Completer<void>();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await fake.override(),
         sessionStatusLookupProvider.overrideWithValue(
           (sessionId) => statusLookup(sessionId),
@@ -138,7 +137,6 @@ void main() {
     await waitReports.close();
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
@@ -213,7 +211,7 @@ void main() {
         .layout
         .panes
         .first;
-    mirroredServer(db).sessionRows.updatePaneId(sessionId, paneId);
+    db.server.sessionRows.updatePaneId(sessionId, paneId);
     final written = <String>[];
     controller.instanceFor(paneId)!.terminal.onOutput = written.add;
     return written;
@@ -445,7 +443,7 @@ void main() {
     });
 
     test('sessionId targets, and does not change who the caller is', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
 
       // Calling as s1 but naming s2: the message goes to s2, which is what a
@@ -478,7 +476,7 @@ void main() {
   // docs/inter-agent-communication.md §4.2 and §4.5.
   group('relays are recorded, and budgeted per pair', () {
     test('a relay survives in the record, beside the turns', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
       attachPane('s2');
 
       await callTool('session_send', {
@@ -486,7 +484,7 @@ void main() {
         'text': 'run the tests',
       }, 's1');
 
-      final relays = mirroredServer(db).relayRows.recentTo('s2', 10);
+      final relays = db.server.relayRows.recentTo('s2', 10);
       expect(relays.total, 1);
       expect(relays.relays.single.fromSessionId, 's1');
       // What the sender wrote, not the envelope the recipient saw.
@@ -503,13 +501,13 @@ void main() {
     test('a message to yourself is not a relay', () async {
       attachPane('s1');
       await callTool('session_send', {'text': 'note to self'}, 's1');
-      expect(mirroredServer(db).relayRows.recentTo('s1', 10).total, 0);
+      expect(db.server.relayRows.recentTo('s1', 10).total, 0);
     });
 
     test('past the budget nothing is sent, and it says why', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
       final written = attachPane('s2');
-      final relays = mirroredServer(db).relayRows;
+      final relays = db.server.relayRows;
       for (var i = 0; i < relayBudget; i++) {
         relays.record(
           SessionRelay(
@@ -539,9 +537,9 @@ void main() {
     });
 
     test('sends older than the window do not count', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
       attachPane('s2');
-      final relays = mirroredServer(db).relayRows;
+      final relays = db.server.relayRows;
       for (var i = 0; i < relayBudget; i++) {
         relays.record(
           SessionRelay(
@@ -566,7 +564,7 @@ void main() {
 
   group('attribution', () {
     test('a relay carries the sending session, built from its row', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
 
       final result = await callTool('session_send', {
@@ -585,8 +583,8 @@ void main() {
     });
 
     test('the sender is the authenticated caller, never the argument', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
-      mirroredServer(db).sessionRows.insert(session(id: 's3', title: 'Impersonated'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's3', title: 'Impersonated'));
       final other = attachPane('s2');
 
       // Every string a model controls, aimed at the prefix: a forged sender id
@@ -662,9 +660,9 @@ void main() {
     });
 
     test('a renamed sender is named by its title now', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
-      mirroredServer(db).sessionRows.updateTitle('s1', 'Audit the MCP surface');
+      db.server.sessionRows.updateTitle('s1', 'Audit the MCP surface');
 
       await callTool('session_send', {
         'sessionId': 's2',
@@ -777,7 +775,7 @@ void main() {
     });
 
     test('the prompt belongs to the target, not the caller', () async {
-      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      db.server.sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
       // s1 is the one holding a prompt; it is still free to talk to s2.
       statusLookup = (id) => id == 's1'
@@ -837,7 +835,7 @@ void main() {
     // captured screen, in the pane's own grid, answered through the tool.
     FixtureMenuScreen folderTrustIn(String sessionId) {
       attachPane(sessionId);
-      final paneId = mirroredServer(db).sessionRows.getById(sessionId)!.paneId!;
+      final paneId = db.server.sessionRows.getById(sessionId)!.paneId!;
       final terminal = container
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(paneId)!
@@ -901,8 +899,12 @@ void main() {
     test('refuses to guess when the agent names no key to decline', () async {
       // Codex says how to continue and never says how to decline. Esc is a
       // guess, and the tool must not make it on the user's behalf.
-      fake.installationRows.insert(agentInstallation(id: 'a2', agentId: 'codex'));
-      mirroredServer(db).sessionRows.insert(session(id: 's3', agentInstallationId: 'a2'));
+      fake.installationRows.insert(
+        agentInstallation(id: 'a2', agentId: 'codex'),
+      );
+      db.server.sessionRows.insert(
+        session(id: 's3', agentInstallationId: 'a2'),
+      );
       attachPane('s3');
 
       final result = await callTool('session_answer', {
@@ -926,7 +928,7 @@ void main() {
 
   group('session_transcript', () {
     test('returns the recorded turns, newest last', () async {
-      final events = mirroredServer(db).eventRows;
+      final events = db.server.eventRows;
       events.append(
         event(payload: '{"role":"user","text":"first"}', type: 'message.user'),
       );
@@ -961,7 +963,7 @@ void main() {
       attachPane('s1');
       container
           .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(mirroredServer(db).sessionRows.getById('s1')!.paneId!)!
+          .instanceFor(db.server.sessionRows.getById('s1')!.paneId!)!
           .terminal
           .write('waiting for your approval\r\n');
 
@@ -977,7 +979,7 @@ void main() {
     });
 
     test('limit caps the turns and reports what was left out', () async {
-      final events = mirroredServer(db).eventRows;
+      final events = db.server.eventRows;
       for (var i = 0; i < 5; i++) {
         events.append(event(payload: '{"text":"turn $i"}'));
       }
@@ -1005,7 +1007,7 @@ void main() {
       });
 
       expect(result.isError, isFalse);
-      expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'Fix the login bug');
+      expect(db.server.sessionRows.getById('s1')!.title, 'Fix the login bug');
     });
 
     test('a blank title is refused', () async {
@@ -1014,7 +1016,7 @@ void main() {
         'title': '  ',
       });
       expect(result.isError, isTrue);
-      expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'Work');
+      expect(db.server.sessionRows.getById('s1')!.title, 'Work');
     });
   });
 
@@ -1024,7 +1026,7 @@ void main() {
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
       );
-      final paneId = mirroredServer(db).sessionRows.getById('s1')!.paneId!;
+      final paneId = db.server.sessionRows.getById('s1')!.paneId!;
       expect(controller.instanceFor(paneId), isNotNull);
 
       final result = await callTool('session_end', {'sessionId': 's1'});
@@ -1092,7 +1094,10 @@ void main() {
     // docs/spawn-approval.md: the mode is the model's string, so without a cap
     // any session could start a bypass child with one call.
     test('a bypass caller is refused a bypass child', () async {
-      mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=bypassPermissions');
+      db.server.sessionRows.updatePermissionMode(
+        's1',
+        'mode=bypassPermissions',
+      );
       final result = await callTool('open_new_session', {
         'projectId': 'p1',
         'permissionMode': 'bypass',
@@ -1102,7 +1107,7 @@ void main() {
     });
 
     test('a plan-mode caller is refused a child that writes', () async {
-      mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=plan');
+      db.server.sessionRows.updatePermissionMode('s1', 'mode=plan');
       final result = await callTool('open_new_session', {
         'projectId': 'p1',
         'permissionMode': 'acceptEdits',
@@ -1112,7 +1117,10 @@ void main() {
     });
 
     test('an exact mode above the cap is refused too', () async {
-      mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=bypassPermissions');
+      db.server.sessionRows.updatePermissionMode(
+        's1',
+        'mode=bypassPermissions',
+      );
       final result = await callTool('open_new_session', {
         'projectId': 'p1',
         'permissionMode': 'mode=bypassPermissions',
@@ -1138,7 +1146,7 @@ void main() {
       container.dispose();
       container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await fake.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           agentRegistryProvider.overrideWithValue(
@@ -1162,7 +1170,7 @@ void main() {
         bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
         socketDirectory: p.join(tmp.path, 'ipc'),
       );
-      mirroredServer(db).importedRows.insertIfAbsent(
+      db.server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i-claude',
           repositoryId: 'r1',
@@ -1222,7 +1230,7 @@ void main() {
           path: r'C:\bin\silent.exe',
         ),
       );
-      mirroredServer(db).importedRows.insertIfAbsent(
+      db.server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i-silent',
           repositoryId: 'r1',
@@ -1270,7 +1278,7 @@ void main() {
             path: '/home/me/.local/bin/silent',
           ),
         );
-        mirroredServer(db).importedRows.insertIfAbsent(
+        db.server.importedRows.insertIfAbsent(
           ImportedSession(
             id: 'i-silent-wsl',
             repositoryId: 'r-wsl',

@@ -385,3 +385,22 @@ String buildReviewThreadPrompt(List<AnchoredReviewThread> threads) {
   }
   return buffer.toString().trimRight();
 }
+
+/// The table's order: newest activity first, then by id.
+int compareReviewThreads(ReviewThread a, ReviewThread b) {
+  final byUpdated = b.updatedAt.compareTo(a.updatedAt);
+  return byUpdated != 0 ? byUpdated : a.id.compareTo(b.id);
+}
+
+/// [body] as a comment keeps it, or null when nothing is written in it.
+String? reviewBodyOf(String body) {
+  final trimmed = body.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+/// A new thread's status when none is asked for: an agent must not triage its
+/// own findings, so only a person's thread starts as "should fix".
+ReviewThreadStatus defaultReviewStatus(ReviewAuthorKind author) =>
+    author == ReviewAuthorKind.user
+    ? ReviewThreadStatus.shouldFix
+    : ReviewThreadStatus.open;

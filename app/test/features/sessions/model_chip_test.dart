@@ -1,7 +1,6 @@
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -21,7 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -62,7 +61,7 @@ const _unknownModels = AgentDescriptor(
 class Harness {
   Harness(this.db, this.container, this.sessionId, this.written);
 
-  final AppDatabase db;
+  final TestMachine db;
   final ProviderContainer container;
   final String sessionId;
 
@@ -98,8 +97,8 @@ Future<Harness> harness(
   String? model,
   String? defaultModel,
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -107,7 +106,7 @@ Future<Harness> harness(
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(registry),
@@ -142,7 +141,7 @@ Future<Harness> harness(
           .onOutput =
       written.add;
   if (model != null) {
-    mirroredServer(db).sessionRows.updateModel(launched.session.id, model);
+    db.server.sessionRows.updateModel(launched.session.id, model);
   }
   return Harness(db, container, launched.session.id, written);
 }
@@ -157,7 +156,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(tester);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
 
@@ -174,7 +172,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(tester, defaultModel: 'opus');
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
 
@@ -222,7 +219,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(tester, model: 'sonnet', defaultModel: 'opus');
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
 
@@ -239,7 +235,6 @@ void main() {
 
   testWidgets('the chip shows the model the launcher resolves', (tester) async {
     final h = await harness(tester, model: 'opus');
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
 
@@ -259,7 +254,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(tester, model: 'claude-opus-4-1');
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
 
@@ -286,7 +280,6 @@ void main() {
       agentId: _untellable.id,
       registry: const AgentRegistry([DataOnlyAgentAdapter(_untellable)]),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await openMenu(tester);
@@ -312,7 +305,6 @@ void main() {
       agentId: _unknownModels.id,
       registry: const AgentRegistry([DataOnlyAgentAdapter(_unknownModels)]),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
 
@@ -323,7 +315,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(tester, model: 'opus');
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await openMenu(tester);
@@ -343,10 +334,7 @@ void main() {
     await tester.tap(find.text('Follow the Settings default'));
     await tester.pumpAndSettle();
 
-    expect(
-      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
-      isNull,
-    );
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, isNull);
     expect(find.text('default'), findsOneWidget);
   });
 
@@ -354,7 +342,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(tester);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await openMenu(tester);
@@ -368,10 +355,7 @@ void main() {
     expect(h.written, ['/model opus', kEndOfLineKey, '\r']);
     expect(find.textContaining('switched now'), findsOneWidget);
     expect(find.textContaining('/model opus'), findsOneWidget);
-    expect(
-      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
-      'opus',
-    );
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
     expect(find.text('Opus'), findsOneWidget);
   });
 
@@ -379,7 +363,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(tester, status: AgentActivityStatus.working);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await openMenu(tester);
@@ -393,17 +376,13 @@ void main() {
     expect(h.written, isEmpty);
     expect(find.textContaining('finishes this turn'), findsOneWidget);
     // The override is still recorded, so the next launch runs on it.
-    expect(
-      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
-      'opus',
-    );
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
   });
 
   testWidgets('Codex, idle: its own picker opens, and the chip says so', (
     tester,
   ) async {
     final h = await harness(tester, agentId: AgentIds.codex);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await openMenu(tester);
@@ -413,17 +392,13 @@ void main() {
 
     expect(h.written.join(), contains('/model'));
     expect(find.textContaining('opened its own model picker'), findsOneWidget);
-    expect(
-      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
-      'gpt-5.5',
-    );
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'gpt-5.5');
   });
 
   testWidgets('the menu draws the house two-line row, checked once', (
     tester,
   ) async {
     final h = await harness(tester, model: 'sonnet');
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await openMenu(tester);

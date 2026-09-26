@@ -1,8 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -10,7 +8,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/unattended_preflight.dart';
-import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
@@ -19,7 +16,6 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// The lookup half of the gate, against the app's own tables.
 ///
@@ -31,7 +27,6 @@ import '../../support/workspace_mirror.dart';
 void main() {
   late FakeDataServer server;
   late DataClient client;
-  late AppDatabase db;
   late ProviderContainer container;
 
   Automation automation({
@@ -57,8 +52,8 @@ void main() {
       container.read(unattendedPreflightProvider).refusalFor(a);
 
   void makeReady() {
-    final checks = container.read(projectCheckDaoProvider);
-    checks.setVerificationEnabled('r1', enabled: true, now: testTime);
+    final checks = container.read(projectChecksDataProvider);
+    checks.setVerification('r1', enabled: true);
     container.read(automationControllerProvider).addCheck(
       'r1',
       'the test suite',
@@ -69,7 +64,6 @@ void main() {
   ProviderContainer build({List<Override> extra = const []}) =>
       ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           dataClientProvider.overrideWithValue(client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('c-')),
@@ -78,17 +72,17 @@ void main() {
       );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     client = await server.connect();
-    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
-    AutomationDao(db).insert(automation());
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
+    server.automationRows.insert(automation());
     container = build();
     addTearDown(container.dispose);
-    addTearDown(db.close);
   });
 
   group('verification, read off the checkout the automation names', () {
@@ -100,8 +94,8 @@ void main() {
 
     test('verification on with no check is still refused', () {
       container
-          .read(projectCheckDaoProvider)
-          .setVerificationEnabled('r1', enabled: true, now: testTime);
+          .read(projectChecksDataProvider)
+          .setVerification('r1', enabled: true);
       expect(
         refusalFor(automation())!.kind,
         UnattendedRefusalKind.noProjectChecks,
@@ -126,7 +120,7 @@ void main() {
       makeReady();
       expect(refusalFor(automation()), isNull);
       final check = container
-          .read(projectCheckDaoProvider)
+          .read(projectChecksDataProvider)
           .forRepository('r1')
           .single;
       container.read(automationControllerProvider).removeCheck(check.id);
@@ -230,8 +224,8 @@ void main() {
         ],
       );
       container
-          .read(projectCheckDaoProvider)
-          .setVerificationEnabled('r2', enabled: true, now: testTime);
+          .read(projectChecksDataProvider)
+          .setVerification('r2', enabled: true);
       container.read(automationControllerProvider).addCheck(
         'r2',
         'the test suite',
@@ -275,8 +269,8 @@ void main() {
         );
         await pumpEventQueue();
         container
-            .read(projectCheckDaoProvider)
-            .setVerificationEnabled('r3', enabled: true, now: testTime);
+            .read(projectChecksDataProvider)
+            .setVerification('r3', enabled: true);
         container.read(automationControllerProvider).addCheck(
           'r3',
           'the test suite',

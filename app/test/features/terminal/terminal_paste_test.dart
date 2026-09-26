@@ -1,5 +1,4 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:flutter/gestures.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import '../../support/test_machine.dart';
 
 /// Pasting into a pane, and the one case the text-only paste got wrong.
 ///
@@ -31,7 +31,7 @@ void main() {
   // chord *does*, which is the same on every platform.
   setUp(() => commandKeyIsMeta = false);
 
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   /// What `Clipboard.getData` answers. `null` is the image case: a bitmap on
@@ -42,15 +42,14 @@ void main() {
   bool clipboardThrows = false;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TestMachine();
     clipboardText = null;
     clipboardThrows = false;
-    container = fakeTerminalContainer(database: db);
+    container = fakeTerminalContainer(machine: db);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   /// Pumps the workbench with one focused pane, and returns it plus everything

@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -16,13 +14,12 @@ import 'package:karmashala/src/features/sessions/application/session_ui_provider
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/counting_sessions.dart';
 
 /// **What one narrow fact costs the app.**
@@ -71,13 +68,13 @@ void main() {
   /// The server each seeded database's workspace lives at.
   final serverOf = Expando<FakeDataServer>();
 
-  _CountingDatabase seed(int count) {
-    final db = _CountingDatabase();
-    final server = serverOf[db] = FakeDataServer()..mirrorInto(db);
-    mirroredServer(db).environmentRows.upsert(windowsEnv());
+  _CountingMachine seed(int count) {
+    final db = _CountingMachine();
+    final server = serverOf[db] = FakeDataServer()..runsOn(db);
+    db.server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    mirroredServer(db).installationRows.insert(agentInstallation());
+    db.server.installationRows.insert(agentInstallation());
     for (var i = 0; i < count; i++) {
       server.sessionRows.insert(
         session(
@@ -91,12 +88,11 @@ void main() {
   }
 
   Future<ProviderContainer> mount(
-    _CountingDatabase db, {
+    _CountingMachine db, {
     FakeCommandRunner? git,
   }) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await serverOf[db]!.override(),
         // The copy, counted: these cases write from this app, or bump by
         // hand, so no server change needs announcing.
@@ -140,7 +136,6 @@ void main() {
     for (final count in scale) {
       test('at $count sessions it costs the same handful of reads', () async {
         final db = seed(count);
-        addTearDown(db.close);
         final container = await mount(db);
         listenToEverything(container, count);
         await container.pump();
@@ -186,7 +181,7 @@ void main() {
     /// a listener that woke would still push the number past it.
     const renamedRowLookup = 1;
 
-    late _CountingDatabase db;
+    late _CountingMachine db;
     late ProviderContainer container;
 
     setUp(() async {
@@ -194,7 +189,6 @@ void main() {
       container = await mount(db);
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
     });
-    tearDown(() => db.close());
 
     /// Subscribes, then renames, and reports what the database was asked.
     ///
@@ -243,7 +237,7 @@ void main() {
   });
 
   group('what a rename must still wake', () {
-    late _CountingDatabase db;
+    late _CountingMachine db;
     late ProviderContainer container;
 
     setUp(() async {
@@ -252,7 +246,6 @@ void main() {
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
       container.listen(attentionInboxProvider, (_, _) {});
     });
-    tearDown(() => db.close());
 
     test('the session list shows the new title', () async {
       container.listen(sessionsForSelectedRepositoryProvider, (_, _) {});
@@ -306,7 +299,6 @@ void main() {
   group('the coarse signal still works', () {
     test('a plain bump wakes every narrowed watcher', () async {
       final db = seed(10);
-      addTearDown(db.close);
       final container = await mount(db);
       listenToEverything(container, 10);
       await container.pump();
@@ -334,7 +326,6 @@ void main() {
 
     test('a per-session watcher wakes on a coarse bump too', () async {
       final db = seed(10);
-      addTearDown(db.close);
       final container = await mount(db);
       container.listen(sessionWhereaboutsProvider('s5'), (_, _) {});
       await container.pump();
@@ -354,7 +345,7 @@ void main() {
   });
 
   group('membership and status still travel', () {
-    late _CountingDatabase db;
+    late _CountingMachine db;
     late ProviderContainer container;
 
     setUp(() async {
@@ -367,7 +358,6 @@ void main() {
       container.listen(sessionsForSelectedRepositoryProvider, (_, _) {});
       await container.pump();
     });
-    tearDown(() => db.close());
 
     test('a deleted session leaves every list', () async {
       await container
@@ -399,7 +389,6 @@ void main() {
   group('the git a rename used to spawn', () {
     test('the checkout picker no longer asks git anything', () async {
       final db = seed(10);
-      addTearDown(db.close);
       final git = FakeCommandRunner();
       final container = await mount(db, git: git);
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
@@ -427,22 +416,21 @@ void main() {
   });
 }
 
-/// An [AppDatabase] that counts every SELECT (the tables not moved yet), and
-/// carries the log of reads of the sessions copy — the unit that matters.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  final List<String> sql = [];
+/// Its data requests, and the log of reads of the sessions copy — the unit
+/// that matters.
+class _CountingMachine extends CountingMachine {
   final log = SessionReadLog();
 
+  @override
   void reset() {
-    sql.clear();
+    super.reset();
     log.reset();
   }
 
-  int get queries => sql.length;
+  int get queries => count;
 
   /// Each read of the sessions copy, by method.
+  @override
   List<String> get reads => log.reads;
 
   int get rowsScanned => log.rows;
@@ -451,13 +439,4 @@ class _CountingDatabase extends AppDatabase {
 
   /// Whole-list reads — what a one-row change must never pay for.
   int get tableScans => log.tableScans;
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    this.sql.add(sql);
-    return super.query(sql, params);
-  }
 }

@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -21,7 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -52,10 +51,10 @@ const _shareable = AgentDescriptor(
   ),
 );
 
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
 harness({AgentDescriptor descriptor = _codexish}) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
@@ -64,7 +63,7 @@ harness({AgentDescriptor descriptor = _codexish}) async {
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
@@ -140,7 +139,6 @@ void main() {
   test('resuming a session that never stopped reopens it, and launches '
       'nothing', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final liveId = await _startLiveSession(h.container);
@@ -165,7 +163,6 @@ void main() {
 
   test('a detached session is reattached rather than relaunched', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final liveId = await _startLiveSession(h.container);
@@ -199,7 +196,6 @@ void main() {
   test('a session whose process has ended is genuinely resumed, in its own '
       'row', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final stoppedId = await _startDeadSession(h.container, title: 'Live work');
@@ -229,7 +225,6 @@ void main() {
     'the launcher itself refuses a second writer, and writes no row',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await _startLiveSession(h.container);
@@ -260,7 +255,6 @@ void main() {
     'handing a running session to an external terminal is refused, legibly',
     () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await _startLiveSession(h.container);
@@ -313,7 +307,6 @@ void main() {
 
     test('resuming twice does not grow the table', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final originalId = await _startDeadSession(h.container);
@@ -344,7 +337,6 @@ void main() {
       'reuse continues the session and never renames or re-dates it',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final originalId = await _startDeadSession(
@@ -375,7 +367,6 @@ void main() {
 
     test('a resume onto a different repository writes its own row', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       h.server.repositoryRows.insert(repository(id: 'r2', name: 'other'));
@@ -399,10 +390,9 @@ void main() {
 
     test('a resume by a different installation writes its own row', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
-      mirroredServer(h.db).installationRows.insert(
+      h.db.server.installationRows.insert(
         agentInstallation(id: 'a2', agentId: 'codexish', path: r'C:\alt\c.exe'),
       );
       final originalId = await _startDeadSession(h.container);
@@ -422,7 +412,6 @@ void main() {
       'an archived row is left archived, and a new one is written',
       () async {
         final h = await harness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final originalId = await _startDeadSession(h.container);
@@ -449,7 +438,6 @@ void main() {
       // refusal does not fire and the reuse check is what stands between "a
       // second session, as asked" and losing the pane the first one is in.
       final h = await harness(descriptor: _shareable);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await _startLiveSession(h.container, agentId: 'sharish');
@@ -498,7 +486,6 @@ void main() {
     // conversation free while a pane was still writing to it.
     test('the live row is found when the dead duplicate came first', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final deadId = await _startDeadSession(h.container);
@@ -537,7 +524,6 @@ void main() {
 
     test('the live row is found when the dead duplicate came after', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final liveId = await _startLiveSession(h.container);
@@ -549,7 +535,6 @@ void main() {
 
     test('all-dead duplicates leave the conversation free', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await _startDeadSession(h.container);
@@ -563,7 +548,6 @@ void main() {
 
   test('an unrelated conversation is unaffected by a live one', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     await _startLiveSession(h.container);

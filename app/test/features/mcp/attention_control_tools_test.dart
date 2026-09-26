@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
@@ -17,7 +15,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// Notes and the inbox, over the endpoint.
@@ -27,7 +25,7 @@ import 'package:agent_cli/process.dart';
 /// state was a human reading a badge.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
 
@@ -41,27 +39,23 @@ void main() {
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_attention_tools_');
-    db = AppDatabase.memory();
+    db = TestMachine();
     final fake = FakeDataServer(
       clock: () => testTime,
       repositoryOfSession: {'s1': 'r1'},
       projectOfRepository: {'r1': 'p1'},
-    )..mirrorInto(db);
+    )..runsOn(db);
     fake.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     fake.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Fix login'));
 
     final data = await fake.override();
     container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        data,
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-      ],
+      overrides: [data, clockProvider.overrideWithValue(FixedClock(testTime))],
     );
     server = LauncherControlServer(container);
     await server.start(
@@ -73,7 +67,6 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 

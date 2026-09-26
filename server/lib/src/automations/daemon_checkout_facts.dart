@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala_git/repositories.dart';

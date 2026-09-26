@@ -37,7 +37,6 @@ import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -49,6 +48,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// **The Explorer is two levels: a header, and what is under it.**
 ///
@@ -58,7 +58,7 @@ import '../terminal/fake_instance.dart';
 /// carried has to be somewhere else. This file is the list of where: each test
 /// names an affordance the old tree had and finds it in the new one.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   // One client for every container a test makes: a "restart" reads the
   // settings back from the same server.
   late DataClient data;
@@ -139,16 +139,15 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     server = FakeDataServer();
     data = await server.connect();
   });
-  tearDown(() => db.close());
 
   ProviderContainer newContainer() {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

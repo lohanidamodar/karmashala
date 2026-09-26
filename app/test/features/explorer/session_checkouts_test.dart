@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -19,7 +17,7 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -52,7 +50,7 @@ void main() {
   const inboxPath = r'C:\src\demo\projects\wt-inbox';
   const otherPath = r'C:\src\other';
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late FakeCommandRunner git;
   late ProviderContainer container;
@@ -114,7 +112,7 @@ void main() {
     String repositoryId = 'hub',
     String? worktree,
     String? workingDirectory,
-  }) => mirroredServer(db).sessionRows.insert(
+  }) => db.server.sessionRows.insert(
     Session(
       id: id,
       repositoryId: repositoryId,
@@ -130,7 +128,7 @@ void main() {
 
   /// A subagent of [parent] that recorded [directory] as the place it runs.
   void subagent(String id, String parent, {String? directory}) =>
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'hub',
@@ -157,15 +155,14 @@ void main() {
   setUp(() async {
     dirty = <String>{};
     families = <String, List<String>>{};
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Demo', path: hubPath));
     server.installationRows.insert(agentInstallation());
     git = FakeCommandRunner(responder: respond);
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -184,7 +181,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   /// The panel following [sessionId], which is what a tab switch does.
   void follow(String sessionId) =>

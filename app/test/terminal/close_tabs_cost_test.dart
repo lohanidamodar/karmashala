@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
@@ -17,17 +16,17 @@ import '../features/terminal/fake_instance.dart';
 /// tabs is one act, so it is one publish and one save — and these count them,
 /// because a cost test counts work rather than timing it.
 void main() {
-  late AppDatabase db;
+  late TerminalLayoutStore db;
   late _CountingLayoutDao dao;
   late ProviderContainer container;
   late TerminalSessionsController controller;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TerminalLayoutStore.memory();
     dao = _CountingLayoutDao(db);
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(layoutStore: db),
         terminalLayoutDaoProvider.overrideWithValue(dao),
       ],
     );

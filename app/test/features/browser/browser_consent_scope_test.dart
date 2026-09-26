@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -9,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// Which project a browser call belongs to — the question the consent gate
@@ -21,13 +19,13 @@ import 'package:agent_cli/process.dart';
 /// at) and, more importantly, pin what happens when neither is: a refusal, not
 /// a pass.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer(clock: () => testTime).mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer(clock: () => testTime).runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
@@ -35,18 +33,12 @@ void main() {
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1'));
-    container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        await server.override(),
-      ],
-    );
+    db.server.sessionRows.insert(session(id: 's1'));
+    container = ProviderContainer(overrides: [await server.override()]);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   test('a calling session resolves to its checkout\'s project', () {
@@ -123,12 +115,7 @@ void main() {
         .read(browserConsentStoreProvider)
         .grant('p1', BrowserCapability.evaluate, grantedBy: 'settings');
     await pumpEventQueue();
-    final second = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        await server.override(),
-      ],
-    );
+    final second = ProviderContainer(overrides: [await server.override()]);
     addTearDown(second.dispose);
     expect(
       second

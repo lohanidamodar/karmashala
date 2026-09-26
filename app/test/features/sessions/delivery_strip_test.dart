@@ -3,7 +3,6 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:async';
 
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
@@ -26,7 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -91,7 +90,7 @@ class _RecordingArchive extends SessionArchiveService {
 
 void main() {
   late _Recorder recorder;
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
 
@@ -102,8 +101,8 @@ void main() {
 
   setUp(() async {
     recorder = _Recorder();
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -122,7 +121,6 @@ void main() {
       ),
     );
   });
-  tearDown(() => db.close());
 
   /// Nowhere to continue to: these tests are about the delivery actions, and
   /// "Continue with…" is not one of them.
@@ -144,7 +142,7 @@ void main() {
       ProviderScope(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
           sessionContinuationProvider.overrideWith((ref, _) => noContinuation),
@@ -188,7 +186,7 @@ void main() {
       ProviderScope(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sessionDeliveryProvider.overrideWith(
             // No answer yet is the same as no answer at all here: the line
@@ -717,7 +715,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
         sessionContinuationProvider.overrideWith((ref, _) => noContinuation),

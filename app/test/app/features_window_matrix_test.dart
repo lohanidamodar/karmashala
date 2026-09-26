@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';
@@ -19,7 +18,6 @@ import 'package:karmashala_devices/ports.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/widgets.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../features/browser/fake_browser.dart';
@@ -250,14 +248,9 @@ void main() {
       await expectSurvivesWindowMatrix(
         tester,
         build: () {
-          final db = AppDatabase.memory();
-          addTearDown(db.close);
           server.environmentRows.upsert(windowsEnv());
           final container = ProviderContainer(
-            overrides: [
-              databaseProvider.overrideWithValue(db),
-              dataClientProvider.overrideWithValue(data),
-            ],
+            overrides: [dataClientProvider.overrideWithValue(data)],
           );
           addTearDown(container.dispose);
           return UncontrolledProviderScope(

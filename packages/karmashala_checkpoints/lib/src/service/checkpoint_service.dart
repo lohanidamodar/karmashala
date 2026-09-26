@@ -2,8 +2,9 @@ import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
-import '../store/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
+import '../domain/checkpoint_rules.dart';
+import 'checkpoint_records.dart';
 
 /// **The half of an undo this app cannot do.** A checkpoint is a git tree; we
 /// keep no cursor into any CLI's conversation, so the agent carries on.
@@ -88,7 +89,7 @@ class CheckpointService {
   CheckpointService({
     required this.runnerFactory,
     required this.environmentOf,
-    required this.dao,
+    required this.records,
     required this.clock,
     required this.newId,
     this.files = const HostGitFiles(),
@@ -98,7 +99,7 @@ class CheckpointService {
 
   /// The environment row an id names, or null when there is none.
   final ExecutionEnvironment? Function(String id) environmentOf;
-  final CheckpointDao dao;
+  final CheckpointRecords records;
   final Clock clock;
   final String Function() newId;
 
@@ -124,7 +125,10 @@ class CheckpointService {
     await git.ensureCheckpointDirs(repo, dirs);
     final tree = await git.writeWorkingTree(repo, dirs);
 
-    final previous = dao.latestFor(sessionId, repository: repo);
+    final previous = latestCheckpointIn(
+      await records.forSession(sessionId),
+      repository: repo,
+    );
     if (!evenIfUnchanged && previous != null && previous.treeSha == tree) {
       return null;
     }
@@ -148,12 +152,12 @@ class CheckpointService {
         ? const <String, FileDiffStat>{}
         : await git.diffNumstat(repo, from: base, to: tree);
 
-    return dao.insert(
+    return records.record(
       Checkpoint(
         id: newId(),
         sessionId: sessionId,
         repository: repo,
-        // Replaced by the DAO, which owns the numbering.
+        // Replaced by the store, which owns the numbering.
         sequence: 0,
         treeSha: tree,
         commitSha: commit,
@@ -178,7 +182,7 @@ class CheckpointService {
     required String sessionId,
     required int keep,
   }) async {
-    final chain = dao.forRepository(sessionId, repo);
+    final chain = checkpointChainIn(await records.forSession(sessionId), repo);
     if (keep <= 0 || chain.length <= keep) return 0;
     final dropped = chain.sublist(0, chain.length - keep);
     final kept = chain.sublist(chain.length - keep);
@@ -198,7 +202,11 @@ class CheckpointService {
       parent = commit;
     }
     await git.updateRef(repo, Checkpoint.refFor(sessionId), parent!);
-    dao.prune(dropIds: [for (final c in dropped) c.id], rewritten: rewritten);
+    await records.prune(
+      sessionId,
+      dropIds: [for (final c in dropped) c.id],
+      rewritten: rewritten,
+    );
     return dropped.length;
   }
 
@@ -248,11 +256,10 @@ class CheckpointService {
 
   // --- reading ---------------------------------------------------------------
 
-  List<Checkpoint> forSession(String sessionId) => dao.forSession(sessionId);
+  Future<List<Checkpoint>> forSession(String sessionId) =>
+      records.forSession(sessionId);
 
-  List<Checkpoint> recent({int limit = 50}) => dao.recent(limit: limit);
-
-  Checkpoint? byId(String id) => dao.getById(id);
+  Future<Checkpoint?> byId(String id) => records.byId(id);
 
   /// The diff this checkpoint *is*: what changed between the one before it and
   /// it. Empty for the first checkpoint of a session in a repository with no
@@ -260,7 +267,12 @@ class CheckpointService {
   Future<String> diffOf(Checkpoint checkpoint) async {
     // The previous checkpoint's tree if there is one; otherwise the commit the
     // repository was on, which is the only earlier state that exists.
-    final base = dao.previousOf(checkpoint)?.treeSha ?? checkpoint.headSha;
+    final base =
+        previousCheckpointIn(
+          await records.forSession(checkpoint.sessionId),
+          checkpoint,
+        )?.treeSha ??
+        checkpoint.headSha;
     if (base == null) return '';
     return _gitFor(
       checkpoint.repository,
@@ -269,7 +281,10 @@ class CheckpointService {
 
   /// What has changed in [repo] since [sessionId]'s most recent checkpoint.
   Future<String> pendingSince(EnvironmentPath repo, String sessionId) async {
-    final latest = dao.latestFor(sessionId, repository: repo);
+    final latest = latestCheckpointIn(
+      await records.forSession(sessionId),
+      repository: repo,
+    );
     if (latest == null) return '';
     return _gitFor(repo).diffObjects(repo, from: latest.treeSha);
   }
@@ -289,8 +304,8 @@ class CheckpointService {
     await git.ensureCheckpointDirs(repo, dirs);
 
     final current = await git.writeWorkingTree(repo, dirs);
-    final latest = dao.latestFor(
-      checkpoint.sessionId,
+    final latest = latestCheckpointIn(
+      await records.forSession(checkpoint.sessionId),
       repository: checkpoint.repository,
     );
     final movedSinceLastCheckpoint =

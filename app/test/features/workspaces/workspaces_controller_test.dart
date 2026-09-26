@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
@@ -13,17 +11,14 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late FakeDataServer server;
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
     server.environmentRows.upsert(windowsEnv());
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -32,7 +27,6 @@ void main() {
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   WorkspacesController controller() =>

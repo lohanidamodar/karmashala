@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_observer.dart';
@@ -14,6 +13,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 const String _appPubspec = '''
 name: demo
@@ -27,7 +27,7 @@ flutter:
 /// The agent's door onto the loop: run, stop, status, and the three that make
 /// the loop closable.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late Directory artifacts;
   late CommandResult Function(CommandRequest) responder;
@@ -59,7 +59,7 @@ void main() {
   setUp(() async {
     responder = healthy;
     artifacts = Directory.systemTemp.createTempSync('karmashala-tools-test');
-    db = AppDatabase.memory();
+    db = TestMachine();
     final server = FakeDataServer()
       ..projectRows.insert(project())
       ..repositoryRows.insert(
@@ -70,7 +70,7 @@ void main() {
       ..upsert(wslEnv());
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
@@ -88,7 +88,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
     if (artifacts.existsSync()) artifacts.deleteSync(recursive: true);
   });
 

@@ -1,7 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/explorer/application/project_working.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
@@ -11,20 +10,19 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **Whether a project's running mark turns.** "Running" is the row's record
 /// of what it started; "working" is the agent in a turn right now, and it comes
 /// from the one status registry — subscribed to, never polled, and narrowed so
 /// that a turn starting in one project wakes that project's header alone.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late AgentHookReceiver receiver;
   late SessionStatusRegistry registry;
@@ -39,8 +37,8 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(posixEnv());
     server.installationRows.insert(agentInstallation());
     for (final (projectId, sessions) in [
@@ -59,7 +57,7 @@ void main() {
         ),
       );
       for (final id in sessions) {
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           Session(
             id: id,
             repositoryId: 'r-$projectId',
@@ -93,7 +91,6 @@ void main() {
     );
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(clock),
         sessionStatusRegistryProvider.overrideWithValue(registry),
@@ -104,7 +101,6 @@ void main() {
   tearDown(() {
     container.dispose();
     registry.dispose();
-    db.close();
   });
 
   void hook(String row, String event) {

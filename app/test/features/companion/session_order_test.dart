@@ -5,13 +5,11 @@
 /// labelled instead of quietly dropped.
 library;
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_companion/screens.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,8 +20,7 @@ import 'companion_test_support.dart';
 
 void main() {
   group('through the real gateway, against a real host', () {
-    late AppDatabase db;
-    late PairedDeviceDao dao;
+    late MemoryPairedDeviceStore dao;
     late FakeRemoteBindings fake;
     late RelayServer relay;
     late Uri relayUri;
@@ -32,8 +29,7 @@ void main() {
     final gateways = <RemoteCompanionGateway>[];
 
     setUp(() async {
-      db = AppDatabase.memory();
-      dao = PairedDeviceDao(db);
+      dao = MemoryPairedDeviceStore();
       fake = FakeRemoteBindings();
       relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
       relayUri = Uri.parse('http://127.0.0.1:${relay.port}');
@@ -57,7 +53,6 @@ void main() {
       await service?.stop();
       service = null;
       await relay.close();
-      db.close();
     });
 
     Future<RemoteCompanionGateway> pairedGateway() async {

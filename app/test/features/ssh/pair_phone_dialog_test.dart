@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/ssh/application/companion_route_store.dart';
@@ -15,7 +14,6 @@ import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart'
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 import '../../support/fake_data_server.dart';
@@ -95,7 +93,6 @@ class _Setup implements SshCompanionSetup {
 }
 
 void main() {
-  late AppDatabase db;
   final host = SshHost(
     id: 'h1',
     name: 'do-box',
@@ -109,11 +106,9 @@ void main() {
   late FakeDataServer server;
   late DataClient data;
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
     data = await server.connect();
   });
-  tearDown(() => db.close());
 
   /// Not `pumpAndSettle`: the busy line spins, and the expiry timer is real.
   Future<void> settle(WidgetTester tester) async {
@@ -145,7 +140,6 @@ void main() {
         // second open in one test is a second launch with its own box.
         key: UniqueKey(),
         overrides: [
-          databaseProvider.overrideWithValue(db),
           dataClientProvider.overrideWithValue(data),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sshCompanionSetupProvider.overrideWith(
@@ -461,7 +455,6 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             dataClientProvider.overrideWithValue(data),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             sshCompanionSetupProvider.overrideWith(

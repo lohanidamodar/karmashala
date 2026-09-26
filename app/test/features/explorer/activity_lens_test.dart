@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -15,14 +14,13 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'explorer_default_view_test.dart' show explorerSemanticsDump;
 
 /// **The by-day lens is a separate view.** It swaps the Explorer's body and
@@ -30,7 +28,7 @@ import 'explorer_default_view_test.dart' show explorerSemanticsDump;
 /// lens existing (`explorer_default_view_test` freezes it), and comes back
 /// exactly as it was left.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   final now = DateTime.utc(2026, 9, 21, 12);
 
@@ -38,8 +36,8 @@ void main() {
       EnvironmentPath(environmentId: 'windows', path: path);
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.installationRows.insert(agentInstallation());
     // Enough projects that the tree scrolls.
@@ -57,7 +55,7 @@ void main() {
       );
     }
     void insert(String id, String repo, DateTime created, {String? worktree}) =>
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           Session(
             id: id,
             repositoryId: repo,
@@ -78,7 +76,6 @@ void main() {
       worktree: r'C:\wt\hotfix',
     );
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(
     WidgetTester tester, {
@@ -89,7 +86,6 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(now)),

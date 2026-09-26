@@ -11,7 +11,6 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../fanout/fanout_harness.dart';
 import '../terminal/fake_instance.dart';
-import '../../support/workspace_mirror.dart';
 
 /// The argv the reviewer's pane was actually launched with — the only place
 /// the brief can be observed leaving the app.
@@ -51,7 +50,6 @@ void main() {
   );
   tearDown(() {
     h.container.dispose();
-    h.db.close();
   });
 
   ReviewSessionService service() =>
@@ -104,7 +102,7 @@ void main() {
 
     test('the only installed agent cannot review itself', () async {
       final sessionId = await work();
-      mirroredServer(h.db).installationRows
+      h.db.server.installationRows
         ..delete(flakyInstall.id)
         ..delete(secondRoverInstall.id);
       final offer = service().offerFor(sessionId);
@@ -161,9 +159,7 @@ void main() {
         sessionId: subject,
         targetInstallationId: flakyInstall.id,
       );
-      final row = mirroredServer(
-        h.db,
-      ).sessionRows.getById(launched.session.id)!;
+      final row = h.db.server.sessionRows.getById(launched.session.id)!;
       expect(row.parentSessionId, subject);
       expect(row.parentLink, SessionLink.spawn);
       expect(row.agentInstallationId, flakyInstall.id);
@@ -173,7 +169,7 @@ void main() {
 
     test('runs in the same worktree as the work it reviews', () async {
       final subject = await work();
-      final subjectRow = mirroredServer(h.db).sessionRows.getById(subject)!;
+      final subjectRow = h.db.server.sessionRows.getById(subject)!;
       final launched = await service().startReview(
         sessionId: subject,
         targetInstallationId: flakyInstall.id,

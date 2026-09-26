@@ -13,7 +13,6 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart' show localHostEnvironment;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -47,7 +46,8 @@ import '../test/features/terminal/fake_instance.dart';
 import '../test/support/fake_command_runner.dart';
 import '../test/support/fake_data_server.dart';
 import '../test/support/fixtures.dart';
-import '../test/support/workspace_mirror.dart';
+import '../test/support/conversation_index_database.dart';
+import '../test/support/test_machine.dart';
 
 const _outDir = 'build/ui-screenshots';
 
@@ -255,16 +255,16 @@ void main() {
     return;
   }
 
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   setUpAll(() => _loadFonts(fontDir));
 
   setUp(() async {
-    db = AppDatabase.memory();
+    db = TestMachine();
     // The workspace, environments, installations and sessions are the
     // server's: seeded at a fake one.
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(localHostEnvironment(testTime));
     server.projectRows
       ..insert(
@@ -296,7 +296,8 @@ void main() {
 
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         documentStoreProvider.overrideWithValue(const _SampleStore()),
@@ -329,7 +330,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   Future<void> shoot(
     WidgetTester tester, {

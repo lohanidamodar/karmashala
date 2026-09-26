@@ -36,7 +36,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -65,7 +64,7 @@ import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart' show fakeDevice;
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 const _goldenPath = 'test/features/remote/bound_frames.golden.json';
 
@@ -87,9 +86,8 @@ typedef _Frame = ({FrameType type, String? id, Map<String, Object?> payload});
 void main() {
   test('the bound frame set matches the committed golden', () async {
     final now = DateTime.utc(2026, 8, 31, 10);
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final server = FakeDataServer(clock: () => now)..mirrorInto(db);
+    final db = TestMachine();
+    final server = FakeDataServer(clock: () => now)..runsOn(db);
 
     EnvironmentPath at(String path) =>
         EnvironmentPath(environmentId: 'windows', path: path);
@@ -230,7 +228,7 @@ void main() {
       String repositoryId = 'r1',
       SessionSurface surface = SessionSurface.external,
       String? parentSessionId,
-    }) => mirroredServer(db).sessionRows.insert(
+    }) => db.server.sessionRows.insert(
       Session(
         id: id,
         repositoryId: repositoryId,
@@ -273,7 +271,7 @@ void main() {
       title: 'On another machine',
       repositoryId: 'r3',
     );
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imp1',
         repositoryId: 'r1',
@@ -289,7 +287,7 @@ void main() {
         updatedAt: DateTime.utc(2026, 8, 31, 8),
       ),
     );
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imp2',
         repositoryId: 'r2',
@@ -307,7 +305,7 @@ void main() {
     );
 
     void append(String sessionId, String type, Map<String, Object?> data) =>
-        mirroredServer(db).eventRows.append(
+        db.server.eventRows.append(
           SessionEvent(
             sessionId: sessionId,
             seq: 0,
@@ -334,7 +332,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('new-')),

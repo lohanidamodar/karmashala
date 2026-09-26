@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/claude_accounts_controller.dart';
 import 'package:karmashala/src/features/agents/application/codex_accounts_controller.dart';
@@ -17,7 +15,7 @@ import 'package:karmashala/src/features/settings/presentation/codex_accounts_sec
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// The "Switch to" menu over the shared pool of saved Claude accounts.
 ///
@@ -40,17 +38,15 @@ void main() {
 
   Future<void> pump(WidgetTester tester) async {
     switched.clear();
-    final db = AppDatabase.memory();
-    FakeDataServer().mirrorInto(db);
-    addTearDown(db.close);
-    mirroredServer(db).environmentRows.upsert(windowsEnv());
+    final db = TestMachine();
+    FakeDataServer().runsOn(db);
+    db.server.environmentRows.upsert(windowsEnv());
     final installation = agentInstallation();
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
-          await mirroredServer(db).override(),
+          await db.server.override(),
           claudeAccountsControllerProvider.overrideWith(
             () => _FakeAccounts([mine, theirs], switched),
           ),
@@ -118,16 +114,14 @@ void main() {
     final expiresAt = testTime.add(const Duration(hours: 3, minutes: 5));
 
     testWidgets('Claude', (tester) async {
-      final db = AppDatabase.memory();
-      FakeDataServer().mirrorInto(db);
-      addTearDown(db.close);
-      mirroredServer(db).environmentRows.upsert(windowsEnv());
+      final db = TestMachine();
+      FakeDataServer().runsOn(db);
+      db.server.environmentRows.upsert(windowsEnv());
       final installation = agentInstallation();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            databaseProvider.overrideWithValue(db),
-            await mirroredServer(db).override(),
+            await db.server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             claudeAccountsControllerProvider.overrideWith(
               () => _FakeAccounts(const [], []),
@@ -156,16 +150,14 @@ void main() {
     });
 
     testWidgets('Codex', (tester) async {
-      final db = AppDatabase.memory();
-      FakeDataServer().mirrorInto(db);
-      addTearDown(db.close);
-      mirroredServer(db).environmentRows.upsert(windowsEnv());
+      final db = TestMachine();
+      FakeDataServer().runsOn(db);
+      db.server.environmentRows.upsert(windowsEnv());
       final installation = agentInstallation();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            databaseProvider.overrideWithValue(db),
-            await mirroredServer(db).override(),
+            await db.server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             codexAccountsControllerProvider.overrideWith(
               () => _FakeCodexAccounts(const []),
@@ -197,10 +189,9 @@ void main() {
   testWidgets('Codex shows the active identity and captured accounts', (
     tester,
   ) async {
-    final db = AppDatabase.memory();
-    FakeDataServer().mirrorInto(db);
-    addTearDown(db.close);
-    mirroredServer(db).environmentRows.upsert(windowsEnv());
+    final db = TestMachine();
+    FakeDataServer().runsOn(db);
+    db.server.environmentRows.upsert(windowsEnv());
     final installation = agentInstallation();
     final captured = CodexAccount(
       id: 'saved-1',
@@ -213,8 +204,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
-          await mirroredServer(db).override(),
+          await db.server.override(),
           codexAccountsControllerProvider.overrideWith(
             () => _FakeCodexAccounts([captured]),
           ),

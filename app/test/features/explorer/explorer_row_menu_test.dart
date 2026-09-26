@@ -15,12 +15,11 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -32,19 +31,19 @@ import '../terminal/fake_instance.dart';
 /// A session's menu listed "Select" twice while an imported conversation's had
 /// none, and `F2` stood beside "Rename" as a label only.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows.insert(
       repository(id: 'r1', name: 'hub', path: r'C:\hub'),
     );
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 'n0',
         repositoryId: 'r1',
@@ -55,7 +54,7 @@ void main() {
         createdAt: testTime,
       ),
     );
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i0',
         repositoryId: 'r1',
@@ -72,7 +71,6 @@ void main() {
       ),
     );
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     tester.view.physicalSize = const Size(460, 900);
@@ -80,7 +78,7 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -177,7 +175,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
       await tester.pumpAndSettle();
 
-      expect(mirroredServer(db).sessionRows.getById('n0')!.title, 'Fix sign-in');
+      expect(db.server.sessionRows.getById('n0')!.title, 'Fix sign-in');
       expect(find.text('Fix sign-in'), findsOneWidget);
     });
 
@@ -191,7 +189,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
       await tester.pumpAndSettle();
 
-      expect(mirroredServer(db).importedRows.getById('i0')!.title, 'Older chat');
+      expect(db.server.importedRows.getById('i0')!.title, 'Older chat');
     });
 
     testWidgets('opens Edit project on a focused project, which says so', (

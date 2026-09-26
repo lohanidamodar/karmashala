@@ -3,6 +3,7 @@
 /// JSON envelope that carries them over any transport.
 library;
 
+export 'src/automation_values.dart';
 export 'src/data_change.dart';
 export 'src/data_endpoint.dart';
 export 'src/data_envelope.dart';
@@ -12,3 +13,4 @@ export 'src/preference_keys.dart';
 export 'src/refusal.dart';
 export 'src/session_values.dart';
 export 'src/workspace_values.dart';
+export 'src/worktree_values.dart';

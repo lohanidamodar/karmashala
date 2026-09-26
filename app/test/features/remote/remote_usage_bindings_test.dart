@@ -2,29 +2,26 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_usage_bindings.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show kRemoteUsageSamples, thinUsageSamples;
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeAgentUsageService service;
 
   Future<ProviderContainer> containerFor() async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
-        await mirroredServer(db).override(),
+        await db.server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -37,7 +34,6 @@ void main() {
     db = seedUsageDatabase();
     service = FakeAgentUsageService();
   });
-  tearDown(() => db.close());
 
   Future<RemoteUsageSnapshot> read(ProviderContainer container) =>
       container.read(
@@ -81,7 +77,7 @@ void main() {
 
   test('the last day of history rides along, thinned', () async {
     final container = await containerFor();
-    final history = mirroredServer(db).usageRows;
+    final history = db.server.usageRows;
     for (var i = 0; i < 100; i++) {
       history.insert(
         UsageSample(

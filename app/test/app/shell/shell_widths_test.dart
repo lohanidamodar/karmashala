@@ -5,7 +5,6 @@ import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,25 +12,24 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     data = await server.override();
   });
-  tearDown(() => db.close());
 
   /// Pumps the whole app at [size] and returns every error the frame raised.
   Future<List<FlutterErrorDetails>> pumpAt(
@@ -39,7 +37,7 @@ void main() {
     Size size, {
     void Function(ProviderContainer container)? prepare,
   }) async {
-    final container = fakeTerminalContainer(database: db, data: data);
+    final container = fakeTerminalContainer(machine: db, data: data);
     addTearDown(container.dispose);
     prepare?.call(container);
     tester.view.physicalSize = size;

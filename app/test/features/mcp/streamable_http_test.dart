@@ -2,8 +2,6 @@ import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala_mcp/access.dart';
@@ -31,13 +29,8 @@ void main() {
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_mcp_http_');
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     container = ProviderContainer(
-      overrides: [
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-        databaseProvider.overrideWithValue(db),
-      ],
+      overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
     );
     server = LauncherControlServer(container);
     await server.start(
@@ -523,13 +516,8 @@ void main() {
       addTearDown(() {
         if (other.existsSync()) other.deleteSync(recursive: true);
       });
-      final closedDb = AppDatabase.memory();
-      addTearDown(closedDb.close);
       final closedContainer = ProviderContainer(
-        overrides: [
-          clockProvider.overrideWithValue(FixedClock(testTime)),
-          databaseProvider.overrideWithValue(closedDb),
-        ],
+        overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
       );
       final closed = LauncherControlServer(
         closedContainer,

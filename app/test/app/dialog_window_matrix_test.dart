@@ -1,6 +1,4 @@
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -24,8 +22,9 @@ import '../support/fakes.dart';
 import '../support/fixtures.dart';
 import '../support/window_matrix.dart';
 import '../support/fake_data_server.dart';
-import '../support/workspace_mirror.dart';
+import '../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
+import '../support/conversation_index_database.dart';
 
 /// The six dialogs `minimum_window_matrix_test.dart` did not reach.
 ///
@@ -115,13 +114,8 @@ void main() {
     });
 
     testWidgets('ForgetHostKeyDialog', (tester) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
       final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          ...noProcessOverrides(),
-        ],
+        overrides: [conversationIndexDatabase(), ...noProcessOverrides()],
       );
       addTearDown(container.dispose);
 
@@ -209,20 +203,19 @@ void main() {
   });
 
   testWidgets('QuickOpen with results to show', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     // Sessions are still in the database, and their foreign keys reach the
     // workspace rows the server holds.
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     // A session row points at an agent installation; without one the insert
     // fails the foreign key rather than the layout.
     server.installationRows.insert(agentInstallation());
-    final sessions = mirroredServer(db).sessionRows;
+    final sessions = db.server.sessionRows;
     for (var i = 0; i < 6; i++) {
       sessions.insert(
         session(id: 's$i', title: 'refactor the terminal ingest path, part $i'),
@@ -232,7 +225,8 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
         ...noProcessOverrides(),
         data,
       ],
@@ -257,12 +251,10 @@ void main() {
   testWidgets('the launcher hotkey recorder', (tester) async {
     // Private, so it is reached the way a user reaches it: the Change button on
     // the launcher-hotkey section, which is only enabled while the switch is on.
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final data = await FakeDataServer().override();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        conversationIndexDatabase(),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),

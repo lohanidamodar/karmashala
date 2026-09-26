@@ -539,10 +539,11 @@ Future<DaemonAutomations?> _startAutomations({
       mcp: mcp,
       configDirectory: p.join(dataDirectory, 'mcp'),
     ),
-    announce: server.lifecycle.publishAutomationsChanged,
+    tell: data.announce,
     sessionWritten: (sessionId) => data.announceSessions([sessionId]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  data.automationsWritten = automations.written;
   try {
     server.automations = automations;
     mcpTools.local = automations.localTool;

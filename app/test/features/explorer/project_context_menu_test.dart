@@ -2,8 +2,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -38,7 +36,6 @@ import '../../support/window_matrix.dart';
 ///   items in one menu and they must never be confusable: one unassigns, the
 ///   other deletes.
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late FakeDataServer server;
 
@@ -46,14 +43,12 @@ void main() {
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         // Every session card asks git what its checkout has changed; a widget
         // test must never spawn one.
@@ -69,7 +64,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   Future<({String personal, String games})> seed({String? filedUnder}) async {
     final personal = (await createContext(container, 'Personal')).id;

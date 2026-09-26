@@ -1,7 +1,5 @@
 import 'package:karmashala/src/app/shell/side_panel_context.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
@@ -22,12 +20,10 @@ import '../../support/fake_data_server.dart';
 /// tab. A panel that changes under the user without saying what it changed to
 /// is worse than one that never moved.
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
     final server = FakeDataServer();
     data = await server.override();
     server.environmentRows.upsert(windowsEnv());
@@ -41,12 +37,9 @@ void main() {
           path: r'C:\src\demo\projects\app',
         ),
       );
-    container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db), data],
-    );
+    container = ProviderContainer(overrides: [data]);
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) => tester.pumpWidget(
     UncontrolledProviderScope(
@@ -88,7 +81,6 @@ void main() {
   ) async {
     final worktrees = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         selectedCheckoutWorktreesProvider.overrideWith(
           (ref) async => const [

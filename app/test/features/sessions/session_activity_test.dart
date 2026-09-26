@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
@@ -12,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import '../../support/fixtures.dart';
 
 /// **What one session is doing right now**, derived from the transcript the
@@ -57,9 +54,7 @@ void main() {
     DateTime? observedAt,
     String? externalSessionId = 'ext-1',
   }) async {
-    final db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
-    addTearDown(db.close);
+    final server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -80,7 +75,6 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => Stream.value(

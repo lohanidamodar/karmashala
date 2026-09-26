@@ -231,7 +231,7 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     return true;
   }
 
-  /// The layout DAO, or `null` when no database is wired up.
+  /// The layout DAO, or `null` when its store cannot be opened.
   TerminalLayoutDao? _dao() {
     try {
       return ref.read(terminalLayoutDaoProvider);

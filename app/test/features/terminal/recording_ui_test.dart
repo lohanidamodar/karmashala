@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
 import 'package:karmashala_media/media.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
@@ -15,6 +14,7 @@ import 'package:karmashala/src/features/terminal/presentation/recording_saved_di
 import 'package:karmashala/src/features/terminal/presentation/session_status.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// The two things the chrome has to get right: a running recording is on
 /// screen for as long as it runs and can be stopped from where it is said, and
@@ -26,17 +26,17 @@ import 'fake_instance.dart';
 /// rather than awaited through a number of pumps that would look like a hang.
 void main() {
   late ProviderContainer container;
-  late AppDatabase db;
+  late TestMachine db;
   late Directory temp;
 
   /// Both surfaces read the same reading, so both cases are testable on any
   /// host rather than only on the one that happens to have an encoder.
   void build({required VideoSupport support}) {
     temp = Directory.systemTemp.createTempSync('recording-ui');
-    db = AppDatabase.memory();
+    db = TestMachine();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         recordingsDirectoryProvider.overrideWith((ref) async => temp),
         videoSupportProvider.overrideWithValue(support),
       ],
@@ -50,7 +50,6 @@ void main() {
   );
   tearDown(() {
     container.dispose();
-    db.close();
     try {
       temp.deleteSync(recursive: true);
     } on FileSystemException {
@@ -188,7 +187,6 @@ void main() {
       tester,
     ) async {
       container.dispose();
-      db.close();
       build(
         support: const VideoSupport.unavailable(
           'MP4 needs an encoder from the operating system, and only the '

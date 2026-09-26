@@ -2,7 +2,6 @@ import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -28,7 +27,7 @@ import '../../support/fakes.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 void main() {
@@ -117,15 +116,15 @@ void main() {
   });
 
   group('the strip', () {
-    late AppDatabase db;
+    late TestMachine db;
     late ProviderContainer container;
 
     setUp(() async {
-      db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      final server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+        localHostEnvironment(FixedClock(testTime).nowUtc()),
+      );
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       server.installationRows.insert(agentInstallation());
@@ -133,7 +132,7 @@ void main() {
       container = ProviderContainer(
         overrides: [
           data,
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           // A selected session brings the chat surface with it, and every one
           // of these otherwise polls on a real timer or reaches the host. The
           // strip does not care what they say — only that a session has two
@@ -173,7 +172,6 @@ void main() {
       );
       addTearDown(container.dispose);
     });
-    tearDown(() => db.close());
 
     TerminalSessionsController terminals() =>
         container.read(terminalSessionsControllerProvider.notifier);
@@ -418,7 +416,7 @@ void main() {
           .read(terminalSessionsControllerProvider)
           .tabs[12]
           .focusedPaneId;
-      mirroredServer(db).sessionRows
+      db.server.sessionRows
         ..insert(session(id: 's1', title: 'Fix login redirect'))
         ..updatePaneId('s1', paneId);
       await pump(tester);
@@ -513,7 +511,7 @@ void main() {
           .tabs
           .first
           .focusedPaneId;
-      mirroredServer(db).sessionRows
+      db.server.sessionRows
         ..insert(session(id: 's1', title: 'Read the report'))
         ..updatePaneId('s1', paneId);
       container.read(selectedSessionIdProvider.notifier).select('s1');

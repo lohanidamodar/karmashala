@@ -22,7 +22,6 @@ class HostCompanionLink implements HostCompanionPeer {
   HostCompanionLink({
     required RemoteHostBindings Function() bindings,
     required this.deviceById,
-    required this.onDevicesChanged,
     this.onAttached,
     AppLogger? logger,
   }) : _dispatcher = CompanionCallDispatcher(bindings),
@@ -30,11 +29,9 @@ class HostCompanionLink implements HostCompanionPeer {
 
   final CompanionCallDispatcher _dispatcher;
 
-  /// The row a pairing stored, read back once the host says it paired.
-  final PairedDevice? Function(String deviceId) deviceById;
-
-  /// The host moved paired-device rows: lists re-read.
-  final void Function() onDevicesChanged;
+  /// The device a pairing recorded, read back from the server once the host
+  /// says it paired.
+  final Future<PairedDevice?> Function(String deviceId) deviceById;
 
   /// A link to a host opened — maybe a new host: what it serves by is read
   /// again.
@@ -142,21 +139,30 @@ class HostCompanionLink implements HostCompanionPeer {
 
   void _onEvent(CompanionEventMessage event) {
     switch (event.kind) {
-      case CompanionEventKind.devicesChanged:
-        onDevicesChanged();
       case CompanionEventKind.pairingEnded:
         final waiting = _pairings.remove(event.requestId);
         if (waiting == null) return;
-        onDevicesChanged();
-        final deviceId = event.deviceId;
-        final device = deviceId == null ? null : deviceById(deviceId);
-        if (device != null) {
-          waiting.complete(device);
-        } else {
-          waiting.completeError(
-            PairingException(event.error ?? 'the phone did not pair'),
-          );
-        }
+        unawaited(_ended(waiting, event));
+    }
+  }
+
+  Future<void> _ended(
+    Completer<PairedDevice> waiting,
+    CompanionEventMessage event,
+  ) async {
+    final deviceId = event.deviceId;
+    PairedDevice? device;
+    try {
+      device = deviceId == null ? null : await deviceById(deviceId);
+    } on Object catch (error) {
+      _log.warning('The paired device could not be read back: $error');
+    }
+    if (device != null) {
+      waiting.complete(device);
+    } else {
+      waiting.completeError(
+        PairingException(event.error ?? 'the phone did not pair'),
+      );
     }
   }
 

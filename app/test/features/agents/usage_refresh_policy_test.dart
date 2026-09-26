@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
@@ -16,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **When the quota is read again, and — far more importantly — when it is
 /// not.**
@@ -37,7 +35,7 @@ import '../../support/workspace_mirror.dart';
 /// * **the reading is per account, the display is per pane.** A hundred panes
 ///   on one account cost one request and hold one timer between them.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeAgentUsageService service;
   late MovableClock clock;
 
@@ -52,7 +50,6 @@ void main() {
     // here would ever be exercised.
     service = FakeAgentUsageService(clock: clock);
   });
-  tearDown(() => db.close());
 
   /// Puts [sessions] chips on screen, one per session row, all on the one
   /// installation `seedUsageDatabase` creates unless [withOtherAgent] adds a
@@ -63,7 +60,7 @@ void main() {
     bool withOtherAgent = false,
   }) async {
     db = seedUsageDatabase();
-    final dao = mirroredServer(db).sessionRows;
+    final dao = db.server.sessionRows;
     for (var i = 2; i <= sessions; i++) {
       dao.insert(session(id: 's$i'));
     }
@@ -72,15 +69,14 @@ void main() {
       // until it grew one; a real agent that later gains a feature stops being
       // a stand-in for lacking it, and the test then asserts the opposite of
       // what it reads as.
-      mirroredServer(db).installationRows.insert(
+      db.server.installationRows.insert(
         agentInstallation(id: 'a2', agentId: 'unknownAgent'),
       );
       dao.insert(session(id: 'other', agentInstallationId: 'a2'));
     }
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
-        await mirroredServer(db).override(),
+        await db.server.override(),
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -352,16 +348,13 @@ void main() {
     // Two quotas are two quotas: the whole reason the chip moved out of the
     // window's status bar, where one figure spoke for both.
     db = seedUsageDatabase();
-    mirroredServer(db).installationRows.insert(
+    db.server.installationRows.insert(
       agentInstallation(id: 'a2', agentId: AgentIds.codex),
     );
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
+    db.server.sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
-        await mirroredServer(db).override(),
+        await db.server.override(),
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -510,8 +503,7 @@ void main() {
     db = seedUsageDatabase(agentId: 'unknownAgent');
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
-        await mirroredServer(db).override(),
+        await db.server.override(),
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -548,8 +540,7 @@ void main() {
       db = seedUsageDatabase();
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
-          await mirroredServer(db).override(),
+          await db.server.override(),
           clockProvider.overrideWithValue(clock),
           agentUsageServiceProvider.overrideWithValue(service),
         ],

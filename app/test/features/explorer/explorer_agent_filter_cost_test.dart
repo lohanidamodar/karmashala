@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -21,8 +21,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
-import '../scale/scale_harness.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **What narrowing the Explorer to one agent costs, counted as a difference.**
@@ -53,9 +52,9 @@ void main() {
   const scale = [1, 10, 100];
 
   /// [count] sessions spread evenly across the three agents, on one project.
-  CountingDatabase seed(FakeDataServer server, int count) {
-    final db = CountingDatabase();
-    server.mirrorInto(db);
+  CountingMachine seed(FakeDataServer server, int count) {
+    final db = CountingMachine();
+    server.runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows.insert(
@@ -70,7 +69,7 @@ void main() {
       installations.insert(agentInstallation(id: 'a-$agent', agentId: agent));
     }
     for (var i = 0; i < count; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(
           id: 's$i',
           title: 'Session $i',
@@ -96,10 +95,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final server = FakeDataServer();
     final db = seed(server, count);
-    addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -215,7 +213,8 @@ void main() {
       tester,
     ) async {
       final result = await pump(tester, 100, narrow: true);
-      final db = result.container.read(databaseProvider) as CountingDatabase;
+      final db = CountingMachine();
+      FakeDataServer.of(result.container.read(dataClientProvider)).runsOn(db);
       final git = FakeCommandRunner();
       db.reset();
 

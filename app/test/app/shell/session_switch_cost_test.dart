@@ -34,7 +34,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **What one session switch costs.**
 ///
@@ -100,7 +100,7 @@ import '../../support/workspace_mirror.dart';
 /// equality to the domain type would now move none of these numbers, while
 /// changing behaviour anywhere that relies on identity.
 void main() {
-  late CountingDatabase db;
+  late CountingMachine db;
   late FakeDataServer server;
   late Override data;
   late FakeCommandRunner git;
@@ -118,8 +118,8 @@ void main() {
   final chatSubscriptions = <String>[];
 
   setUp(() async {
-    db = CountingDatabase();
-    server = FakeDataServer()..mirrorInto(db);
+    db = CountingMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     terminals.clear();
     chatSubscriptions.clear();
@@ -132,7 +132,7 @@ void main() {
     // visible. All carry a CLI id, because that is what makes a chat rendering
     // possible and therefore what makes a transcript worth reading.
     for (final id in ['s1', 's2', 's3']) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -154,7 +154,7 @@ void main() {
         // scrollback shows up in the unit `layout_save_cost_test` uses.
         data,
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           instanceFactory: _countingFactory(terminals),
         ),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -192,7 +192,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   /// A bounded settle. `pumpAndSettle` never returns against the whole shell —
   /// something always has a frame scheduled — and the measurement only needs
@@ -209,7 +208,7 @@ void main() {
   /// curve rather than as a constant.
   void seedIdleRows(int count) {
     for (var i = 0; i < count; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 'idle$i',
           repositoryId: 'r1',
@@ -254,7 +253,7 @@ void main() {
           .layout
           .panes
           .single;
-      mirroredServer(db).sessionRows.updatePaneId(id, paneId);
+      db.server.sessionRows.updatePaneId(id, paneId);
     }
     for (var i = 0; i < deadPanes; i++) {
       controller.openTab(TerminalProfile.powerShell);
@@ -267,7 +266,7 @@ void main() {
       final instance = controller.instanceFor(paneId)! as FakeTerminalInstance;
       instance.terminal.write('a screenful of the run that ended\r\n' * 20);
       instance.livenessNotifier.value = PaneLiveness.exited;
-      mirroredServer(db).sessionRows.updatePaneId('idle$i', paneId);
+      db.server.sessionRows.updatePaneId('idle$i', paneId);
     }
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
 

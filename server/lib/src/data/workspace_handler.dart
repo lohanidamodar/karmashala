@@ -286,8 +286,11 @@ class WorkspaceHandler {
       answer[id] = records;
       if (records > 0) continue;
       final project = _projects.getById(checkout.projectId);
+      final going = _checkoutsGoing?.call([id]);
       _repositories.delete(id);
-      changes.add(RepositoryRemoved(id));
+      changes
+        ..add(RepositoryRemoved(id))
+        ..addAll(going?.call() ?? const []);
       // `default_repository_id` is `ON DELETE SET NULL`.
       if (project?.defaultRepositoryId == id) touched.add(project!.id);
     }

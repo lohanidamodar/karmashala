@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -25,7 +24,8 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
+import '../../support/conversation_index_database.dart';
 
 /// The owner's bug, end to end, on a real `.codex` store.
 ///
@@ -46,7 +46,7 @@ void main() {
   late DataClient client;
   late Directory tmp;
   late String storeHome;
-  late AppDatabase db;
+  late TestMachine db;
 
   const conversation = '01a05c73-912d-7bf3-84cc-a1bb591134aa';
   const threadName = "hey let's work on karmashala app, i";
@@ -55,8 +55,8 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_codex_identity_');
     storeHome = p.join(tmp.path, '.codex');
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -64,7 +64,6 @@ void main() {
     server.installationRows.insert(agentInstallation(agentId: AgentIds.codex));
   });
   tearDown(() {
-    db.close();
     try {
       tmp.deleteSync(recursive: true);
     } on FileSystemException {
@@ -113,7 +112,8 @@ void main() {
 
   ProviderContainer container() => ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      conversationIndexDatabase(),
+      ...fakeTerminalOverrides(machine: db),
       dataClientProvider.overrideWithValue(client),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       cliStoreLocatorProvider.overrideWithValue(
@@ -147,7 +147,7 @@ void main() {
 
   /// The same conversation as the auto-import files it: read-only history.
   void importRecord() {
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i1',
         repositoryId: 'r1',
@@ -173,13 +173,13 @@ void main() {
 
   test('a launched Codex row learns its conversation and its name', () async {
     writeRollout();
-    mirroredServer(db).sessionRows.insert(launchedRow());
+    db.server.sessionRows.insert(launchedRow());
     final ref = container();
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    final row = mirroredServer(db).sessionRows.getById('s1')!;
+    final row = db.server.sessionRows.getById('s1')!;
     expect(row.externalSessionId, conversation);
     // The tab strip reads the row at display time, so this *is* the tab strip.
     expect(row.title, threadName);
@@ -212,14 +212,14 @@ void main() {
     // record, and one conversation is one card again.
     writeRollout();
     importRecord();
-    mirroredServer(db).sessionRows.insert(launchedRow());
+    db.server.sessionRows.insert(launchedRow());
     final ref = container();
     addTearDown(ref.dispose);
-    expect(mirroredServer(db).importedRows.getAll(), hasLength(1));
+    expect(db.server.importedRows.getAll(), hasLength(1));
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    expect(mirroredServer(db).importedRows.getAll(), isEmpty);
+    expect(db.server.importedRows.getAll(), isEmpty);
   });
 
   test(
@@ -272,7 +272,7 @@ void main() {
       // the session they are reading is running in a pane behind them.
       writeRollout();
       importRecord();
-      mirroredServer(db).sessionRows.insert(launchedRow());
+      db.server.sessionRows.insert(launchedRow());
       final ref = container();
       addTearDown(ref.dispose);
       ref.read(selectedImportedSessionIdProvider.notifier).select('i1');
@@ -287,7 +287,7 @@ void main() {
   test('a selection on some other history is left where it is', () async {
     writeRollout();
     importRecord();
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i2',
         repositoryId: 'r1',
@@ -301,7 +301,7 @@ void main() {
         createdAt: testTime,
       ),
     );
-    mirroredServer(db).sessionRows.insert(launchedRow());
+    db.server.sessionRows.insert(launchedRow());
     final ref = container();
     addTearDown(ref.dispose);
     ref.read(selectedImportedSessionIdProvider.notifier).select('i2');
@@ -317,28 +317,25 @@ void main() {
     // still lands — that is what the inbox and a resume need — and the title
     // sync says nothing, which is the honest answer.
     writeRollout(name: null);
-    mirroredServer(db).sessionRows.insert(launchedRow());
+    db.server.sessionRows.insert(launchedRow());
     final ref = container();
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    final row = mirroredServer(db).sessionRows.getById('s1')!;
+    final row = db.server.sessionRows.getById('s1')!;
     expect(row.externalSessionId, conversation);
     expect(row.title, 'New session');
   });
 
   test('a conversation from before the launch is left where it was', () async {
     writeRollout(startedAfterLaunch: const Duration(hours: -1));
-    mirroredServer(db).sessionRows.insert(launchedRow());
+    db.server.sessionRows.insert(launchedRow());
     final ref = container();
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    expect(
-      mirroredServer(db).sessionRows.getById('s1')!.externalSessionId,
-      isNull,
-    );
+    expect(db.server.sessionRows.getById('s1')!.externalSessionId, isNull);
   });
 }

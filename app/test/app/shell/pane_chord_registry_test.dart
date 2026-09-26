@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_search_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -14,7 +13,7 @@ import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dar
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -35,19 +34,18 @@ void main() {
   // The chord table follows the host; these cases press `Ctrl+…` by name.
   setUp(() => commandKeyIsMeta = false);
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     data = await server.override();
   });
-  tearDown(() => db.close());
 
   /// Every key worth pressing with a modifier down.
   const keys = <LogicalKeyboardKey>[
@@ -125,7 +123,7 @@ void main() {
     WidgetTester tester, {
     Map<String, bool> chordOverrides = const {},
   }) async {
-    final container = fakeTerminalContainer(database: db, data: data);
+    final container = fakeTerminalContainer(machine: db, data: data);
     addTearDown(container.dispose);
     for (final entry in chordOverrides.entries) {
       container
@@ -306,7 +304,7 @@ void main() {
     Future<(ProviderContainer, List<String>)> pumpFocusedTerminal(
       WidgetTester tester,
     ) async {
-      final container = fakeTerminalContainer(database: db, data: data);
+      final container = fakeTerminalContainer(machine: db, data: data);
       addTearDown(container.dispose);
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;

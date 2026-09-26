@@ -1,6 +1,5 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -12,7 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -27,7 +26,7 @@ import '../terminal/fake_instance.dart';
 /// answer would still be right. And **honesty**: a probe that fails must leave a
 /// null behind, never a confident zero.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late List<List<String>> gitCalls;
@@ -80,15 +79,14 @@ void main() {
         '[{"isResolved":false},{"isResolved":true}]}}}}}';
     gitCalls = [];
     ghCalls = [];
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   CommandResult respond(CommandRequest request) {
     final args = request.arguments;
@@ -146,7 +144,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: overlap),
@@ -161,7 +159,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
@@ -175,7 +173,7 @@ void main() {
   }
 
   void addSession(String id, {EnvironmentPath? at = worktree}) =>
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -484,7 +482,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(
@@ -521,7 +519,7 @@ void main() {
   test('an archived session reports archived, offers no prompts, and asks '
       'git nothing — its directory is gone', () async {
     addSession('s1');
-    mirroredServer(db).sessionRows.markArchived('s1', testTime);
+    db.server.sessionRows.markArchived('s1', testTime);
 
     final container = harness();
     final delivery = await container.read(sessionDeliveryProvider('s1').future);
@@ -542,7 +540,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
@@ -572,7 +570,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(

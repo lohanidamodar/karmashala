@@ -9,8 +9,6 @@ import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -34,6 +32,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 /// One header, six surfaces.
 ///
@@ -191,11 +190,9 @@ void main() {
   });
 
   group('database-backed surfaces', () {
-    late AppDatabase db;
     late Override data;
 
     setUp(() async {
-      db = AppDatabase.memory();
       final server = FakeDataServer();
       data = await server.override();
       server.environmentRows.upsert(windowsEnv());
@@ -203,12 +200,10 @@ void main() {
       server.repositoryRows.insert(repository());
       server.installationRows.insert(agentInstallation());
     });
-    tearDown(() => db.close());
 
     Widget scoped(Widget child) {
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           agentSessionStatusProvider.overrideWith(
@@ -240,14 +235,13 @@ void main() {
 
   testWidgets('the side panel draws the same header for a surface that has '
       'none of its own', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     final server = FakeDataServer()
       ..environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
     final container = fakeTerminalContainer(
-      database: db,
+      machine: db,
       data: await server.override(),
     );
     addTearDown(container.dispose);

@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_scheduler.dart';
 import 'package:karmashala/src/features/automations/application/automation_timer.dart';
@@ -9,7 +8,6 @@ import 'package:karmashala/src/features/git/application/worktree_cleanup_provide
 import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
@@ -18,20 +16,17 @@ import '../../support/fakes.dart';
 /// is off, turning it on arms that timer (after a settle), and a fire sweeps
 /// once and re-arms for the next interval.
 void main() {
-  late AppDatabase db;
   late MovableClock clock;
   late ManualAutomationTimer timer;
   late ProviderContainer container;
   late int sweeps;
 
   setUp(() async {
-    db = AppDatabase.memory();
     clock = MovableClock(DateTime.utc(2026, 9, 21, 9));
     timer = ManualAutomationTimer();
     sweeps = 0;
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await FakeDataServer(clock: () => clock.nowUtc()).override(),
         clockProvider.overrideWithValue(clock),
         automationTimerProvider.overrideWithValue(timer),
@@ -60,7 +55,6 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    addTearDown(db.close);
   });
 
   void watchScheduler() =>

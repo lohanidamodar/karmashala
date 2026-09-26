@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/subagent_providers.dart';
 import 'package:agent_cli/read.dart';
@@ -20,7 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -85,14 +84,13 @@ void main() {
     required List<TranscriptMessage> messages,
     Map<String, List<TranscriptMessage>> turns = const {},
   }) {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     server.environmentRows.upsert(windowsEnv());
-    server.mirrorInto(db);
+    server.runsOn(db);
     server.installationRows.insert(
       agentInstallation(agentId: AgentIds.claudeCode),
     );
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -108,7 +106,7 @@ void main() {
 
     return ProviderScope(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],

@@ -1,21 +1,19 @@
 import 'dart:async';
 
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_providers.dart';
-import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/data/workspace_data.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../data/worktree_cleanup_store.dart';
+import '../data/worktree_setup_data.dart';
 import 'changes_providers.dart';
 import 'git_providers.dart';
 import 'worktree_cleanup_policy.dart';
@@ -61,7 +59,6 @@ final worktreeCleanupLastSweepProvider = Provider<WorktreeCleanupSweepSummary?>(
 /// Every collaborator is read inside its callback, so building this runs no
 /// git and builds no terminal until a sweep actually asks.
 final worktreeCleanupServiceProvider = Provider<WorktreeCleanupService>((ref) {
-  AppDatabase db() => ref.read(databaseProvider);
   return WorktreeCleanupService(
     projects: () => ref.read(workspaceDataProvider).projects,
     repositoriesOf: (id) => ref.read(workspaceDataProvider).repositoriesOf(id),
@@ -98,19 +95,8 @@ final worktreeCleanupServiceProvider = Provider<WorktreeCleanupService>((ref) {
     },
     lastEventAt: (ids) =>
         ref.read(sessionRecordsProvider).lastEventAt(ids.toList()),
-    createdAt: (worktree) {
-      final rows = db().query(
-        'SELECT worktree_path, ran_at FROM worktree_setup_runs '
-        'WHERE environment_id = ?;',
-        [worktree.environmentId],
-      );
-      for (final row in rows) {
-        if (samePath(row['worktree_path']! as String, worktree.path)) {
-          return dateFromIso(row['ran_at']);
-        }
-      }
-      return null;
-    },
+    createdAt: (worktree) =>
+        ref.read(worktreeSetupDataProvider).createdAt(worktree),
     clock: ref.watch(clockProvider),
     onRemoved: (entry, sessionIds) {
       ref.read(worktreeCleanupStoreProvider).appendLog(entry);

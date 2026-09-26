@@ -50,17 +50,14 @@ final worktreeSetupServiceProvider = Provider<WorktreeSetupService>((ref) {
         if (Checkout(repository.path) != Checkout(repo)) continue;
         return (
           repositoryId: repository.id,
-          setup: ref.read(worktreeSetupDaoProvider).get(repository.id),
+          setup: ref.read(worktreeSetupDataProvider).get(repository.id),
         );
       }
       // Not a recorded checkout, and not an error: `worktree_create` can be
       // pointed at a path no scan has been to yet.
       return null;
     },
-    record: (report) {
-      ref.read(worktreeSetupDaoProvider).record(report);
-      ref.read(worktreeSetupRevisionProvider.notifier).bump();
-    },
+    record: (report) => ref.read(worktreeSetupDataProvider).record(report),
     // Ends the process, not just the pane: a cancel must stop the script.
     closePane: (paneId) => ref
         .read(terminalSessionsControllerProvider.notifier)

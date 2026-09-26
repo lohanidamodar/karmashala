@@ -1,7 +1,6 @@
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -20,7 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -51,20 +50,20 @@ const _bypass = 'mode=bypassPermissions';
 const _bypassLabel = 'Bypass (full autonomy)';
 
 /// A session row for [agentId], carrying [mode] (null = inherit).
-Future<({AppDatabase db, ProviderScope app})> harness({
+Future<({TestMachine db, ProviderScope app})> harness({
   required String agentId,
   String? mode,
   Settings settings = const Settings(),
   AgentRegistry registry = AgentRegistry.builtIn,
   String? externalSessionId,
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
   server.installationRows.insert(agentInstallation(agentId: agentId));
-  mirroredServer(db).sessionRows.insert(
+  db.server.sessionRows.insert(
     Session(
       id: 's1',
       repositoryId: repository().id,
@@ -86,7 +85,7 @@ Future<({AppDatabase db, ProviderScope app})> harness({
       overrides: [
         // Already overrides `databaseProvider`; a second one asserts.
         await server.override(),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         // Hermetic: the real probe would read this machine's own agent store.
         conversationPresenceProvider.overrideWithValue(
           ({
@@ -129,7 +128,7 @@ Future<({AppDatabase db, ProviderScope app})> harness({
 /// pane, that pane has an instance, and the instance says it is live — and a
 /// fake that satisfies only the first would make every test here pass without
 /// exercising the end-and-relaunch this feature is.
-String startAgent(WidgetTester tester, AppDatabase db) {
+String startAgent(WidgetTester tester, TestMachine db) {
   final container = ProviderScope.containerOf(
     tester.element(find.byType(PermissionModeChip)),
   );
@@ -145,7 +144,7 @@ String startAgent(WidgetTester tester, AppDatabase db) {
           title: 'Session',
         ),
       );
-  mirroredServer(db).sessionRows.updatePaneId('s1', opened.paneId);
+  db.server.sessionRows.updatePaneId('s1', opened.paneId);
   return opened.paneId;
 }
 
@@ -161,7 +160,6 @@ void main() {
         const AgentPermissions(existingSessions: _bypass),
       ),
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     // The row says acceptEdits; the agent default says bypass. The chip must
@@ -184,7 +182,6 @@ void main() {
     // word that is the same across three CLIs, and the CLI's own word is what
     // a person configuring that CLI needs.
     final h = await harness(agentId: AgentIds.claudeCode, mode: _acceptEdits);
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     expect(find.text('Build · Accept edits'), findsOneWidget);
@@ -192,7 +189,6 @@ void main() {
 
   testWidgets('and says it once where the CLI already says it', (tester) async {
     final h = await harness(agentId: AgentIds.claudeCode, mode: 'mode=plan');
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     // "Plan · Plan" is not clearer than "Plan".
@@ -208,7 +204,6 @@ void main() {
       agentId: AgentIds.codex,
       mode: 'approval=on-request;sandbox=workspace-write',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     // Two axes, so the CLI's own words are bracketed behind the one borrowed
@@ -224,7 +219,6 @@ void main() {
       agentId: _unestablished.id,
       registry: const AgentRegistry([DataOnlyAgentAdapter(_unestablished)]),
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     expect(find.text('Not established'), findsOneWidget);
@@ -237,7 +231,6 @@ void main() {
       agentId: _unestablished.id,
       registry: const AgentRegistry([DataOnlyAgentAdapter(_unestablished)]),
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
@@ -267,7 +260,6 @@ void main() {
       agentId: AgentIds.codex,
       mode: 'approval=on-request;sandbox=bypass-all',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
@@ -290,7 +282,6 @@ void main() {
       agentId: AgentIds.claudeCode,
       mode: 'mode=somethingNewer',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     expect(find.text('Ask'), findsOneWidget);
@@ -305,7 +296,6 @@ void main() {
     // Its rows were a `Row`/`Column` of their own inside a plain
     // `PopupMenuItem`; the Explorer's menus a pane away were `DesktopMenuItem`.
     final h = await harness(agentId: AgentIds.claudeCode, mode: _ask);
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
@@ -343,7 +333,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(agentId: AgentIds.claudeCode, mode: _ask);
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
@@ -355,10 +344,7 @@ void main() {
     await tester.pump(kPermissionCycleSettle * 2);
     await tester.pumpAndSettle();
 
-    expect(
-      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
-      _acceptEdits,
-    );
+    expect(h.db.server.sessionRows.getById('s1')!.permissionMode, _acceptEdits);
     // Never claims the running agent changed: it was started with the old
     // flags and no CLI here can be re-governed mid-session.
     expect(find.textContaining('applies'), findsOneWidget);
@@ -375,7 +361,6 @@ void main() {
         const AgentPermissions(existingSessions: _acceptEdits),
       ),
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     // Null column: the row predates v11 or was never overridden, so the agent
@@ -400,7 +385,6 @@ void main() {
         const AgentPermissions(existingSessions: _acceptEdits),
       ),
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     // Honest on the face of the control, not only on hover: this session never
@@ -419,7 +403,6 @@ void main() {
         const AgentPermissions(existingSessions: _acceptEdits),
       ),
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     // Same resolved mode as the test above, different state, and the two must
@@ -436,7 +419,6 @@ void main() {
         const AgentPermissions(existingSessions: _ask),
       ),
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
@@ -447,10 +429,7 @@ void main() {
     // Clearing the row is the only way back: without it the first pick would
     // be irreversible, and "follow the default" would be a state the user
     // could leave but never re-enter.
-    expect(
-      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
-      isNull,
-    );
+    expect(h.db.server.sessionRows.getById('s1')!.permissionMode, isNull);
     expect(find.text('Ask'), findsOneWidget);
     expect(find.text('· default'), findsOneWidget);
   });
@@ -465,7 +444,6 @@ void main() {
       mode: _ask,
       externalSessionId: 'ext-1',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     final pane = startAgent(tester, h.db);
 
@@ -482,11 +460,8 @@ void main() {
     // row first and offering to undo would be a weaker promise: the mode would
     // already be recorded, and any other surface resuming this session would
     // honour it.
-    expect(
-      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
-      _ask,
-    );
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.paneId, pane);
+    expect(h.db.server.sessionRows.getById('s1')!.permissionMode, _ask);
+    expect(h.db.server.sessionRows.getById('s1')!.paneId, pane);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
     );
@@ -506,7 +481,6 @@ void main() {
       mode: _ask,
       externalSessionId: 'ext-1',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     startAgent(tester, h.db);
 
@@ -533,7 +507,6 @@ void main() {
       mode: _ask,
       externalSessionId: 'ext-1',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     final pane = startAgent(tester, h.db);
 
@@ -544,17 +517,14 @@ void main() {
     await tester.tap(find.text('Restart in $_bypassLabel'));
     await tester.pumpAndSettle();
 
-    expect(
-      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
-      _bypass,
-    );
+    expect(h.db.server.sessionRows.getById('s1')!.permissionMode, _bypass);
 
     // A second process, on the same conversation, carrying the flags the first
     // one could not be told about.
     final terminals = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
     ).read(terminalSessionsControllerProvider.notifier);
-    final restarted = mirroredServer(h.db).sessionRows.getById('s1')!.paneId!;
+    final restarted = h.db.server.sessionRows.getById('s1')!.paneId!;
     expect(restarted, isNot(pane));
     expect(terminals.instanceFor(pane), isNull);
     final arguments = terminals.instanceFor(restarted)!.agentLaunch!.arguments;
@@ -573,7 +543,6 @@ void main() {
       mode: _ask,
       externalSessionId: 'ext-1',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     final pane = startAgent(tester, h.db);
 
@@ -589,7 +558,7 @@ void main() {
     // Nothing was ended. Accept-edits is not dangerous, so it earns no dialog
     // — but a mode change must not silently kill an agent either, so the
     // restart is an offer.
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.paneId, pane);
+    expect(h.db.server.sessionRows.getById('s1')!.paneId, pane);
     expect(find.text('Restart to apply'), findsOneWidget);
     // And the offer is honest before it is taken: it is one tap with no dialog
     // behind it, so both costs are in the message itself.
@@ -609,7 +578,6 @@ void main() {
       mode: _ask,
       externalSessionId: 'ext-1',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     final pane = startAgent(tester, h.db);
 
@@ -627,7 +595,7 @@ void main() {
     final terminals = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
     ).read(terminalSessionsControllerProvider.notifier);
-    final restarted = mirroredServer(h.db).sessionRows.getById('s1')!.paneId!;
+    final restarted = h.db.server.sessionRows.getById('s1')!.paneId!;
     expect(restarted, isNot(pane));
     expect(terminals.instanceFor(pane), isNull);
     expect(
@@ -644,7 +612,6 @@ void main() {
       mode: _ask,
       externalSessionId: 'ext-1',
     );
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
@@ -666,7 +633,6 @@ void main() {
     tester,
   ) async {
     final h = await harness(agentId: AgentIds.claudeCode, mode: _ask);
-    addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     final pane = startAgent(tester, h.db);
 
@@ -689,17 +655,14 @@ void main() {
     // Asked of the instance, not of the row: the row goes on naming a pane
     // long after that pane has been disposed, so a paneId check alone would
     // pass for a refusal that killed the agent on its way out.
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.paneId, pane);
+    expect(h.db.server.sessionRows.getById('s1')!.paneId, pane);
     expect(
       ProviderScope.containerOf(
         tester.element(find.byType(PermissionModeChip)),
       ).read(terminalSessionsControllerProvider.notifier).instanceFor(pane),
       isNotNull,
     );
-    expect(
-      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
-      _acceptEdits,
-    );
+    expect(h.db.server.sessionRows.getById('s1')!.permissionMode, _acceptEdits);
     expect(find.textContaining('new conversation'), findsOneWidget);
     expect(find.textContaining('is saved'), findsOneWidget);
   });

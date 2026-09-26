@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
-import 'package:karmashala/src/features/snippets/data/command_snippet_dao.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
 import 'package:karmashala/src/features/snippets/presentation/snippet_dialogs.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -19,22 +19,21 @@ import '../terminal/fake_instance.dart';
 /// safety rather than taste: **submit starts off**, and a pasted multi-line
 /// command cannot smuggle one in.
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late ProviderContainer container;
 
-  setUp(() {
-    db = AppDatabase.memory();
+  setUp(() async {
+    server = FakeDataServer(clock: () => testTime);
+    data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(data: data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   Widget host(Widget Function(BuildContext context) onTap) =>
       UncontrolledProviderScope(
@@ -193,7 +192,7 @@ void main() {
   });
 
   testWidgets('both dialogs survive the window matrix', (tester) async {
-    CommandSnippetDao(db).insert(
+    server.snippetRows.insert(
       CommandSnippet(
         id: 'sn1',
         label: 'Run the tests on this machine only, excluding the live ones',
@@ -215,7 +214,7 @@ void main() {
         build: () {
           final scope = ProviderContainer(
             overrides: [
-              ...fakeTerminalOverrides(database: db),
+              ...fakeTerminalOverrides(data: data),
               clockProvider.overrideWithValue(FixedClock(testTime)),
             ],
           );

@@ -17,7 +17,7 @@ part 'data_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 14;
+const int kProtocolVersion = 15;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -898,7 +898,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.companionNotice => CompanionNoticeMessage.decode(frame),
   MessageType.companionEvent => CompanionEventMessage.decode(frame),
   MessageType.automationNotice => AutomationNoticeMessage.decode(frame),
-  MessageType.automationsChanged => AutomationsChangedMessage.decode(frame),
   MessageType.automationCall => AutomationCallMessage.decode(frame),
   MessageType.automationResult => AutomationResultMessage.decode(frame),
   MessageType.checksRun => ChecksRunMessage.decode(frame),

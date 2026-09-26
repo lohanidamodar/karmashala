@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -20,7 +19,7 @@ import 'package:logging/logging.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -51,14 +50,14 @@ const _talkative = AgentDescriptor(
   ),
 );
 
-Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+Future<({ProviderContainer container, TestMachine db, FakeDataServer server})>
 harness({
   Settings settings = const Settings(),
   AgentRegistry registry = const AgentRegistry([DataOnlyAgentAdapter(_rover)]),
   Set<String> missingDirectories = const {},
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows
     ..upsert(windowsEnv())
     ..upsert(wslEnv());
@@ -70,7 +69,7 @@ harness({
   // behaviour exercised here is not a second, friendlier fake.
   final container = ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       await server.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -97,7 +96,6 @@ class _StaticSettings extends SettingsController {
 void main() {
   test('a registry-only agent runs in a PTY pane, with a session row', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final launched = h.container
@@ -141,7 +139,6 @@ void main() {
   test('a title a person typed is recorded as theirs; a placeholder, a blank '
       'or a program\'s title leaves the naming to the agent', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -185,7 +182,6 @@ void main() {
         ),
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -230,7 +226,6 @@ void main() {
         ),
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -279,7 +274,6 @@ void main() {
         const AgentPermissions(existingSessions: bypassStored),
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -325,7 +319,6 @@ void main() {
         const AgentPermissions(existingSessions: acceptEditsStored),
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -338,9 +331,8 @@ void main() {
       ),
     );
     // Exactly what an old row looks like: the column exists and is null.
-    h.db.execute('UPDATE sessions SET permission_mode = NULL WHERE id = ?;', [
-      launched.session.id,
-    ]);
+    h.server.sessionRows.updatePermissionMode(launched.session.id, null);
+    await pumpEventQueue();
 
     expect(
       h.container
@@ -358,7 +350,6 @@ void main() {
 
   test('a spawned session records its parent and is capped', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -403,16 +394,14 @@ void main() {
 
   test('a spawned session names its parent in its opening prompt', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
     // The rover agent does not accept a prompt argument, so use a built-in that
     // does — the attribution is what is under test, not the delivery.
     final claudeHarness = await harness(registry: AgentRegistry.builtIn);
-    addTearDown(claudeHarness.db.close);
     addTearDown(claudeHarness.container.dispose);
-    mirroredServer(claudeHarness.db).installationRows.insert(
+    claudeHarness.db.server.installationRows.insert(
       agentInstallation(id: 'i2', agentId: AgentIds.claudeCode),
     );
     final claudeLauncher = claudeHarness.container.read(
@@ -449,9 +438,8 @@ void main() {
 
   test('Claude Code is launched with our own id as its session id', () async {
     final h = await harness(registry: AgentRegistry.builtIn);
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    mirroredServer(h.db).installationRows.insert(
+    h.db.server.installationRows.insert(
       agentInstallation(id: 'i2', agentId: AgentIds.claudeCode),
     );
 
@@ -477,7 +465,6 @@ void main() {
 
   test('a WSL session is wrapped for wsl.exe', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.server.repositoryRows.insert(
       repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/u/app'),
@@ -513,7 +500,6 @@ void main() {
   /// two. So a message now ends its typing before it presses Return.
   test('a sent message ends the typing before it presses Return', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -543,7 +529,6 @@ void main() {
 
   test('answering a prompt presses the key and nothing else', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -585,7 +570,6 @@ void main() {
     // model believed its instruction had landed at an agent that came up bare.
     final h = await harness();
     addTearDown(h.container.dispose);
-    addTearDown(h.db.close);
 
     await expectLater(
       h.container
@@ -613,7 +597,6 @@ void main() {
       registry: const AgentRegistry([DataOnlyAgentAdapter(_talkative)]),
     );
     addTearDown(h.container.dispose);
-    addTearDown(h.db.close);
 
     final result = await h.container
         .read(sessionLauncherProvider)
@@ -642,8 +625,8 @@ void main() {
 
     /// A session adopted out of a terminal pane: a real row, in a
     /// subdirectory, with the CLI's own id and no pane of its own.
-    void adoptedIn(AppDatabase db, EnvironmentPath directory) {
-      mirroredServer(db).sessionRows.insert(
+    void adoptedIn(TestMachine db, EnvironmentPath directory) {
+      db.server.sessionRows.insert(
         session(
           id: 'adopted-1',
           title: 'Adopted',
@@ -654,7 +637,6 @@ void main() {
 
     test('a launched session records where it was started', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final launched = await h.container
@@ -680,7 +662,6 @@ void main() {
 
     test('a session joining a worktree records the worktree', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       const worktree = EnvironmentPath(
         environmentId: 'windows',
@@ -713,7 +694,6 @@ void main() {
       // stores by working directory, so a resume from the repository root can
       // silently start a *new* conversation wearing this row's title.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adoptedIn(h.db, elsewhere);
 
@@ -741,7 +721,6 @@ void main() {
 
     test('a resume with nothing recorded still starts at the root', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       h.server.sessionRows.insert(
         session(
@@ -775,7 +754,6 @@ void main() {
       // session back in the repository root. A row written before v22 records
       // no directory but does record its worktree, which is the same fact.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       const worktree = EnvironmentPath(
         environmentId: 'windows',
@@ -811,7 +789,6 @@ void main() {
     test('a stated directory beats the row and the repository', () async {
       // What a handoff and a fork need: continue the work *where it is*.
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final launched = await h.container
@@ -841,7 +818,6 @@ void main() {
 
     test('a directory that has gone away falls back and says so', () async {
       final h = await harness(missingDirectories: const {subdirectory});
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adoptedIn(h.db, elsewhere);
 
@@ -888,7 +864,6 @@ void main() {
     // terminals. None threw. The line is asserted rather than merely written
     // so the facts that distinguish those outcomes cannot be dropped later.
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
     final previous = Diagnostics.instance;
@@ -934,7 +909,6 @@ void main() {
         const AgentPermissions(existingSessions: askStored),
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
     final terminals = h.container.read(
@@ -998,7 +972,6 @@ void main() {
         const AgentPermissions(existingSessions: bypassStored),
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -1039,7 +1012,6 @@ void main() {
 
   test('a restart is refused when the CLI has named no conversation', () async {
     final h = await harness();
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
@@ -1099,7 +1071,6 @@ void main() {
 
     test('refuses a pane launch', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await expectLater(
@@ -1120,7 +1091,6 @@ void main() {
 
     test('refuses an external-terminal launch, in the same words', () async {
       final h = await harness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await expectLater(

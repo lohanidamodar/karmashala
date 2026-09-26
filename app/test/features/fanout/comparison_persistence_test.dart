@@ -1,12 +1,9 @@
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
-import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
-import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -89,23 +86,18 @@ Future<FanOutLaunch> launchTwo(Harness h) => h.container
     );
 
 /// What the app sees on the next launch: a new container over the same file.
-Future<ProviderContainer> afterRestart(Harness h) async => ProviderContainer(
-  overrides: [
-    databaseProvider.overrideWithValue(h.db),
-    await h.server.override(),
-  ],
-);
+Future<ProviderContainer> afterRestart(Harness h) async =>
+    ProviderContainer(overrides: [await h.server.override()]);
 
 void main() {
   group('launch writes the record', () {
     test('one comparison, one candidate per installation, in order', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final launched = await launchTwo(h);
 
-      final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+      final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
       expect(stored.prompt, 'make the parser faster');
       expect(stored.repositoryId, repository().id);
       expect(stored.outcome, ComparisonOutcome.pending);
@@ -136,12 +128,11 @@ void main() {
       'an agent that never started is a failed candidate, not a gap',
       () async {
         final h = await connectedHarness(paneFailsFor: {'flakyCli'});
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final launched = await launchTwo(h);
 
-        final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+        final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
         expect(stored.candidates, hasLength(2), reason: 'both were requested');
         final failed = stored.candidates.last;
         expect(failed.agentId, 'flakyCli');
@@ -156,7 +147,6 @@ void main() {
 
     test('refused input writes nothing at all', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await expectLater(
@@ -169,7 +159,7 @@ void main() {
             ),
         throwsA(isA<ArgumentError>()),
       );
-      expect(ComparisonDao(h.db).getAll(), isEmpty);
+      expect(h.server.comparisonRows.getAll(), isEmpty);
     });
   });
 
@@ -178,7 +168,6 @@ void main() {
       'a new container reads back the comparison and its candidates',
       () async {
         final h = await connectedHarness();
-        addTearDown(h.db.close);
         final launched = await launchTwo(h);
         h.container.dispose();
 
@@ -200,7 +189,6 @@ void main() {
       'the handles to act again are rebuilt from the session rows',
       () async {
         final h = await connectedHarness();
-        addTearDown(h.db.close);
         final launched = await launchTwo(h);
         h.container.dispose();
 
@@ -221,7 +209,6 @@ void main() {
 
     test('a candidate whose session is gone keeps its record', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       final launched = await launchTwo(h);
       final lost = launched.started.first.session.id;
       h.server.sessionRows.delete(lost);
@@ -245,7 +232,6 @@ void main() {
       'files from status, lines from both diffs, commits from rev-list',
       () async {
         final h = await connectedHarness(git: _busyGit());
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         final launched = await launchTwo(h);
 
@@ -253,9 +239,11 @@ void main() {
             .read(fanOutServiceProvider)
             .diff(launched.started.first);
 
-        final stat = ComparisonDao(
-          h.db,
-        ).getById(launched.comparison.id)!.candidates.first.diff!;
+        final stat = h.server.comparisonRows
+            .getById(launched.comparison.id)!
+            .candidates
+            .first
+            .diff!;
         // Three paths in `git status`; `git diff` alone would have said one, and
         // it would never have seen the untracked file at all.
         expect(stat.filesChanged, 3);
@@ -290,7 +278,6 @@ void main() {
           return const CommandResult(exitCode: 0, stdout: '', stderr: '');
         },
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await h.container
           .read(fanOutServiceProvider)
@@ -304,9 +291,11 @@ void main() {
           .read(fanOutServiceProvider)
           .diff(launched.started.first);
 
-      final stat = ComparisonDao(
-        h.db,
-      ).getById(launched.comparison.id)!.candidates.first.diff!;
+      final stat = h.server.comparisonRows
+          .getById(launched.comparison.id)!
+          .candidates
+          .first
+          .diff!;
       expect(stat.insertions, 2);
       expect(stat.deletions, 1);
       expect(stat.commits, isNull, reason: '"could not tell", not zero');
@@ -316,14 +305,13 @@ void main() {
   group('the outcome is recorded', () {
     test('merging a winner names it and the commit it landed on', () async {
       final h = await connectedHarness(git: _busyGit(status: ''));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
       final winner = launched.started.first;
 
       await h.container.read(fanOutServiceProvider).mergeWinner(winner);
 
-      final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+      final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
       expect(stored.outcome, ComparisonOutcome.merged);
       expect(stored.winnerCandidateId, winner.candidate!.id);
       expect(stored.winner!.agentId, 'roverCli');
@@ -333,7 +321,6 @@ void main() {
 
     test('a refused merge leaves the comparison pending', () async {
       final h = await connectedHarness(git: _busyGit());
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
 
@@ -344,20 +331,21 @@ void main() {
         throwsA(isA<StateError>()),
       );
 
-      final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+      final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
       expect(stored.outcome, ComparisonOutcome.pending);
       expect(stored.winnerCandidateId, isNull);
     });
 
     test('a winner can be named without merging anything', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
 
-      h.container.read(fanOutServiceProvider).markWinner(launched.started.last);
+      await h.container
+          .read(fanOutServiceProvider)
+          .markWinner(launched.started.last);
 
-      final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+      final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
       expect(stored.winner!.agentId, 'flakyCli');
       expect(
         stored.outcome,
@@ -368,15 +356,14 @@ void main() {
 
     test('abandoning closes it out without a merge', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
 
-      h.container
+      await h.container
           .read(fanOutServiceProvider)
-          .abandon(ComparisonDao(h.db).getById(launched.comparison.id)!);
+          .abandon(h.server.comparisonRows.getById(launched.comparison.id)!);
 
-      final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+      final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
       expect(stored.outcome, ComparisonOutcome.discarded);
       expect(stored.finishedAt, isNotNull);
     });
@@ -385,7 +372,6 @@ void main() {
   group('the record outlives the worktree', () {
     test('a discarded loser is marked, never deleted', () async {
       final h = await connectedHarness(git: _busyGit(status: ''));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
       stopEverything(h, launched);
@@ -395,7 +381,7 @@ void main() {
           .discardLosers(launched.started, winner: launched.started.first);
       expect(discard.removed, hasLength(1));
 
-      final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+      final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
       expect(stored.candidates, hasLength(2));
       final loser = stored.candidates.last;
       expect(loser.worktreeRemoved, isTrue);
@@ -407,7 +393,6 @@ void main() {
 
     test('the loser keeps the last diff read from it', () async {
       final h = await connectedHarness(git: _busyGit(status: ''));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
       stopEverything(h, launched);
@@ -416,9 +401,10 @@ void main() {
           .read(fanOutServiceProvider)
           .discardLosers(launched.started, winner: launched.started.first);
 
-      final loser = ComparisonDao(
-        h.db,
-      ).getById(launched.comparison.id)!.candidates.last;
+      final loser = h.server.comparisonRows
+          .getById(launched.comparison.id)!
+          .candidates
+          .last;
       // Captured on the way out, when the directory still existed.
       expect(loser.diff, isNotNull);
       expect(loser.diff!.insertions, 5);
@@ -427,7 +413,6 @@ void main() {
 
     test('a discarded worktree is not diffed again', () async {
       final h = await connectedHarness(git: _busyGit(status: ''));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
       stopEverything(h, launched);
@@ -435,7 +420,7 @@ void main() {
           .read(fanOutServiceProvider)
           .discardLosers(launched.started, winner: launched.started.first);
 
-      final stored = ComparisonDao(h.db).getById(launched.comparison.id)!;
+      final stored = h.server.comparisonRows.getById(launched.comparison.id)!;
       final loser = h.container
           .read(fanOutServiceProvider)
           .resultFor(stored, stored.candidates.last)!;
@@ -451,7 +436,6 @@ void main() {
 
     test('merged, discarded, restarted — and it still reads', () async {
       final h = await connectedHarness(git: _busyGit(status: ''));
-      addTearDown(h.db.close);
       final launched = await launchTwo(h);
       stopEverything(h, launched);
       final service = h.container.read(fanOutServiceProvider);
@@ -481,7 +465,6 @@ void main() {
   group('the list', () {
     test('archived comparisons are put away, not lost', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
 
@@ -496,101 +479,6 @@ void main() {
         ..showArchived(false)
         ..archive(launched.comparison.id, archived: false);
       expect(h.container.read(comparisonsProvider), hasLength(1));
-    });
-
-    test('a comparison can be narrowed to one repository', () async {
-      final h = await connectedHarness();
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      await launchTwo(h);
-
-      final dao = ComparisonDao(h.db);
-      expect(dao.getAll(repositoryId: repository().id), hasLength(1));
-      expect(dao.getAll(repositoryId: 'other'), isEmpty);
-    });
-  });
-
-  group('the verification seam', () {
-    test('a verdict round-trips, and defaults to nothing', () async {
-      final h = await connectedHarness();
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      final launched = await launchTwo(h);
-      final dao = ComparisonDao(h.db);
-      final candidate = launched.started.first.candidate!;
-
-      expect(candidate.evidence, isNull);
-      expect(
-        h.container.read(candidateEvidenceProvider)(candidate.sessionId!),
-        isNull,
-        reason: 'nothing offers verdicts until verification is wired in',
-      );
-
-      dao.updateEvidence(
-        candidate.id,
-        const CandidateEvidence(
-          verdict: EvidenceVerdict.passed,
-          label: '8 tests, 0 failed',
-          runId: 'run-1',
-        ),
-      );
-
-      final stored = dao.getById(launched.comparison.id)!.candidates.first;
-      expect(stored.evidence!.verdict, EvidenceVerdict.passed);
-      expect(stored.evidence!.label, '8 tests, 0 failed');
-      expect(stored.evidence!.runId, 'run-1');
-      // Nobody named a producer, so the candidate says so rather than
-      // assuming the session that did the work also graded it.
-      expect(stored.evidence!.producerSessionId, isNull);
-      expect(stored.evidenceAttribution, VerdictAttribution.notRecorded);
-    });
-
-    test('who produced the verdict survives the round trip', () async {
-      final h = await connectedHarness();
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      final launched = await launchTwo(h);
-      final dao = ComparisonDao(h.db);
-      final candidate = launched.started.first.candidate!;
-
-      dao.updateEvidence(
-        candidate.id,
-        CandidateEvidence(
-          verdict: EvidenceVerdict.passed,
-          label: '8 tests, 0 failed',
-          runId: 'run-1',
-          producerSessionId: candidate.sessionId,
-        ),
-      );
-      final self = dao.getById(launched.comparison.id)!.candidates.first;
-      expect(self.evidence!.producerSessionId, candidate.sessionId);
-      expect(self.evidenceAttribution, VerdictAttribution.author);
-
-      dao.updateEvidence(
-        candidate.id,
-        const CandidateEvidence(
-          verdict: EvidenceVerdict.passed,
-          label: '8 tests, 0 failed',
-          runId: 'run-2',
-          producerSessionId: 'some-other-session',
-        ),
-      );
-      final checked = dao.getById(launched.comparison.id)!.candidates.first;
-      expect(checked.evidenceAttribution, VerdictAttribution.independent);
-    });
-
-    test('a note can be kept against a candidate', () async {
-      final h = await connectedHarness();
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      final launched = await launchTwo(h);
-      final dao = ComparisonDao(h.db)
-        ..updateNotes(launched.started.last.candidate!.id, 'over-engineered');
-
-      expect(
-        dao.getById(launched.comparison.id)!.candidates.last.notes,
-        'over-engineered',
-      );
     });
   });
 }

@@ -4,13 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/media/presentation/session_media_panel.dart';
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
+import '../../support/test_machine.dart';
 
 /// The Media surface, as the rail actually offers it.
 ///
@@ -19,19 +19,18 @@ import 'package:agent_cli/process.dart';
 /// picture was *nowhere*, and a panel behind a glyph nobody can find would be
 /// the same complaint again.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TestMachine();
     server = FakeDataServer()
       ..environmentRows.upsert(localHostEnvironment(testTime));
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pumpApp(WidgetTester tester) async {
     final container = fakeTerminalContainer(
-      database: db,
+      machine: db,
       data: await server.override(),
     );
     addTearDown(container.dispose);

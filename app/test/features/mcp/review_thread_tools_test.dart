@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 import '../git/review_thread_harness.dart';
-import '../../support/workspace_mirror.dart';
 
 /// The MCP surface: what an agent can say about a review, and what it cannot.
 void main() {
@@ -16,8 +15,8 @@ void main() {
     harness = await ReviewThreadHarness.create(
       shas: {'lib/a.dart': 'sha-one', 'lib/b.dart': 'sha-b'},
     );
-    mirroredServer(harness.db).installationRows.insert(agentInstallation());
-    mirroredServer(harness.db).sessionRows.insert(session(id: 's1'));
+    harness.server.installationRows.insert(agentInstallation());
+    harness.server.sessionRows.insert(session(id: 's1'));
     tools = ReviewThreadTools(harness.container, callerSessionId: 's1');
   });
   tearDown(() => harness.dispose());

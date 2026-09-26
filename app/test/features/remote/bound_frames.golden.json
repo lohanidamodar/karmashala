@@ -535,8 +535,11 @@
           },
           "frames": [
             {
-              "type": "result",
-              "payload": {}
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "push registrations are kept by the Karmashala server"
+              }
             }
           ]
         }

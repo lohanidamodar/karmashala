@@ -2,8 +2,6 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -21,7 +19,7 @@ import 'package:logging/logging.dart';
 import '../../support/fake_data_server.dart';
 import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/agents/data/agents_data.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -58,29 +56,28 @@ void main() {
       .join('\n');
 
   group('a rename says what the CLI store did with it', () {
-    late AppDatabase db;
+    late TestMachine db;
     late FakeDataServer dataServer;
     late DataClient data;
     late FakeCodexAppServer server;
     late FakeCommandRunner runner;
 
     setUp(() async {
-      db = AppDatabase.memory();
-      dataServer = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      dataServer = FakeDataServer()..runsOn(db);
       data = await dataServer.connect();
       server = FakeCodexAppServer();
       runner = FakeCommandRunner(processFactory: (_) => server);
-      mirroredServer(db).environmentRows.upsert(windowsEnv());
+      db.server.environmentRows.upsert(windowsEnv());
       dataServer.projectRows.insert(project());
       dataServer.repositoryRows.insert(repository());
     });
-    tearDown(() => db.close());
 
     void seed({String? externalId = 'u1'}) {
-      mirroredServer(
-        db,
-      ).installationRows.insert(agentInstallation(agentId: AgentIds.codex));
-      mirroredServer(db).sessionRows.insert(
+      db.server.installationRows.insert(
+        agentInstallation(agentId: AgentIds.codex),
+      );
+      db.server.sessionRows.insert(
         session(title: 'Session 0').copyWith(externalSessionId: externalId),
       );
     }
@@ -88,7 +85,6 @@ void main() {
     ProviderContainer mount() {
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           dataClientProvider.overrideWithValue(data),
           agentStoreServersProvider.overrideWithValue(
             AgentStoreServers(
@@ -128,7 +124,7 @@ void main() {
         linesOn(records, 'sessions.actions'),
         contains('store=no-conversation'),
       );
-      expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'Renamed');
+      expect(db.server.sessionRows.getById('s1')!.title, 'Renamed');
     });
   });
 
@@ -137,21 +133,18 @@ void main() {
       // Chat and terminal are two views of one session and there is exactly one
       // write path into the agent — but which of the three was taken decides
       // whether a second process was started, and nothing on screen says.
-      final db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
+      final db = TestMachine();
+      final server = FakeDataServer()..runsOn(db);
       final data = await server.connect();
-      addTearDown(db.close);
-      mirroredServer(db).environmentRows.upsert(windowsEnv());
+      db.server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      mirroredServer(
-        db,
-      ).installationRows.insert(agentInstallation(agentId: 'demo'));
+      db.server.installationRows.insert(agentInstallation(agentId: 'demo'));
 
       final container = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],
       );
@@ -181,7 +174,7 @@ void main() {
   });
 
   group('an archive says what it decided', () {
-    late AppDatabase db;
+    late TestMachine db;
     late FakeDataServer server;
     late DataClient data;
     late FakeCommandRunner git;
@@ -194,23 +187,22 @@ void main() {
 
     setUp(() async {
       statusOutput = '';
-      db = AppDatabase.memory();
-      server = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      server = FakeDataServer()..runsOn(db);
       data = await server.connect();
-      mirroredServer(db).environmentRows.upsert(windowsEnv());
+      db.server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      mirroredServer(db).installationRows.insert(agentInstallation());
+      db.server.installationRows.insert(agentInstallation());
       git = FakeCommandRunner(
         responder: (request) => request.arguments.contains('status')
             ? CommandResult(exitCode: 0, stdout: statusOutput, stderr: '')
             : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
       );
     });
-    tearDown(() => db.close());
 
     void addSession({EnvironmentPath? at = worktree}) =>
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           Session(
             id: 's1',
             repositoryId: 'r1',
@@ -227,7 +219,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: git),

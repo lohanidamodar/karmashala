@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -26,7 +25,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **Multi-select in the Explorer: the conventional gestures, both row kinds,
@@ -36,12 +35,12 @@ import '../terminal/fake_instance.dart';
 /// all as well". A context holds projects, and a project is in at most one, so
 /// the verb is *Move to*. A selection holds one kind at a time.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.workspaceRows.insert(
       Workspace(id: 'w1', name: 'Game dev', createdAt: testTime),
@@ -58,7 +57,7 @@ void main() {
     );
     server.installationRows.insert(agentInstallation());
     for (var i = 0; i < 4; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -71,7 +70,6 @@ void main() {
       );
     }
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(
     WidgetTester tester, {
@@ -83,7 +81,7 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -388,7 +386,7 @@ void main() {
       expect(find.text('Delete 2 sessions?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(mirroredServer(db).sessionRows.getById('n0'), isNotNull);
+      expect(db.server.sessionRows.getById('n0'), isNotNull);
     });
   });
 

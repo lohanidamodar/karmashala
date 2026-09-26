@@ -1,5 +1,4 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import '../../support/test_machine.dart';
 
 /// `Ctrl+C` in a terminal pane means two different things, and which one is
 /// decided by whether there is a selection *right now*.
@@ -24,19 +24,18 @@ void main() {
   // chord *does*, which is the same on every platform.
   setUp(() => commandKeyIsMeta = false);
 
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   String? clipboard;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TestMachine();
     clipboard = null;
-    container = fakeTerminalContainer(database: db);
+    container = fakeTerminalContainer(machine: db);
   });
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   /// Pumps the workbench with one pane holding [output], and returns that pane

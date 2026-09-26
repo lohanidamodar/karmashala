@@ -39,17 +39,17 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 /// subscriber to everything the app knows, **zero statements while it is not
 /// the tab on screen**.
 void main() {
-  late CountingDatabase db;
+  late CountingLayoutStore db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
-    db = CountingDatabase();
+    db = CountingLayoutStore();
     server = FakeDataServer();
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
@@ -60,7 +60,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(layoutStore: db),
         // Nothing here may shell out or read a real Ghostty/Warp directory:
         // the settings pages this opens probe both.
         commandRunnerFactoryProvider.overrideWithValue(
@@ -166,7 +166,7 @@ void main() {
     // Written by one container and read by another, which is what a quit and a
     // relaunch are. The pane behind it has no process, so this is exactly the
     // case a stored layout used to drop.
-    final first = fakeTerminalContainer(database: db);
+    final first = fakeTerminalContainer(layoutStore: db);
     final terminals = first.read(terminalSessionsControllerProvider.notifier);
     terminals.openTab(TerminalProfile.powerShell);
     terminals.openSettingsTab();
@@ -196,11 +196,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byType(EnvironmentsSection), findsOneWidget);
-    expect(
-      db.reads,
-      isNotEmpty,
-      reason: 'the shown page has to cost something',
-    );
+    expect(db.reads, isNotEmpty, reason: 'opening the tab saves the layout');
 
     activateTerminalTab(refOf(tester), shellTab);
     await tester.pump();
@@ -214,7 +210,7 @@ void main() {
     // in the tree, and an element that does not exist holds no subscription.
     expect(find.byType(SettingsScreen, skipOffstage: false), findsNothing);
     // Counted, never timed: builds of the surface, and statements through the
-    // database, over a stretch of the app's life with the tab open behind
+    // layout store (its data is the server's, through the fake), over a stretch of the app's life with the tab open behind
     // another one. Both stay where they were.
     db.reset();
     final builds = SettingsTabView.debugBuildCount;

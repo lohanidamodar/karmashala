@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
@@ -15,7 +13,6 @@ import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
 import '../fanout/fanout_harness.dart' as fanout;
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
@@ -36,7 +33,6 @@ import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 /// tooltip and to the agent through `list_checkouts`. A silent version of this
 /// arrangement is the bug; a stated one is a design.
 void main() {
-  late AppDatabase db;
   late SessionRepositoriesService service;
   late FakeSessionLinks links;
   late FakeDataServer server;
@@ -44,8 +40,7 @@ void main() {
   /// A project with three checkouts, which is the shape this is about: an `app`
   /// each session worktrees, and `api` and `docs` that nobody does.
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1'));
     server.repositoryRows
@@ -74,7 +69,6 @@ void main() {
       workspace: WorkspaceData(client),
     );
   });
-  tearDown(() => db.close());
 
   /// One worktree session spanning `app` (its own) plus whichever others.
   void worktreeSession(
@@ -289,12 +283,7 @@ void main() {
     });
 
     test('list_checkouts names the occupants of each checkout', () async {
-      final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          await server.override(),
-        ],
-      );
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
 
       // Four candidates in four worktrees of `app`, and one ordinary session
@@ -350,7 +339,6 @@ void main() {
       // production code path. A second repository is added to the project it
       // builds — the multi-repo shape this whole file is about.
       final h = await fanout.connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       h.server.repositoryRows.insert(
         repository(id: 'r-api', name: 'api', path: r'C:\src\demo\api'),
@@ -410,7 +398,6 @@ void main() {
       // namespace rather than a lock, so this asserts distinctness for the
       // ids actually minted and claims nothing stronger.
       final h = await fanout.connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final launched = await h.container
@@ -438,7 +425,6 @@ void main() {
       worktreeSession('s1');
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           selectedSessionIdProvider.overrideWith(() => _FixedSelection('s1')),
         ],

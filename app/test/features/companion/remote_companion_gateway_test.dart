@@ -7,7 +7,6 @@ library;
 
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -15,7 +14,6 @@ import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart' hide CompanionPairing;
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,8 +27,7 @@ final _lanGroup = InternetAddress('239.255.42.202');
 
 void main() {
   late int lanPort;
-  late AppDatabase db;
-  late PairedDeviceDao dao;
+  late MemoryPairedDeviceStore dao;
   late FakeRemoteBindings fake;
   late RelayServer relay;
   late Uri relayUri;
@@ -48,8 +45,7 @@ void main() {
   setUp(() async {
     dialledPorts.clear();
     lanPort = await freeBeaconPort();
-    db = AppDatabase.memory();
-    dao = PairedDeviceDao(db);
+    dao = MemoryPairedDeviceStore();
     fake = FakeRemoteBindings()..addSession('s1');
     fake.transcripts['s1'] = [
       const RemoteTranscriptMessage(role: 'user', text: 'hello'),
@@ -91,7 +87,6 @@ void main() {
     await service?.stop();
     service = null;
     await relay.close();
-    db.close();
   });
 
   Future<RemoteHostService> startService() async {

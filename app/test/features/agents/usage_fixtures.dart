@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
@@ -8,7 +7,7 @@ import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// An [AgentUsageService] that answers from the test.
 ///
@@ -124,18 +123,16 @@ const usageFixtureFloor = Duration(minutes: 3);
 /// The project and repository are seeded on [server] (a fresh one when
 /// omitted) and mirrored into the database for the session's foreign keys;
 /// a container that reads the workspace takes `await server.override()`.
-AppDatabase seedUsageDatabase({
+TestMachine seedUsageDatabase({
   String agentId = AgentIds.claudeCode,
   FakeDataServer? server,
 }) {
-  final db = AppDatabase.memory();
-  (server ?? FakeDataServer()).mirrorInto(db)
+  final db = TestMachine();
+  (server ?? FakeDataServer()).runsOn(db)
     ..environmentRows.upsert(windowsEnv())
     ..projectRows.insert(project())
     ..repositoryRows.insert(repository());
-  mirroredServer(
-    db,
-  ).installationRows.insert(agentInstallation(agentId: agentId));
-  mirroredServer(db).sessionRows.insert(session());
+  db.server.installationRows.insert(agentInstallation(agentId: agentId));
+  db.server.sessionRows.insert(session());
   return db;
 }

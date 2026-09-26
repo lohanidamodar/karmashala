@@ -7,7 +7,6 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_actions.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
@@ -154,18 +153,11 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     },
     approvalEvidenceFor: (sessionId) =>
         ref.read(remotePromptsProvider).approvalEvidence(sessionId),
-    registerPush: (deviceId, token, platform, presence) async {
-      ref
-          .read(pairedDeviceDaoProvider)
-          .updatePush(
-            deviceId,
-            token: token,
-            platform: platform,
-            presence: presence,
-            now: ref.read(clockProvider).nowUtc(),
-          );
-      ref.read(pairedDevicesRevisionProvider.notifier).bump();
-    },
+    // Never forwarded: the server records a phone's push registration.
+    registerPush: (_, _, _, _) async => throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'push registrations are kept by the Karmashala server',
+    ),
     listWorkspace: () => listRemoteWorkspace(ref),
     listProjects: () => listRemoteProjects(ref),
     startSession: (request) => startRemoteSession(ref, request),

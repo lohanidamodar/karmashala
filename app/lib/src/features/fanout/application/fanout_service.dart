@@ -13,9 +13,9 @@ import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
-import '../domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
+import '../data/comparisons_data.dart';
 import '../domain/diff_counts.dart';
-import 'comparison_providers.dart';
 
 /// One agent's run of the shared prompt, in its own worktree.
 class FanOutResult {
@@ -189,8 +189,7 @@ class FanOutService {
       createdAt: ref.read(clockProvider).nowUtc(),
       candidates: candidates,
     );
-    ref.read(comparisonDaoProvider).insert(comparison);
-    ref.read(comparisonsProvider.notifier).reload();
+    await ref.read(comparisonsDataProvider).create(comparison);
 
     return FanOutLaunch(
       comparison: comparison,
@@ -371,19 +370,17 @@ class FanOutService {
       commits: commits,
       capturedAt: ref.read(clockProvider).nowUtc(),
     );
-    ref.read(comparisonDaoProvider).updateDiff(candidate.id, stat);
-    ref.read(comparisonsProvider.notifier).reload();
+    await ref.read(comparisonsDataProvider).recordDiff(candidate.id, stat);
     return stat;
   }
 
   /// Names [result] the winner of its comparison without merging anything.
-  void markWinner(FanOutResult result) {
+  Future<void> markWinner(FanOutResult result) async {
     final candidate = result.candidate;
     if (candidate == null) return;
-    ref
-        .read(comparisonDaoProvider)
-        .updateWinner(candidate.comparisonId, candidate.id);
-    ref.read(comparisonsProvider.notifier).reload();
+    await ref
+        .read(comparisonsDataProvider)
+        .setWinner(candidate.comparisonId, candidate.id);
   }
 
   /// Merges [result]'s branch and records the winner. Merging is all it does:
@@ -413,31 +410,25 @@ class FanOutService {
     } on Object {
       // The merge succeeded; not being able to name its commit does not undo it.
     }
-    ref
-        .read(comparisonDaoProvider)
-        .updateOutcome(
+    await ref
+        .read(comparisonsDataProvider)
+        .close(
           candidate.comparisonId,
           outcome: ComparisonOutcome.merged,
           winnerCandidateId: candidate.id,
           mergedCommit: merged,
-          finishedAt: ref.read(clockProvider).nowUtc(),
         );
-    ref.read(comparisonsProvider.notifier).reload();
   }
 
   /// Closes a comparison out without merging anything.
-  void abandon(Comparison comparison) {
-    ref
-        .read(comparisonDaoProvider)
-        .updateOutcome(
-          comparison.id,
-          outcome: ComparisonOutcome.discarded,
-          winnerCandidateId: comparison.winnerCandidateId,
-          mergedCommit: comparison.mergedCommit,
-          finishedAt: ref.read(clockProvider).nowUtc(),
-        );
-    ref.read(comparisonsProvider.notifier).reload();
-  }
+  Future<void> abandon(Comparison comparison) => ref
+      .read(comparisonsDataProvider)
+      .close(
+        comparison.id,
+        outcome: ComparisonOutcome.discarded,
+        winnerCandidateId: comparison.winnerCandidateId,
+        mergedCommit: comparison.mergedCommit,
+      );
 
   /// Removes the worktrees of every result except [winner]. It refuses a running
   /// session and an uncommitted tree; branches, being cheap, are left alone.
@@ -449,7 +440,7 @@ class FanOutService {
     final removed = <FanOutResult>[];
     final kept = <FanOutKept>[];
     final failures = <FanOutDiscardFailure>[];
-    final dao = ref.read(comparisonDaoProvider);
+    final comparisons = ref.read(comparisonsDataProvider);
 
     for (final loser in results) {
       if (loser.session.id == winner.session.id) continue;
@@ -509,14 +500,13 @@ class FanOutService {
             );
         removed.add(loser);
         if (loser.candidate case final candidate?) {
-          dao.markWorktreeRemoved(candidate.id);
+          await comparisons.worktreeRemoved(candidate.id);
         }
       } on Object catch (error) {
         failures.add(FanOutDiscardFailure(result: loser, error: error));
       }
     }
 
-    if (removed.isNotEmpty) ref.read(comparisonsProvider.notifier).reload();
     return FanOutDiscard(removed: removed, kept: kept, failures: failures);
   }
 }

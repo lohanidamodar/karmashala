@@ -6,7 +6,6 @@
 /// so a list that reads top-to-bottom on the desktop arrived shuffled.
 library;
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/read.dart';
@@ -24,10 +23,10 @@ import '../../support/sync_bindings.dart';
 import '../terminal/fake_instance.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late FakeDataServer server;
   final now = DateTime.utc(2026, 8, 31, 10);
@@ -42,11 +41,11 @@ void main() {
   setUp(() async {
     missing.clear();
     activeAt.clear();
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         remoteDeliveryStageProvider.overrideWithValue((id) async => null),
         sessionStatusLookupProvider.overrideWithValue((_) => null),
@@ -65,7 +64,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   EnvironmentPath path(String p) =>
@@ -115,7 +113,7 @@ void main() {
     String? parentSessionId,
     String? worktree,
   }) {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: id,
         repositoryId: repositoryId,
@@ -198,7 +196,7 @@ void main() {
     seedProject('p', r'C:\work\p');
     seedRepository('r', 'p', r'C:\work\p\repo');
     seedSession('native', repositoryId: 'r', createdAt: DateTime.utc(2026, 3));
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imported',
         repositoryId: 'r',
@@ -259,13 +257,10 @@ void main() {
   test('nothing is ever dropped: a session with no project row still '
       'lists', () {
     seedEnvironment();
-    // A repository whose project row is gone. Foreign keys forbid writing
-    // that, which is the point: this is the corrupted-database shape the
-    // fallback exists for, so it is seeded the only way it can occur.
-    db.execute('PRAGMA foreign_keys = OFF;');
+    // A repository whose project row is gone: the corrupted shape the
+    // fallback exists for.
     seedRepository('orphan', 'no-such-project', r'C:\elsewhere\repo');
     seedSession('lost', repositoryId: 'orphan');
-    db.execute('PRAGMA foreign_keys = ON;');
     seedProject('p', r'C:\work\p');
     seedRepository('r', 'p', r'C:\work\p\repo');
     seedSession('found', repositoryId: 'r');
@@ -354,7 +349,7 @@ void main() {
     seedEnvironment();
     seedProject('p', r'C:\work\p');
     seedRepository('r', 'p', r'C:\work\p\repo');
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'undated',
         repositoryId: 'r',

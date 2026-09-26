@@ -1,7 +1,7 @@
 import '../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../fanout/application/comparison_providers.dart';
+import '../fanout/data/comparisons_data.dart';
 
 /// The fan-out comparisons an agent can read: one prompt run on several agents
 /// in parallel worktrees. Read-only, and it needs no caller identity.
@@ -34,7 +34,7 @@ class FanOutTools {
   }) {
     final workspace = _container.read(workspaceDataProvider);
     final comparisons = _container
-        .read(comparisonDaoProvider)
+        .read(comparisonsDataProvider)
         .getAll(repositoryId: repositoryId, includeArchived: includeArchived);
     final capped = comparisons.take(limit == null || limit <= 0 ? 20 : limit);
     return [
@@ -65,7 +65,7 @@ class FanOutTools {
     if (id == null || id.isEmpty) {
       throw ArgumentError('id is required.');
     }
-    final comparison = _container.read(comparisonDaoProvider).getById(id);
+    final comparison = _container.read(comparisonsDataProvider).getById(id);
     if (comparison == null) {
       throw ArgumentError('No comparison with id $id.');
     }

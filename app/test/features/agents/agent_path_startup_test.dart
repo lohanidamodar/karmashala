@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala_core/paths.dart';
 import 'package:karmashala_core/testing.dart';
@@ -25,15 +23,12 @@ const _real =
     r'C:\Users\d\.codex\packages\standalone\releases\0.153.4\codex.exe';
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   setUp(() {
     server = FakeDataServer();
-    db = AppDatabase.memory();
     server.environmentRows.upsert(windowsEnv());
   });
-  tearDown(() => db.close());
 
   Future<ProviderContainer> scoped({
     required PathProbe probe,
@@ -42,7 +37,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         pathProbeProvider.overrideWithValue(probe),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -73,7 +67,9 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+      server.installationRows.insert(
+        agentInstallation(agentId: AgentIds.codex, path: _stored),
+      );
       final probe = FakePathProbe(
         files: const {_real},
         links: const {_storedDir: _release},
@@ -112,7 +108,9 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+      server.installationRows.insert(
+        agentInstallation(agentId: AgentIds.codex, path: _stored),
+      );
       final probe = FakePathProbe(
         files: const {_real},
         links: const {_storedDir: _release},
@@ -135,7 +133,9 @@ void main() {
       () async {
         // That launch's own first-run scan is writing the rows this would be
         // checking; racing it would probe everything twice.
-        server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+        server.installationRows.insert(
+          agentInstallation(agentId: AgentIds.codex, path: _stored),
+        );
         final probe = FakePathProbe();
         final runner = FakeCommandRunner();
         final container = await scoped(probe: probe, runner: runner);
@@ -153,7 +153,9 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+      server.installationRows.insert(
+        agentInstallation(agentId: AgentIds.codex, path: _real),
+      );
       final probe = FakePathProbe(files: const {_real});
       final container = await scoped(
         probe: probe,
@@ -184,7 +186,9 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+      server.installationRows.insert(
+        agentInstallation(agentId: AgentIds.codex, path: _real),
+      );
       final probe = FakePathProbe(files: const {_real});
       final runner = FakeCommandRunner(
         responder: (_) =>
@@ -216,7 +220,9 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+      server.installationRows.insert(
+        agentInstallation(agentId: AgentIds.codex, path: _real),
+      );
       final runner = FakeCommandRunner(
         responder: (_) =>
             const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
@@ -240,7 +246,9 @@ void main() {
     test(
       'a workspace that has never discovered leaves it to the first run',
       () async {
-        server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+        server.installationRows.insert(
+          agentInstallation(agentId: AgentIds.codex, path: _real),
+        );
         final runner = FakeCommandRunner(
           responder: (_) => fail('the first-run scan is writing these rows'),
         );

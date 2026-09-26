@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala_core/logging.dart';
 
@@ -27,7 +25,6 @@ void main() {
   late Directory dir;
   late Diagnostics previous;
   late LogFileSink sink;
-  late AppDatabase db;
   late ProviderContainer container;
 
   setUp(() async {
@@ -37,16 +34,12 @@ void main() {
     AppLogger.initialize(onRecord: Diagnostics.instance.handle);
     sink = LogFileSink(directory: dir);
     Diagnostics.instance.attachFile(sink);
-    db = AppDatabase.memory();
-    container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
-    );
+    container = ProviderContainer(overrides: []);
   });
 
   tearDown(() async {
     await sink.close();
     Diagnostics.instance = previous;
-    db.close();
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
 

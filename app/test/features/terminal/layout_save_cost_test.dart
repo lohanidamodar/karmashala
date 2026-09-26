@@ -1,5 +1,4 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
@@ -25,7 +24,7 @@ import 'package:xterm2/xterm.dart';
 /// These tests pin the fix: a pane is re-encoded only when its buffer moved
 /// since the last time it was written.
 void main() {
-  late AppDatabase db;
+  late TerminalLayoutStore db;
   late ProviderContainer container;
   late TerminalSessionsController controller;
   late TerminalLayoutDao dao;
@@ -35,11 +34,11 @@ void main() {
 
   setUp(() {
     armed.clear();
-    db = AppDatabase.memory();
+    db = TerminalLayoutStore.memory();
     dao = TerminalLayoutDao(db);
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        terminalLayoutStoreProvider.overrideWithValue(db),
         scrollbackAutosaveFactoryProvider.overrideWithValue(
           ({required onTick}) => ScrollbackAutosave(
             onTick: onTick,

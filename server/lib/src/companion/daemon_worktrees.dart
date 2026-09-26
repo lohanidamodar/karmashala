@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_automations/persistence.dart' show CheckoutRows;
-import 'package:karmashala_git/git.dart' show GitException;
+import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_git/git.dart' show GitException, WorktreeSetupReport;
+import 'package:karmashala_git/store.dart' show WorktreeSetupDao;
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
@@ -17,7 +18,8 @@ const String kWorktreeSetupSessionPrefix = 'karmashala-setup-';
 
 /// The app's worktree creation, run by the session host for a session a phone
 /// starts in a worktree of its own: the same staged creation, the same setup
-/// setting and verdict table — with a repository's setup command run as a
+/// setting and verdict table (recorded through [record], which tells every
+/// client) — with a repository's setup command run as a
 /// session this host owns (watchable from any client) where the app would
 /// open a pane.
 WorktreeService daemonWorktrees({
@@ -25,6 +27,7 @@ WorktreeService daemonWorktrees({
   required SessionRegistry registry,
   required DaemonCheckoutFacts facts,
   required String Function() newId,
+  required void Function(WorktreeSetupReport report) record,
 }) {
   final rows = CheckoutRows(database);
   final setups = WorktreeSetupDao(database);
@@ -43,7 +46,7 @@ WorktreeService daemonWorktrees({
       }
       return null;
     },
-    record: setups.record,
+    record: record,
     openPane: (command) {
       final id = '$kWorktreeSetupSessionPrefix${newId()}';
       final session = registry.open(

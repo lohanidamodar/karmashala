@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/events.dart';
-import 'package:karmashala_automations/persistence.dart';
+
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -16,8 +16,7 @@ import '../../notifications/application/session_status_registry.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import 'automation_providers.dart';
-import 'automation_scheduler.dart';
+import '../data/automations_data.dart';
 import 'unattended_preflight.dart';
 import 'usage_limit_watcher.dart' show sessionStatusChangesProvider;
 
@@ -84,7 +83,7 @@ class AutomationEventRouter extends Notifier<int> {
     return _fired;
   }
 
-  AutomationDao get _dao => ref.read(automationDaoProvider);
+  AutomationsData get _dao => ref.read(automationsDataProvider);
   DateTime get _now => ref.read(clockProvider).nowUtc();
 
   void _observe(SessionStatusEntry entry) {
@@ -221,9 +220,8 @@ class AutomationEventRouter extends Notifier<int> {
     );
     switch (rule.trigger!.action) {
       case AutomationEventAction.startSession:
-        await ref
-            .read(automationSchedulerProvider.notifier)
-            .startEventRun(rule, run);
+        // Queued at the server, which starts it when the checkout is free.
+        await _dao.queueEventRun(run);
       case AutomationEventAction.messageSession:
         _message(rule, run, session);
     }
@@ -292,7 +290,6 @@ class AutomationEventRouter extends Notifier<int> {
           finishedAt: now,
         ),
       );
-      ref.read(automationsRevisionProvider.notifier).bump();
       return;
     }
     final target = session!;
@@ -311,7 +308,6 @@ class AutomationEventRouter extends Notifier<int> {
         finishedAt: now,
       ),
     );
-    ref.read(automationsRevisionProvider.notifier).bump();
   }
 }
 

@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -48,13 +46,8 @@ void main() async {
   Future<LauncherControlServer> startServer({
     Future<InternetAddress?> Function()? wslHostAddress,
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     container = ProviderContainer(
-      overrides: [
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-        databaseProvider.overrideWithValue(db),
-      ],
+      overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
     );
     final started = LauncherControlServer(container);
     await started.start(
@@ -128,13 +121,8 @@ void main() async {
     test(
       'nothing is offered anywhere when the endpoint has no credential',
       () async {
-        final db = AppDatabase.memory();
-        addTearDown(db.close);
         final closedContainer = ProviderContainer(
-          overrides: [
-            clockProvider.overrideWithValue(FixedClock(testTime)),
-            databaseProvider.overrideWithValue(db),
-          ],
+          overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
         );
         final closed = LauncherControlServer(
           closedContainer,

@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/settings/presentation/tools_page.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -13,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// Whether the app admits, on screen, that it cannot see its agents properly.
 ///
@@ -23,26 +21,24 @@ import '../../support/workspace_mirror.dart';
 /// trace used to be one `I bootstrap:` line, and nine of the owner's sessions
 /// ran a whole day on disk probes with nothing on screen saying so.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late Override data;
 
   // The environments the ids in these reports refer to. Without them the page
   // can only fall back to the raw id, and the local host's raw id is the
   // literal `windows` on a Mac.
   setUp(() async {
-    db = AppDatabase.memory();
-    FakeDataServer().mirrorInto(db);
-    mirroredServer(db).environmentRows
+    db = TestMachine();
+    FakeDataServer().runsOn(db);
+    db.server.environmentRows
       ..upsert(posixEnv())
       ..upsert(wslEnv());
-    data = await mirroredServer(db).override();
+    data = await db.server.override();
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester, AgentHookInstallationReport report) {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         agentHookInstallationReportProvider.overrideWith(
           () => _StubReport(report),

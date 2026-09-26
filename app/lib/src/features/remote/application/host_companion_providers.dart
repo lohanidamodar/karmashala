@@ -4,17 +4,17 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_host/lifecycle_client.dart' show ServerMethod;
 import 'package:riverpod/riverpod.dart';
 
-import '../../agents/application/host_hook_endpoint.dart';
+import '../../terminal/application/local_host_providers.dart';
 import 'host_companion_link.dart';
 import 'remote_access_controller.dart';
 import 'remote_bindings.dart';
 import 'remote_providers.dart';
 
-/// Whether this machine's session host serves the phone companion: whenever
-/// local panes are host-backed, as it serves agents' hooks and tools. This app
-/// then runs no companion server of its own — one machine, one server.
+/// Whether this app has a link to this machine's server's companion: whenever
+/// a local server may be reached, whatever the panes setting. The app never
+/// runs a companion server of its own.
 final companionAtHostProvider = Provider<bool>(
-  (ref) => ref.watch(agentHooksAtHostProvider),
+  (ref) => ref.watch(localHostSessionAccessProvider) != null,
 );
 
 /// This app's half of the companion the host serves: it answers the calls the
@@ -24,9 +24,7 @@ final hostCompanionLinkProvider = Provider<HostCompanionLink>((ref) {
   link = HostCompanionLink(
     bindings: () => ref.read(remoteHostBindingsProvider),
     deviceById: (deviceId) =>
-        ref.read(pairedDeviceDaoProvider).getById(deviceId),
-    onDevicesChanged: () =>
-        ref.read(pairedDevicesRevisionProvider.notifier).bump(),
+        ref.read(pairedDevicesDataProvider).fresh(deviceId),
     // Maybe a new host: what it serves by is read again, and the agent CLIs
     // it found on this machine are what the app lists.
     onAttached: () {

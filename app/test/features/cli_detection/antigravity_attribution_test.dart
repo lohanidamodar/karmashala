@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/directory_conversation_attribution_service.dart';
 import 'package:agent_cli/process.dart';
@@ -11,7 +10,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
@@ -33,7 +32,7 @@ import 'package:karmashala/src/features/agents/data/agents_data.dart';
 void main() {
   late Directory tmp;
   late String storeHome;
-  late AppDatabase db;
+  late TestMachine db;
   late FakeSessionRows dao;
   late SessionsData sessions;
   late WorkspaceData workspace;
@@ -48,8 +47,8 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_attr_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
-    db = AppDatabase.memory();
-    final server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -65,7 +64,6 @@ void main() {
     installations = AgentInstallationsData(await server.connect());
   });
   tearDown(() {
-    db.close();
     try {
       tmp.deleteSync(recursive: true);
     } on FileSystemException {

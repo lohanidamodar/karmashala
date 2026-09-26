@@ -8,9 +8,6 @@ part of 'messages.dart';
 enum AutomationNoticeKind {
   /// "I am the app": forwarded automation calls go to this connection.
   ready,
-
-  /// The app wrote automations, runs, checks or resumes: re-read and re-arm.
-  changed,
 }
 
 /// client → host: one [AutomationNoticeKind].
@@ -38,26 +35,6 @@ class AutomationNoticeMessage extends HostMessage {
   }
 }
 
-/// host → client: the host wrote automation, run, check, resume or
-/// verification rows; whatever shows them re-reads.
-class AutomationsChangedMessage extends HostMessage {
-  const AutomationsChangedMessage();
-
-  @override
-  Frame toFrame() => Frame(
-    MessageType.automationsChanged,
-    0,
-    (WireWriter()..str(jsonEncode(const <String, Object?>{}))).take(),
-  );
-
-  static AutomationsChangedMessage decode(Frame frame) {
-    _object(
-      _decodeJson(WireReader(frame.payload).str()),
-      'automations changed',
-    );
-    return const AutomationsChangedMessage();
-  }
-}
 
 /// What the host forwards to the app because only the app can do it.
 enum AutomationCallKind {

@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not part of the main barrel in Riverpod 3.
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
@@ -23,6 +21,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../agents/usage_fixtures.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 /// Usage at the point of decision.
 ///
@@ -70,7 +69,7 @@ Future<Override> seededWorkspace() {
   return server.override();
 }
 
-AppDatabase seeded() => AppDatabase.memory();
+TestMachine seeded() => TestMachine();
 
 typedef UsageLookup = FutureOr<AgentUsage> Function(AgentInstallation);
 
@@ -82,11 +81,9 @@ Future<ProviderContainer> pumpSetup(
   int select = 2,
   List<Override> extraOverrides = const [],
 }) async {
-  final db = seeded();
-  addTearDown(db.close);
+  seeded();
   final container = ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(db),
       await seededWorkspace(),
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -346,11 +343,9 @@ void main() {
   testWidgets('the strip survives the window matrix, warning and all', (
     tester,
   ) async {
-    final db = seeded();
-    addTearDown(db.close);
+    seeded();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await seededWorkspace(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -396,11 +391,9 @@ void main() {
     // compact width CLAUDE.md asks for up to the desktop one — three accounts,
     // one of them warning and one of them unreadable, which is the tallest and
     // wordiest the strip ever gets.
-    final db = seeded();
-    addTearDown(db.close);
+    seeded();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await seededWorkspace(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
@@ -288,10 +286,8 @@ void main() {
       // stored — `Settings.flutterSdkPaths`, which is where a person names an
       // SDK PATH does not mention. Empty here, so every test below measures
       // exactly what it did before.
-      final db = AppDatabase.memory();
       container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           clockProvider.overrideWithValue(clock),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
@@ -299,7 +295,6 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      addTearDown(db.close);
     });
 
     FlutterSdkReadings readings() =>

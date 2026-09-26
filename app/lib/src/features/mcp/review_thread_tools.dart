@@ -115,7 +115,7 @@ class ReviewThreadTools {
       throw ArgumentError('id is required — review_thread_list has them.');
     }
     final comment = args['comment'] as String? ?? '';
-    final thread = _service.reply(
+    final thread = await _service.reply(
       threadId: id,
       body: comment,
       author: _author,
@@ -137,7 +137,10 @@ class ReviewThreadTools {
         'status must be one of: ${ReviewThreadStatus.settable.join(', ')}.',
       );
     }
-    final thread = _service.setStatus(id, ReviewThreadStatus.fromName(name));
+    final thread = await _service.setStatus(
+      id,
+      ReviewThreadStatus.fromName(name),
+    );
     if (thread == null) throw StateError('No review thread with id $id.');
     final entry = await _service.anchored(id);
     return _threadJson(entry!);

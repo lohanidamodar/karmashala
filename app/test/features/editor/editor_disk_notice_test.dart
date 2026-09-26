@@ -9,8 +9,8 @@ import 'package:karmashala/src/features/editor/presentation/editor_tab_view.dart
 import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/theme.dart';
 
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _path = r'C:\repo\lib\main.dart';
 
@@ -103,12 +103,11 @@ void main() {
       );
 
   Future<void> mount(WidgetTester tester, {bool showing = true}) async {
-    final db = CountingDatabase();
-    addTearDown(db.close);
+    final db = TestMachine();
     disk = _Disk();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         documentStoreProvider.overrideWithValue(disk),
       ],
     );

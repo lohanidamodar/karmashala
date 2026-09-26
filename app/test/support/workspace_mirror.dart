@@ -6,24 +6,17 @@ import 'package:karmashala_store/database.dart';
 
 import 'fake_data_server.dart';
 
-/// **Transitional — goes when the last table that points at the workspace,
-/// sessions, environments or installations moves to the server (slices
-/// 1e–1f).**
+/// **Transitional — goes with the conversation index (slice 1f).**
 ///
-/// The app reads the workspace, sessions, environments and installations only
-/// from its data client (in tests, the [FakeDataServer]). But tables not moved
-/// yet are still in the test's database, and their foreign keys — and a few
-/// queries not moved yet (the conversation index's joins, scheduled resumes,
-/// automation origins, checkpoints' environments) — reach those rows there.
-/// [mirrorInto] copies every environment, installation, workspace and session
-/// row the fake writes into [db], so those rows exist; nothing in the app
-/// reads them from [db].
+/// The app reads everything but the conversation index from its data client
+/// (in tests, the [FakeDataServer]). The index still lives in the database the
+/// app opens, and its queries join the rows it indexes — sessions, their
+/// checkouts and projects, installations. [mirrorInto] copies those rows the
+/// fake writes into [db] for the index's tests; nothing else reads them there.
 ///
 /// The one file under `test/` that may name the moved domains' DAOs
 /// (`direct_database_guard_test.dart` holds it there).
-/// The fake server whose rows are mirrored into [db] — the server a test that
-/// holds only its database seeds and reads (`mirroredServer(db).sessionRows`).
-/// Never the database itself: [db] only names which server.
+/// The fake server whose rows are mirrored into [db].
 FakeDataServer mirroredServer(AppDatabase db) =>
     _mirrored[db] ??
     (throw StateError('no fake server is mirrored into that database'));

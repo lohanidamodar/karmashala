@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -8,6 +7,7 @@ import 'package:karmashala/src/features/sessions/application/delivery_providers.
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 /// A `.git` that answers for one clone and nothing else.
 class _OneRemote implements GitFiles {
@@ -79,8 +79,7 @@ void main() {
 
   group('wired to the reading the app already takes', () {
     Future<String?> identityAfterReading(String? url) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+      final db = TestMachine();
       final server = FakeDataServer()
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
@@ -88,7 +87,7 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db, gitFiles: _OneRemote(url)),
+          ...fakeTerminalOverrides(machine: db, gitFiles: _OneRemote(url)),
           await server.override(),
         ],
       );

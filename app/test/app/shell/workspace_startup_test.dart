@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -25,7 +24,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// The whole shell, launched into a **stored split workspace** — which is the
@@ -37,22 +36,21 @@ import 'package:agent_cli/process.dart';
 /// while the tree is still building, which Riverpod refuses loudly in debug and
 /// swallows in release.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   /// The bar's own content is what a narrow group has to fit, so the delivery
   /// state is the **fullest** one rather than the empty default: a branch, a
@@ -79,7 +77,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db, layoutStore: layoutStoreOf(db)),
         // Everything that would otherwise reach the host or poll a file: a
         // spinner that never stops is a `pumpAndSettle` that never returns.
         sessionTranscriptProvider.overrideWith(
@@ -115,9 +113,12 @@ void main() {
   /// which is what pulls the delivery strip, the model and the usage figure
   /// into the first frame.
   void storeASplitWorkspace() {
-    final first = fakeTerminalContainer(database: db);
+    final first = fakeTerminalContainer(
+      machine: db,
+      layoutStore: layoutStoreOf(db),
+    );
     final controller = first.read(terminalSessionsControllerProvider.notifier);
-    final dao = mirroredServer(db).sessionRows;
+    final dao = db.server.sessionRows;
 
     void seed(String id, String tabId) {
       final paneId = first

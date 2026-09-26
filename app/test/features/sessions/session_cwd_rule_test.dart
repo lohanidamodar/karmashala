@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -21,7 +20,7 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -392,14 +391,14 @@ void main() {
     );
 
     Future<
-      ({ProviderContainer container, AppDatabase db, FakeDataServer server})
+      ({ProviderContainer container, TestMachine db, FakeDataServer server})
     >
     harness({
       required AgentDescriptor agent,
       Set<String> missingDirectories = const {},
     }) async {
-      final db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
+      final db = TestMachine();
+      final server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
@@ -407,7 +406,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           await server.override(),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
           agentRegistryProvider.overrideWithValue(
@@ -438,8 +437,8 @@ void main() {
     /// conversation survive, the directory does not. This is exactly what
     /// `SessionArchiveService` leaves behind — it removes the worktree and
     /// deliberately keeps everything else.
-    void insertArchivedWorktreeSession(AppDatabase db) {
-      mirroredServer(db).sessionRows.insert(
+    void insertArchivedWorktreeSession(TestMachine db) {
+      db.server.sessionRows.insert(
         Session(
           id: 'src-1',
           repositoryId: 'r1',
@@ -467,7 +466,6 @@ void main() {
         agent: uncheckedAgent,
         missingDirectories: {worktreePath},
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       insertArchivedWorktreeSession(h.db);
 
@@ -501,7 +499,6 @@ void main() {
         agent: checkedAgent,
         missingDirectories: {worktreePath},
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       insertArchivedWorktreeSession(h.db);
 
@@ -529,7 +526,6 @@ void main() {
       'fork into a new worktree says so for an agent nobody has checked',
       () async {
         final h = await harness(agent: uncheckedAgent);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         insertArchivedWorktreeSession(h.db);
 
@@ -560,7 +556,6 @@ void main() {
       'fork into a new worktree says nothing for an agent that was checked',
       () async {
         final h = await harness(agent: checkedAgent);
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         insertArchivedWorktreeSession(h.db);
 
@@ -581,7 +576,7 @@ void main() {
         // A fork is a create: the source conversation is left where it is, and
         // the row that named it is untouched.
         expect(
-          mirroredServer(h.db).sessionRows.getById('src-1')!.worktree!.path,
+          h.db.server.sessionRows.getById('src-1')!.worktree!.path,
           worktreePath,
         );
       },
@@ -593,14 +588,13 @@ void main() {
     /// session's remembered pick, and no session row.
     test('select_checkout moves the view, never a session directory', () async {
       final h = await harness(agent: checkedAgent);
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       insertArchivedWorktreeSession(h.db);
       h.server.repositoryRows.insert(repository(id: 'r2', name: 'api'));
 
-      final before = mirroredServer(h.db).sessionRows.getById('src-1')!;
+      final before = h.db.server.sessionRows.getById('src-1')!;
       h.container.read(checkoutPickerProvider).select(repository(id: 'r2'));
-      final after = mirroredServer(h.db).sessionRows.getById('src-1')!;
+      final after = h.db.server.sessionRows.getById('src-1')!;
 
       expect(after.workingDirectory, before.workingDirectory);
       expect(after.worktree, before.worktree);

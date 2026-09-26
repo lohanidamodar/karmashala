@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -21,7 +19,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/temp_directory.dart';
 
 /// **Deleting a project does not hold the UI, and does not fail in silence.**
@@ -46,9 +44,9 @@ void main() {
   String claudeHome() => p.join(tmp.path, '.claude');
 
   /// A project of [count] Claude sessions, each with a real transcript on disk.
-  AppDatabase seed(int count, {String projectId = 'p1'}) {
-    final db = AppDatabase.memory();
-    server = FakeDataServer(clock: () => testTime)..mirrorInto(db);
+  TestMachine seed(int count, {String projectId = 'p1'}) {
+    final db = TestMachine();
+    server = FakeDataServer(clock: () => testTime)..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: projectId));
     server.repositoryRows.insert(repository(projectId: projectId));
@@ -62,7 +60,7 @@ void main() {
       File(p.join(claudeHome(), 'sessions', '$id.json'))
         ..createSync(recursive: true)
         ..writeAsStringSync(jsonEncode({'sessionId': id}));
-      mirroredServer(db).importedRows.insertIfAbsent(
+      db.server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 's$i',
           repositoryId: 'r1',
@@ -82,14 +80,13 @@ void main() {
   }
 
   Future<ProviderContainer> mount(
-    AppDatabase db, {
+    TestMachine db, {
     CliSessionMutator? mutator,
     _RecordingPresenter? presenter,
     bool autoDispose = true,
   }) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(
@@ -111,7 +108,6 @@ void main() {
   group('the UI is not held while the store is purged', () {
     test('the project is gone before a single transcript is', () async {
       final db = seed(8);
-      addTearDown(db.close);
       final container = await mount(db);
       final runner = container.read(cliStorePurgeRunnerProvider);
 
@@ -123,7 +119,7 @@ void main() {
       // already been refreshed — no frame is waiting on the filesystem.
       expect(container.read(projectsControllerProvider), isEmpty);
       expect(server.projectRows.getById('p1'), isNull);
-      expect(mirroredServer(db).importedRows.getByRepository('r1'), isEmpty);
+      expect(db.server.importedRows.getByRepository('r1'), isEmpty);
       // …and the store work has genuinely not finished yet. This is the
       // assertion that would fail if the purge were awaited inline again.
       expect(runner.pending, 1);
@@ -140,7 +136,6 @@ void main() {
 
     test('nothing is started when the store is not being touched', () async {
       final db = seed(3);
-      addTearDown(db.close);
       final container = await mount(db);
 
       await container
@@ -159,7 +154,6 @@ void main() {
   group('a session that cannot be deleted', () {
     test('does not abandon the rest, and is named in a notification', () async {
       final db = seed(5);
-      addTearDown(db.close);
       final presenter = _RecordingPresenter();
       final container = await mount(
         db,
@@ -202,7 +196,6 @@ void main() {
       'the workspace is still coherent: the project and its rows are gone',
       () async {
         final db = seed(4);
-        addTearDown(db.close);
         final presenter = _RecordingPresenter();
         final container = await mount(
           db,
@@ -219,7 +212,7 @@ void main() {
         // project cleanly — no half-deleted project, and nothing silent.
         expect(server.projectRows.getById('p1'), isNull);
         expect(server.repositoryRows.getByProject('p1'), isEmpty);
-        expect(mirroredServer(db).importedRows.getByRepository('r1'), isEmpty);
+        expect(db.server.importedRows.getByRepository('r1'), isEmpty);
         expect(container.read(projectsControllerProvider), isEmpty);
         expect(transcriptsRemain(4), isTrue);
 
@@ -232,7 +225,6 @@ void main() {
 
     test('a delete that loses nothing says nothing', () async {
       final db = seed(3);
-      addTearDown(db.close);
       final presenter = _RecordingPresenter();
       final container = await mount(db, presenter: presenter);
 
@@ -248,8 +240,7 @@ void main() {
   group('selection', () {
     test('deleting the selected project clears the selection', () async {
       final db = seed(2);
-      addTearDown(db.close);
-      mirroredServer(db).sessionRows.insert(session(id: 'n1'));
+      db.server.sessionRows.insert(session(id: 'n1'));
       final container = await mount(db);
       container.read(selectedProjectIdProvider.notifier).select('p1');
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
@@ -272,7 +263,6 @@ void main() {
 
     test('a selection pointing elsewhere is left alone', () async {
       final db = seed(1);
-      addTearDown(db.close);
       server.projectRows.insert(project(id: 'p2', name: 'Other'));
       server.repositoryRows.insert(repository(id: 'r2', projectId: 'p2'));
       final container = await mount(db);
@@ -291,7 +281,6 @@ void main() {
   group('nothing outlives the task', () {
     test('a container disposed mid-purge is never read from', () async {
       final db = seed(4);
-      addTearDown(db.close);
       final presenter = _RecordingPresenter();
       final container = await mount(
         db,
@@ -318,7 +307,6 @@ void main() {
 
     test('the runner holds nothing once it has settled', () async {
       final db = seed(6);
-      addTearDown(db.close);
       final container = await mount(db);
       final runner = container.read(cliStorePurgeRunnerProvider);
 
@@ -339,7 +327,6 @@ void main() {
       'one locked transcript, the rest deleted, the index still pruned',
       () async {
         final db = seed(4);
-        addTearDown(db.close);
         final locked = File(
           p.join(claudeHome(), 'projects', '-demo', 'x1.jsonl'),
         );
@@ -353,7 +340,7 @@ void main() {
         });
 
         final mutator = CliSessionMutator();
-        final sessions = mirroredServer(db).importedRows.getByRepository('r1');
+        final sessions = db.server.importedRows.getByRepository('r1');
         final report = await mutator.deleteAll([
           for (final s in sessions)
             DetectedSession(

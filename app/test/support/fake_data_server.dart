@@ -1,11 +1,27 @@
 import 'dart:async';
+import 'package:karmashala_automations/karmashala_automations.dart';
 
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_verification/verification.dart';
+import 'package:karmashala_git/git.dart'
+    show
+        ReviewAnchor,
+        ReviewAuthorKind,
+        ReviewComment,
+        ReviewThread,
+        WorktreeSetup,
+        WorktreeSetupReport,
+        compareSetupRuns,
+        defaultReviewStatus,
+        reviewBodyOf;
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:agent_cli/discovery.dart';
@@ -18,9 +34,17 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart'
+    show MemoryPairedDeviceStore;
+import 'package:karmashala_remote/remote.dart'
+    show PairedDevice, pairedDeviceNameOf, pairedDeviceWithoutSecrets;
 
+part 'fake_evidence.dart';
 part 'fake_hosts.dart';
 part 'fake_sessions.dart';
+part 'fake_pairings.dart';
+part 'fake_worktrees.dart';
+part 'fake_automations.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -101,6 +125,12 @@ class FakeDataServer {
   late final relayRows = FakeRelayRows._(sessionRecords);
   late final followUpRows = FakeFollowUpRows._(sessionRecords);
 
+  /// Checkpoints (numbered per session), verification runs (kept whole, told
+  /// by header) and comparisons, shaped like the server's DAOs.
+  late final checkpointRows = FakeCheckpointRows._(this);
+  late final verificationRows = FakeVerificationRows._(this);
+  late final comparisonRows = FakeComparisonRows._(this);
+
   /// The sessions this server runs, so records the status of itself: a
   /// client's status for one is ignored and the row told back, as
   /// `SessionsHandler` does.
@@ -154,6 +184,23 @@ class FakeDataServer {
     compareCodexAccounts,
   );
   late final usageRows = FakeUsageRows._(this);
+
+  /// The automations domain, shaped like the server's DAOs: automations,
+  /// their runs, checks and origin chains; scheduled resumes; project checks
+  /// and verification switches.
+  late final automationRows = FakeAutomationRows._(this);
+  late final resumeRows = FakeResumeRows._(this);
+  late final projectCheckRows = FakeProjectCheckRows._(this);
+
+  /// Where the rows' own tells go while a request is answered: its changes.
+  List<DataChange>? _recordInto;
+
+  /// The paired devices, keys and push tokens kept as the store keeps them.
+  late final deviceRows = FakeDeviceRows._(this);
+
+  /// Worktree setups, their runs and review threads; snippets and presets.
+  late final worktreeRows = FakeWorktreeRows._(this);
+  late final snippetRows = FakeSnippetRows._(this);
 
   /// Told every environment and installation row this server writes or
   /// removes — the mirror's feed, for the foreign keys of the tables not
@@ -263,6 +310,17 @@ class FakeDataServer {
           _applySession(change);
         case final HostsDomainChange change:
           _applyHosts(change);
+        case final WorktreesChange change:
+          worktreeRows._apply(change);
+        case final AutomationsChange change:
+          automationRows._apply(change);
+        case final SnippetsChange change:
+          snippetRows._apply(change);
+        case final EvidenceChange change:
+          _applyEvidence(change);
+        case PairingsChange():
+          // Seed devices through [deviceRows]; a change carries no key.
+          break;
       }
     }
     _tell(null, changes);
@@ -359,6 +417,11 @@ class FakeDataServer {
 
   void _tell(FakeDataLink? origin, List<DataChange> changes) {
     if (changes.isEmpty) return;
+    final recording = _recordInto;
+    if (origin == null && recording != null) {
+      recording.addAll(changes);
+      return;
+    }
     changes.forEach(_mirror);
     final batch = DataChanges(++revision, List.unmodifiable(changes));
     for (final link in _links) {
@@ -371,6 +434,16 @@ class FakeDataServer {
     final changes = <DataChange>[];
     final Object? result = switch (request) {
       DataSubscribe() => _subscribe(origin),
+      final AutomationsRequest<Object?> r => automationRows._handle(r, changes),
+      final PairingsRequest<Object?> r => deviceRows._handle(r, changes),
+      final WorktreesRequest<Object?> r => worktreeRows._handle(r, changes),
+      final SnippetsRequest<Object?> r => snippetRows._handle(r, changes),
+      final CheckpointsRequest<Object?> r => checkpointRows._handle(r, changes),
+      final VerificationRequest<Object?> r => verificationRows._handle(
+        r,
+        changes,
+      ),
+      final ComparisonsRequest<Object?> r => comparisonRows._handle(r, changes),
       NotesList(:final sessionId) => [
         for (final note in notes.values)
           if (sessionId == null || note.sourceSessionId == sessionId) note,
@@ -672,6 +745,7 @@ class FakeDataServer {
         changes.add(ImportedRemoved(imported.id));
       }
     }
+    worktreeRows._checkoutsGoing(checkouts, changes);
     changes.addAll(projectRows._removeCascading(id));
     for (final note in [...notes.values]) {
       if (note.projectId == id) {
@@ -714,6 +788,7 @@ class FakeDataServer {
           (historyReferences[id] ?? 0) + _sessionHistoryOn(id);
       if (records > 0) continue;
       changes.add(repositoryRows._remove(id));
+      worktreeRows._checkoutsGoing({id}, changes);
       final project = projectRows.getById(checkout.projectId);
       if (project != null && project.defaultRepositoryId == id) {
         _rowChanged(changes, _withDefault(project, null));

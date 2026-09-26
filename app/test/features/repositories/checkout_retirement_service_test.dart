@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/repositories/application/checkout_retirement_service.dart';
@@ -31,7 +30,6 @@ class StubProbe implements CheckoutPresenceProbe {
 }
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
 
   final windows = windowsEnv();
@@ -41,12 +39,10 @@ void main() {
   );
 
   setUp(() {
-    db = AppDatabase.memory();
     server = FakeDataServer()..projectRows.insert(project());
     server.environmentRows.upsert(windows);
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   Future<CheckoutRetirementReport> retireWith(StubProbe probe) async =>
       CheckoutRetirementService(

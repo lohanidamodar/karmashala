@@ -1,4 +1,4 @@
-import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/scheduler.dart';
 
@@ -18,7 +18,7 @@ class DaemonResumeFiring implements ScheduledResumeFiring {
   });
 
   final AutomationAppRelay relay;
-  final ScheduledResumeDao resumes;
+  final ResumeRecords resumes;
   final DateTime Function() now;
   final void Function(String sessionId) onChanged;
 

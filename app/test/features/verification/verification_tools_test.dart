@@ -24,8 +24,8 @@ void main() {
   late VerificationHarness h;
   late VerificationTools tools;
 
-  setUp(() {
-    h = VerificationHarness();
+  setUp(() async {
+    h = await VerificationHarness.start();
     tools = VerificationTools(h.service);
   });
   tearDown(() => h.dispose());
@@ -195,7 +195,7 @@ void main() {
         'verdict': 'fail',
         'reason': 'save throws',
       });
-      return h.service.list().first.id;
+      return (await h.service.list()).first.id;
     }
 
     test('is compact by default: no images, no file contents', () async {
@@ -331,7 +331,7 @@ void main() {
         callerSessionId: 's-3',
       ).call('verification_finish', {'verdict': 'pass'});
 
-      expect(h.service.list().single.producedBySessionId, 's-3');
+      expect((await h.service.list()).single.producedBySessionId, 's-3');
       expect(textOf(result), contains('by another session'));
     });
 
@@ -360,7 +360,7 @@ void main() {
       await tools.call('verification_start', {'url': 'https://example.com'});
       await tools.call('verification_finish', {'verdict': 'pass'});
 
-      final run = h.service.list().single;
+      final run = (await h.service.list()).single;
       expect(run.producedBySessionId, isNull);
       expect(run.attribution, VerdictAttribution.notRecorded);
     });

@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/imported_session_view.dart';
@@ -16,7 +14,7 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// The header's "open in a system terminal" menu.
 ///
@@ -33,13 +31,12 @@ void main() {
     WidgetTester tester, {
     List<SystemTerminal> terminals = const [wt],
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final server = FakeDataServer()..mirrorInto(db);
+    final db = TestMachine();
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i1',
         repositoryId: 'r1',
@@ -59,7 +56,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           dataClientProvider.overrideWithValue(client),
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => terminals,

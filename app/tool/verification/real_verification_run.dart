@@ -15,24 +15,25 @@
 // The device half needs a real device attached; it launches Settings, taps one
 // element, and presses Home afterwards so the phone is left as it was found.
 //
-// Nothing here touches the app's real database: the run rows go to an in-memory
-// database and the artifacts to a temp directory that is listed, reported on,
+// Nothing here touches the app's real database: the run rows go to a fake
+// server and the artifacts to a temp directory that is listed, reported on,
 // and then deleted.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_tools.dart';
-import 'package:karmashala_verification/store.dart';
+import 'package:karmashala/src/features/verification/data/verification_data.dart';
+import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../test/support/fake_data_server.dart';
 import 'png_reader.dart';
 
 const int kPort = 9336;
@@ -65,12 +66,12 @@ void main() {
     await page.writeAsString(_testPage);
 
     final artifacts = await Directory.systemTemp.createTemp('verify-runs-');
-    final db = AppDatabase.memory();
+    final client = await FakeDataServer().connect();
     final browser = BrowserService(
       startProcess: browserProcessStarter(const LocalCommandRunner()),
     );
     final service = VerificationService(
-      VerificationDao(db),
+      VerificationData(client),
       VerificationArtifactStore(artifacts),
       browserOf: () => browser,
       adbOf: () => null,
@@ -135,7 +136,7 @@ void main() {
         '${tokens(finishText)} tokens',
       );
 
-      final run = service.list().single;
+      final run = (await service.list()).single;
       expect(run.verdict.toString(), contains('fail'));
 
       banner('the run, as an agent reads it back');
@@ -228,7 +229,6 @@ void main() {
       }
       stdout.writeln('\nartifacts were in ${artifacts.path}');
       await _deleteWithRetries(artifacts);
-      db.close();
     }
   }, timeout: const Timeout(Duration(minutes: 4)));
 
@@ -247,9 +247,9 @@ void main() {
     stdout.writeln('device: ${device!.serial} (${device.displayName})');
 
     final artifacts = await Directory.systemTemp.createTemp('verify-device-');
-    final db = AppDatabase.memory();
+    final client = await FakeDataServer().connect();
     final service = VerificationService(
-      VerificationDao(db),
+      VerificationData(client),
       VerificationArtifactStore(artifacts),
       browserOf: () =>
           BrowserService(startProcess: browserProcessStarter(runner)),
@@ -303,7 +303,7 @@ void main() {
         ),
       );
 
-      final run = service.list().single;
+      final run = (await service.list()).single;
       banner('the run, as an agent reads it back');
       final compact = textOf(
         await tools.call('verification_get', {'id': run.id}),
@@ -348,7 +348,6 @@ void main() {
       await adb.pressKey(device.serial, DeviceKey.home);
       stdout.writeln('\nartifacts were in ${artifacts.path}');
       await _deleteWithRetries(artifacts);
-      db.close();
     }
   }, timeout: const Timeout(Duration(minutes: 4)));
 }

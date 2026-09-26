@@ -24,7 +24,6 @@ void main() {
     setUp(() async => h = await connectedHarness());
     tearDown(() {
       h.container.dispose();
-      h.db.close();
     });
 
     Future<FanOutLaunch> run({
@@ -83,7 +82,6 @@ void main() {
       'gives every agent its own worktree on its own session branch',
       () async {
         final h = await connectedHarness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final launched = await h.container
@@ -124,7 +122,6 @@ void main() {
 
     test('sends the trimmed prompt to every agent', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final launched = await h.container
@@ -153,7 +150,6 @@ void main() {
   group('a partial launch keeps what started', () {
     test('the agents that started are returned, not discarded', () async {
       final h = await connectedHarness(paneFailsFor: {'flakyCli'});
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final launched = await h.container
@@ -175,7 +171,6 @@ void main() {
 
     test('the failure names the installation and carries the error', () async {
       final h = await connectedHarness(paneFailsFor: {'flakyCli'});
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final launched = await h.container
@@ -195,7 +190,6 @@ void main() {
       'the started sessions are running rows; the failed one is failed',
       () async {
         final h = await connectedHarness(paneFailsFor: {'flakyCli'});
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final launched = await h.container
@@ -224,7 +218,6 @@ void main() {
         final h = await connectedHarness(
           paneFailsFor: {'roverCli', 'flakyCli'},
         );
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final launched = await h.container
@@ -253,7 +246,6 @@ void main() {
               )
             : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final service = h.container.read(fanOutServiceProvider);
@@ -275,7 +267,6 @@ void main() {
       'a result with no worktree diffs to nothing rather than throwing',
       () async {
         final h = await connectedHarness();
-        addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
         final result = FanOutResult(
@@ -291,7 +282,6 @@ void main() {
   group('mergeWinner', () {
     test('refuses a winner with uncommitted changes', () async {
       final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final service = h.container.read(fanOutServiceProvider);
@@ -320,7 +310,6 @@ void main() {
 
     test('merges the session branch when the worktree is clean', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final service = h.container.read(fanOutServiceProvider);
@@ -342,7 +331,6 @@ void main() {
 
     test('refuses a result that has no worktree', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       await expectLater(
@@ -361,7 +349,6 @@ void main() {
 
     test('merging alone removes nothing', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
       final service = h.container.read(fanOutServiceProvider);
@@ -409,7 +396,6 @@ void main() {
 
     test('removes the losers and keeps the winner', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final (service, launched) = await launchedAndStopped(h);
       final winner = launched.started.first;
@@ -439,7 +425,6 @@ void main() {
 
     test('keeps a loser that still has uncommitted work', () async {
       final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final (service, launched) = await launchedAndStopped(h);
 
@@ -461,7 +446,6 @@ void main() {
 
     test('removes uncommitted work only for the session named', () async {
       final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final (service, launched) = await launchedAndStopped(h);
       final loser = launched.started.last;
@@ -483,7 +467,6 @@ void main() {
 
     test('confirming one session does not license another', () async {
       final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final service = h.container.read(fanOutServiceProvider);
       final launched = await service.launch(
@@ -522,7 +505,6 @@ void main() {
 
     test('refuses to delete a worktree an agent is still working in', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final service = h.container.read(fanOutServiceProvider);
       final launched = await service.launch(
@@ -555,7 +537,6 @@ void main() {
               )
             : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final service = h.container.read(fanOutServiceProvider);
       final launched = await service.launch(
@@ -594,7 +575,6 @@ void main() {
 
     test('a result with no worktree is nothing to discard', () async {
       final h = await connectedHarness();
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final service = h.container.read(fanOutServiceProvider);
 

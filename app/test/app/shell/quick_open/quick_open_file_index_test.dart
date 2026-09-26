@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
@@ -16,8 +15,9 @@ import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
 import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../../support/workspace_mirror.dart';
+import '../../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
+import '../../../support/conversation_index_database.dart';
 
 /// The dialog's side of the file index: that it draws what is cached, notices
 /// the index refreshing behind it, and lets go of a walk it no longer wants.
@@ -25,27 +25,28 @@ import 'package:agent_cli/process.dart';
 /// The index's own behaviour — bounds, determinism, staleness — is in
 /// `repo_file_index_test.dart`; this is only the wiring.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
   late Directory root;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login redirect'));
+    db.server.sessionRows.insert(
+      session(id: 's1', title: 'Fix login redirect'),
+    );
     root = Directory.systemTemp.createTempSync('cg_qo_index');
   });
 
   tearDown(() {
-    db.close();
     try {
       root.deleteSync(recursive: true);
     } catch (_) {}
@@ -66,7 +67,8 @@ void main() {
   ProviderContainer containerWith(RepoFileIndex index) => ProviderContainer(
     overrides: [
       data,
-      ...fakeTerminalOverrides(database: db),
+      conversationIndexDatabase(),
+      ...fakeTerminalOverrides(machine: db),
       quickOpenFileRootProvider.overrideWithValue(root.path),
       repoFileIndexProvider.overrideWithValue(index),
     ],
@@ -255,7 +257,8 @@ void main() {
         ProviderContainer(
           overrides: [
             data,
-            ...fakeTerminalOverrides(database: db),
+            conversationIndexDatabase(),
+            ...fakeTerminalOverrides(machine: db),
             quickOpenFileRootProvider.overrideWith((ref) => selected),
             repoFileIndexProvider.overrideWithValue(index),
           ],

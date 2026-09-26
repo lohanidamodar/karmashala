@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/projects/application/project_service.dart';
@@ -11,7 +10,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late WorkspaceData workspace;
   late FakeRepositoryDiscoveryService discovery;
@@ -26,7 +24,6 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
     server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv(id: localHostEnvironmentId))
@@ -35,7 +32,6 @@ void main() {
     workspace = await workspaceOf(server);
     discovery = FakeRepositoryDiscoveryService();
   });
-  tearDown(() => db.close());
 
   test('persists the project and all discovered repositories', () async {
     discovery.result = [

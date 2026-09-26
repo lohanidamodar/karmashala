@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
@@ -19,7 +18,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 void main() {
   late FakeDataServer server;
@@ -34,9 +33,8 @@ void main() {
     bool withSession = true,
     TargetPlatform platform = TargetPlatform.windows,
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    server = FakeDataServer()..mirrorInto(db);
+    final db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     if (withSession) {
       server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
@@ -50,7 +48,7 @@ void main() {
     // send test takes, for the same reason.
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
       ],
     );

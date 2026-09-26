@@ -1,5 +1,4 @@
 import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
 import 'package:agent_cli/process.dart';
@@ -19,6 +18,7 @@ import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/test_machine.dart';
 
 void main() {
   group('webUrlForRemote', () {
@@ -55,24 +55,23 @@ void main() {
   });
 
   group('RepositoryInfoView', () {
-    late AppDatabase db;
+    late TestMachine db;
     late FakeDataServer server;
 
     setUp(() {
-      db = AppDatabase.memory();
+      db = TestMachine();
       server = FakeDataServer()
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
       server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+        localHostEnvironment(FixedClock(testTime).nowUtc()),
+      );
     });
-    tearDown(() => db.close());
 
     Future<ProviderContainer> pump(WidgetTester tester) async {
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
         ],
       );
@@ -147,7 +146,7 @@ void main() {
     // As long as the branches this repository's own agents cut.
     const longBranch = 'agents/loop-73-worktree-navigation-and-a-long-name';
 
-    late AppDatabase db;
+    late TestMachine db;
     late FakeDataServer server;
     late List<GitWorktree> worktrees;
 
@@ -164,21 +163,20 @@ void main() {
     ];
 
     setUp(() {
-      db = AppDatabase.memory();
+      db = TestMachine();
       server = FakeDataServer()
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
       server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+        localHostEnvironment(FixedClock(testTime).nowUtc()),
+      );
       worktrees = family(8);
     });
-    tearDown(() => db.close());
 
     Future<ProviderContainer> container() async {
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

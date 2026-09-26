@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,7 +13,7 @@ import '../../verification/presentation/review_action.dart';
 import '../../automations/application/automation_check_runner.dart';
 import '../application/comparison_providers.dart';
 import '../application/fanout_service.dart';
-import '../domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'comparison_chrome.dart';
 
 /// One comparison, side by side. Everything drawn comes from the stored
@@ -277,7 +279,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
   ) {
     final result = results[candidate.id];
     if (result == null) return;
-    ref.read(fanOutServiceProvider).markWinner(result);
+    unawaited(ref.read(fanOutServiceProvider).markWinner(result));
   }
 
   Future<void> _merge(

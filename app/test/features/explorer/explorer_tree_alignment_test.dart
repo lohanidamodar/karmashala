@@ -21,7 +21,6 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -31,7 +30,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **Two visible levels and one right-hand column, for every row kind.**
@@ -69,9 +68,9 @@ class _Inbox extends AttentionInboxController {
 }
 
 void main() {
-  AppDatabase seeded(FakeDataServer server) {
-    final db = AppDatabase.memory();
-    server.mirrorInto(db);
+  TestMachine seeded(FakeDataServer server) {
+    final db = TestMachine();
+    server.runsOn(db);
     server.environmentRows.upsert(posixEnv());
     server.workspaceRows.insert(
       Workspace(id: 'w1', name: 'Game dev', createdAt: testTime),
@@ -92,7 +91,9 @@ void main() {
       ('s-done', 'Finished session', SessionStatus.completed),
       ('s-unread', 'Unread session', SessionStatus.completed),
     ]) {
-      mirroredServer(db).sessionRows.insert(session(id: id, title: title, status: status));
+      db.server.sessionRows.insert(
+        session(id: id, title: title, status: status),
+      );
     }
     return db;
   }
@@ -107,14 +108,13 @@ void main() {
     addTearDown(tester.view.reset);
     final server = FakeDataServer();
     final db = seeded(server);
-    addTearDown(db.close);
     await tester.pumpWidget(
       ProviderScope(
         // A second pump in one test is a second scope, not new overrides.
         key: UniqueKey(),
         overrides: [
           await server.override(),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
           commandRunnerFactoryProvider.overrideWithValue(

@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -22,7 +20,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// Which checkout the repository-scoped surfaces describe when nobody has
 /// picked one.
@@ -39,7 +37,7 @@ void main() {
   const inboxPath = r'C:\src\demo\projects\wt-inbox';
   const otherPath = r'C:\src\other';
 
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late FakeCommandRunner git;
   late ProviderContainer container;
@@ -88,7 +86,7 @@ void main() {
 
   /// A subagent of [parent] that recorded [directory] as the place it runs.
   void subagent(String id, String parent, {String? directory}) =>
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'hub',
@@ -108,7 +106,7 @@ void main() {
     String repositoryId = 'hub',
     String? worktree,
     String? workingDirectory,
-  }) => mirroredServer(db).sessionRows.insert(
+  }) => db.server.sessionRows.insert(
     Session(
       id: id,
       repositoryId: repositoryId,
@@ -133,15 +131,14 @@ void main() {
 
   setUp(() async {
     dirty = <String>{};
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Demo', path: hubPath));
     server.installationRows.insert(agentInstallation());
     git = FakeCommandRunner(responder: respond);
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -160,7 +157,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   String? follow(String sessionId) =>
       container.read(sessionContextProvider).follow(sessionId)?.id;
@@ -206,7 +202,7 @@ void main() {
     test('a session no checkout contains keeps its own repository', () {
       // Paths are never compared across environments, so nothing contains this.
       insertAllCheckouts();
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(
           repositoryId: 'app',
           useWorktree: true,
@@ -290,7 +286,7 @@ void main() {
       subagent('b-app', 's1', directory: appPath);
 
       expect(follow('s1'), 'app');
-      expect(mirroredServer(db).sessionRows.childrenOf('s1').first.id, 'a-inbox');
+      expect(db.server.sessionRows.childrenOf('s1').first.id, 'a-inbox');
     });
   });
 

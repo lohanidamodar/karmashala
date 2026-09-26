@@ -426,7 +426,6 @@ void main() {
   });
 
   test('reserved preference keys and shapes', () {
-    expect(PreferenceKeys.isReserved('terminal.workspace_tree'), isTrue);
     expect(PreferenceKeys.isReserved('remote.host_device_id'), isTrue);
     expect(PreferenceKeys.isReserved('settings.v1'), isFalse);
     expect(PreferenceKeys.keyProblem('has space'), isNotNull);

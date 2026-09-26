@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
@@ -20,7 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// A clock stuck at [testTime], so a captured note's timestamps are checkable.
@@ -47,12 +46,11 @@ void main() {
     WidgetTester tester, {
     bool notesEnabled = true,
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     server = FakeDataServer(
       clock: () => testTime,
       repositoryOfSession: {'s1': 'r1'},
-    )..mirrorInto(db);
+    )..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -62,7 +60,7 @@ void main() {
       overrides: [
         // Fakes for everything this view pulls in that would otherwise poll a
         // process or leave a timer running past the widget tree.
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         clockProvider.overrideWithValue(const _FixedClock()),
         availableSystemTerminalsProvider.overrideWith(

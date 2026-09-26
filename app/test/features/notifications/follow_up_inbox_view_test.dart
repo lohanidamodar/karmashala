@@ -1,6 +1,4 @@
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -8,7 +6,6 @@ import 'package:karmashala/src/features/notifications/presentation/attention_inb
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -19,29 +16,27 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// What the user actually sees: the follow-up as a row in the one list the app
 /// has, with the words that let them decide whether to open the session.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer().mirrorInto(db)
+    db = TestMachine();
+    server = FakeDataServer().runsOn(db)
       ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(
           FixedClock(testTime.add(const Duration(hours: 2))),
@@ -66,7 +61,7 @@ void main() {
   }
 
   testWidgets('a crashed session is listed with what it left', (tester) async {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -83,14 +78,14 @@ void main() {
   testWidgets('an unfinished check is quoted in the run\'s own words', (
     tester,
   ) async {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(
         id: 's1',
         title: 'Ship the parser',
         status: SessionStatus.completed,
       ),
     );
-    VerificationDao(db).insertRun(
+    db.server.verificationRows.insertRun(
       VerificationRun(
         id: 'v1',
         title: 'the parser round-trips a nested list',
@@ -109,7 +104,7 @@ void main() {
   });
 
   testWidgets('dismissing it empties the list for good', (tester) async {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -118,11 +113,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('Nothing needs you.'), findsOneWidget);
-    expect(mirroredServer(db).followUpRows.open(), isEmpty);
+    expect(db.server.followUpRows.open(), isEmpty);
   });
 
   testWidgets('reading the inbox does not clear a follow-up', (tester) async {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -137,7 +132,7 @@ void main() {
   });
 
   testWidgets('tapping it opens the session it came from', (tester) async {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -148,10 +143,7 @@ void main() {
     // Opened, and nothing else: the offer is a way in, never a relaunch.
     expect(container.read(selectedSessionIdProvider), 's1');
     expect(container.read(attentionInboxProvider).items.single.seen, isTrue);
-    expect(
-      mirroredServer(db).sessionRows.getById('s1')!.status,
-      SessionStatus.failed,
-    );
+    expect(db.server.sessionRows.getById('s1')!.status, SessionStatus.failed);
   });
 
   /// The same rule the Todos and Notes panes keep, on the pane whose rows
@@ -163,7 +155,7 @@ void main() {
   /// row's own tap performs.
   group('the row menu', () {
     testWidgets('a right-click opens it', (tester) async {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
       );
       await pump(tester);
@@ -176,7 +168,7 @@ void main() {
     });
 
     testWidgets('Shift+F10 opens it from the focused row', (tester) async {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
       );
       await pump(tester);
@@ -195,7 +187,7 @@ void main() {
     testWidgets('so does the Menu key, and Dismiss on it clears the row', (
       tester,
     ) async {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
       );
       await pump(tester);
@@ -210,7 +202,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Nothing needs you.'), findsOneWidget);
-      expect(mirroredServer(db).followUpRows.open(), isEmpty);
+      expect(db.server.followUpRows.open(), isEmpty);
     });
   });
 }

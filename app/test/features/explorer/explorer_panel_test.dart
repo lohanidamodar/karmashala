@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -20,7 +18,6 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 
 void main() {
-  late AppDatabase db;
   late FakeRepositoryDiscoveryService discovery;
 
   EnvironmentPath root(String path) =>
@@ -29,7 +26,6 @@ void main() {
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
     data =
         await (FakeDataServer()
               ..environmentRows.upsert(localHostEnvironment(testTime)))
@@ -38,13 +34,11 @@ void main() {
       result: [DiscoveredRepository(name: 'app', path: root(r'C:\ws\app'))],
     );
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           // Every session card asks git what its checkout has changed. A
           // widget test must never spawn `git`, so the runner is a fake and

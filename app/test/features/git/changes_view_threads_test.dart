@@ -1,4 +1,3 @@
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -50,7 +49,6 @@ void main() {
           sessionActionsProvider.overrideWith(
             (ref) => _RecordingActions(ref, sent),
           ),
-          databaseProvider.overrideWithValue(harness.db),
           dataClientProvider.overrideWithValue(harness.client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(
@@ -214,7 +212,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(harness.db),
           dataClientProvider.overrideWithValue(harness.client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(

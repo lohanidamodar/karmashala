@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -20,7 +18,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// What a session row is allowed to say before the user clicks it.
 ///
@@ -35,18 +33,17 @@ Finder tooltipSaying(String text) => find.byWidgetPredicate(
 );
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
 
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   AgentStatusReport reportAged(Duration age) => AgentStatusReport(
     agentId: AgentIds.claudeCode,
@@ -61,7 +58,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           // Every session card asks git what its checkout has changed. A
           // widget test must never spawn `git`, so the runner is a fake and
@@ -102,7 +98,7 @@ void main() {
   testWidgets('a session opened in someone else\'s terminal says so', (
     tester,
   ) async {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -133,7 +129,7 @@ void main() {
   testWidgets('a session with no evidence never claims to have been seen', (
     tester,
   ) async {
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -162,7 +158,7 @@ void main() {
   testWidgets('an imported row is dated from the agent\'s own file', (
     tester,
   ) async {
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i1',
         repositoryId: 'r1',
@@ -189,7 +185,7 @@ void main() {
   });
 
   testWidgets('an imported row with no timestamp shows no age', (tester) async {
-    mirroredServer(db).importedRows.insertIfAbsent(
+    db.server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i1',
         repositoryId: 'r1',

@@ -76,7 +76,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
       );
     }
 
-    final checkpoints = ref.watch(sessionCheckpointsProvider(sessionId));
+    final checkpoints =
+        ref.watch(sessionCheckpointsProvider(sessionId)).value ?? const [];
     final skipped = ref.watch(
       checkpointSkipReasonsProvider.select((reasons) => reasons[sessionId]),
     );
@@ -190,7 +191,6 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
             confirm: confirm,
             selection: [for (final path in paths) HunkSelection(path)],
           );
-      ref.read(checkpointsRevisionProvider.notifier).bump();
       // The service's own sentence, not a second one written here.
       messenger?.showSnackBar(
         SnackBar(content: Text(restoreOutcomeMessage(outcome))),

@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -16,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// The inbox wired to the app: what marks an item seen, and the single count
 /// the status bar, the rail and the tray all read.
@@ -35,7 +33,7 @@ final _foregroundProvider = NotifierProvider<_ForegroundPanes, List<String>>(
 );
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   const key = AgentSessionKey('claudeCode', 'cli-1');
@@ -47,17 +45,16 @@ void main() {
   );
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer().mirrorInto(db)
+    db = TestMachine();
+    final server = FakeDataServer().runsOn(db)
       ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1'));
-    mirroredServer(db).sessionRows.updatePaneId('s1', 'pane-1');
+    db.server.sessionRows.insert(session(id: 's1'));
+    db.server.sessionRows.updatePaneId('s1', 'pane-1');
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         foregroundTerminalPaneIdsProvider.overrideWith(
@@ -67,7 +64,6 @@ void main() {
     );
     addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   AttentionInboxController controller() =>
       container.read(attentionInboxProvider.notifier);

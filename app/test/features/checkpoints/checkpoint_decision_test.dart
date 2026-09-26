@@ -1,8 +1,8 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/events.dart';
@@ -13,7 +13,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
@@ -46,7 +46,7 @@ class _MemoryGitFiles implements GitFiles {
 /// only signal in the app that tells the two apart, so it is the only one that
 /// writes a decision.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late ProviderContainer container;
   late List<String> trees;
@@ -86,11 +86,11 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
@@ -100,7 +100,7 @@ void main() {
 
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         checkpointServiceProvider.overrideWithValue(
@@ -109,7 +109,7 @@ void main() {
               fallback: FakeCommandRunner(responder: respond),
             ),
             environmentOf: server.environmentRows.getById,
-            dao: CheckpointDao(db),
+            records: CheckpointsData(await server.connect()),
             clock: FixedClock(testTime),
             newId: () => 'ckpt${++ids}',
             files: _MemoryGitFiles(),
@@ -121,7 +121,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Future<Checkpoint?> capture({

@@ -6,7 +6,6 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
@@ -17,30 +16,13 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
-/// A DAO that counts the reads the panel costs.
-///
-/// The number, not a proxy for it: every checkpoint the surface draws comes
-/// through one of these two calls, so a closed panel that reads zero has
-/// subscribed to nothing.
-class _CountingCheckpointDao extends CheckpointDao {
-  _CountingCheckpointDao(super.db);
-
-  int reads = 0;
-
-  @override
-  List<Checkpoint> forSession(String sessionId) {
-    reads++;
-    return super.forSession(sessionId);
-  }
-
-  @override
-  List<Checkpoint> recent({int limit = 50}) {
-    reads++;
-    return super.recent(limit: limit);
-  }
-}
+/// The checkpoint reads the panel costs, counted at the server: every
+/// checkpoint the surface draws is asked for, so a closed panel that asked
+/// nothing has subscribed to nothing.
+int _checkpointReads(FakeDataServer server) =>
+    server.requests.where((kind) => kind.startsWith('checkpoints.')).length;
 
 /// **The Checkpoints surface, as the rail actually offers it.**
 ///
@@ -50,25 +32,23 @@ class _CountingCheckpointDao extends CheckpointDao {
 void main() {
   const repo = EnvironmentPath(environmentId: 'local', path: '/src/demo');
   final captured = testTime.add(const Duration(hours: 1));
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient client;
-  late _CountingCheckpointDao dao;
+  var readsBefore = 0;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     client = await server.connect();
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
-    dao = _CountingCheckpointDao(db);
   });
-  tearDown(() => db.close());
 
   void seed({int count = 2}) {
     for (var i = 1; i <= count; i++) {
-      dao.insert(
+      server.checkpointRows.insert(
         Checkpoint(
           id: 'ckpt$i',
           sessionId: 's1',
@@ -83,15 +63,14 @@ void main() {
         ),
       );
     }
-    dao.reads = 0;
+    readsBefore = _checkpointReads(server);
   }
 
   Future<ProviderContainer> pumpApp(WidgetTester tester) async {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(client),
-        checkpointDaoProvider.overrideWithValue(dao),
         checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
         // Two hours after the capture, so the age on each row is the test's
         // own arithmetic rather than the wall clock's.
@@ -170,20 +149,24 @@ void main() {
     final container = await pumpApp(tester);
 
     // The panel opens on Changes, so Checkpoints has never been built.
-    expect(dao.reads, 0);
+    expect((_checkpointReads(server) - readsBefore), 0);
     expect(container.exists(sessionCheckpointsProvider('s1')), isFalse);
 
     await tester.tap(railButton());
     await tester.pumpAndSettle();
-    expect(dao.reads, greaterThan(0));
+    expect((_checkpointReads(server) - readsBefore), greaterThan(0));
 
     // Closing it disposes the subscription again — nothing keeps reading
     // behind a panel nobody is looking at.
     await tester.tap(railButton());
     await tester.pumpAndSettle();
-    final settled = dao.reads;
+    final settled = (_checkpointReads(server) - readsBefore);
     expect(container.exists(sessionCheckpointsProvider('s1')), isFalse);
     await tester.pump(const Duration(seconds: 30));
-    expect(dao.reads, settled, reason: 'nothing polls');
+    expect(
+      (_checkpointReads(server) - readsBefore),
+      settled,
+      reason: 'nothing polls',
+    );
   });
 }

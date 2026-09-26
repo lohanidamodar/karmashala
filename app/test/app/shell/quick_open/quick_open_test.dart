@@ -1,7 +1,6 @@
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open_list.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -22,29 +21,29 @@ import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
 import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../../support/workspace_mirror.dart';
+import '../../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
+import '../../../support/conversation_index_database.dart';
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late Override data;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.override();
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(session(id: 's1', title: 'Fix login redirect'))
       ..insert(session(id: 's2', title: 'Write the release notes'));
   });
-  tearDown(() => db.close());
 
   /// Opens the palette. [before] runs once the workspace is selected and
   /// before the palette builds its items — which is when anything it has to
@@ -60,7 +59,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(database: db),
+        conversationIndexDatabase(),
+        ...fakeTerminalOverrides(machine: db),
         if (explorerActions != null)
           explorerActionsProvider.overrideWith(explorerActions),
       ],
@@ -418,7 +418,7 @@ void main() {
           terminalSessionsControllerProvider.notifier,
         );
         terminals.openTab(TerminalProfile.powerShell);
-        mirroredServer(db).sessionRows.updatePaneId(
+        db.server.sessionRows.updatePaneId(
           's1',
           container
               .read(terminalSessionsControllerProvider)
@@ -447,7 +447,7 @@ void main() {
           terminalSessionsControllerProvider.notifier,
         );
         terminals.openTab(TerminalProfile.powerShell);
-        mirroredServer(db).sessionRows.updatePaneId(
+        db.server.sessionRows.updatePaneId(
           's1',
           container
               .read(terminalSessionsControllerProvider)
@@ -741,7 +741,10 @@ void main() {
         tester,
         before: (container) {
           select(container);
-          mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=bypassPermissions');
+          db.server.sessionRows.updatePermissionMode(
+            's1',
+            'mode=bypassPermissions',
+          );
           container
               .read(scheduledResumeControllerProvider)
               .schedule(
@@ -759,7 +762,7 @@ void main() {
 
       await tester.tap(find.text('Cancel scheduled resume'));
       await tester.pumpAndSettle();
-      expect(container.read(scheduledResumeDaoProvider).liveFor('s1'), isNull);
+      expect(container.read(resumesDataProvider).liveFor('s1'), isNull);
     });
   });
 }

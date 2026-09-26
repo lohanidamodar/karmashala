@@ -9,24 +9,22 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
-import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala_session/events.dart';
 
 /// A hosted session's follow-up is owed by what the recorder wrote to its row,
 /// never by its pane exiting or its live status.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late Override data;
   late FakeDataServer server;
   late FakeFollowUpRows followUps;
@@ -34,8 +32,8 @@ void main() {
   late FakeHostLifecycle host;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     data = await server.override();
     server.projectRows.insert(project());
@@ -43,7 +41,7 @@ void main() {
     server.installationRows.insert(agentInstallation());
     server.sessionRows.insert(session(id: 's1', status: SessionStatus.running));
     // Outstanding verification, so a clean finish is owed a follow-up.
-    VerificationDao(db).insertRun(
+    db.server.verificationRows.insertRun(
       VerificationRun(
         id: 'v1',
         title: 'the login page still loads',
@@ -59,7 +57,6 @@ void main() {
       ..snapshot = [hostFacts('s1', HostSessionState.running)];
     addTearDown(() async {
       await reports.close();
-      db.close();
     });
   });
 
@@ -72,7 +69,7 @@ void main() {
   Future<ProviderContainer> observing({required bool hosted}) async {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentSessionStatusProvider.overrideWith((ref, id) => reports.stream),

@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -17,7 +15,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// A clock the test moves, because the whole question the window answers is
 /// "how long ago was this asked".
@@ -254,7 +252,7 @@ void main() {
 
   group('open_new_session over the owner-only socket', () {
     late Directory tmp;
-    late AppDatabase db;
+    late TestMachine db;
     late ProviderContainer container;
     late LauncherControlServer server;
     late Completer<void> gate;
@@ -262,9 +260,8 @@ void main() {
 
     setUp(() async {
       tmp = Directory.systemTemp.createTempSync('karmashala_launch_dedupe_');
-      db = AppDatabase.memory();
-      addTearDown(db.close);
-      final fake = FakeDataServer()..mirrorInto(db);
+      db = TestMachine();
+      final fake = FakeDataServer()..runsOn(db);
       fake.environmentRows.upsert(windowsEnv());
       fake.projectRows.insert(project());
       fake.repositoryRows.insert(repository());
@@ -272,7 +269,6 @@ void main() {
       gate = Completer<void>();
       container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await fake.override(),
           sessionLauncherProvider.overrideWith((ref) {
             return launcher = _CountingLauncher(ref, gate);
@@ -353,7 +349,7 @@ void main() {
 
     test('a read answers freshly every time', () async {
       expect(await call('list_sessions', const {}), isEmpty);
-      mirroredServer(db).sessionRows.insert(session());
+      db.server.sessionRows.insert(session());
       // The ledger must not be in the way of a read: the identical call, made
       // a moment later, has to see what changed in between.
       expect(await call('list_sessions', const {}), hasLength(1));

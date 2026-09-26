@@ -9,6 +9,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
@@ -18,13 +19,12 @@ import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/temp_directory.dart';
 import '../terminal/fake_instance.dart';
 
@@ -47,7 +47,7 @@ class _SlowCapture extends CheckpointService {
   _SlowCapture({
     required super.runnerFactory,
     required super.environmentOf,
-    required super.dao,
+    required super.records,
     required super.clock,
     required super.newId,
     required this.delay,
@@ -87,7 +87,7 @@ void main() {
   late Directory tmp;
   late String hub;
   late String app;
-  late AppDatabase db;
+  late TestMachine db;
   late AgentHookReports reports;
   late SessionStatusRegistry registry;
   late ProviderContainer container;
@@ -138,15 +138,15 @@ void main() {
     git(app, ['add', '-A']);
     git(app, ['commit', '-q', '-m', 'app']);
 
-    db = AppDatabase.memory();
+    db = TestMachine();
     final clock = FixedClock(testTime);
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
     const envId = localHostEnvironmentId;
     server.projectRows.insert(project(environmentId: envId, path: hub));
     server.repositoryRows.insert(repository(environmentId: envId, path: hub));
     server.installationRows.insert(agentInstallation(environmentId: envId));
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(
         session(
           status: SessionStatus.running,
@@ -176,7 +176,7 @@ void main() {
     var ids = 0;
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(clock),
         agentHookReportsProvider.overrideWithValue(reports),
@@ -185,7 +185,7 @@ void main() {
           _SlowCapture(
             runnerFactory: const CommandRunnerFactory(),
             environmentOf: server.environmentRows.getById,
-            dao: CheckpointDao(db),
+            records: CheckpointsData(await server.connect()),
             clock: clock,
             newId: () => 'ckpt${++ids}',
             // Comfortably past the 1.5 s hold, so the give-up is a fact of the
@@ -201,7 +201,6 @@ void main() {
   tearDown(() {
     registry.dispose();
     container.dispose();
-    db.close();
     removeTempDirectory(tmp);
   });
 
@@ -238,7 +237,7 @@ void main() {
   }
 
   List<Checkpoint> ofRepo(String path) => [
-    for (final c in CheckpointDao(db).forSession('s1'))
+    for (final c in db.server.checkpointRows.forSession('s1'))
       if (c.repository.path == path) c,
   ];
 

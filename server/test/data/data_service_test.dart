@@ -164,10 +164,6 @@ void main() {
         () => session.handle(const PreferenceSet('remote.host_device_id', 'x')),
         refused(DataRefusalCode.reserved),
       );
-      expect(
-        () => session.handle(const PreferenceSet('terminal.pane_grid', 'x')),
-        refused(DataRefusalCode.reserved),
-      );
       session.handle(const PreferenceRemove('settings.v1'));
       expect(session.handle(const PreferencesGet()).value, isEmpty);
     });

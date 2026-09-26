@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:karmashala_store/database.dart';
+
+import '../domain/automation_copy_rules.dart';
+import '../service/automation_records.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_core/verdicts.dart';
 import '../domain/automation.dart';
@@ -9,7 +12,7 @@ import '../domain/automation_run.dart';
 import '../domain/automation_trigger.dart';
 
 /// Data access for automations and their occurrences. Hand-written SQL.
-class AutomationDao {
+class AutomationDao implements AutomationRecords {
   AutomationDao(this._db);
 
   final AppDatabase _db;
@@ -88,6 +91,7 @@ class AutomationDao {
   /// A success clears the count **and** the reason it was disabled for, so an
   /// automation somebody re-enables after fixing it starts from zero rather
   /// than one failure away from stopping again.
+  @override
   void recordOutcome(String id, {required bool failed}) {
     if (!failed) {
       _db.execute(
@@ -106,6 +110,7 @@ class AutomationDao {
 
   /// Disables [id] and says why — the one disabling nobody asked for, so it
   /// must never be silent.
+  @override
   void disable(String id, String reason) => _db.execute(
     'UPDATE automations SET enabled = 0, disabled_reason = ? WHERE id = ?;',
     [reason, id],
@@ -113,6 +118,7 @@ class AutomationDao {
 
   /// Pauses or resumes one, leaving everything else — including its arming —
   /// alone. A paused automation is still authorised; it is just not due.
+  @override
   void setEnabled(String id, {required bool enabled}) => _db.execute(
     'UPDATE automations SET enabled = ? WHERE id = ?;',
     [intFromBool(enabled), id],
@@ -121,11 +127,13 @@ class AutomationDao {
   void delete(String id) =>
       _db.execute('DELETE FROM automations WHERE id = ?;', [id]);
 
+  @override
   Automation? getById(String id) {
     final rows = _db.query('SELECT * FROM automations WHERE id = ?;', [id]);
     return rows.isEmpty ? null : _automation(rows.first);
   }
 
+  @override
   List<Automation> getAll() => _db
       .query('SELECT * FROM automations ORDER BY name, id;')
       .map(_automation)
@@ -139,6 +147,7 @@ class AutomationDao {
       .map(_automation)
       .toList();
 
+  @override
   List<Automation> enabled() => _db
       .query('SELECT * FROM automations WHERE enabled = 1 ORDER BY name, id;')
       .map(_automation)
@@ -146,6 +155,7 @@ class AutomationDao {
 
   /// Every event-triggered automation, paused ones included: a dry run has to
   /// be able to say "paused" rather than leave one out.
+  @override
   List<Automation> eventRules() => _db
       .query(
         'SELECT * FROM automations WHERE trigger_event IS NOT NULL '
@@ -159,6 +169,7 @@ class AutomationDao {
 
   /// The chain behind every event of [sessionId] because an automation started
   /// it, or empty. A time-based run's chain is just itself.
+  @override
   List<String> originOfSession(String sessionId) {
     final run = runForSession(sessionId);
     if (run == null) return const [];
@@ -168,6 +179,7 @@ class AutomationDao {
   /// Records that an automation's message is going into [sessionId], so the
   /// turn it causes is known to be the automation's. Written *before* the
   /// message is typed: a fast turn must not finish ahead of the record.
+  @override
   void markMessaged(String sessionId, List<String> origin, DateTime at) =>
       _db.execute(
         'INSERT INTO automation_session_origins (session_id, origin, '
@@ -178,6 +190,7 @@ class AutomationDao {
 
   /// The chain a message left on [sessionId], or empty. [consume] clears it:
   /// only the one turn the message caused is the automation's.
+  @override
   List<String> messagedOrigin(String sessionId, {bool consume = false}) {
     final rows = _db.query(
       'SELECT origin FROM automation_session_origins WHERE session_id = ?;',
@@ -188,6 +201,7 @@ class AutomationDao {
     return _ids(rows.first['origin'] as String?);
   }
 
+  @override
   void clearMessaged(String sessionId) => _db.execute(
     'DELETE FROM automation_session_origins WHERE session_id = ?;',
     [sessionId],
@@ -195,6 +209,7 @@ class AutomationDao {
 
   // --- runs -----------------------------------------------------------------
 
+  @override
   void insertRun(AutomationRun run) => _db.execute(
     'INSERT INTO automation_runs '
     '(id, automation_id, scheduled_for, fired_at, state, reason, '
@@ -216,6 +231,7 @@ class AutomationDao {
     ],
   );
 
+  @override
   void updateRun(AutomationRun run) => _db.execute(
     'UPDATE automation_runs SET state = ?, reason = ?, base_checkpoint_id = ?, '
     'session_id = ?, finished_at = ?, commits_made = ? WHERE id = ?;',
@@ -232,6 +248,7 @@ class AutomationDao {
 
   // --- the checks one occurrence's work was measured with -------------------
 
+  @override
   void insertRunCheck(AutomationCheckVerdict verdict) => _db.execute(
     'INSERT INTO automation_run_checks '
     '(run_id, ordinal, check_id, name, command, verdict, reason, '
@@ -250,6 +267,7 @@ class AutomationDao {
   );
 
   /// One run's verdicts, in the order the checks ran.
+  @override
   List<AutomationCheckVerdict> checksFor(String runId) => _db
       .query(
         'SELECT * FROM automation_run_checks WHERE run_id = ? ORDER BY '
@@ -261,6 +279,7 @@ class AutomationDao {
 
   /// Records that this run's checks were looked at, whatever they said. Without
   /// the timestamp, "no verdicts" cannot be told from "nobody looked".
+  @override
   void noteChecksObserved(String runId, DateTime at) => _db.execute(
     'UPDATE automation_runs SET checks_observed_at = ? WHERE id = ?;',
     [isoFromDate(at), runId],
@@ -314,12 +333,14 @@ class AutomationDao {
     }
   }
 
+  @override
   AutomationRun? runById(String id) {
     final rows = _db.query('SELECT * FROM automation_runs WHERE id = ?;', [id]);
     return rows.isEmpty ? null : _run(rows.first);
   }
 
   /// One automation's occurrences, newest due first.
+  @override
   List<AutomationRun> runsFor(String automationId, {int limit = 50}) => _db
       .query(
         'SELECT * FROM automation_runs WHERE automation_id = ? '
@@ -331,6 +352,7 @@ class AutomationDao {
 
   /// Every run still expecting something to happen, oldest due first — which
   /// is the order the queue drains in.
+  @override
   List<AutomationRun> liveRuns() => _db
       .query(
         "SELECT * FROM automation_runs WHERE state IN ('queued', 'running') "
@@ -340,6 +362,7 @@ class AutomationDao {
       .map(_run)
       .toList();
 
+  @override
   AutomationRun? runForSession(String sessionId) {
     final rows = _db.query(
       'SELECT * FROM automation_runs WHERE session_id = ? '
@@ -355,6 +378,7 @@ class AutomationDao {
   /// and not the occurrence: a gap measured from the start would let a run
   /// that overran be followed immediately by the next one, which is the
   /// overlap the interval kind exists to prevent.
+  @override
   DateTime? lastFinishedAt(String automationId) {
     final rows = _db.query(
       'SELECT MAX(finished_at) AS at FROM automation_runs '
@@ -368,6 +392,7 @@ class AutomationDao {
   /// Whether this automation has a run of its own still live — the guard that
   /// stops two occurrences of *one* automation stacking, which the
   /// per-checkout guard does not catch when they are in different checkouts.
+  @override
   AutomationRun? liveRunOf(String automationId) {
     for (final run in liveRuns()) {
       if (run.automationId == automationId) return run;
@@ -384,6 +409,7 @@ class AutomationDao {
   /// and a ten-hour sleep files sixty misses one tick at a time. Counting from
   /// when the miss was *filed* says the honest thing instead — the backlog is
   /// not being worked through, and the next one is a gap from now.
+  @override
   DateTime? lastTouchedAt(String automationId) {
     final rows = _db.query(
       'SELECT MAX(fired_at) AS at FROM automation_runs WHERE automation_id = ?;',
@@ -395,6 +421,7 @@ class AutomationDao {
 
   /// The newest occurrence this install has recorded anything about, or null —
   /// the floor a missed-fire sweep counts from.
+  @override
   DateTime? lastObservedOccurrence(String automationId) {
     final rows = _db.query(
       'SELECT MAX(scheduled_for) AS at FROM automation_runs '
@@ -404,6 +431,37 @@ class AutomationDao {
     final value = rows.isEmpty ? null : rows.first['at'];
     return value == null ? null : dateFromIso(value);
   }
+
+  // --- what a client's copy holds --------------------------------------------
+
+  /// Every live run and the newest [perAutomation] of each automation.
+  List<AutomationRun> copiedRuns({
+    int perAutomation = kRunsCopiedPerAutomation,
+  }) {
+    final runs = {for (final run in liveRuns()) run.id: run};
+    for (final automation in getAll()) {
+      for (final run in runsFor(automation.id, limit: perAutomation)) {
+        runs[run.id] = run;
+      }
+    }
+    return [...runs.values];
+  }
+
+  /// Every verdict of [runIds], by run.
+  Map<String, List<AutomationCheckVerdict>> checksOf(
+    Iterable<String> runIds,
+  ) => {
+    for (final id in runIds)
+      if (checksFor(id) case final checks when checks.isNotEmpty) id: checks,
+  };
+
+  /// Every origin chain a message left, by session.
+  Map<String, List<String>> origins() => {
+    for (final row in _db.query(
+      'SELECT session_id, origin FROM automation_session_origins;',
+    ))
+      row['session_id']! as String: _ids(row['origin'] as String?),
+  };
 
   Automation _automation(Map<String, Object?> row) {
     final firesAt = row['fires_at'];

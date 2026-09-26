@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_providers.dart';
@@ -17,26 +16,23 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/usage_limit_settings.dart';
-import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/unattended.dart';
 import 'automation_providers.dart';
 import 'unattended_preflight.dart';
 
-final scheduledResumeDaoProvider = Provider<ScheduledResumeDao>(
-  (ref) => ScheduledResumeDao(ref.watch(databaseProvider)),
-);
+export '../data/automations_data.dart' show resumesDataProvider;
 
-/// Every resume still waiting, soonest first. Shares the automations revision:
-/// the one scheduler re-arms on it, so a write here moves its timer too.
+/// Every resume still waiting, soonest first.
 final liveScheduledResumesProvider = Provider<List<ScheduledResume>>((ref) {
   ref.watch(automationsRevisionProvider);
-  return ref.watch(scheduledResumeDaoProvider).live();
+  return ref.watch(resumesDataProvider).live();
 });
 
 final recentScheduledResumesProvider = Provider<List<ScheduledResume>>((ref) {
   ref.watch(automationsRevisionProvider);
-  return ref.watch(scheduledResumeDaoProvider).recentEnded();
+  return ref.watch(resumesDataProvider).recentEnded();
 });
 
 /// What a session row and its bar say about a waiting resume. A value type, so
@@ -234,7 +230,7 @@ class ScheduledResumeController {
 
   final Ref _ref;
 
-  ScheduledResumeDao get _dao => _ref.read(scheduledResumeDaoProvider);
+  ResumeRecords get _dao => _ref.read(resumesDataProvider);
   DateTime get _now => _ref.read(clockProvider).nowUtc();
 
   /// Why [sessionId] may not be resumed unattended under [permissionMode].
@@ -366,7 +362,6 @@ class ScheduledResumeController {
   }
 
   void _changed([String? sessionId]) {
-    _ref.read(automationsRevisionProvider.notifier).bump();
     // The session's own row moved too: that is what a paired phone hears.
     if (sessionId != null) {
       _ref.publishSessionChange(SessionChange.reconfigured(sessionId));

@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -83,15 +81,12 @@ void main() {
       ClaudeCodeAdapter(descriptor: _claudeish),
     ],
   }) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         cliStoreLocatorProvider.overrideWithValue(FixedLocator(stores)),
         agentRegistryProvider.overrideWithValue(AgentRegistry(agents)),

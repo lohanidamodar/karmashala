@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -13,7 +11,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// Antigravity's messages, where the store keeps a readable copy of them.
 ///
@@ -396,13 +394,12 @@ void main() {
   group('importedTranscriptProvider', () {
     /// One imported Antigravity conversation, filed at [filePath].
     Future<ProviderContainer> containerFor(String filePath) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final server = FakeDataServer()..mirrorInto(db);
+      final db = TestMachine();
+      final server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      mirroredServer(db).importedRows.insertIfAbsent(
+      db.server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i1',
           repositoryId: 'r1',
@@ -416,12 +413,7 @@ void main() {
           createdAt: testTime,
         ),
       );
-      final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          await server.override(),
-        ],
-      );
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
       return container;
     }

@@ -1,6 +1,11 @@
+import 'package:karmashala_git/git.dart'
+    show ReviewThread, WorktreeSetup, WorktreeSetupReport;
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_remote/remote.dart'
+    show PairedDevice, pairedDeviceFromJson, pairedDeviceToJson;
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
@@ -9,9 +14,31 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/records.dart';
+import 'package:karmashala_automations/resumes.dart';
+import 'package:karmashala_automations/runs.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart'
+    show Checkpoint, checkpointFromJson, checkpointToJson;
+import 'package:karmashala_comparisons/comparisons.dart'
+    show Comparison, comparisonFromJson, comparisonToJson;
 import 'package:karmashala_environments/karmashala_environments.dart';
+import 'package:karmashala_verification/verification.dart'
+    show
+        VerificationRun,
+        verificationHeaderOf,
+        verificationRunFromJson,
+        verificationRunToJson;
 
 import 'session_values.dart';
+import 'worktree_values.dart';
+
+part 'changes/automations_changes.dart';
+part 'changes/checkpoints_changes.dart';
+part 'changes/worktrees_changes.dart';
+part 'changes/snippets_changes.dart';
+part 'changes/pairings_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -79,6 +106,7 @@ sealed class DataChange {
     ),
     'codexAccountRemoved' => CodexAccountRemoved(json['id']! as String),
     'usageRecorded' => UsageRecorded(json['accountKey']! as String),
+    final String name => _domainChangeFromJson(name, json),
     _ => null,
   };
 }
@@ -516,6 +544,15 @@ final class SectionRemoved extends RowRemoved {
   @override
   String get name => 'sectionRemoved';
 }
+
+/// A change of the domains slice 1e moved, each family read by its own part
+/// file; null when none knows [name] (a newer server's domain).
+DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
+    _automationsChangeFromJson(name, json) ??
+    _checkpointsChangeFromJson(name, json) ??
+    _worktreesChangeFromJson(name, json) ??
+    _snippetsChangeFromJson(name, json) ??
+    _pairingsChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

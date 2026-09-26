@@ -3,13 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
@@ -22,14 +21,14 @@ Future<void> _settle() async {
 /// The session host serves agents' MCP and forwards each call over the
 /// lifecycle link; the app runs it with the caller the host's token named.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeSessionRows dao;
   late FakeHostLifecycle host;
   late ProviderContainer container;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final fake = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    final fake = FakeDataServer()..runsOn(db);
     fake.environmentRows.upsert(windowsEnv());
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
@@ -40,7 +39,7 @@ void main() {
     host = FakeHostLifecycle();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
@@ -48,7 +47,6 @@ void main() {
     );
     addTearDown(() {
       container.dispose();
-      db.close();
     });
     container.listen(hostLifecycleSubscriberProvider, (_, _) {});
     await _settle();

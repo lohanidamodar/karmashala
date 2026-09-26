@@ -11,8 +11,8 @@ import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/window_matrix.dart';
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _path = '/repo/lib/main.dart';
 
@@ -51,11 +51,10 @@ void main() {
     await expectSurvivesWindowMatrix(
       tester,
       build: () {
-        final db = CountingDatabase();
-        addTearDown(db.close);
+        final db = TestMachine();
         final container = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: db),
+            ...fakeTerminalOverrides(machine: db),
             documentStoreProvider.overrideWithValue(_Store()),
           ],
         );

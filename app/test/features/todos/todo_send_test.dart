@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -18,7 +17,7 @@ import '../terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// A todo's way back to a session.
 ///
@@ -29,13 +28,12 @@ import '../../support/workspace_mirror.dart';
 /// That is already the one answer to "which session is this window about", and
 /// a side panel inventing a second one is how two surfaces come to disagree.
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
 
   Future<void> pump(WidgetTester tester) async {
-    db = AppDatabase.memory();
-    addTearDown(db.close);
-    final server = FakeDataServer(clock: () => testTime).mirrorInto(db)
+    db = TestMachine();
+    final server = FakeDataServer(clock: () => testTime).runsOn(db)
       ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
@@ -44,7 +42,7 @@ void main() {
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
@@ -85,7 +83,7 @@ void main() {
         .read(terminalSessionsControllerProvider)
         .activeTab!
         .focusedPaneId;
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(session(id: id, title: title))
       ..updatePaneId(id, paneId);
   }
@@ -200,9 +198,7 @@ void main() {
   ) async {
     await pump(tester);
     runSessionInATab('s1', title: 'Toolbar rework');
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session(id: 's2', title: 'Second look'));
+    db.server.sessionRows.insert(session(id: 's2', title: 'Second look'));
     container.read(selectedSessionIdProvider.notifier).select('s2');
     container.read(todosProvider.notifier).add(body: 'Fix the resize');
     await tester.pumpAndSettle();

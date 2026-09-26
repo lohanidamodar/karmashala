@@ -2,15 +2,17 @@ import 'dart:async';
 
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/verification.dart';
+
+import '../data/verification_data.dart';
 
 /// Turns what the browser and device services report into a run's steps and
 /// files. Both sinks are synchronous, so writes queue and [drain] is what a
 /// caller awaits; nothing here throws at the service it is watching.
 class VerificationRecorder {
   VerificationRecorder(
-    this._dao,
+    this._data,
     this._store, {
     required this.run,
     DateTime Function()? now,
@@ -19,7 +21,7 @@ class VerificationRecorder {
   static DateTime _utcNow() => DateTime.now().toUtc();
 
   final VerificationRun run;
-  final VerificationDao _dao;
+  final VerificationData _data;
   final VerificationArtifactStore _store;
   final DateTime Function() _now;
 
@@ -98,7 +100,7 @@ class VerificationRecorder {
               text: text ?? '',
               at: _now(),
             );
-      _dao.insertArtifact(artifact);
+      await _data.addArtifact(artifact);
     });
   }
 
@@ -114,24 +116,25 @@ class VerificationRecorder {
   }) {
     final ordinal = ++_ordinal;
     final at = _now();
-    // The step lands now, not on the queue: `sqlite3` writes on this isolate,
-    // so a verb's step is durable by the time it returns. Only files queue.
-    _dao.insertStep(
-      run.id,
-      VerificationStep(
-        ordinal: ordinal,
-        kind: kind,
-        summary: summary,
-        detail: detail,
-        ok: ok,
-        at: at,
+    // Sent now, in order, ahead of its files; [drain] waits for both.
+    _enqueue(
+      () => _data.addStep(
+        run.id,
+        VerificationStep(
+          ordinal: ordinal,
+          kind: kind,
+          summary: summary,
+          detail: detail,
+          ok: ok,
+          at: at,
+        ),
       ),
     );
     if ((png == null || png.isEmpty) && (text == null || text.isEmpty)) return;
     _enqueue(() async {
       final prefix = ordinal.toString().padLeft(3, '0');
       if (png != null && png.isNotEmpty) {
-        _dao.insertArtifact(
+        await _data.addArtifact(
           await _store.write(
             runId: run.id,
             kind: VerificationArtifactKind.screenshot,
@@ -144,7 +147,7 @@ class VerificationRecorder {
         );
       }
       if (text != null && text.isNotEmpty) {
-        _dao.insertArtifact(
+        await _data.addArtifact(
           await _store.writeText(
             runId: run.id,
             kind: textKind,

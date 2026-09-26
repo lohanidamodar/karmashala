@@ -16,7 +16,7 @@ Future<void> settle() => Future<void>.delayed(Duration.zero);
 void main() {
   late VerificationHarness h;
 
-  setUp(() => h = VerificationHarness());
+  setUp(() async => h = await VerificationHarness.start());
   tearDown(() => h.dispose());
 
   group('starting', () {
@@ -33,7 +33,7 @@ void main() {
       expect(h.browser.service.observer, isNotNull);
       // The navigation is the run's first step, not a silent prelude.
       expect(
-        h.service.get(run.id)!.steps.map((s) => s.kind),
+        (await h.service.get(run.id))!.steps.map((s) => s.kind),
         contains(VerificationStepKind.navigate),
       );
     });
@@ -47,7 +47,7 @@ void main() {
       );
 
       expect(h.adb.called('monkey -p com.example.app'), isTrue);
-      final steps = h.service.get(run.id)!.steps;
+      final steps = (await h.service.get(run.id))!.steps;
       expect(steps.first.kind, VerificationStepKind.launch);
       expect(steps.first.summary, contains('com.example.app'));
     });
@@ -80,7 +80,7 @@ void main() {
         );
         // The run survives the failure, with the reason recorded.
         final run = h.service.activeRun!;
-        final steps = h.service.get(run.id)!.steps;
+        final steps = (await h.service.get(run.id))!.steps;
         expect(steps.last.summary, contains('Could not reach the target'));
       },
     );
@@ -129,7 +129,7 @@ void main() {
       h.service.note('the header is where it should be');
       await h.service.flush();
 
-      final recorded = h.service.get(run.id)!;
+      final recorded = (await h.service.get(run.id))!;
       expect(
         recorded.steps.map((s) => s.kind),
         containsAll([
@@ -159,7 +159,7 @@ void main() {
         await h.adb.service.dumpUiHierarchy('FAKE123');
         await h.service.flush();
 
-        final recorded = h.service.get(run.id)!;
+        final recorded = (await h.service.get(run.id))!;
         expect(
           recorded.steps.map((s) => s.summary),
           contains('Tapped (100, 200)'),
@@ -191,11 +191,9 @@ void main() {
         );
         await h.service.flush();
 
-        final failed = h.service
-            .get(run.id)!
-            .steps
-            .where((s) => !s.ok)
-            .toList();
+        final failed = (await h.service.get(
+          run.id,
+        ))!.steps.where((s) => !s.ok).toList();
         expect(failed, isNotEmpty);
         expect(failed.last.kind, VerificationStepKind.click);
         expect(failed.last.detail, isNotNull);
@@ -207,12 +205,12 @@ void main() {
         target: const VerificationTarget.browser('https://example.com'),
       );
       await h.service.finish(verdict: VerificationVerdict.pass);
-      final before = h.service.get(run.id)!.steps.length;
+      final before = (await h.service.get(run.id))!.steps.length;
 
       await h.browser.service.screenshot();
       await h.service.flush();
 
-      expect(h.service.get(run.id)!.steps, hasLength(before));
+      expect((await h.service.get(run.id))!.steps, hasLength(before));
       expect(h.browser.service.actionSink, isNull);
     });
   });
@@ -397,9 +395,9 @@ void main() {
         );
         await h.service.finish(verdict: VerificationVerdict.pass);
 
-        expect(h.service.find('run-001')!.target.url, 'https://a.test');
-        expect(h.service.find('run-'), isNull);
-        expect(h.service.matching('run-'), hasLength(2));
+        expect((await h.service.find('run-001'))!.target.url, 'https://a.test');
+        expect((await h.service.find('run-')), isNull);
+        expect((await h.service.matching('run-')), hasLength(2));
       },
     );
 
@@ -412,7 +410,7 @@ void main() {
 
       await h.service.delete(run.id);
 
-      expect(h.service.get(run.id), isNull);
+      expect((await h.service.get(run.id)), isNull);
       expect(Directory(run.artifactDirectory).existsSync(), isFalse);
     });
 
@@ -423,7 +421,7 @@ void main() {
       await h.service.abandon();
 
       expect(h.service.activeRun, isNull);
-      expect(h.service.get(run.id)!.isOpen, isTrue);
+      expect((await h.service.get(run.id))!.isOpen, isTrue);
       expect(h.browser.service.actionSink, isNull);
     });
   });

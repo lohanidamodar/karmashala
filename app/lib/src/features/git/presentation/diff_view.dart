@@ -526,7 +526,7 @@ class _ReviewThreadDialogState extends ConsumerState<_ReviewThreadDialog> {
     try {
       final replyingTo = _replyingTo;
       if (replyingTo != null) {
-        service.reply(
+        await service.reply(
           threadId: replyingTo,
           body: body,
           author: 'the user',

@@ -1,24 +1,25 @@
-import '../../workspaces/data/workspace_data.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
-import '../../../core/util/clock_provider.dart';
+import '../../../core/data/data_client.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/id_generator_provider.dart';
-import '../data/review_thread_dao.dart';
+import '../../workspaces/data/workspace_data.dart';
 import 'package:karmashala_git/git.dart';
 import 'changes_providers.dart';
 
-/// Opening, answering and triaging review threads. No argument takes a blob
-/// sha: every write computes it from disk, and an unhashable file gets none.
+/// Opening, answering and triaging review threads, kept at the server (which
+/// stamps and orders them). No argument takes a blob sha: every write computes
+/// it from disk, and an unhashable file gets none.
 class ReviewThreadService {
   ReviewThreadService(this._ref);
 
   final Ref _ref;
 
-  ReviewThreadDao get _dao => _ref.read(reviewThreadDaoProvider);
+  DataClient get _client => _ref.read(dataClientProvider);
 
-  /// Opens a thread against [path], anchored to the file as it is now; [status]
-  /// defaults by author, since an agent must not triage its own findings.
+  /// Opens a thread against [path], anchored to the file as it is now; an
+  /// unset [status] is the server's `defaultReviewStatus`.
   Future<ReviewThread> open({
     required String repositoryId,
     required String path,
@@ -31,10 +32,11 @@ class ReviewThreadService {
     String? sessionId,
     ReviewThreadStatus? status,
   }) async {
-    final trimmed = body.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError('A review comment needs something written in it.');
-    }
+    final trimmed =
+        reviewBodyOf(body) ??
+        (throw ArgumentError(
+          'A review comment needs something written in it.',
+        ));
     final sha = await currentBlobSha(repositoryId, path);
     if (sha == null) {
       throw StateError(
@@ -44,72 +46,65 @@ class ReviewThreadService {
         'keeping.',
       );
     }
-    final now = _ref.read(clockProvider).nowUtc();
-    final thread = _dao.open(
-      id: _ref.read(idGeneratorProvider).newId(),
-      repositoryId: repositoryId,
-      anchor: ReviewAnchor(
-        path: path,
-        blobSha: sha,
-        startLine: startLine,
-        // A single-line anchor stores the same number twice, so a range is
-        // always read the same way.
-        endLine: startLine == null ? null : (endLine ?? startLine),
-        excerpt: excerpt,
+    return _client.write(
+      ReviewThreadOpen(
+        id: _ref.read(idGeneratorProvider).newId(),
+        repositoryId: repositoryId,
+        anchor: ReviewAnchor(
+          path: path,
+          blobSha: sha,
+          startLine: startLine,
+          endLine: endLine,
+          excerpt: excerpt,
+        ),
+        author: author,
+        authorKind: authorKind,
+        body: trimmed,
+        status: status,
+        sessionId: sessionId,
       ),
-      status:
-          status ??
-          (authorKind == ReviewAuthorKind.user
-              ? ReviewThreadStatus.shouldFix
-              : ReviewThreadStatus.open),
-      author: author,
-      authorKind: authorKind,
-      body: trimmed,
-      sessionId: sessionId,
-      now: now,
+      domain: DataDomain.worktrees,
     );
-    _bump();
-    return thread;
   }
 
-  /// Adds a reply. Returns null when the thread no longer exists.
-  ReviewThread? reply({
+  /// Adds a reply. Null when the thread no longer exists.
+  Future<ReviewThread?> reply({
     required String threadId,
     required String body,
     required String author,
     required ReviewAuthorKind authorKind,
   }) {
-    final trimmed = body.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError('A reply needs something written in it.');
+    final trimmed =
+        reviewBodyOf(body) ??
+        (throw ArgumentError('A reply needs something written in it.'));
+    return _orGone(
+      ReviewThreadReply(
+        threadId: threadId,
+        author: author,
+        authorKind: authorKind,
+        body: trimmed,
+      ),
+    );
+  }
+
+  /// Moves a thread's status. Null when the thread no longer exists.
+  Future<ReviewThread?> setStatus(String threadId, ReviewThreadStatus status) =>
+      _orGone(ReviewThreadSetStatus(threadId, status));
+
+  Future<ReviewThread?> _orGone(DataRequest<ReviewThread> request) async {
+    try {
+      return await _client.write(request, domain: DataDomain.worktrees);
+    } on DataRefused catch (refusal) {
+      if (refusal.code == DataRefusalCode.notFound) return null;
+      rethrow;
     }
-    final thread = _dao.reply(
-      threadId: threadId,
-      author: author,
-      authorKind: authorKind,
-      body: trimmed,
-      now: _ref.read(clockProvider).nowUtc(),
-    );
-    if (thread != null) _bump();
-    return thread;
   }
 
-  /// Moves a thread's status. Returns null when the thread no longer exists.
-  ReviewThread? setStatus(String threadId, ReviewThreadStatus status) {
-    final thread = _dao.setStatus(
-      threadId,
-      status,
-      now: _ref.read(clockProvider).nowUtc(),
-    );
-    if (thread != null) _bump();
-    return thread;
-  }
-
-  ReviewThread? getById(String id) => _dao.getById(id);
+  ReviewThread? getById(String id) => _client.reviewThreads[id];
 
   /// One thread with its anchor checked, or null when it is gone.
   Future<AnchoredReviewThread?> anchored(String id) async {
-    final thread = _dao.getById(id);
+    final thread = getById(id);
     if (thread == null) return null;
     final shas = await _shasFor(thread.repositoryId, [thread.anchor.path]);
     return AnchoredReviewThread(
@@ -118,11 +113,14 @@ class ReviewThreadService {
     );
   }
 
-  /// Every thread on [repositoryId], each already held against the file it
-  /// points at, in two database statements and one git process whatever the
-  /// thread count — the diff panel calls this on every working-tree change.
+  /// Every thread on [repositoryId], each held against the file it points at,
+  /// in one git process whatever the count — the diff panel calls this on
+  /// every working-tree change.
   Future<ReviewThreadIndex> indexFor(String repositoryId) async {
-    final threads = _dao.forRepository(repositoryId);
+    final threads = [
+      for (final thread in _client.reviewThreads.values)
+        if (thread.repositoryId == repositoryId) thread,
+    ]..sort(compareReviewThreads);
     if (threads.isEmpty) return ReviewThreadIndex.empty;
     final paths = <String>{for (final thread in threads) thread.anchor.path};
     final shas = await _shasFor(repositoryId, paths.toList()..sort());
@@ -158,38 +156,23 @@ class ReviewThreadService {
       return const {};
     }
   }
-
-  /// Tells the read providers that something changed. A revision counter, not
-  /// an invalidation, because an agent writing over MCP goes through this same
-  /// service and the panel a human is looking at has to notice.
-  void _bump() => _ref.read(reviewThreadRevisionProvider.notifier).bump();
 }
-
-final reviewThreadDaoProvider = Provider<ReviewThreadDao>(
-  (ref) => ReviewThreadDao(ref.watch(databaseProvider)),
-);
 
 final reviewThreadServiceProvider = Provider<ReviewThreadService>(
   ReviewThreadService.new,
 );
 
-/// Bumped by every write, watched by every read. See [ReviewThreadService].
-class ReviewThreadRevision extends Notifier<int> {
-  @override
-  int build() => 0;
-
-  void bump() => state = state + 1;
-}
-
-final reviewThreadRevisionProvider =
-    NotifierProvider<ReviewThreadRevision, int>(ReviewThreadRevision.new);
-
-/// Every review thread on [repositoryId], anchors already checked. Keyed, so a
-/// diff tab reads the repository it was opened on rather than whichever row the
-/// sidebar is pointed at now.
+/// Every review thread on [repositoryId], anchors already checked, read again
+/// when a thread changes — here, from an agent, or at another client. Keyed,
+/// so a diff tab reads the repository it was opened on.
 final reviewThreadsByRepositoryProvider = FutureProvider.autoDispose
     .family<ReviewThreadIndex, String>((ref, repositoryId) async {
-      ref.watch(reviewThreadRevisionProvider);
+      final listening = ref
+          .watch(dataClientProvider)
+          .reviewThreads
+          .changes
+          .listen((_) => ref.invalidateSelf());
+      ref.onDispose(listening.cancel);
       return ref.read(reviewThreadServiceProvider).indexFor(repositoryId);
     });
 

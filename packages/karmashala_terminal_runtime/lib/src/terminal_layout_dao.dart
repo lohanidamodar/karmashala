@@ -1,8 +1,11 @@
 import 'dart:convert';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_store/database.dart'
+    show boolFromInt, intFromBool, isoFromDate;
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
+
+import 'terminal_layout_store.dart';
 
 /// One persisted terminal pane: how to relaunch it, and what was on its screen.
 class StoredTerminalPane {
@@ -70,26 +73,26 @@ class StoredTerminalLayout {
   final String? activeTabId;
 }
 
-/// The `app_metadata` key stamped when a save emptied a non-empty layout. It
+/// The layout-metadata key stamped when a save emptied a non-empty layout. It
 /// still says "workspace": renaming would orphan the timestamp on disk.
 const kTerminalLayoutBackupAtKey = 'terminal.workspace_backup_at';
 
-/// The `app_metadata` key holding the grid the app last drew a terminal pane at
+/// The layout-metadata key holding the grid the app last drew a terminal pane at
 /// — restored panes parse during `build`, before any layout pass could say.
 const kTerminalPaneGridKey = 'terminal.pane_grid';
 
-/// The `app_metadata` key holding the workspace split tree — see
+/// The layout-metadata key holding the workspace split tree — see
 /// [WorkspaceLayout]. One row about all the tabs, because the tree is a
 /// document, and half of one written across N rows cannot be read back.
 const kTerminalWorkspaceKey = 'terminal.workspace_tree';
 
-/// Reads and writes the terminal layout (schema v7, backup tables v11) with
-/// hand-written SQL. Loading is deliberately forgiving: an unparseable row is
+/// Reads and writes the terminal layout in this client's
+/// [TerminalLayoutStore] with hand-written SQL. Loading is deliberately forgiving: an unparseable row is
 /// skipped, because a corrupt layout must never make the terminal unopenable.
 class TerminalLayoutDao {
   TerminalLayoutDao(this._db);
 
-  final AppDatabase _db;
+  final TerminalLayoutStore _db;
 
   /// The scrollback text this dao last saw in the store, by pane id: the one
   /// column too expensive to read back, so a save compares against this.

@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -16,7 +15,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -28,19 +27,19 @@ import '../terminal/fake_instance.dart';
 ///
 /// [live] opens a (process-free) pane and points the row at it, which is what
 /// decides whether the card can offer to type anything at all.
-Future<({AppDatabase db, Widget app, ProviderContainer container})> harness({
+Future<({TestMachine db, Widget app, ProviderContainer container})> harness({
   required String agentId,
   required AgentStatusReport report,
   bool live = true,
   List<Override> overrides = const [],
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
   server.installationRows.insert(agentInstallation(agentId: agentId));
-  final dao = mirroredServer(db).sessionRows
+  final dao = db.server.sessionRows
     ..insert(
       Session(
         id: 's1',
@@ -57,7 +56,7 @@ Future<({AppDatabase db, Widget app, ProviderContainer container})> harness({
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db),
       agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
       agentSessionStatusProvider.overrideWith(
         (ref, id) => Stream.value(report),
@@ -118,7 +117,6 @@ void main() {
         status: AgentActivityStatus.working,
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     // The status provider is a stream: its first frame is AsyncLoading, and the
@@ -139,7 +137,6 @@ void main() {
         evidence: const ['Claude wants to run:', '  rm -rf build/'],
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     // The status provider is a stream: its first frame is AsyncLoading, and the
@@ -166,7 +163,6 @@ void main() {
         source: AgentStatusSource.hook,
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     // The status provider is a stream: its first frame is AsyncLoading, and the
@@ -189,7 +185,6 @@ void main() {
         evidence: const ['Proceed?'],
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     // The status provider is a stream: its first frame is AsyncLoading, and the
@@ -212,7 +207,6 @@ void main() {
         evidence: const ['Press enter to continue'],
       ),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     // The status provider is a stream: its first frame is AsyncLoading, and the
@@ -241,7 +235,6 @@ void main() {
       // than none.
       live: false,
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     // The status provider is a stream: its first frame is AsyncLoading, and the
@@ -269,7 +262,6 @@ void main() {
           waiting: AgentWaitKind.input,
         ),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       await tester.pumpWidget(h.app);
       await tester.pumpAndSettle();
@@ -300,7 +292,6 @@ void main() {
           waiting: AgentWaitKind.unrecorded,
         ),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       await tester.pumpWidget(h.app);
       await tester.pumpAndSettle();
@@ -323,7 +314,6 @@ void main() {
           evidence: const ['Press enter to continue'],
         ),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       await tester.pumpWidget(h.app);
       await tester.pumpAndSettle();
@@ -345,7 +335,6 @@ void main() {
       agentId: AgentIds.codex,
       report: report(agentId: AgentIds.codex),
     );
-    addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await tester.pumpAndSettle();
@@ -396,7 +385,6 @@ void main() {
         report: report(agentId: AgentIds.claudeCode),
         overrides: menuPane(),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       await tester.pumpWidget(h.app);
       await tester.pump();
@@ -415,7 +403,6 @@ void main() {
         report: report(agentId: AgentIds.claudeCode),
         overrides: menuPane(),
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       await tester.pumpWidget(h.app);
       await tester.pump();
@@ -463,7 +450,6 @@ void main() {
           }),
         ],
       );
-      addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       await tester.pumpWidget(h.app);
       await tester.pumpAndSettle();

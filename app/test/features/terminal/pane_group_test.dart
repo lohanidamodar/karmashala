@@ -1,4 +1,4 @@
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -389,14 +389,14 @@ void main() {
 
   group('regions survive a save and a restore', () {
     test('the stack and its front pane come back', () {
-      final database = AppDatabase.memory();
+      final database = TerminalLayoutStore.memory();
       addTearDown(database.close);
 
       String hostPane;
       String guestPane;
       String tabId;
       {
-        final container = fakeTerminalContainer(database: database);
+        final container = fakeTerminalContainer(layoutStore: database);
         final controller = container.read(
           terminalSessionsControllerProvider.notifier,
         );
@@ -421,7 +421,7 @@ void main() {
         container.dispose();
       }
 
-      final container = fakeTerminalContainer(database: database);
+      final container = fakeTerminalContainer(layoutStore: database);
       addTearDown(container.dispose);
       final restored = container.read(terminalSessionsControllerProvider);
 
@@ -437,13 +437,13 @@ void main() {
     });
 
     test('a restore drops a pane that no longer exists, not the region', () {
-      final database = AppDatabase.memory();
+      final database = TerminalLayoutStore.memory();
       addTearDown(database.close);
 
       String hostPane;
       String guestPane;
       {
-        final container = fakeTerminalContainer(database: database);
+        final container = fakeTerminalContainer(layoutStore: database);
         final controller = container.read(
           terminalSessionsControllerProvider.notifier,
         );
@@ -470,7 +470,7 @@ void main() {
       // The front pane's row goes, the way a removed WSL distro takes one.
       database.execute('DELETE FROM terminal_panes WHERE id = ?', [guestPane]);
 
-      final container = fakeTerminalContainer(database: database);
+      final container = fakeTerminalContainer(layoutStore: database);
       addTearDown(container.dispose);
       final restored = container.read(terminalSessionsControllerProvider);
 

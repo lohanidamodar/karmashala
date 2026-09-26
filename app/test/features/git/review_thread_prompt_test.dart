@@ -52,15 +52,15 @@ void main() {
     ]);
 
     // Once a human triages it, it joins the set.
-    harness.service.setStatus(agent.id, ReviewThreadStatus.shouldFix);
+    await harness.service.setStatus(agent.id, ReviewThreadStatus.shouldFix);
     expect((await harness.service.indexFor('r1')).pending, hasLength(2));
   });
 
   test('dismissed and resolved threads are kept and not sent', () async {
     final one = await comment(body: 'not actually a problem');
     final two = await comment(path: 'lib/b.dart', body: 'already handled');
-    harness.service.setStatus(one.id, ReviewThreadStatus.dismissed);
-    harness.service.setStatus(two.id, ReviewThreadStatus.resolved);
+    await harness.service.setStatus(one.id, ReviewThreadStatus.dismissed);
+    await harness.service.setStatus(two.id, ReviewThreadStatus.resolved);
 
     final index = await harness.service.indexFor('r1');
     expect(index.pending, isEmpty);
@@ -124,7 +124,7 @@ void main() {
 
   test('replies travel with the request, attributed', () async {
     final thread = await comment(body: 'This drops the null check.');
-    harness.service.reply(
+    await harness.service.reply(
       threadId: thread.id,
       body: 'Only on the empty-map path.',
       author: 'an agent in session s1',

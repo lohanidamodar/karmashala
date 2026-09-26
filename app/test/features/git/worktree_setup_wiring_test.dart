@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
@@ -17,15 +17,13 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'worktree_processes.dart';
 
 /// The app's own wiring, end to end: a worktree created through
-/// `worktreeServiceProvider` reads the setting out of the database, opens a
+/// `worktreeServiceProvider` reads the setting from the server's copy, opens a
 /// real pane through the terminal controller, and records a verdict.
 void main() {
   late FakeDataServer server;
-  late AppDatabase db;
   late FakeCommandRunner runner;
   late ProviderContainer container;
 
@@ -35,8 +33,7 @@ void main() {
   );
 
   Future<void> build() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
@@ -53,7 +50,7 @@ void main() {
     );
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(),
         await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
@@ -66,10 +63,21 @@ void main() {
   }
 
   setUp(build);
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
+
+  /// The verdict this app holds for [worktree] — what a surface reads.
+  WorktreeSetupReport? lastRun(EnvironmentPath worktree) => container
+      .read(worktreeSetupDataProvider)
+      .runsFor('r1')
+      .where((run) => run.worktreePath == worktree.path)
+      .firstOrNull;
+
+  /// The verdict the server holds, once this app's writes have landed — as a
+  /// reload or another client would read it.
+  Future<WorktreeSetupReport?> storedRun(EnvironmentPath worktree) async {
+    await container.read(dataClientProvider).settled();
+    return server.worktreeRows.lastRun('r1', worktree);
+  }
 
   Future<EnvironmentPath> create() async {
     final worktree = await container
@@ -87,7 +95,10 @@ void main() {
     () async {
       await create();
       expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
-      final run = container.read(worktreeSetupDaoProvider).runsFor('r1').single;
+      final run = container
+          .read(worktreeSetupDataProvider)
+          .runsFor('r1')
+          .single;
       expect(run.copies, isEmpty);
       expect(run.command, isNull);
       expect(run.creation!.outcome, WorktreeCreationOutcome.succeeded);
@@ -101,16 +112,13 @@ void main() {
   test(
     'the command reaches a real pane, pointed at the distribution',
     () async {
-      container
-          .read(worktreeSetupDaoProvider)
-          .save(
-            'r1',
-            const WorktreeSetup(
-              command: ['flutter', 'pub', 'get'],
-              copyPaths: ['.dart_tool'],
-            ),
-            testTime,
-          );
+      server.worktreeRows.save(
+        'r1',
+        const WorktreeSetup(
+          command: ['flutter', 'pub', 'get'],
+          copyPaths: ['.dart_tool'],
+        ),
+      );
 
       final path = await create();
       final terminals = container.read(
@@ -137,7 +145,7 @@ void main() {
       expect(launch.sessionId, isNull);
       expect(launch.title, contains('app-s1'));
 
-      final run = container.read(worktreeSetupDaoProvider).lastRun('r1', path)!;
+      final run = lastRun(path)!;
       expect(run.command!.result, WorktreeCommandResult.running);
       expect(run.command!.paneId, tab.focusedPaneId);
       expect(run.command!.exitCode, isNull);
@@ -156,9 +164,10 @@ void main() {
       ),
     );
     await pumpEventQueue();
-    container
-        .read(worktreeSetupDaoProvider)
-        .save('r2', const WorktreeSetup(command: ['make', 'setup']), testTime);
+    server.worktreeRows.save(
+      'r2',
+      const WorktreeSetup(command: ['make', 'setup']),
+    );
 
     await container
         .read(worktreeServiceProvider)
@@ -183,61 +192,52 @@ void main() {
   });
 
   test('the pane stopping turns "running" into a recorded verdict', () async {
-    container
-        .read(worktreeSetupDaoProvider)
-        .save(
-          'r1',
-          const WorktreeSetup(command: ['flutter', 'pub', 'get']),
-          testTime,
-        );
+    server.worktreeRows.save(
+      'r1',
+      const WorktreeSetup(command: ['flutter', 'pub', 'get']),
+    );
     final path = await create();
     final paneId = container
         .read(terminalSessionsControllerProvider)
         .tabs
         .single
         .focusedPaneId;
-    final before = container.read(worktreeSetupRevisionProvider);
+    var told = 0;
+    final listening = container
+        .read(worktreeSetupDataProvider)
+        .changes
+        .listen((_) => told++);
+    addTearDown(listening.cancel);
 
     container
         .read(paneExitProvider.notifier)
         .record(PaneExit(paneId: paneId, sessionId: null, exitCode: 1));
 
-    final run = container.read(worktreeSetupDaoProvider).lastRun('r1', path)!;
+    final run = lastRun(path)!;
     expect(run.command!.result, WorktreeCommandResult.failed);
     expect(run.command!.exitCode, 1);
     expect(run.verdict, WorktreeSetupVerdict.attention);
     expect(
-      container.read(worktreeSetupRevisionProvider),
-      greaterThan(before),
+      told,
+      greaterThan(0),
       reason: 'the surface is told, rather than asking again on a timer',
     );
   });
 
   test('some other pane stopping changes nothing', () async {
-    container
-        .read(worktreeSetupDaoProvider)
-        .save('r1', const WorktreeSetup(command: ['make']), testTime);
+    server.worktreeRows.save('r1', const WorktreeSetup(command: ['make']));
     final path = await create();
     container
         .read(paneExitProvider.notifier)
         .record(
           const PaneExit(paneId: 'a-shell', sessionId: null, exitCode: 3),
         );
-    expect(
-      container
-          .read(worktreeSetupDaoProvider)
-          .lastRun('r1', path)!
-          .command!
-          .result,
-      WorktreeCommandResult.running,
-    );
+    expect(lastRun(path)!.command!.result, WorktreeCommandResult.running);
   });
 
   test('the setup pane is not a session pane, and is stored as one restore '
       'will not re-run', () async {
-    container
-        .read(worktreeSetupDaoProvider)
-        .save('r1', const WorktreeSetup(command: ['make']), testTime);
+    server.worktreeRows.save('r1', const WorktreeSetup(command: ['make']));
     await create();
     final paneId = container
         .read(terminalSessionsControllerProvider)
@@ -256,16 +256,13 @@ void main() {
 
   group('an agent that waits for the setup command', () {
     setUp(() {
-      container
-          .read(worktreeSetupDaoProvider)
-          .save(
-            'r1',
-            const WorktreeSetup(
-              command: ['make', 'setup'],
-              startAgentBeforeSetup: false,
-            ),
-            testTime,
-          );
+      server.worktreeRows.save(
+        'r1',
+        const WorktreeSetup(
+          command: ['make', 'setup'],
+          startAgentBeforeSetup: false,
+        ),
+      );
     });
 
     String setupPane() => container
@@ -306,7 +303,7 @@ void main() {
 
       created.tracker.agentStarted();
       // Read back from the database, as a reload or another surface would.
-      final run = WorktreeSetupDao(db).lastRun('r1', created.worktree.path)!;
+      final run = (await storedRun(created.worktree.path))!;
       expect(run.creation!.outcome, WorktreeCreationOutcome.succeeded);
       expect(
         run.creation!.stage(WorktreeStage.agent).state,
@@ -327,7 +324,7 @@ void main() {
         WorktreeStageState.failed,
       );
       created.tracker.agentStarted();
-      final run = WorktreeSetupDao(db).lastRun('r1', created.worktree.path)!;
+      final run = (await storedRun(created.worktree.path))!;
       expect(run.creation!.outcome, WorktreeCreationOutcome.warning);
     });
 
@@ -335,7 +332,7 @@ void main() {
       // The same setting: waiting is about an agent, so without one the
       // create returns while the command is still running.
       final path = await create();
-      final run = WorktreeSetupDao(db).lastRun('r1', path)!;
+      final run = (await storedRun(path))!;
       expect(
         run.creation!.stage(WorktreeStage.setupScript).state,
         WorktreeStageState.running,
@@ -373,9 +370,9 @@ void main() {
         ),
       );
       expect(ran, contains(equals(['branch', '-D', 'session/s1'])));
-      final run = WorktreeSetupDao(
-        db,
-      ).lastRun('r1', worktreePathFor(EnvironmentKind.wsl, wslRepo, 's1'))!;
+      final run = (await storedRun(
+        worktreePathFor(EnvironmentKind.wsl, wslRepo, 's1'),
+      ))!;
       expect(run.creation!.outcome, WorktreeCreationOutcome.cancelled);
       expect(
         run.creation!.stage(WorktreeStage.setupScript).state,

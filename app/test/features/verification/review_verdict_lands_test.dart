@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
-import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_tools.dart';
-import 'package:karmashala_verification/store.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/verification/data/verification_data.dart';
+import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -30,7 +32,7 @@ void main() {
     h = await connectedHarness();
     root = Directory.systemTemp.createTempSync('review-verdict');
     verification = VerificationService(
-      VerificationDao(h.db),
+      VerificationData(h.container.read(dataClientProvider)),
       VerificationArtifactStore(root),
       browserOf: () => FakeBrowser().service,
       adbOf: () => null,
@@ -39,7 +41,6 @@ void main() {
   tearDown(() async {
     await verification.dispose();
     h.container.dispose();
-    h.db.close();
     if (root.existsSync()) root.deleteSync(recursive: true);
   });
 
@@ -127,7 +128,7 @@ void main() {
 
     // The record exists, is attached to the work, and says who signed it —
     // "nothing found" as a fact rather than as an absence.
-    final runs = verification.list(sessionId: subject.session.id);
+    final runs = await verification.list(sessionId: subject.session.id);
     expect(runs, hasLength(1));
     expect(runs.single.reason, contains('found nothing'));
     expect(runs.single.attribution, VerdictAttribution.independent);

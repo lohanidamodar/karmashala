@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'dart:convert';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_git/worktrees.dart';
@@ -11,7 +10,6 @@ import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -20,7 +18,6 @@ import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 void main() {
-  late AppDatabase db;
   late EnvironmentsData environments;
   late FakeDataServer server;
   // The app's copy, where the engine's writes land at once.
@@ -30,8 +27,7 @@ void main() {
   late FakeEventRows eventDao;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     environments = EnvironmentsData(await server.connect());
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
@@ -42,7 +38,6 @@ void main() {
     records = SessionRecordsData(client);
     eventDao = server.eventRows;
   });
-  tearDown(() => db.close());
 
   SessionEngine buildEngine({ChatProtocolResolver? resolver}) => SessionEngine(
     sessions: sessionDao,

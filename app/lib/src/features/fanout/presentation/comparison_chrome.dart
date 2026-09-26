@@ -7,7 +7,7 @@ import 'package:karmashala_verification/verification.dart';
 import '../../verification/presentation/attribution_mark.dart';
 import '../../verification/presentation/verdict_appearance.dart';
 import '../application/comparison_providers.dart';
-import '../domain/comparison.dart';
+import 'package:karmashala_comparisons/comparisons.dart';
 
 /// Small shared pieces of the comparison surface. Neutral by decision: the
 /// only colour is [SemanticColors] — diff add/remove, a failure, a verdict.

@@ -1,5 +1,4 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_link_actions.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// What a Ctrl+click in a terminal pane actually does.
 ///
@@ -27,17 +27,17 @@ void main() {
   const cwd = r'C:\src\app';
   const resolvedMain = r'C:\src\app\lib\main.dart';
 
-  late AppDatabase db;
+  late TestMachine db;
   late _RecordingLinkActions actions;
   late ProviderContainer container;
 
   setUp(() {
-    db = AppDatabase.memory();
+    db = TestMachine();
     actions = _RecordingLinkActions();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(
-          database: db,
+          machine: db,
           // A pane that opened somewhere, so a relative path has something to
           // be relative to.
           instanceFactory:
@@ -65,7 +65,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   /// Pumps the workbench, writes [output] into its one pane, and returns that

@@ -4,7 +4,6 @@
 /// dialog writes through.
 library;
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
@@ -21,7 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart';
@@ -40,7 +39,7 @@ const _rover = AgentDescriptor(
 );
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late FakeDataServer server;
   late List<({FrameType type, String? id, Map<String, Object?> payload})> sent;
@@ -48,8 +47,8 @@ void main() {
   var seq = 0;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
@@ -58,7 +57,7 @@ void main() {
     server.installationRows.insert(agentInstallation(agentId: 'roverCli'));
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -86,7 +85,6 @@ void main() {
 
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Future<void> request(
@@ -171,7 +169,9 @@ void main() {
       () async {
         // Installed, but nothing in the registry declares what it can be put
         // into. The phone gets one unselectable row rather than an empty menu.
-        server.installationRows.insert(agentInstallation(id: 'a2', agentId: 'mysteryCli'));
+        server.installationRows.insert(
+          agentInstallation(id: 'a2', agentId: 'mysteryCli'),
+        );
 
         final agents = (await workspace()).single.checkouts.single.agents;
         final mystery = agents.firstWhere((a) => a.installationId == 'a2');
@@ -275,7 +275,7 @@ void main() {
 
       expect(sent.last.type, FrameType.result);
       final started = RemoteSessionStarted.fromJson(sent.last.payload);
-      final session = mirroredServer(db).sessionRows.getById(started.sessionId);
+      final session = db.server.sessionRows.getById(started.sessionId);
       expect(session, isNotNull);
       expect(session!.title, 'From the phone');
       expect(
@@ -297,9 +297,7 @@ void main() {
       await start(message: 'begin');
 
       final started = RemoteSessionStarted.fromJson(sent.last.payload);
-      final session = mirroredServer(
-        db,
-      ).sessionRows.getById(started.sessionId)!;
+      final session = db.server.sessionRows.getById(started.sessionId)!;
       expect(session.title, 'Session');
       expect(session.titleByUser, isFalse);
     });
@@ -309,9 +307,7 @@ void main() {
 
       final started = RemoteSessionStarted.fromJson(sent.last.payload);
       expect(
-        mirroredServer(
-          db,
-        ).sessionRows.getById(started.sessionId)!.permissionMode,
+        db.server.sessionRows.getById(started.sessionId)!.permissionMode,
         bypassStored,
       );
     });
@@ -325,7 +321,7 @@ void main() {
       expect(sent.last.type, FrameType.error);
       expect(sent.last.payload['code'], ErrorCode.badRequest.wire);
       expect(sent.last.payload['message'], contains('Rover CLI'));
-      expect(mirroredServer(db).sessionRows.getAll(), isEmpty);
+      expect(db.server.sessionRows.getAll(), isEmpty);
     });
 
     test('refuses a mode that does not exist here', () async {
@@ -339,7 +335,7 @@ void main() {
       await start(repositoryId: 'gone');
 
       expect(sent.last.payload['code'], ErrorCode.notFound.wire);
-      expect(mirroredServer(db).sessionRows.getAll(), isEmpty);
+      expect(db.server.sessionRows.getAll(), isEmpty);
     });
 
     test('refuses an agent installed somewhere else', () async {
@@ -359,14 +355,14 @@ void main() {
         sent.last.payload['message'],
         contains('not installed where that checkout lives'),
       );
-      expect(mirroredServer(db).sessionRows.getAll(), isEmpty);
+      expect(db.server.sessionRows.getAll(), isEmpty);
     });
 
     test('the same key twice leaves one row behind', () async {
       await start(title: 'Once');
       await start(title: 'Once');
 
-      expect(mirroredServer(db).sessionRows.getAll(), hasLength(1));
+      expect(db.server.sessionRows.getAll(), hasLength(1));
       expect(sent.last.payload['replayed'], isTrue);
     });
   });

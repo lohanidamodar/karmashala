@@ -1,4 +1,3 @@
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -14,14 +13,14 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
-import '../scale/scale_harness.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// **What saved sections cost, in the two units that matter.**
@@ -74,9 +73,9 @@ void main() {
 
   /// A workspace of [count] sessions on one repository, a third of them failed
   /// so the seeded "Ended in failure" section has something to hold.
-  CountingDatabase seed(int count) {
-    final db = CountingDatabase();
-    server = FakeDataServer()..mirrorInto(db);
+  CountingMachine seed(int count) {
+    final db = CountingMachine();
+    server = FakeDataServer()..runsOn(db);
     seedDefaultSections(server);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
@@ -85,7 +84,7 @@ void main() {
     );
     server.installationRows.insert(agentInstallation());
     for (var i = 0; i < count; i++) {
-      mirroredServer(db).sessionRows.insert(
+      db.server.sessionRows.insert(
         session(
           id: 's$i',
           title: 'Session $i',
@@ -97,12 +96,11 @@ void main() {
   }
 
   Future<ProviderContainer> mount(
-    CountingDatabase db,
+    CountingMachine db,
     FakeCommandRunner git,
   ) async {
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -128,7 +126,6 @@ void main() {
     for (final count in scale) {
       test('of $count sessions files them without asking anything new', () async {
         final db = seed(count);
-        addTearDown(db.close);
         final git = FakeCommandRunner();
         final container = await mount(db, git);
 
@@ -207,7 +204,7 @@ void main() {
     /// match in order to know which headers are worth a row.
     Future<ProviderContainer> pump(
       WidgetTester tester,
-      CountingDatabase db, {
+      CountingMachine db, {
       bool hideEmpty = false,
     }) async {
       tester.view.physicalSize = const Size(460, 900);
@@ -216,7 +213,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -252,7 +249,6 @@ void main() {
         tester,
       ) async {
         final db = seed(count);
-        addTearDown(db.close);
         final container = await pump(tester, db);
 
         // The four seeded sections are all there, folded shut.
@@ -293,7 +289,6 @@ void main() {
       int count,
     ) async {
       final db = seed(count);
-      addTearDown(db.close);
       final container = await pump(tester, db);
       db.reset();
 
@@ -401,10 +396,9 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final db = seed(count);
-      addTearDown(db.close);
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -506,7 +500,8 @@ void main() {
       tester,
     ) async {
       final result = await pump(tester, 100, hideEmpty: true);
-      final db = result.container.read(databaseProvider) as CountingDatabase;
+      final db = CountingMachine();
+      FakeDataServer.of(result.container.read(dataClientProvider)).runsOn(db);
       db.reset();
 
       // A second of frames over a sidebar where nothing moved. The filter's

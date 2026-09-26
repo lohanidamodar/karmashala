@@ -23,7 +23,7 @@ class HostLifecycleWatch {
   final _companionCalls = StreamController<CompanionCallMessage>();
   final _companionEvents = StreamController<CompanionEventMessage>();
   final _automationCalls = StreamController<AutomationCallMessage>();
-  final _automationsChanged = StreamController<void>();
+
   final _agentStatuses = StreamController<AgentStatusMessage>();
   final _pairings = <int, Completer<PairedMessage>>{};
   final _checks = <int, Completer<ChecksRanMessage>>{};
@@ -152,12 +152,7 @@ class HostLifecycleWatch {
   /// [answerAutomationCall].
   Stream<AutomationCallMessage> get automationCalls => _automationCalls.stream;
 
-  /// Each time the host wrote automation, run, check, resume or verification
-  /// rows.
-  Stream<void> get automationsChanged => _automationsChanged.stream;
-
-  /// "I am the app" ([AutomationNoticeKind.ready]) or "I wrote automation
-  /// rows" ([AutomationNoticeKind.changed]).
+  /// "I am the app" ([AutomationNoticeKind.ready]).
   void noticeAutomations(AutomationNoticeKind kind) =>
       _write(AutomationNoticeMessage(kind));
 
@@ -364,10 +359,7 @@ class HostLifecycleWatch {
       if (!_automationCalls.isClosed) _automationCalls.add(message);
       return;
     }
-    if (message is AutomationsChangedMessage) {
-      if (!_automationsChanged.isClosed) _automationsChanged.add(null);
-      return;
-    }
+
     if (message is ChecksRanMessage) {
       _checks.remove(message.requestId)?.complete(message);
       return;
@@ -424,7 +416,7 @@ class HostLifecycleWatch {
     if (!_companionCalls.isClosed) unawaited(_companionCalls.close());
     if (!_companionEvents.isClosed) unawaited(_companionEvents.close());
     if (!_automationCalls.isClosed) unawaited(_automationCalls.close());
-    if (!_automationsChanged.isClosed) unawaited(_automationsChanged.close());
+
     if (!_agentStatuses.isClosed) unawaited(_agentStatuses.close());
     for (final pairing in _pairings.values) {
       pairing.completeError(

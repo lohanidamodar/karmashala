@@ -14,12 +14,10 @@ import 'dart:io' show InternetAddress;
 import 'dart:typed_data';
 
 import 'package:karmashala/src/app/companion/companion_lifecycle.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
-import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
@@ -101,8 +99,7 @@ class ScriptedScout extends LanPathScout {
 }
 
 void main() {
-  late AppDatabase db;
-  late PairedDeviceDao dao;
+  late MemoryPairedDeviceStore dao;
   late FakeRemoteBindings fake;
   late RelayServer relay;
   late Uri relayUri;
@@ -130,8 +127,7 @@ void main() {
 
   setUp(() async {
     clockShift = Duration.zero;
-    db = AppDatabase.memory();
-    dao = PairedDeviceDao(db);
+    dao = MemoryPairedDeviceStore();
     fake = FakeRemoteBindings()..addSession('s1');
     relay = await RelayServer.bind(
       address: '127.0.0.1',
@@ -154,7 +150,6 @@ void main() {
     await service?.stop();
     service = null;
     await relay.close();
-    db.close();
   });
 
   Future<RemoteHostService> startService() async {

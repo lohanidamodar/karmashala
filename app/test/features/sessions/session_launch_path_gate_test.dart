@@ -25,7 +25,6 @@ import 'package:karmashala_core/testing.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -38,7 +37,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// The owner's Codex, as it was on 2026-09-07: the path its installer
@@ -68,7 +67,7 @@ CommandResult _whereFindsNothing(CommandRequest request) =>
 // ignore: library_private_types_in_public_api
 typedef Harness = ({
   ProviderContainer container,
-  AppDatabase db,
+  TestMachine db,
   FakeCommandRunner runner,
   FakeDataServer server,
 });
@@ -80,8 +79,8 @@ Future<Harness> harness({
   List<AgentInstallation> installations = const [],
   CommandResult Function(CommandRequest)? responder,
 }) async {
-  final db = AppDatabase.memory();
-  final server = FakeDataServer()..mirrorInto(db);
+  final db = TestMachine();
+  final server = FakeDataServer()..runsOn(db);
   server.environmentRows
     ..upsert(windowsEnv())
     ..upsert(wslEnv());
@@ -95,7 +94,7 @@ Future<Harness> harness({
   final container = ProviderContainer(
     overrides: [
       await server.override(),
-      ...fakeTerminalOverrides(database: db, pathProbe: probe),
+      ...fakeTerminalOverrides(machine: db, pathProbe: probe),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       hostEnvironmentProvider.overrideWithValue(const {
@@ -111,7 +110,6 @@ Future<Harness> harness({
     ],
   );
   addTearDown(container.dispose);
-  addTearDown(db.close);
   return (container: container, db: db, runner: runner, server: server);
 }
 
@@ -158,17 +156,14 @@ void main() {
 
       final result = await _launch(h, row);
 
-      expect(
-        mirroredServer(h.db).sessionRows.getById(result.session.id),
-        isNotNull,
-      );
+      expect(h.db.server.sessionRows.getById(result.session.id), isNotNull);
       // Counted, not timed: the whole claim to running on every launch is that
       // a workspace with nothing wrong costs one stat and no processes.
       expect(h.runner.requests, isEmpty);
       expect(h.runner.startRequests, isEmpty);
       // And the row was left exactly as it was found.
       expect(
-        mirroredServer(h.db).installationRows.getById(row.id)!.executable.path,
+        h.db.server.installationRows.getById(row.id)!.executable.path,
         _claude,
       );
     });
@@ -219,9 +214,7 @@ void main() {
       // The row moved and kept its id, and the pane runs the binary that is
       // actually there rather than the spelling the request carried.
       expect(
-        mirroredServer(
-          h.db,
-        ).installationRows.getById('codex-row')!.executable.path,
+        h.db.server.installationRows.getById('codex-row')!.executable.path,
         _real,
       );
       final instance = h.container
@@ -230,9 +223,9 @@ void main() {
       expect(instance.agentLaunch!.executable, _real);
 
       // Written once: a repair must not leave a second session behind it.
-      expect(mirroredServer(h.db).sessionRows.getAll(), hasLength(1));
+      expect(h.db.server.sessionRows.getAll(), hasLength(1));
       expect(
-        mirroredServer(h.db).sessionRows.getById(result.session.id)!.status,
+        h.db.server.sessionRows.getById(result.session.id)!.status,
         SessionStatus.running,
       );
 
@@ -273,7 +266,7 @@ void main() {
 
       // Refused before the row: a failed launch must not leave a half-made
       // session for the user to find and wonder about.
-      expect(mirroredServer(h.db).sessionRows.getAll(), isEmpty);
+      expect(h.db.server.sessionRows.getAll(), isEmpty);
     });
 
     test('a junction the OS will not read refuses as unreachable', () async {
@@ -304,12 +297,9 @@ void main() {
         ),
       );
 
-      expect(mirroredServer(h.db).sessionRows.getAll(), isEmpty);
+      expect(h.db.server.sessionRows.getAll(), isEmpty);
       // §20's first rule: an unreachable row is never deleted.
-      expect(
-        mirroredServer(h.db).installationRows.getById('codex-row'),
-        isNotNull,
-      );
+      expect(h.db.server.installationRows.getById('codex-row'), isNotNull);
     });
 
     test(
@@ -321,7 +311,7 @@ void main() {
           installations: [row],
           responder: (_) => _notOnPath,
         );
-        final dao = mirroredServer(h.db).sessionRows
+        final dao = h.db.server.sessionRows
           ..insert(
             session(id: 'conv-1', status: SessionStatus.completed).copyWith(
               externalSessionId: 'conv-1',
@@ -374,7 +364,7 @@ void main() {
       final launcher = h.container.read(sessionLauncherProvider);
       expect(launcher.livePaneFor(started.session.id), paneId);
       expect(
-        mirroredServer(h.db).sessionRows.getById(started.session.id)!.status,
+        h.db.server.sessionRows.getById(started.session.id)!.status,
         SessionStatus.running,
       );
     });

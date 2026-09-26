@@ -8,8 +8,8 @@ import 'package:karmashala/src/features/editor/presentation/editor_tab_view.dart
 import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/theme.dart';
 
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _path = r'C:\repo\build\bundle.js';
 
@@ -46,11 +46,10 @@ void main() {
     for (final scale in [1.0, 1.3]) {
       testWidgets('the read-only notice leaves the viewer its height at '
           '${width}x$height @${scale}x', (tester) async {
-        final db = CountingDatabase();
-        addTearDown(db.close);
+        final db = TestMachine();
         final container = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: db),
+            ...fakeTerminalOverrides(machine: db),
             documentStoreProvider.overrideWithValue(_HugeStore()),
           ],
         );

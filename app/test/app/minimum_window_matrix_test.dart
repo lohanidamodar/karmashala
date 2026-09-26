@@ -1,6 +1,4 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -43,7 +41,7 @@ import '../support/fixtures.dart';
 import '../support/system_health_fakes.dart';
 import '../support/window_matrix.dart';
 import '../support/fake_data_server.dart';
-import '../support/workspace_mirror.dart';
+import '../support/test_machine.dart';
 
 /// The minimum-window and accessibility matrix, applied to the surfaces the
 /// audit flagged.
@@ -87,18 +85,13 @@ void main() {
     // 220 taller than the whole supported window.
     Future<ProviderContainer> withRepositorySelected() async {
       final server = FakeDataServer();
-      final db = seedDatabase(server: server);
+      seedDatabase(server: server);
       server.installationRows
         ..insert(agentInstallation(id: 'a1', agentId: 'claudeCode'))
         ..insert(agentInstallation(id: 'a2', agentId: 'codex'));
-      addTearDown(db.close);
       final data = await server.override();
       final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          data,
-          ...noProcessOverrides(),
-        ],
+        overrides: [data, ...noProcessOverrides()],
       );
       addTearDown(container.dispose);
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
@@ -141,15 +134,10 @@ void main() {
 
   testWidgets('ComparisonView on its own', (tester) async {
     final server = FakeDataServer();
-    final db = seedDatabase(server: server);
-    addTearDown(db.close);
+    seedDatabase(server: server);
     final data = await server.override();
     final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        data,
-        ...noProcessOverrides(),
-      ],
+      overrides: [data, ...noProcessOverrides()],
     );
     addTearDown(container.dispose);
 
@@ -165,8 +153,7 @@ void main() {
 
   group('NewSessionDialog', () {
     Future<ProviderContainer> prepared() async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+      final db = TestMachine();
       final server = FakeDataServer();
       server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
@@ -176,7 +163,7 @@ void main() {
       final data = await server.override();
       final container = ProviderContainer(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           data,
           ...noProcessOverrides(),
           // Detecting terminals really probes PATH; the picker only needs a list.
@@ -237,16 +224,15 @@ void main() {
   });
 
   testWidgets('DeliveryStrip', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     // The session is still in the database, and its foreign keys reach the
     // workspace rows the server holds.
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(
+    db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -265,7 +251,7 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -300,8 +286,6 @@ void main() {
   });
 
   testWidgets('SshHostDialog', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
@@ -310,7 +294,6 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -327,8 +310,7 @@ void main() {
   });
 
   testWidgets('RepositoryInfoView', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final db = TestMachine();
     final server = FakeDataServer();
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
@@ -339,7 +321,7 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         data,
         ...noProcessOverrides(),
       ],
@@ -362,8 +344,6 @@ void main() {
   // to notice.
 
   testWidgets('EnvironmentHealthDialog', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
@@ -372,7 +352,6 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         ...noProcessOverrides(),
         // Checking health really spawns processes — `git --version` per
@@ -452,11 +431,8 @@ void main() {
       Override data, {
       SessionStatusCoverage? coverage,
     }) {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           data,
           ...noProcessOverrides(),
           // The Terminal page reads the session host's status, and the one running
@@ -597,8 +573,6 @@ void main() {
   });
 
   testWidgets('NewProjectDialog', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
     final server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
@@ -607,7 +581,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),

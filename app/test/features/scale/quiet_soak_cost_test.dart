@@ -1,4 +1,3 @@
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -21,7 +20,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'scale_harness.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 
 /// **The 100-session quiet soak.** One of the four benchmark gates
 /// `docs/BACKLOG.md` carried as unbuilt, and the reason "not proven for
@@ -227,15 +226,15 @@ void main() {
     /// The layout `session_signal_cost_test` seeds, at the sizes this file
     /// reads the curve at. `s0` ended badly, so exactly one follow-up exists
     /// and the inbox has something to keep up to date.
-    CountingDatabase seed(int count, FakeDataServer server) {
-      final db = CountingDatabase();
+    CountingMachine seed(int count, FakeDataServer server) {
+      final db = CountingMachine();
       server.environmentRows.upsert(windowsEnv());
-      server.mirrorInto(db)
+      server.runsOn(db)
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
       server.installationRows.insert(agentInstallation());
       for (var i = 0; i < count; i++) {
-        mirroredServer(db).sessionRows.insert(
+        db.server.sessionRows.insert(
           session(
             id: 's$i',
             title: 'Session $i',
@@ -247,13 +246,12 @@ void main() {
     }
 
     Future<ProviderContainer> mount(
-      CountingDatabase db,
+      CountingMachine db,
       FakeCommandRunner git,
       FakeDataServer server,
     ) async {
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           // Stubbed for the reason the file header gives: the live one fans
@@ -299,7 +297,6 @@ void main() {
       test('of $count sessions reads nothing while nothing changes', () async {
         final server = FakeDataServer();
         final db = seed(count, server);
-        addTearDown(db.close);
         final git = FakeCommandRunner();
         final container = await mount(db, git, server);
         listenToEverything(container, count);

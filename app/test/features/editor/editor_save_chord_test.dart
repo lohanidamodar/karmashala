@@ -9,8 +9,8 @@ import 'package:karmashala/src/features/editor/presentation/editor_tab_view.dart
 import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/theme.dart';
 
-import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/test_machine.dart';
 
 const _path = '/repo/lib/main.dart';
 
@@ -47,12 +47,11 @@ class _MemoryStore extends DocumentStore {
 /// consumed the chord before the tab's binding could hear it.
 void main() {
   Future<_MemoryStore> open(WidgetTester tester) async {
-    final db = CountingDatabase();
-    addTearDown(db.close);
+    final db = TestMachine();
     final store = _MemoryStore();
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         documentStoreProvider.overrideWithValue(store),
       ],
     );

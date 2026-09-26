@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -16,7 +15,6 @@ import 'package:path/path.dart' as p;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/agents/data/agents_data.dart';
 
 /// A clock the test moves forward, for the cold-recheck window.
@@ -28,7 +26,6 @@ class _MovableClock implements Clock {
 }
 
 void main() {
-  late AppDatabase db;
   late Directory temp;
   late FakeSessionRows sessions;
   late FakeImportedRows imported;
@@ -38,8 +35,7 @@ void main() {
   late AgentHookReports reports;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    final server = FakeDataServer().mirrorInto(db)
+    final server = FakeDataServer()
       ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
@@ -53,7 +49,6 @@ void main() {
     installations = AgentInstallationsData(client);
     reports = AgentHookReports();
     addTearDown(() {
-      db.close();
       try {
         temp.deleteSync(recursive: true);
       } catch (_) {}

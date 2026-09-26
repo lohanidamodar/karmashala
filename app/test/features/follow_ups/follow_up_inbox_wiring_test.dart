@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -14,13 +12,11 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// The whole chain, from a session row that says `failed` to a line in the one
 /// list the app has for things that need the user.
 void main() {
-  late AppDatabase db;
   late Override data;
   late ProviderContainer container;
   late FakeDataServer server;
@@ -35,7 +31,6 @@ void main() {
   ProviderContainer mount() {
     final made = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // The status pipeline is not the subject here; the row is.
@@ -52,8 +47,7 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
     data = await server.override();
     server.projectRows.insert(project());
@@ -66,7 +60,6 @@ void main() {
     container = mount();
     await settle();
   });
-  tearDown(() => db.close());
 
   AttentionInbox inbox() => container.read(attentionInboxProvider);
 

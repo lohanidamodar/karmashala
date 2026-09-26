@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -26,7 +25,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
@@ -72,15 +71,13 @@ class _StaticSettings extends SettingsController {
 /// The server each seeded database's workspace lives at.
 final _serverOf = Expando<FakeDataServer>();
 
-AppDatabase seededDatabase() {
-  final db = AppDatabase.memory();
-  final server = _serverOf[db] = FakeDataServer()..mirrorInto(db);
-  mirroredServer(db).environmentRows.upsert(windowsEnv());
+TestMachine seededDatabase() {
+  final db = TestMachine();
+  final server = _serverOf[db] = FakeDataServer()..runsOn(db);
+  db.server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  mirroredServer(
-    db,
-  ).installationRows.insert(agentInstallation(agentId: 'claudeish'));
+  db.server.installationRows.insert(agentInstallation(agentId: 'claudeish'));
   return db;
 }
 
@@ -105,12 +102,12 @@ void main() {
   /// [locatable] false is a store home the locator could not resolve — a WSL
   /// distribution that is not running — which must never read as "absent".
   Future<ProviderContainer> containerOver(
-    AppDatabase db, {
+    TestMachine db, {
     String idPrefix = 's-',
     bool locatable = true,
   }) async => ProviderContainer(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(machine: db, layoutStore: layoutStoreOf(db)),
       await _serverOf[db]!.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -162,7 +159,7 @@ void main() {
   /// over the same database. Panes come back dormant, as they do in the app.
   Future<ProviderContainer> restart(
     ProviderContainer first,
-    AppDatabase db, {
+    TestMachine db, {
     bool locatable = true,
   }) async {
     first.read(terminalSessionsControllerProvider.notifier).persistLayout();
@@ -175,7 +172,6 @@ void main() {
   test('a session whose conversation was never written is refused, not '
       'restarted as a new one', () async {
     final db = seededDatabase();
-    addTearDown(db.close);
     emptyStore();
 
     final first = await containerOver(db);
@@ -219,7 +215,6 @@ void main() {
   test('a session whose conversation is on disk still resumes into its own '
       'pane', () async {
     final db = seededDatabase();
-    addTearDown(db.close);
 
     final first = await containerOver(db);
     final sessionId = await startSession(first);
@@ -251,7 +246,6 @@ void main() {
     // unmounted drive or a store home we failed to resolve all land here, and
     // the resume goes ahead exactly as it did before any of this existed.
     final db = seededDatabase();
-    addTearDown(db.close);
     emptyStore();
 
     final first = await containerOver(db);
@@ -275,7 +269,6 @@ void main() {
       // One discovered from a hook payload or an imported store entry is resumed
       // as it is whenever the store holds it.
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       writeConversation('observed-elsewhere');
 
@@ -303,7 +296,6 @@ void main() {
       bool locatable = true,
     }) async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
       final first = await containerOver(db);
       final sessionId = await startSession(first);
@@ -392,7 +384,6 @@ void main() {
     'the refusal is thrown by the launcher, so no surface can forget it',
     () async {
       final db = seededDatabase();
-      addTearDown(db.close);
       emptyStore();
 
       final container = await containerOver(db);

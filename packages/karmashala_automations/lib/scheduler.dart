@@ -5,4 +5,3 @@ library;
 export 'src/service/automation_firing.dart';
 export 'src/service/automation_scheduler.dart';
 export 'src/service/automation_timer.dart';
-export 'src/service/scheduler_chore.dart';

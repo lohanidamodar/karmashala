@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/features/devices/application/device_bindings.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -19,7 +18,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fakes.dart' show MovableClock;
 
 /// The device lock, driven the way two agents would actually collide with each
@@ -48,7 +47,7 @@ const _dumpXml =
 
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TestMachine db;
   late ProviderContainer container;
   late LauncherControlServer server;
   late FakeCommandRunner adb;
@@ -56,15 +55,15 @@ void main() {
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_device_lock_');
-    db = AppDatabase.memory();
+    db = TestMachine();
     clock = MovableClock(testTime);
-    final data = FakeDataServer().mirrorInto(db);
+    final data = FakeDataServer().runsOn(db);
     data.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
     data
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     data.installationRows.insert(agentInstallation());
-    mirroredServer(db).sessionRows
+    db.server.sessionRows
       ..insert(session(id: 's1', title: 'Fix the login flow'))
       ..insert(session(id: 's2', title: 'Check the release build'));
 
@@ -106,7 +105,7 @@ void main() {
         // The app's half of `karmashala_devices`: its clock, its runner
         // factory, its settings and its shell, behind the package's ports.
         ...deviceBindings,
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         await data.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: adb),
@@ -126,7 +125,6 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    db.close();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
@@ -262,9 +260,7 @@ void main() {
   group('a holder that goes away', () {
     test('a session that ended does not keep the device', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
-      mirroredServer(
-        db,
-      ).sessionRows.updateStatus('s1', SessionStatus.completed);
+      db.server.sessionRows.updateStatus('s1', SessionStatus.completed);
 
       final second = await callAs('s2', 'device_tap', {'x': 100, 'y': 100});
       expect(second.isError, isFalse, reason: second.text);
@@ -273,7 +269,7 @@ void main() {
     test('a session we merely lost sight of keeps it', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
       // `unknown` is our blind spot, not an ending — see Session.isOver.
-      mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.unknown);
+      db.server.sessionRows.updateStatus('s1', SessionStatus.unknown);
 
       final second = await callAs('s2', 'device_tap', {'x': 100, 'y': 100});
       expect(second.isError, isTrue);
@@ -290,9 +286,7 @@ void main() {
 
     test('the ending the app does see frees the device at once', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
-      mirroredServer(
-        db,
-      ).sessionRows.updateStatus('s1', SessionStatus.completed);
+      db.server.sessionRows.updateStatus('s1', SessionStatus.completed);
 
       // The same event that retires the session's MCP token — a change to the
       // session list, not a timer. Nothing polls for this.

@@ -2,17 +2,24 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
+import 'package:karmashala_git/git.dart'
+    show WorktreeSetup, WorktreeSetupReport;
 import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
+import 'automations_handler.dart';
+import 'evidence_handler.dart';
 import 'filing_lookup.dart';
 import 'hosts_handler.dart';
 import 'notes_handler.dart';
+import 'pairings_handler.dart';
 import 'preferences_handler.dart';
+import 'snippets_handler.dart';
 import 'sessions_handler.dart';
 import 'todos_handler.dart';
 import 'workspace_handler.dart';
+import 'worktrees_handler.dart';
 
 /// The server's data API over its store: every client's reads and writes of
 /// notes, todos, preferences, the workspace, sessions, and where agents run
@@ -33,13 +40,27 @@ class DataService {
     _notes = NotesHandler(database, filing, _now);
     _todos = TodosHandler(database, filing, _now);
     _preferences = PreferencesHandler(database);
+    _automations = AutomationsHandler(
+      database,
+      _now,
+      written: () => automationsWritten?.call(),
+    );
+    _worktrees = WorktreesHandler(database, _now);
+    _snippets = SnippetsHandler(database, _now);
+    _pairings = PairingsHandler(database);
     _sessions = SessionsHandler(database, _now, runs: runsSession);
     _hosts = HostsHandler(database, _now, opens: opens);
+    _evidence = EvidenceHandler(database, _now);
     _workspace = WorkspaceHandler(
       database,
       _now,
       newId ?? newUuid,
-      checkoutsGoing: _sessions.checkoutsGoing,
+      checkoutsGoing: (ids) {
+        final sessions = _sessions.checkoutsGoing(ids);
+        final comparisons = _evidence.checkoutsGoing(ids);
+        final worktrees = _worktrees.checkoutsGoing(ids);
+        return () => [...sessions(), ...comparisons(), ...worktrees()];
+      },
     );
   }
 
@@ -49,9 +70,18 @@ class DataService {
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
+  late final AutomationsHandler _automations;
+
+  /// Told after a client wrote automations, runs, checks or resumes: the
+  /// server's scheduler re-arms and drains what it can start.
+  void Function()? automationsWritten;
+  late final WorktreesHandler _worktrees;
+  late final SnippetsHandler _snippets;
+  late final PairingsHandler _pairings;
   late final WorkspaceHandler _workspace;
   late final SessionsHandler _sessions;
   late final HostsHandler _hosts;
+  late final EvidenceHandler _evidence;
   final _links = <DataSession>{};
   var _revision = 0;
 
@@ -100,6 +130,26 @@ class DataService {
     announce(changes);
   }
 
+  /// Tells every client the paired devices as they now stand, without
+  /// secrets — after the companion wrote them itself.
+  void announceDevices() => announce(_pairings.devicesNow());
+
+  /// Set by the companion: brings the phones' live links in line after a
+  /// client renamed, granted or revoked a device.
+  set onDevicesWritten(void Function()? apply) => _pairings.onWritten = apply;
+
+  /// Records how a worktree the server made was set up, and tells every
+  /// client.
+  void recordWorktreeSetup(WorktreeSetupReport report) {
+    final changes = <DataChange>[];
+    _worktrees.record(report, changes);
+    announce(changes);
+  }
+
+  /// What checkout [repositoryId] asks of a new worktree.
+  WorktreeSetup worktreeSetupOf(String repositoryId) =>
+      _worktrees.setupOf(repositoryId);
+
   /// The installations recorded in [environmentId], oldest first.
   List<AgentInstallation> installationsIn(String environmentId) =>
       _hosts.installationsIn(environmentId);
@@ -116,6 +166,33 @@ class DataService {
     try {
       result = switch (request) {
         DataSubscribe() => origin._subscribe(),
+        final AutomationsRequest r => _automations.handle(r, changes),
+        final CheckpointsRequest r => _evidence.handleCheckpoints(r, changes),
+        final VerificationRequest r => _evidence.handleVerification(r, changes),
+        final ComparisonsRequest r => _evidence.handleComparisons(r, changes),
+        final WorktreesRequest r => switch (r) {
+          WorktreesList() => _worktrees.list(),
+          final WorktreeSetupSave r => _worktrees.save(r, changes),
+          final WorktreeSetupClear r => _worktrees.clear(r, changes),
+          final WorktreeSetupRecord r => _worktrees.record(r.report, changes),
+          final ReviewThreadOpen r => _worktrees.open(r, changes),
+          final ReviewThreadReply r => _worktrees.reply(r, changes),
+          final ReviewThreadSetStatus r => _worktrees.setStatus(r, changes),
+        },
+        final SnippetsRequest r => switch (r) {
+          SnippetsList() => _snippets.list(),
+          final SnippetAdd r => _snippets.add(r, changes),
+          final SnippetEdit r => _snippets.edit(r, changes),
+          final SnippetDelete r => _snippets.delete(r, changes),
+          final PresetSave r => _snippets.savePreset(r, changes),
+          final PresetDelete r => _snippets.deletePreset(r, changes),
+        },
+        final PairingsRequest r => switch (r) {
+          DevicesList() => _pairings.list(),
+          final DeviceRename r => _pairings.rename(r, changes),
+          final DeviceGrant r => _pairings.grant(r, changes),
+          final DeviceRevoke r => _pairings.revoke(r, changes),
+        },
         final NotesList r => _notes.list(r),
         final NoteCapture r => _notes.capture(r, changes),
         final NoteEdit r => _notes.edit(r, changes),

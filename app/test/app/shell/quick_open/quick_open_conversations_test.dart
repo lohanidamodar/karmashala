@@ -67,11 +67,13 @@ void main() {
     data = await server.override();
     index = ConversationIndexDao(db);
     server.environmentRows.upsert(
-  localHostEnvironment(FixedClock(testTime).nowUtc()),
-);
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
-    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
   });
   tearDown(() => db.close());
 

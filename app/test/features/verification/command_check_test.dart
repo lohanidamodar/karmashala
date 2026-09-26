@@ -13,7 +13,7 @@ void main() {
 
   final startedAt = DateTime.utc(2026, 9, 9, 10);
 
-  setUp(() => h = VerificationHarness());
+  setUp(() async => h = await VerificationHarness.start());
   tearDown(() => h.dispose());
 
   Future<VerificationRun> record({
@@ -96,8 +96,8 @@ void main() {
 
   test('it is listed with everything else', () async {
     final gate = await record();
-    expect(h.service.list().map((run) => run.id), contains(gate.id));
-    expect(h.service.get(gate.id)!.verdict, VerificationVerdict.pass);
+    expect((await h.service.list()).map((run) => run.id), contains(gate.id));
+    expect((await h.service.get(gate.id))!.verdict, VerificationVerdict.pass);
   });
 
   /// A batch of checks is one run whose verdict is the worst of them.

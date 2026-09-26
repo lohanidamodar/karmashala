@@ -3,10 +3,8 @@ import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/before_quit.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../features/system/fake_native_adapters.dart';
 
@@ -70,14 +68,11 @@ void main() {
   });
 
   group('quitting', () {
-    late AppDatabase db;
     late ProviderContainer container;
 
     setUp(() {
-      db = AppDatabase.memory();
       container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           beforeQuitHooksProvider.overrideWithValue(
             BeforeQuitHooks(flushBudget: const Duration(milliseconds: 50)),
           ),
@@ -86,7 +81,6 @@ void main() {
     });
     tearDown(() {
       container.dispose();
-      db.close();
     });
 
     BeforeQuitHooks hooks() => container.read(beforeQuitHooksProvider);

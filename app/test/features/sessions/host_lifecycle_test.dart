@@ -25,10 +25,9 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -65,7 +64,7 @@ Future<void> _settle() async {
 }
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
   late FakeSessionRows dao;
@@ -74,8 +73,8 @@ void main() {
   late _RecordingRecorder recorder;
 
   setUp(() async {
-    db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
+    db = TestMachine();
+    server = FakeDataServer()..runsOn(db);
     data = await server.connect();
     server.environmentRows
       ..upsert(windowsEnv())
@@ -94,7 +93,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
         sessionCheckpointRecorderProvider.overrideWith(
@@ -104,7 +103,6 @@ void main() {
     );
     addTearDown(() {
       container.dispose();
-      db.close();
     });
   });
 
@@ -147,7 +145,7 @@ void main() {
       client = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(feedOnly),
         ],
@@ -450,7 +448,7 @@ void main() {
       final direct = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(null),
         ],
@@ -688,7 +686,7 @@ void main() {
       container = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(host),
         ],
@@ -750,7 +748,7 @@ void main() {
       final app = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(host),
           cliStoreSyncRunnerProvider.overrideWithValue(() => storeSync.future),
@@ -871,7 +869,7 @@ void main() {
     final plain = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(null),
       ],

@@ -7,13 +7,12 @@ import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.da
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_host/protocol.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
 /// This computer's host, holding what a test puts in it.
@@ -50,24 +49,23 @@ SessionSummary _summary(String id, List<String> argv) => SessionSummary(
 );
 
 void main() {
-  late AppDatabase db;
+  late TestMachine db;
   late FakeDataServer server;
   setUp(() {
-    db = AppDatabase.memory();
-    server = FakeDataServer().mirrorInto(db)
+    db = TestMachine();
+    server = FakeDataServer().runsOn(db)
       ..environmentRows.upsert(localHostEnvironment(testTime))
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester, _LocalHost host) async {
     final workspace = await server.override();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(machine: db),
           workspace,
           localHostSessionAccessProvider.overrideWithValue(host),
         ],
@@ -80,9 +78,7 @@ void main() {
   testWidgets('lists what the host holds, agents by their session title', (
     tester,
   ) async {
-    mirroredServer(
-      db,
-    ).sessionRows.insert(session(id: 's1', title: 'Fix the parser'));
+    db.server.sessionRows.insert(session(id: 's1', title: 'Fix the parser'));
     final host = _LocalHost([
       _summary('karmashala_s1', ['claude', '--resume', 'x']),
       _summary('karmashala_local_pane-1', ['/bin/zsh', '-l']),

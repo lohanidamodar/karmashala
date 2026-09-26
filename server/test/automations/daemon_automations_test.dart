@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:karmashala_automations/store.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -123,7 +124,7 @@ void main() {
       registry: registry,
       dataDirectory: data.path,
       mcp: SessionMcpAccessPoint(mcp: null, configDirectory: data.path),
-      announce: () => announced++,
+      tell: (changes) => announced += changes.length,
       clock: () => now,
       newId: () => 'id-${++ids}',
       timer: timer,

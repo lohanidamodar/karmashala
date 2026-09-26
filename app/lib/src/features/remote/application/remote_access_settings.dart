@@ -119,8 +119,8 @@ class HostServerConfigSource implements ServerConfigSource {
   }
 }
 
-/// The file itself, where no server runs (local panes not host-backed): the
-/// app's own companion serves by it, and the next server to start does too.
+/// The file itself, where no local server may be reached: the server serves
+/// by it from its next start.
 class FileServerConfigSource implements ServerConfigSource {
   FileServerConfigSource(this._dataDirectory);
 

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/presentation/empty_pane_region.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import 'fake_instance.dart';
+import '../../support/test_machine.dart';
 
 /// A region can be dragged down to 5% of the window, so its invitation has to
 /// fit a small rectangle without hiding the way out.
@@ -14,9 +14,8 @@ void main() {
     testWidgets('an empty split fits ${size.width}x${size.height}', (
       tester,
     ) async {
-      final database = AppDatabase.memory();
-      addTearDown(database.close);
-      final container = fakeTerminalContainer(database: database);
+      final database = TestMachine();
+      final container = fakeTerminalContainer(machine: database);
       addTearDown(container.dispose);
 
       final errors = <String>[];

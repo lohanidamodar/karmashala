@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
 import 'package:karmashala/src/features/verification/domain/session_verdict.dart';
 import 'package:karmashala/src/features/verification/presentation/session_verdict_mark.dart';
+
+import '../../support/fake_data_server.dart';
 
 /// **Asking what a session's verdict is must not reach the filesystem.**
 ///
@@ -37,12 +39,11 @@ import 'package:karmashala/src/features/verification/presentation/session_verdic
 /// panel the owner reported. There is no colour bug in this feature — the white
 /// *is* the crash.
 void main() {
-  late AppDatabase db;
+  late DataClient client;
 
-  setUp(() => db = AppDatabase.memory());
-  tearDown(() => db.close());
+  setUp(() async => client = await FakeDataServer().connect());
 
-  /// The app's own first frame: the database, and an artifact root that is not
+  /// The app's own first frame: the server's data, and an artifact root that is not
   /// resolved yet. [root] stands in for the global `resolveVerificationRoot()`
   /// fills in later — the ordering under test is which provider is *read*
   /// first, not how the directory is found.
@@ -50,7 +51,7 @@ void main() {
     Directory? resolved;
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         verificationRootProvider.overrideWith((ref) {
           final root = resolved;
           if (root == null) {
@@ -72,25 +73,28 @@ void main() {
     );
   });
 
-  test('and the strip asking first does not break the pane afterwards', () {
-    final (container, resolve) = launching();
-    final root = Directory.systemTemp.createTempSync('verify-root-order');
-    addTearDown(() {
-      if (root.existsSync()) root.deleteSync(recursive: true);
-    });
+  test(
+    'and the strip asking first does not break the pane afterwards',
+    () async {
+      final (container, resolve) = launching();
+      final root = Directory.systemTemp.createTempSync('verify-root-order');
+      addTearDown(() {
+        if (root.existsSync()) root.deleteSync(recursive: true);
+      });
 
-    // The warm-up frame: every session view hosts a delivery strip, and it is
-    // drawn long before anything has opened the verification pane.
-    container.read(sessionVerdictProvider('s-1'));
+      // The warm-up frame: every session view hosts a delivery strip, and it is
+      // drawn long before anything has opened the verification pane.
+      container.read(sessionVerdictProvider('s-1'));
 
-    // The pane opens, and `verificationRootReadyProvider` resolves the root.
-    resolve(root);
+      // The pane opens, and `verificationRootReadyProvider` resolves the root.
+      resolve(root);
 
-    // The list the pane draws. This is the read that used to throw
-    // `ProviderException` and paint a white rectangle.
-    expect(container.read(verificationRunsProvider), isEmpty);
-    expect(container.read(verificationServiceProvider).activeRun, isNull);
-  });
+      // The list the pane draws. This is the read that used to throw
+      // `ProviderException` and paint a white rectangle.
+      expect(await container.read(verificationRunsProvider.future), isEmpty);
+      expect(container.read(verificationServiceProvider).activeRun, isNull);
+    },
+  );
 
   testWidgets('the mark draws on a launch that has resolved nothing', (
     tester,
