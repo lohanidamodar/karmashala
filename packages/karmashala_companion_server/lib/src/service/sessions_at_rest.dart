@@ -1,9 +1,11 @@
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../store/workspace_names.dart';
+import 'companion_prompts.dart';
 import 'companion_screens.dart';
 import 'screen_transcripts.dart';
 
@@ -12,17 +14,17 @@ import 'screen_transcripts.dart';
 /// writes — and the sessions it runs, read and typed into through their
 /// screens.
 ///
-/// **Only what the host can see for itself.** Attention from the agent status
-/// it keeps for the sessions it holds; no delivery stage, no attachments, no
-/// agent record: a phone is told less, never something the host would be
-/// guessing.
+/// **Only what the host can see for itself.** Attention and what the agent is
+/// doing from the agent status it keeps for the sessions it holds; no
+/// delivery stage, no attachments, no agent record: a phone is told less,
+/// never something the host would be guessing.
 class SessionsAtRest {
   SessionsAtRest({
     required this.sessions,
     required this.names,
     required this.screens,
     required this.hostName,
-    this.attentionOf,
+    this.agentStatusOf,
     ScreenTranscripts? transcripts,
     DateTime Function()? clock,
   }) : transcripts = transcripts ?? ScreenTranscripts(clock: clock),
@@ -35,9 +37,10 @@ class SessionsAtRest {
   /// This machine, as a row's whereabouts names it.
   final String hostName;
 
-  /// The attention word for a session row the host keeps an agent status
-  /// for (`needs_approval`, `failed`), or null for nothing waiting.
-  final String? Function(String sessionId)? attentionOf;
+  /// The agent status the host keeps for a session row, or null when it keeps
+  /// none: the row's attention (`needs_approval`, `failed`) and what its agent
+  /// is doing — idle at its prompt, or mid-turn — are read off it.
+  final AgentStatusReport? Function(String sessionId)? agentStatusOf;
   final ScreenTranscripts transcripts;
   final DateTime Function() _now;
 
@@ -63,18 +66,22 @@ class SessionsAtRest {
     return hosted == null ? null : _hostedSnapshot(hosted);
   }
 
-  /// The session's screens as its transcript, and that nothing is known to be
-  /// in flight: the host reads no agent's record.
+  /// The session's screens as its transcript, and what is in flight: nothing
+  /// the host can name, since it reads no agent's record. Only an agent the
+  /// host's status says is mid-turn is "working on something unrecorded"; one
+  /// at rest at its prompt is running nothing.
   RemoteSessionRecord transcript(String sessionId) {
     final hostId = _hostIdOf(sessionId);
     final page = transcripts.read(sessionId, screens.screenText(hostId));
     final running = screens.find(hostId)?.running ?? false;
+    final working =
+        agentStatusOf?.call(sessionId)?.status == AgentActivityStatus.working;
     return (
       page: page,
       activity: RemoteSessionActivity(
         sessionId: sessionId,
         observedAt: _now().toUtc(),
-        absence: running ? RemoteActivityAbsence.noRecord : null,
+        absence: running && working ? RemoteActivityAbsence.noRecord : null,
       ),
     );
   }
@@ -114,12 +121,14 @@ class SessionsAtRest {
   ) {
     final place = repositories[row.repositoryId];
     final hosted = screens.find(hostSessionIdOf(row.id));
+    final agent = agentStatusOf?.call(row.id);
     return RemoteSessionSnapshot(
       sessionId: row.id,
       title: row.title,
       status: row.status.name,
       archived: row.isArchived,
-      attention: attentionOf?.call(row.id),
+      attention: remoteAttentionOf(agent),
+      activity: agent?.status.name,
       repositoryId: row.repositoryId,
       repositoryName: place?.repositoryName,
       createdAt: row.createdAt.toUtc().toIso8601String(),

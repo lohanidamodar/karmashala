@@ -13,19 +13,23 @@ import 'companion_chrome.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
 
-/// [sessions] split into the ones the host says are working and the rest, each
-/// in the host's own order.
+/// [sessions] split into the running ones — working, or live and idle at the
+/// agent's own prompt — and the rest, each in the host's own order.
 ({List<CompanionSessionSummary> running, List<CompanionSessionSummary> rest})
 partitionByRunning(List<CompanionSessionSummary> sessions) => (
   running: [
     for (final session in sessions)
-      if (session.status == CompanionSessionStatus.working) session,
+      if (_running(session)) session,
   ],
   rest: [
     for (final session in sessions)
-      if (session.status != CompanionSessionStatus.working) session,
+      if (!_running(session)) session,
   ],
 );
+
+bool _running(CompanionSessionSummary session) =>
+    session.status == CompanionSessionStatus.working ||
+    (session.live && session.status == CompanionSessionStatus.idle);
 
 /// The pinned group. Draws nothing when [sessions] is empty, so a caller that
 /// has not checked cannot put an empty box on screen.
@@ -36,7 +40,7 @@ class RunningSessionsGroup extends ConsumerWidget {
     super.key,
   });
 
-  /// Exactly the rows the snapshot called working, in the host's order.
+  /// Exactly the rows [partitionByRunning] calls running, in the host's order.
   final List<CompanionSessionSummary> sessions;
 
   /// Names each row's project on the card's whereabouts line — true where this

@@ -170,9 +170,10 @@ class _CompanionActivityStripState
 /// so an older host's unrecognised value reads as null.
 String companionActivityAbsenceSentence(RemoteActivityAbsence absence) =>
     switch (absence) {
+      // Sent only while the agent is mid-turn: an agent idle at its prompt
+      // is running nothing, and the host says so with no absence at all.
       RemoteActivityAbsence.noRecord =>
-        'Working — your desktop keeps no record of what this session is '
-            'running.',
+        "Working — which step it's on can't be read from here.",
     };
 
 class _QuietLine extends StatelessWidget {

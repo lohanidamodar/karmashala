@@ -480,5 +480,110 @@ void main() {
       expect(await client.answerApproval('s1', approve: true), 'Yes');
       expect(utf8.decode(agent.writes.single), '\r');
     });
+
+    /// The turn ends: Claude Code's idle screen (the real capture, after its
+    /// reply) and its `Stop`.
+    Future<void> turnEnds() async {
+      final idle = File(
+        '../../test/features/agents/fixtures/claude-code-tui.raw',
+      ).readAsStringSync();
+      agent.emit(
+        utf8.encode(
+          '\x1b[2J\x1b[H${idle.substring(0, (idle.length * 0.85).round())}',
+        ),
+      );
+      await pumpEventQueue();
+      status.hook(hook('Stop', pane: 's1'));
+      status.tick();
+    }
+
+    // Found on a real phone (2.1.283, app closed): the header said "Working"
+    // and "your desktop keeps no record of what this session is running"
+    // under an agent at rest; a minute later its idle nudge put it in the
+    // inbox as "needs you".
+    test('an agent at rest reads idle, running nothing, waiting on '
+        'nobody — its idle nudge included', () async {
+      await turnEnds();
+      status.hook(
+        hook(
+          'Notification',
+          pane: 's1',
+          more: {
+            'notification_type': 'idle_prompt',
+            'message': 'Claude is waiting for your input',
+          },
+        ),
+      );
+      status.tick();
+
+      final client = await dial();
+      final row = (await client.listSessions()).singleWhere(
+        (s) => s.sessionId == 's1',
+      );
+      expect(row.status, 'running');
+      expect(row.activity, 'idle');
+      expect(row.attention, isNull);
+      expect((await client.activity('s1')).absence, isNull);
+    });
+
+    test(
+      'mid-turn it reads working, on something the host cannot name',
+      () async {
+        status.hook(hook('UserPromptSubmit', pane: 's1'));
+        final client = await dial();
+        final row = (await client.listSessions()).singleWhere(
+          (s) => s.sessionId == 's1',
+        );
+        expect(row.activity, 'working');
+        expect(
+          (await client.activity('s1')).absence,
+          RemoteActivityAbsence.noRecord,
+        );
+      },
+    );
+
+    // Found on the same phone: after its turn Claude Code drew "Teach auto
+    // mode about your environment?" under the idle footer, and the phone was
+    // never asked.
+    test('a menu drawn under the idle footer after the turn is asked, and '
+        'answered by option', () async {
+      await turnEnds();
+      expect(last('s1')!.report.status, AgentActivityStatus.idle);
+      agent.emit(fixture('claude-code-auto-mode-offer'));
+      await pumpEventQueue();
+      status.tick();
+      expect(last('s1')!.report.hasOpenPrompt, isTrue);
+
+      final client = await dial();
+      final row = (await client.listSessions()).singleWhere(
+        (s) => s.sessionId == 's1',
+      );
+      expect(row.attention, kAttentionNeedsApproval);
+      expect(row.activity, 'awaitingApproval');
+
+      final asked = client.events
+          .where((e) => e is ApprovalRequestedEvent)
+          .cast<ApprovalRequestedEvent>()
+          .first;
+      await client.subscribeSession('s1');
+      final evidence = (await asked.timeout(
+        const Duration(seconds: 10),
+      )).request;
+      expect(evidence.menu!.options, ['Yes', 'Not now', "Don't show again"]);
+      expect(
+        evidence.menu!.prompt,
+        contains('Teach auto mode about your environment?'),
+      );
+
+      final chosen = await client.answerMenu(
+        RemoteMenuAnswerRequest(
+          sessionId: 's1',
+          menuId: evidence.menu!.menuId,
+          option: 0,
+        ),
+      );
+      expect(chosen, 'Yes');
+      expect(utf8.decode(agent.writes.single), '\r');
+    });
   });
 }

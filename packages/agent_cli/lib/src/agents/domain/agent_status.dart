@@ -379,7 +379,7 @@ class AgentHookSpec {
     this.promptPath = const ['prompt'],
     this.toolInputPath = const ['tool_input'],
     this.messagePaths = const [],
-    this.messageWaiting = const {},
+    this.messageMeaning = const {},
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
     this.inFlightPath = const {},
@@ -456,16 +456,21 @@ class AgentHookSpec {
   /// Hook event name → the status it implies.
   final Map<String, AgentActivityStatus> eventStatus;
 
-  /// Substring of the hook's message → what the agent is waiting on, matched
-  /// case-insensitively in declaration order.
+  /// Substring of the hook's message → what that event actually means, matched
+  /// case-insensitively in declaration order — the prose fallback for an event
+  /// whose payload carries no subtype at [eventKindPath].
   ///
-  /// An event name alone cannot answer this. Claude Code's `Notification` fires
-  /// both for a permission request and for a turn that ended and is waiting on
-  /// the user, and only the message tells them apart. A message matching
-  /// nothing here stays [AgentWaitKind.unrecorded]: an agent that reworded its
-  /// prompt costs us an Approve button, which is the direction that cannot send
-  /// a keystroke into a session with no prompt open.
-  final Map<String, AgentWaitKind> messageWaiting;
+  /// Consulted only for an event [eventStatus] says stopped for the user
+  /// ([AgentActivityStatus.awaitingApproval]): an event name alone cannot tell
+  /// a permission request from a turn that ended and is sitting at its own
+  /// input — Claude Code's `Notification` fires for both — and only the
+  /// message tells them apart. An idle nudge is **not** a prompt: it resolves
+  /// to [AgentActivityStatus.idle] here, so it never reaches an inbox as
+  /// "needs you". A message matching nothing stays `awaitingApproval` with
+  /// [AgentWaitKind.unrecorded]: an agent that reworded its prompt costs us an
+  /// Approve button, which is the direction that cannot send a keystroke into
+  /// a session with no prompt open.
+  final Map<String, AgentHookMeaning> messageMeaning;
 
   /// Where the agent's **own** subtype for an event sits in the payload, or
   /// empty when its hooks carry none.
@@ -474,7 +479,7 @@ class AgentHookSpec {
   /// for ten unrelated things — a permission request, a finished turn, a
   /// successful login, an MCP elicitation result, "Claude is done using your
   /// computer" — and its payload says which in `notification_type`. Matching
-  /// prose in [messageWaiting] was a guess at that field; this is the field.
+  /// prose in [messageMeaning] was a guess at that field; this is the field.
   final List<String> eventKindPath;
 
   /// Subtype at [eventKindPath] → what that event actually means.

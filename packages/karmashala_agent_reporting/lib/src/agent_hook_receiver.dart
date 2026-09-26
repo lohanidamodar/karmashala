@@ -54,11 +54,18 @@ class AgentHookReceiver {
     final kind = spec == null || spec.eventKindPath.isEmpty
         ? ''
         : _stringAt(spec.eventKindPath, payload);
-    final declared = kind.isEmpty ? null : spec!.eventKindMeaning[kind];
+    final tableStatus = spec?.eventStatus[name] ?? AgentActivityStatus.unknown;
+    // Without a subtype, an event that says the session stopped for the user
+    // is read by its prose: Claude Code's idle nudge is not a prompt.
+    final declared = kind.isEmpty
+        ? (tableStatus == AgentActivityStatus.awaitingApproval
+              ? _proseMeaning(spec!, payload)
+              : null)
+        : spec!.eventKindMeaning[kind];
     // A subtype we do not recognise is `unknown`, not the event's default:
     // `Notification` covers a successful login as well as an approval.
     final declaredStatus = kind.isEmpty
-        ? spec?.eventStatus[name] ?? AgentActivityStatus.unknown
+        ? declared?.status ?? tableStatus
         : declared?.status ?? AgentActivityStatus.unknown;
     // **The turn ended; the session did not.** Claude Code fires a real `Stop`
     // when a `Task` subagent launches, so the payload decides, not the name.
@@ -114,10 +121,8 @@ class AgentHookReceiver {
       failureReason: _failureReason(spec, status, payload),
       // Only a session that stopped *for the user* is asked: otherwise an agent
       // writing "it needs your permission" would claim an open prompt.
-      waiting: spec == null || status != AgentActivityStatus.awaitingApproval
+      waiting: status != AgentActivityStatus.awaitingApproval
           ? AgentWaitKind.unrecorded
-          : kind.isEmpty
-          ? _waitKind(spec, message)
           : declared?.waiting ?? AgentWaitKind.unrecorded,
     );
     // **The notice a question sends about itself.** Claude Code follows the
@@ -173,15 +178,16 @@ class AgentHookReceiver {
     return reason.isEmpty ? null : reason;
   }
 
-  /// What [message] says the agent is waiting on — `Notification` covers both a
-  /// permission request and a finished turn, so no match means `unrecorded`.
-  AgentWaitKind _waitKind(AgentHookSpec spec, String message) {
-    if (message.isEmpty) return AgentWaitKind.unrecorded;
-    final lower = message.toLowerCase();
-    for (final entry in spec.messageWaiting.entries) {
-      if (lower.contains(entry.key.toLowerCase())) return entry.value;
+  /// What the message in [payload] says the event means — `Notification`
+  /// covers both a permission request and a finished turn — or null when no
+  /// declared prose matches it.
+  static AgentHookMeaning? _proseMeaning(AgentHookSpec spec, Object? payload) {
+    final message = _messageIn(spec, payload, null).toLowerCase();
+    if (message.isEmpty) return null;
+    for (final entry in spec.messageMeaning.entries) {
+      if (message.contains(entry.key.toLowerCase())) return entry.value;
     }
-    return AgentWaitKind.unrecorded;
+    return null;
   }
 
   /// The agent's own words in [payload], first non-empty path winning, else

@@ -72,15 +72,19 @@ void main() {
     expect(report.evidence, ['Claude needs your permission to use Bash']);
   });
 
-  test('the idle nudge stops the session without offering a key', () {
+  // Found on a phone, 2.1.283: a minute after every turn the session entered
+  // the inbox as "needs you", over an agent at rest at its own prompt.
+  test('the idle nudge is idle, not a prompt waiting on anyone', () {
     final report = receiver.handle(
       agentId: 'claudeCode',
       event: 'Notification',
       body: notification('idle_prompt', 'Claude is waiting for your input'),
     );
 
-    expect(report.status, AgentActivityStatus.awaitingApproval);
-    expect(report.waiting, AgentWaitKind.input);
+    expect(report.status, AgentActivityStatus.idle);
+    expect(report.waiting, AgentWaitKind.unrecorded);
+    expect(report.hasOpenPrompt, isFalse);
+    expect(report.evidence, ['Claude is waiting for your input']);
   });
 
   test('notifications nobody is waiting on are not statuses', () {
@@ -435,16 +439,32 @@ void main() {
     // The live misclassification: a finished turn posted a message, Claude Code
     // nudged with `Notification`, and the app offered Approve — which types
     // Enter into a prompt with nothing highlighted and submits the composer.
-    test('a nudge about an idle prompt is waiting on input, not approval', () {
+    test('a nudge about an idle prompt is idle, not a prompt', () {
       final report = receiver.handle(
         agentId: 'claudeCode',
         event: 'Notification',
         body: body('s1', message: 'Claude is waiting for your input'),
       );
 
-      expect(report.status, AgentActivityStatus.awaitingApproval);
-      expect(report.waiting, AgentWaitKind.input);
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.waiting, AgentWaitKind.unrecorded);
       expect(report.evidence, ['Claude is waiting for your input']);
+    });
+
+    test('the prose is read only on an event that stopped for the user', () {
+      // A turn's own reply can say anything; only `Notification` is asked.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Stop',
+          'last_assistant_message': 'Claude needs your permission to use Bash',
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.waiting, AgentWaitKind.unrecorded);
     });
 
     test('a permission request is an approval', () {

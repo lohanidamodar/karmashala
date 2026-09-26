@@ -87,8 +87,7 @@ class DaemonCompanion implements CompanionHandler {
       names: WorkspaceNames(database),
       screens: screens,
       hostName: hostName,
-      attentionOf: (sessionId) =>
-          remoteAttentionOf(prompts?.statusOf(sessionId)),
+      agentStatusOf: (sessionId) => prompts?.statusOf(sessionId),
       clock: _now,
     ),
     notes: () async => notesSnapshot(

@@ -302,6 +302,16 @@ void main() {
       expect(split.rest.map((s) => s.id), ['z', 'm']);
     });
 
+    test('a live session idle at its prompt is still running', () {
+      final split = partitionByRunning([
+        summary('ended', status: CompanionSessionStatus.idle),
+        summary('resting', status: CompanionSessionStatus.idle, live: true),
+      ]);
+
+      expect(split.running.map((s) => s.id), ['resting']);
+      expect(split.rest.map((s) => s.id), ['ended']);
+    });
+
     test(
       'a status the host could not name is not a claim that it is running',
       () {

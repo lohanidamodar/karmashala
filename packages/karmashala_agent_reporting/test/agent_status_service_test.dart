@@ -151,4 +151,54 @@ void main() {
     expect(report.status, AgentActivityStatus.unknown);
     expect(report.source, AgentStatusSource.none);
   });
+
+  group('a menu drawn after the turn ended', () {
+    // Claude Code 2.1.283 draws its startup offers under the idle footer after
+    // a turn, with no hook of its own; the turn's `Stop` is then older than
+    // the menu on screen.
+    const menuScreen = [
+      '  \u23f5\u23f5 auto mode on (shift+tab to cycle) \u00b7 \u2190 for agents',
+      '',
+      ' Teach auto mode about your environment?',
+      '',
+      ' \u276f 1. Yes',
+      '   2. Not now',
+      "   3. Don't show again",
+      '',
+      ' Enter to confirm \u00b7 Esc to cancel',
+    ];
+
+    test('outranks a fresh idle hook', () async {
+      recordHook(
+        AgentActivityStatus.idle,
+        at: now.subtract(const Duration(seconds: 5)),
+      );
+      final report = await service.statusFor(
+        const AgentStatusQuery(
+          agentId: 'claudeCode',
+          sessionId: 's1',
+          terminalTailLines: menuScreen,
+        ),
+      );
+      expect(report.status, AgentActivityStatus.awaitingApproval);
+      expect(report.waiting, AgentWaitKind.approval);
+      expect(report.source, AgentStatusSource.terminalGrid);
+    });
+
+    test('does not outrank a fresh hook that the turn is running', () async {
+      recordHook(
+        AgentActivityStatus.working,
+        at: now.subtract(const Duration(seconds: 5)),
+      );
+      final report = await service.statusFor(
+        const AgentStatusQuery(
+          agentId: 'claudeCode',
+          sessionId: 's1',
+          terminalTailLines: menuScreen,
+        ),
+      );
+      expect(report.status, AgentActivityStatus.working);
+      expect(report.source, AgentStatusSource.hook);
+    });
+  });
 }

@@ -15,10 +15,26 @@ class TerminalGridStatusSource {
     if (rules.isEmpty || tailLines.isEmpty) return null;
 
     // The agent's own composer footer, if it is drawn. Its presence is what
-    // disqualifies the approval bucket below — see the class doc.
-    final composer =
-        _firstMatch(rules.working, tailLines) ??
-        _firstMatch(rules.idle, tailLines);
+    // disqualifies the approval bucket below — a prompt's words above a live
+    // composer are text the agent printed, not a modal.
+    final composerRow = _lowestRow([
+      ...rules.working,
+      ...rules.idle,
+    ], tailLines);
+    // **Unless a menu is drawn under it.** Claude Code 2.1.283 draws its
+    // startup offers ("Teach auto mode about your environment?") below the
+    // composer's footer, which stays on screen above them. Only the rows under
+    // the lowest footer can be that modal, and only when they hold a menu the
+    // agent's own menu rules read whole: a footer the agent quoted in a reply
+    // is always above its composer.
+    final menus = descriptor.menus;
+    final belowComposer = composerRow == null
+        ? null
+        : tailLines.sublist(composerRow + 1);
+    final modalBelow =
+        belowComposer != null &&
+        menus != null &&
+        readScreenMenu(belowComposer, menus) != null;
 
     // The wait kind travels with the bucket that matched: an approval matcher
     // fires on a drawn modal, an idle one on the agent's own prompt footer.
@@ -37,10 +53,11 @@ class TerminalGridStatusSource {
       (AgentActivityStatus.working, AgentWaitKind.unrecorded, rules.working),
       (AgentActivityStatus.idle, AgentWaitKind.input, rules.idle),
     ]) {
-      if (status == AgentActivityStatus.awaitingApproval && composer != null) {
-        continue;
-      }
-      final hit = _firstMatch(matchers, tailLines);
+      final prompt = status == AgentActivityStatus.awaitingApproval;
+      if (prompt && composerRow != null && !modalBelow) continue;
+      // A prompt under a composer is read off the rows under it alone.
+      final rows = prompt && modalBelow ? belowComposer : tailLines;
+      final hit = _firstMatch(matchers, rows);
       if (hit == null) continue;
       return AgentStatusReport(
         agentId: descriptor.id,
@@ -52,10 +69,16 @@ class TerminalGridStatusSource {
         waiting: waiting,
         // Only for an approval, and passed on verbatim: deciding which row is
         // "the question" would be guessing at a TUI's layout.
-        evidence: status == AgentActivityStatus.awaitingApproval
-            ? _quotable(tailLines)
-            : const [],
+        evidence: prompt ? _quotable(rows) : const [],
       );
+    }
+    return null;
+  }
+
+  /// The index of the lowest row any of [matchers] fires on, or null.
+  static int? _lowestRow(List<GridMatcher> matchers, List<String> lines) {
+    for (var i = lines.length - 1; i >= 0; i--) {
+      if (matchers.any((matcher) => matcher.matches(lines[i]))) return i;
     }
     return null;
   }

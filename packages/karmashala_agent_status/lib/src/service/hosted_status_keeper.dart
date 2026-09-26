@@ -10,9 +10,10 @@ import '../domain/status_evidence.dart';
 
 /// **What the agent in each session a host holds is doing**, kept from the two
 /// things the host sees for itself: every hook the agent fires, and the screen
-/// it draws. The precedence is the status service's — a fresh hook, then a
-/// screen showing a prompt or a failure, then the rest of the screen, then
-/// the last hook however old (standing in for the transcript) — with
+/// it draws. The precedence is the status service's — a fresh hook (unless it
+/// says idle and a screen read since shows a prompt), then a screen showing a
+/// prompt or a failure, then the rest of the screen, then the last hook
+/// however old (standing in for the transcript) — with
 /// every agent-specific word read from the agent's adapter, never its id.
 ///
 /// No transcript: a host holds the process and its screen, and a hook says
@@ -138,6 +139,13 @@ class HostedStatusKeeper {
     final kept = _sessions[sessionId];
     if (kept == null) return null;
     if (report.sessionId.isNotEmpty) kept.conversationId = report.sessionId;
+    // A hook repeating the word before it (Claude Code's idle nudge after its
+    // `Stop`) is no news about the screen: a menu drawn in between stands.
+    if (report.status != AgentActivityStatus.unknown &&
+        report.status != kept.hookStatus) {
+      kept.hookStatus = report.status;
+      kept.hookSince = report.observedAt;
+    }
     if (report.hasOpenQuestion && report.source == AgentStatusSource.hook) {
       kept.question = _questionIn(kept.agentId, body) ?? kept.question;
     }
@@ -153,6 +161,7 @@ class HostedStatusKeeper {
     final kept = _sessions[sessionId];
     if (kept == null) return null;
     kept.tail = tailLines;
+    kept.tailAt = clock.nowUtc();
     return _recompose(kept);
   }
 
@@ -168,7 +177,18 @@ class HostedStatusKeeper {
       next = _service.unknownFor(query, now);
     } else {
       final hook = _service.hookReport(query, now);
-      final grid = hook == null ? _service.gridReport(query, now) : null;
+      // Beside a fresh hook, only a screen read since the hooks came to say
+      // what they say: a menu drawn once the turn ended outranks the turn's
+      // idle hook (and the idle nudges repeating it), and a screen from before
+      // says nothing about what came after.
+      final tailAt = kept.tailAt;
+      final since = hook == null
+          ? null
+          : (kept.hookStatus == hook.status ? kept.hookSince : null) ??
+                hook.observedAt;
+      final grid = since == null || (tailAt != null && !tailAt.isBefore(since))
+          ? _service.gridReport(query, now)
+          : null;
       final composed = _service.compose(
         query: query,
         now: now,
@@ -252,4 +272,11 @@ class _Kept {
   HostedAgentStatus status;
   AgentQuestionSet? question;
   List<String> tail = const [];
+
+  /// When [tail] was read, or null before the first screen.
+  DateTime? tailAt;
+
+  /// The status the hooks last said, and since when they have said it.
+  AgentActivityStatus? hookStatus;
+  DateTime? hookSince;
 }

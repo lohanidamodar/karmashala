@@ -95,6 +95,7 @@ extension _GatewaySessions on RemoteCompanionGateway {
       projectId: snapshot.projectId ?? snapshot.repositoryId,
       projectPath: snapshot.projectPath,
       status: _statusOf(snapshot),
+      live: snapshot.status == 'running',
       whereabouts: snapshot.whereabouts,
       branch: text('branch'),
       subPath: text('subPath'),
@@ -126,7 +127,15 @@ extension _GatewaySessions on RemoteCompanionGateway {
     }
     if (snapshot.attention == 'failed') return CompanionSessionStatus.failed;
     return switch (snapshot.status) {
-      'running' => CompanionSessionStatus.working,
+      // A running process is not a working agent: the agent's own status says
+      // whether it is mid-turn or at rest at its prompt. Only when nobody
+      // keeps one does the process's word stand.
+      'running' => switch (snapshot.activity) {
+        'idle' => CompanionSessionStatus.idle,
+        'awaitingApproval' => CompanionSessionStatus.needsYou,
+        'failed' => CompanionSessionStatus.failed,
+        _ => CompanionSessionStatus.working,
+      },
       'idle' ||
       'created' ||
       'completed' ||

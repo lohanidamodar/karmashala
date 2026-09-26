@@ -6,6 +6,12 @@ import 'terminal_grid_status_source.dart';
 
 /// Answers "what is this agent session doing?": a fresh hook, then the grid but
 /// only for `awaitingApproval`/`failed`, then the state file, then the grid.
+///
+/// One exception to the hook's rank: a hook saying the turn ended (`idle`)
+/// yields to a screen showing a prompt, because an agent can draw a menu after
+/// its turn with no hook of its own — Claude Code's startup offers do — and
+/// the idle hook is then older than the menu. The caller hands in a grid read
+/// after the hook, or none.
 class AgentStatusService {
   AgentStatusService({
     required this.registry,
@@ -32,9 +38,10 @@ class AgentStatusService {
     if (descriptor == null) return unknownFor(query, now);
 
     final hook = hookReport(query, now);
-    if (hook != null) return hook;
-
     final grid = gridReport(query, now);
+    if (hook != null) {
+      return compose(query: query, now: now, hook: hook, grid: grid);
+    }
     if (grid != null && escalates(grid)) return grid;
 
     final path = query.stateFilePath;
@@ -78,6 +85,13 @@ class AgentStatusService {
       grid.status == AgentActivityStatus.awaitingApproval ||
       grid.status == AgentActivityStatus.failed;
 
+  /// Whether [grid] shows a prompt the agent drew after [hook] said its turn
+  /// ended — the one case a screen outranks a fresh hook.
+  static bool promptAfter(AgentStatusReport hook, AgentStatusReport? grid) =>
+      hook.status == AgentActivityStatus.idle &&
+      grid != null &&
+      grid.status == AgentActivityStatus.awaitingApproval;
+
   /// Whether the transcript still has to be read once [hook] and [grid] are
   /// known — asked separately, because it is the one expensive question.
   bool needsStateFile(AgentStatusReport? hook, AgentStatusReport? grid) =>
@@ -92,7 +106,7 @@ class AgentStatusService {
     AgentStatusReport? grid,
     AgentStatusReport? state,
   }) {
-    if (hook != null) return hook;
+    if (hook != null) return promptAfter(hook, grid) ? grid! : hook;
     if (grid != null && escalates(grid)) return grid;
     if (state != null) return state;
     if (grid != null) return grid;

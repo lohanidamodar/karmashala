@@ -164,6 +164,99 @@ void main() {
     });
   });
 
+  // Found on a real phone, Claude Code 2.1.283, desktop app closed: every
+  // surface (the phone's inbox, the desktop's `session_wait`, MCP) reads this
+  // keeper, so what it says of a hook is what they all say.
+  group('Claude Code\'s Notification, by its notification_type', () {
+    setUp(() => keeper.track('row-1', agentId: claude.id));
+
+    test('"waiting for your input" is idle, never awaitingApproval', () {
+      hook('UserPromptSubmit');
+      hook('Stop');
+      clock.now = clock.now.add(const Duration(seconds: 60));
+      hook('Notification', {
+        'notification_type': 'idle_prompt',
+        'message': 'Claude is waiting for your input',
+      });
+      final kept = keeper.statusOf('row-1')!.report;
+      expect(kept.status, AgentActivityStatus.idle);
+      expect(kept.hasOpenPrompt, isFalse);
+      expect(kept.hasOpenQuestion, isFalse);
+    });
+
+    test('"needs your permission" is awaitingApproval, an open prompt', () {
+      hook('PreToolUse', {'tool_name': 'Bash'});
+      final asking = hook('Notification', {
+        'notification_type': 'permission_prompt',
+        'message': 'Claude needs your permission to use Bash',
+      });
+      expect(asking!.report.status, AgentActivityStatus.awaitingApproval);
+      expect(asking.report.waiting, AgentWaitKind.approval);
+      expect(asking.report.hasOpenPrompt, isTrue);
+    });
+  });
+
+  group('a menu drawn under the idle footer after the turn', () {
+    // `claude-code-auto-mode-offer.raw`: the real idle screen of
+    // `claude-code-tui.raw`, then the "Teach auto mode about your
+    // environment?" offer 2.1.283 drew below its footer, as the phone report
+    // transcribed it.
+    late List<String> offer;
+
+    setUp(() {
+      keeper.track('row-1', agentId: claude.id);
+      offer = screenOf('claude-code-auto-mode-offer', 1.0, claude);
+    });
+
+    test('is an open prompt, although the turn\'s Stop is fresh', () {
+      hook('UserPromptSubmit');
+      hook('Stop');
+      clock.now = clock.now.add(const Duration(seconds: 1));
+      final asking = keeper.screen('row-1', offer);
+      expect(asking!.report.status, AgentActivityStatus.awaitingApproval);
+      expect(asking.report.waiting, AgentWaitKind.approval);
+      expect(asking.report.source, AgentStatusSource.terminalGrid);
+      expect(
+        asking.report.evidence.join('\n'),
+        contains('Teach auto mode about your environment?'),
+      );
+
+      // Claude's idle nudge a minute later repeats the Stop: it does not put
+      // the session back to idle, not even until the next screen.
+      clock.now = clock.now.add(const Duration(seconds: 60));
+      expect(
+        hook('Notification', {
+          'notification_type': 'idle_prompt',
+          'message': 'Claude is waiting for your input',
+        }),
+        isNull,
+      );
+      expect(keeper.statusOf('row-1')!.report.hasOpenPrompt, isTrue);
+      keeper.screen('row-1', offer);
+      expect(keeper.statusOf('row-1')!.report.hasOpenPrompt, isTrue);
+    });
+
+    test('a screen read before the Stop does not outrank it', () {
+      keeper.screen('row-1', offer);
+      clock.now = clock.now.add(const Duration(seconds: 1));
+      final idle = hook('Stop');
+      expect(idle!.report.status, AgentActivityStatus.idle);
+      expect(idle.report.source, AgentStatusSource.hook);
+    });
+
+    test('answered, the idle screen is idle again', () {
+      hook('Stop');
+      clock.now = clock.now.add(const Duration(seconds: 1));
+      expect(keeper.screen('row-1', offer)!.report.hasOpenPrompt, isTrue);
+      clock.now = clock.now.add(const Duration(seconds: 1));
+      final back = keeper.screen(
+        'row-1',
+        screenOf('claude-code-tui', 0.85, claude),
+      );
+      expect(back!.report.status, AgentActivityStatus.idle);
+    });
+  });
+
   group('from the screen, real PTY captures', () {
     test('Claude Code working, then idle, then at a permission modal', () {
       keeper.track('row-1', agentId: claude.id);

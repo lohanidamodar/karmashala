@@ -28,6 +28,7 @@ class RemoteSessionSnapshot {
     required this.status,
     this.archived = false,
     this.attention,
+    this.activity,
     this.stage,
     this.repositoryId,
     this.repositoryName,
@@ -63,6 +64,13 @@ class RemoteSessionSnapshot {
 
   /// [kAttentionNeedsApproval], `failed`, or null for "nothing waiting".
   final String? attention;
+
+  /// **What the agent in a running session is doing** — `working`, `idle`,
+  /// `awaitingApproval`, `failed` or `unknown` (`AgentActivityStatus.name`) —
+  /// as whoever keeps its status says, or null when nobody does. [status] is
+  /// the process's lifecycle: `running` covers an agent at rest at its own
+  /// prompt as much as one mid-turn, and only this tells them apart.
+  final String? activity;
 
   /// `DeliveryStage.name`, or null for "could not tell" — which is a
   /// first-class answer, never smoothed into a guess.
@@ -164,6 +172,7 @@ class RemoteSessionSnapshot {
     status: status,
     archived: archived,
     attention: clearAttention ? null : (attention ?? this.attention),
+    activity: activity,
     stage: stage ?? this.stage,
     repositoryId: repositoryId,
     repositoryName: repositoryName,
@@ -195,6 +204,7 @@ class RemoteSessionSnapshot {
     'status': status,
     'archived': archived,
     if (attention != null) 'attention': attention,
+    if (activity != null) 'activity': activity,
     if (stage != null) 'stage': stage,
     if (repositoryId != null) 'repositoryId': repositoryId,
     if (repositoryName != null) 'repositoryName': repositoryName,
@@ -235,6 +245,7 @@ class RemoteSessionSnapshot {
       status: status,
       archived: json['archived'] == true,
       attention: str(json['attention']),
+      activity: str(json['activity']),
       stage: str(json['stage']),
       repositoryId: str(json['repositoryId']),
       repositoryName: str(json['repositoryName']),
@@ -269,6 +280,7 @@ class RemoteSessionSnapshot {
       other.status == status &&
       other.archived == archived &&
       other.attention == attention &&
+      other.activity == activity &&
       other.stage == stage &&
       other.repositoryId == repositoryId &&
       other.repositoryName == repositoryName &&
@@ -314,6 +326,7 @@ class RemoteSessionSnapshot {
     pinned,
     folderMissing,
     Object.hash(
+      activity,
       subPath,
       worktree,
       branch,

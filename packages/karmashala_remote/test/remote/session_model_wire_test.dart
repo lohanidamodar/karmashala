@@ -23,4 +23,25 @@ void main() {
     expect(sent.toJson().containsKey('model'), isFalse);
     expect(RemoteSessionSnapshot.fromJson(sent.toJson()).model, isNull);
   });
+
+  test('a session snapshot carries what its agent is doing', () {
+    const sent = RemoteSessionSnapshot(
+      sessionId: 's1',
+      title: 'Fix the tests',
+      status: 'running',
+      activity: 'idle',
+    );
+    final read = RemoteSessionSnapshot.fromJson(sent.toJson());
+    expect(read.activity, 'idle');
+    expect(read, sent);
+    expect(
+      const RemoteSessionSnapshot(
+        sessionId: 's1',
+        title: 'Fix the tests',
+        status: 'running',
+      ).toJson().containsKey('activity'),
+      isFalse,
+      reason: 'nobody keeps a status: no key',
+    );
+  });
 }

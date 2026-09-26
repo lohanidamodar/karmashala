@@ -421,10 +421,14 @@ const claudeCodeDescriptor = AgentDescriptor(
     ],
     // The prose fallback, kept only for a CLI whose payload carries no
     // `notification_type` — see [eventKindMeaning], which is the field this was
-    // guessing at.
-    messageWaiting: {
-      'needs your permission': AgentWaitKind.approval,
-      'waiting for your input': AgentWaitKind.input,
+    // guessing at. The idle nudge reads as idle here too, as `idle_prompt`
+    // does below.
+    messageMeaning: {
+      'needs your permission': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+      ),
+      'waiting for your input': AgentHookMeaning(AgentActivityStatus.idle),
     },
     // **`Notification` is not a status.** Claude Code fires it for sixteen
     // unrelated things and says which in a required `notification_type` field.
@@ -483,12 +487,15 @@ const claudeCodeDescriptor = AgentDescriptor(
       'worker_permission_prompt': AgentHookMeaning(
         AgentActivityStatus.awaitingApproval,
       ),
-      // The 60-second nudge after a turn ends. Still holding the user up —
-      // that is what `awaitingApproval` answers — but with nothing to confirm.
-      'idle_prompt': AgentHookMeaning(
-        AgentActivityStatus.awaitingApproval,
-        waiting: AgentWaitKind.input,
-      ),
+      // The 60-second nudge after a turn ends: "Claude is waiting for your
+      // input". **Idle, not a prompt.** The agent finished its turn and sits
+      // at its own composer; nothing is open to answer. Read as
+      // `awaitingApproval` it put every finished session in the inbox as
+      // "needs you" a minute after its turn (found live on a phone, 2.1.283,
+      // 2026-09-26), and on the desktop `session_wait` answered
+      // `awaitingApproval` for a session at rest. The turn's own `Stop` has
+      // already said idle; this repeats it.
+      'idle_prompt': AgentHookMeaning(AgentActivityStatus.idle),
       // **An MCP server is asking the user something, and nothing moves until
       // it is answered.** The CLI's own dialog table is unambiguous about which
       // side is blocked: both kinds carry `waitingFor: "input needed"`, against

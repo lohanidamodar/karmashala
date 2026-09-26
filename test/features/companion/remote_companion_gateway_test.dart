@@ -351,6 +351,50 @@ void main() {
     },
   );
 
+  // Found on a phone with the desktop app closed: a session whose agent sat
+  // idle at its prompt kept reading "Working", because the process runs.
+  test(
+    'a running session reads what its agent is doing, and stays live',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final gateway = makeGateway();
+      await pairPhone(gateway);
+
+      Future<CompanionSessionSummary> reads(
+        String? activity, {
+        String? attention,
+      }) async {
+        fake.sessions['s1'] = RemoteSessionSnapshot(
+          sessionId: 's1',
+          title: 'Fix the tests',
+          status: 'running',
+          activity: activity,
+          attention: attention,
+        );
+        return (await gateway.listSessions()).single;
+      }
+
+      final idle = await reads('idle');
+      expect(idle.status, CompanionSessionStatus.idle);
+      expect(idle.live, isTrue);
+      expect((await reads('working')).status, CompanionSessionStatus.working);
+      expect(
+        (await reads(
+          'awaitingApproval',
+          attention: kAttentionNeedsApproval,
+        )).status,
+        CompanionSessionStatus.needsYou,
+      );
+      expect(
+        (await reads(null)).status,
+        CompanionSessionStatus.working,
+        reason: 'nobody keeps a status: the process\'s word stands',
+      );
+      expect((await reads('unknown')).status, CompanionSessionStatus.working);
+    },
+  );
+
   test(
     'an approval answered on the desktop stops offering itself on the '
     'phone',

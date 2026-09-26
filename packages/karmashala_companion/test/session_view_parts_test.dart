@@ -39,6 +39,18 @@ void main() {
       );
     });
 
+    // Found on a phone: an agent idle at its own prompt, with the app closed,
+    // is a running process — it is sent a message, never resumed over.
+    test('not for a live session whose agent is idle at its prompt', () {
+      expect(
+        companionOffersResume(
+          summary('s1', status: CompanionSessionStatus.idle, live: true),
+          listKnown: true,
+        ),
+        isFalse,
+      );
+    });
+
     test('not for a session that is working', () {
       expect(
         companionOffersResume(

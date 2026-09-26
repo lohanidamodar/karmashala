@@ -650,7 +650,9 @@ class SessionStatusRegistry {
       return;
     }
     final hook = statusService.hookReport(query, now);
-    final grid = hook == null ? statusService.gridReport(query, now) : null;
+    // Read beside a fresh hook too: the screen was read just now, after it,
+    // and a menu drawn once the turn ended outranks the turn's idle hook.
+    final grid = statusService.gridReport(query, now);
     tracked.hook = hook;
     tracked.grid = grid;
     tracked.wantsProbe =

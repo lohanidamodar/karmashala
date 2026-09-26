@@ -2,6 +2,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:test/test.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
+import 'fixture_menu_screen.dart';
+
 /// A pane showing Claude Code's folder-trust menu, which moves its highlight on
 /// the arrow keys and records what Enter confirmed — the behaviour measured in
 /// `live_prompt_probe_test.dart`.
@@ -125,5 +127,31 @@ void main() {
       throwsA(isA<SessionPromptRefusal>()),
     );
     expect(pane.pressed, isEmpty);
+  });
+
+  // Claude Code 2.1.283's "Teach auto mode" offer, drawn under the idle
+  // footer after a turn (`claude-code-auto-mode-offer.raw`).
+  test('an offer drawn under the idle footer is read and answered', () async {
+    final screen = FixtureMenuScreen.fixture(
+      'claude-code-auto-mode-offer',
+      marker: '❯',
+    );
+    final claude = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
+    final answerer = SessionMenuAnswerer(
+      readScreen: (_) => screen.rows(),
+      supportFor: (_) => claude.menus,
+      isAsking: (_) => true,
+      press: (_, keys) => screen.press(keys),
+      poll: const Duration(milliseconds: 1),
+      patience: const Duration(milliseconds: 200),
+    );
+    final menu = answerer.read('s1')!;
+    expect(menu.options, ['Yes', 'Not now', "Don't show again"]);
+    expect(menu.prompt, contains('Teach auto mode about your environment?'));
+
+    final chosen = await answerer.choose('s1', menuId: menu.id, option: 1);
+    expect(chosen, 'Not now');
+    expect(screen.confirmed, 'Not now');
+    expect(screen.sent, ['\x1b[B', '\r']);
   });
 }

@@ -264,6 +264,7 @@ class CompanionSessionSummary {
     this.projectId,
     this.projectPath,
     this.status = CompanionSessionStatus.unknown,
+    this.live = false,
     this.whereabouts,
     this.branch,
     this.subPath,
@@ -306,6 +307,11 @@ class CompanionSessionSummary {
 
   final String? projectPath;
   final CompanionSessionStatus status;
+
+  /// Whether the session's process is running on the host. A live session
+  /// whose agent is [CompanionSessionStatus.idle] sits at its own prompt:
+  /// running, not ended, so it is sent a message rather than resumed.
+  final bool live;
 
   /// Loop 46's whereabouts clause, verbatim from the host.
   final String? whereabouts;
@@ -371,6 +377,7 @@ class CompanionSessionSummary {
     projectId: projectId,
     projectPath: projectPath,
     status: status ?? this.status,
+    live: live,
     whereabouts: whereabouts,
     branch: branch,
     subPath: subPath,

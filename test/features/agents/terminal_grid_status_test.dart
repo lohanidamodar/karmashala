@@ -275,11 +275,11 @@ void main() {
       // the composer. The capture says otherwise: a modal replaces it, so a
       // screen showing both is a screen where those words are text.
       //
-      // **What this now cannot detect**: a real modal an agent draws *without*
-      // taking its composer footer down. Nothing captured does that, and the
-      // cost of being wrong runs the other way — the terminal still shows the
-      // prompt and the user answers it there, whereas an Approve button offered
-      // over a live composer types Enter into it.
+      // A real modal an agent draws *without* taking its composer footer down
+      // is drawn **under** it — Claude Code 2.1.283's startup offers are (the
+      // next test) — never above it, and only rows under the footer holding a
+      // whole menu count. Words above a live composer stay text: an Approve
+      // button offered over it would type Enter into it.
       final descriptor = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
       final report = const TerminalGridStatusSource().read(
         descriptor,
@@ -292,6 +292,40 @@ void main() {
       );
       expect(report?.status, AgentActivityStatus.working);
       expect(report?.waiting, AgentWaitKind.unrecorded);
+    });
+  });
+
+  group('a menu under the idle footer', () {
+    // Found on a real phone (Claude Code 2.1.283): after a turn it drew
+    // "Teach auto mode about your environment?" below its idle footer, which
+    // stayed on screen, and the composer check read the session as idle.
+    // `claude-code-auto-mode-offer.raw` is the real idle capture of
+    // `claude-code-tui.raw` with that offer, as transcribed, drawn under it.
+    test('is a prompt, read off the rows under the footer', () {
+      final report = classify('claude-code-auto-mode-offer', 1.0);
+      expect(report?.status, AgentActivityStatus.awaitingApproval);
+      expect(report?.waiting, AgentWaitKind.approval);
+      expect(report?.detail, 'Enter to confirm');
+      expect(
+        report?.evidence.first,
+        contains('Teach auto mode about your environment?'),
+      );
+      expect(report?.evidence.join('\n'), isNot(contains('shift+tab')));
+    });
+
+    test('its words under the footer with no menu are not a prompt', () {
+      final report = const TerminalGridStatusSource().read(
+        AgentRegistry.builtIn.byId(AgentIds.claudeCode)!,
+        const [
+          '\u276f',
+          '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+          '  \u23f5\u23f5 auto mode on (shift+tab to cycle) \u00b7 \u2190 for agents',
+          '  Enter to confirm \u00b7 Esc to cancel',
+        ],
+        DateTime.utc(2026, 9, 26),
+        sessionId: 's',
+      );
+      expect(report?.status, AgentActivityStatus.idle);
     });
   });
 

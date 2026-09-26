@@ -25,8 +25,9 @@ import 'companion_transcript_view.dart';
 import 'link_banner.dart';
 
 /// Whether the session view offers Resume for [session]: an imported session,
-/// or one that is not working. Never before the session list is known, and
-/// never for a session the list no longer has.
+/// or one whose process is not running and is not working. Never before the
+/// session list is known, never for a session the list no longer has, and
+/// never for a live one — an agent idle at its own prompt is sent a message.
 bool companionOffersResume(
   CompanionSessionSummary? session, {
   required bool listKnown,
@@ -34,9 +35,10 @@ bool companionOffersResume(
     listKnown &&
     session != null &&
     (session.imported ||
-        session.status == CompanionSessionStatus.idle ||
-        session.status == CompanionSessionStatus.failed ||
-        session.status == CompanionSessionStatus.unknown);
+        (!session.live &&
+            (session.status == CompanionSessionStatus.idle ||
+                session.status == CompanionSessionStatus.failed ||
+                session.status == CompanionSessionStatus.unknown)));
 
 /// One session's transcript on the phone: the desktop chat's shapes drawn
 /// bottom-up by [CompanionTranscriptView], with the composer reduced to what
