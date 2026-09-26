@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'dart:async';
 
@@ -19,6 +18,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
@@ -177,8 +178,9 @@ void main() {
     ProviderContainer containerFinding(Map<String, String> onPath) {
       db = AppDatabase.memory();
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      FakeDataServer().mirrorInto(db)
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(id: 'old', path: r'C:\old\claude.exe'));

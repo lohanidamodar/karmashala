@@ -2,21 +2,24 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/data/review_thread_dao.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
   late ReviewThreadDao dao;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     dao = ReviewThreadDao(db);
   });
   tearDown(() => db.close());
@@ -119,7 +122,7 @@ void main() {
       body: 'still wrong',
       now: testTime,
     );
-    db.execute("DELETE FROM repositories WHERE id = 'r1';");
+    server.repositoryRows.delete('r1');
     expect(db.query('SELECT * FROM review_threads;'), isEmpty);
     expect(db.query('SELECT * FROM review_thread_comments;'), isEmpty);
   });

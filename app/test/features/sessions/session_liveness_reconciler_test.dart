@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
@@ -20,7 +19,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -46,15 +47,18 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-({ProviderContainer container, AppDatabase db}) harness() {
+Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+harness() async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: 'demo'));
 
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -64,7 +68,7 @@ class _StaticSettings extends SettingsController {
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );
-  return (container: container, db: db);
+  return (container: container, db: db, server: server);
 }
 
 void main() {
@@ -74,9 +78,10 @@ void main() {
 
     setUp(() {
       db = AppDatabase.memory();
+      final server = FakeDataServer()..mirrorInto(db);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       dao = SessionDao(db);
     });
@@ -282,10 +287,11 @@ void main() {
   group('a pane that stops', () {
     test('only the rows it was hosting, and only live claims', () {
       final db = AppDatabase.memory();
+      final server = FakeDataServer()..mirrorInto(db);
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       final dao = SessionDao(db)
         ..insert(
@@ -361,7 +367,7 @@ void main() {
 
   group('wired to the terminal', () {
     test('a pane whose process dies stops claiming to run a session', () async {
-      final (:container, :db) = harness();
+      final (:container, :db, server: _) = await harness();
       addTearDown(container.dispose);
       addTearDown(db.close);
       // Exactly what `AppShell` does: watched, not read. Riverpod 3 pauses a
@@ -410,10 +416,11 @@ void main() {
 
     test('a status word this build cannot read is unknown, not a crash', () {
       final db = AppDatabase.memory();
+      final server = FakeDataServer()..mirrorInto(db);
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       final dao = SessionDao(db)..insert(session());
       db.execute("UPDATE sessions SET status = 'hibernating' WHERE id = 's1';");

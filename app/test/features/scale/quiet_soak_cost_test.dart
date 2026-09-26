@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -24,6 +23,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'scale_harness.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **The 100-session quiet soak.** One of the four benchmark gates
 /// `docs/BACKLOG.md` carried as unbuilt, and the reason "not proven for
@@ -229,11 +230,12 @@ void main() {
     /// The layout `session_signal_cost_test` seeds, at the sizes this file
     /// reads the curve at. `s0` ended badly, so exactly one follow-up exists
     /// and the inbox has something to keep up to date.
-    CountingDatabase seed(int count) {
+    CountingDatabase seed(int count, FakeDataServer server) {
       final db = CountingDatabase();
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.mirrorInto(db)
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       for (var i = 0; i < count; i++) {
         SessionDao(db).insert(
@@ -247,10 +249,15 @@ void main() {
       return db;
     }
 
-    ProviderContainer mount(CountingDatabase db, FakeCommandRunner git) {
+    Future<ProviderContainer> mount(
+      CountingDatabase db,
+      FakeCommandRunner git,
+      FakeDataServer server,
+    ) async {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           // Stubbed for the reason the file header gives: the live one fans
           // into the transcript-stat cycle, which is a disk measurement and
@@ -293,10 +300,11 @@ void main() {
 
     for (final count in scale) {
       test('of $count sessions reads nothing while nothing changes', () async {
-        final db = seed(count);
+        final server = FakeDataServer();
+        final db = seed(count, server);
         addTearDown(db.close);
         final git = FakeCommandRunner();
-        final container = mount(db, git);
+        final container = await mount(db, git, server);
         listenToEverything(container, count);
         await container.pump();
 

@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
 import 'package:karmashala_ui/code.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -49,7 +50,12 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    final container = fakeTerminalContainer(database: db);
+    final container = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        await FakeDataServer().override(),
+      ],
+    );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;

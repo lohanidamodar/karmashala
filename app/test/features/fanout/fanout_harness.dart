@@ -4,6 +4,8 @@
 library;
 
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -13,15 +15,16 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 
@@ -79,6 +82,7 @@ typedef Harness = ({
   ProviderContainer container,
   AppDatabase db,
   FakeCommandRunner git,
+  FakeDataServer server,
 });
 
 /// Builds the fan-out under a real [SessionLauncher] over fake terminals and a
@@ -88,11 +92,21 @@ Harness harness({
   /// Agent ids whose pane refuses to be created, to force a partial launch.
   Set<String> paneFailsFor = const {},
   CommandResult Function(CommandRequest request)? git,
+
+  /// Where the project and repository are seeded (a fresh one when omitted);
+  /// mirrored into the database for the session rows' foreign keys.
+  FakeDataServer? server,
+
+  /// A client of [server] for the container to read the workspace through —
+  /// see [connectedHarness]. Without one the container's data client is the
+  /// unavailable default.
+  DataClient? client,
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  final data = (server ?? FakeDataServer()).mirrorInto(db)
+    ..projectRows.insert(project())
+    ..repositoryRows.insert(repository());
   AgentInstallationDao(db)
     ..insert(roverInstall)
     ..insert(flakyInstall)
@@ -108,6 +122,7 @@ Harness harness({
 
   final container = ProviderContainer(
     overrides: [
+      if (client != null) dataClientProvider.overrideWithValue(client),
       ...fakeTerminalOverrides(
         database: db,
         instanceFactory: paneFailsFor.isEmpty
@@ -154,5 +169,20 @@ Harness harness({
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
     ],
   );
-  return (container: container, db: db, git: runner);
+  return (container: container, db: db, git: runner, server: data);
+}
+
+/// [harness] whose container reads the workspace from a connected
+/// [FakeDataServer].
+Future<Harness> connectedHarness({
+  Set<String> paneFailsFor = const {},
+  CommandResult Function(CommandRequest request)? git,
+}) async {
+  final server = FakeDataServer(clock: () => testTime);
+  return harness(
+    paneFailsFor: paneFailsFor,
+    git: git,
+    server: server,
+    client: await server.connect(),
+  );
 }

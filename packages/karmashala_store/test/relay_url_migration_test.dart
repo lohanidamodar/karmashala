@@ -6,10 +6,10 @@ library;
 
 import 'dart:convert';
 
-import 'package:karmashala_store/migrations.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_store/migrations.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:test/test.dart';
 
 /// Applies every migration up to and including [upTo], the way `AppDatabase`
 /// does, so a pre-v19 database can be populated and then migrated.

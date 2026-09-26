@@ -1,16 +1,19 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_update_service.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -29,6 +32,8 @@ import '../terminal/fake_instance.dart';
 /// assert that a working tree came back exactly as it went in.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late List<List<String>> gitCalls;
 
   const worktree = EnvironmentPath(
@@ -42,7 +47,7 @@ void main() {
   var abortSucceeds = true;
   var mergeHead = '';
 
-  setUp(() {
+  setUp(() async {
     statusOutput = '## work...origin/work [ahead 2, behind 3]\n';
     originHead = 'origin/main\n';
     mergeFails = false;
@@ -50,9 +55,11 @@ void main() {
     mergeHead = '';
     gitCalls = [];
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       Session(
@@ -141,6 +148,7 @@ void main() {
   ProviderContainer harness() {
     final container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(

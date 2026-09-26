@@ -48,7 +48,6 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
@@ -69,6 +68,9 @@ import 'package:karmashala_session/launch.dart';
 import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart' show fakeDevice;
+
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 const _goldenPath = 'test/features/remote/bound_frames.golden.json';
 
@@ -92,6 +94,7 @@ void main() {
     final now = DateTime.utc(2026, 8, 31, 10);
     final db = AppDatabase.memory();
     addTearDown(db.close);
+    final server = FakeDataServer(clock: () => now)..mirrorInto(db);
 
     EnvironmentPath at(String path) =>
         EnvironmentPath(environmentId: 'windows', path: path);
@@ -125,10 +128,10 @@ void main() {
         createdAt: now,
       ),
     );
-    ProjectDao(db).insert(
+    server.projectRows.insert(
       Project(id: 'p1', name: 'Proj', root: at(r'C:\work'), createdAt: now),
     );
-    ProjectDao(db).insert(
+    server.projectRows.insert(
       Project(
         id: 'p2',
         name: 'Api',
@@ -139,7 +142,7 @@ void main() {
         createdAt: now,
       ),
     );
-    ProjectDao(db).insert(
+    server.projectRows.insert(
       Project(
         id: 'p3',
         name: 'Farm',
@@ -150,7 +153,7 @@ void main() {
         createdAt: now,
       ),
     );
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       Repository(
         id: 'r1',
         projectId: 'p1',
@@ -159,7 +162,7 @@ void main() {
         createdAt: now,
       ),
     );
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       Repository(
         id: 'r2',
         projectId: 'p2',
@@ -171,7 +174,7 @@ void main() {
         createdAt: now,
       ),
     );
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       Repository(
         id: 'r3',
         projectId: 'p3',
@@ -337,6 +340,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('new-')),
         sessionTranscriptLocatorProvider.overrideWithValue(_NoStore()),
@@ -372,7 +376,7 @@ void main() {
     // attachment is offered into its composer.
     final live = (await launcher.launch(
       SessionLaunchRequest(
-        repository: RepositoryDao(db).getById('r1')!,
+        repository: server.repositoryRows.getById('r1')!,
         installation: AgentInstallationDao(db).getById('i1')!,
         title: 'Live pane',
         purpose: SessionPurpose.newSession,
@@ -572,7 +576,9 @@ void main() {
             r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}',
           ),
           '<serverId>',
-        );
+        )
+        // The same ids as the test's fake server spells them.
+        .replaceAll(RegExp(r'\b[a-z]+-fake-\d+\b'), '<serverId>');
     for (final (from, to) in <(String, String)>[
       (projectFolder.resolveSymbolicLinksSync(), '<projectFolder>'),
       (projectFolder.path, '<projectFolder>'),

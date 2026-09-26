@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/github/application/pull_request_context_service.dart';
 import 'package:karmashala_git/pull_request_context.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
@@ -13,6 +12,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A long paste collapses in the agent's own transcript, so the only place
 /// that can answer "what was it actually told?" is this record. What it keeps
@@ -35,16 +36,18 @@ void main() {
   late ProviderContainer container;
   late _RecordingActions actions;
 
-  void build({bool failSend = false}) {
+  Future<void> build({bool failSend = false}) async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session());
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionActionsProvider.overrideWith((ref) {
           actions = _RecordingActions(ref, fail: failSend);
@@ -106,7 +109,7 @@ void main() {
   test('a send that failed is still recorded', () async {
     // The one case worth investigating later must not be the one case with
     // no trace of what was attempted.
-    build(failSend: true);
+    await build(failSend: true);
     await expectLater(send(), throwsA(isA<StateError>()));
     expect(service().sentIn('s1'), hasLength(1));
   });

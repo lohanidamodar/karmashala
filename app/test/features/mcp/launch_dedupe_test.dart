@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
@@ -20,6 +19,8 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A clock the test moves, because the whole question the window answers is
 /// "how long ago was this asked".
@@ -141,7 +142,7 @@ void main() {
     late LaunchDedupe dedupe;
     late List<String> collapsed;
 
-    setUp(() {
+    setUp(() async {
       clock = _MovingClock();
       collapsed = [];
       dedupe = LaunchDedupe(clock: clock, onCollapsed: collapsed.add);
@@ -267,13 +268,15 @@ void main() {
       db = AppDatabase.memory();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      final fake = FakeDataServer()..mirrorInto(db);
+      fake.projectRows.insert(project());
+      fake.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       gate = Completer<void>();
       container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await fake.override(),
           sessionLauncherProvider.overrideWith((ref) {
             return launcher = _CountingLauncher(ref, gate);
           }),

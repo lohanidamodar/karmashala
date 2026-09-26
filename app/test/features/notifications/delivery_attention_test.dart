@@ -9,7 +9,6 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/transitions.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -19,6 +18,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Delivery news, and the inbox it lands in.
 ///
@@ -149,12 +150,14 @@ void main() {
 
   group('the inbox it lands in', () {
     late AppDatabase db;
+    late FakeDataServer server;
 
     setUp(() {
       db = AppDatabase.memory();
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server = FakeDataServer().mirrorInto(db)
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       SessionDao(db).insert(
         Session(
@@ -171,10 +174,11 @@ void main() {
     });
     tearDown(() => db.close());
 
-    ProviderContainer harness() {
+    Future<ProviderContainer> harness() async {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],
       );
@@ -182,8 +186,8 @@ void main() {
       return container;
     }
 
-    test('a failing build becomes an inbox item', () {
-      final container = harness();
+    test('a failing build becomes an inbox item', () async {
+      final container = await harness();
       container
           .read(deliveryAttentionProvider.notifier)
           .observe('s1', withPr(checks: const ChecksSummary(failed: 1)));
@@ -195,8 +199,8 @@ void main() {
       expect(container.read(attentionInboxProvider).unseen, 1);
     });
 
-    test('the same reading again does not file a second item', () {
-      final container = harness();
+    test('the same reading again does not file a second item', () async {
+      final container = await harness();
       final red = withPr(checks: const ChecksSummary(failed: 1));
       final notifier = container.read(deliveryAttentionProvider.notifier)
         ..observe('s1', red)
@@ -205,25 +209,28 @@ void main() {
       expect(container.read(attentionInboxProvider).items, hasLength(1));
     });
 
-    test('an item that clears is not swept away by the agent watcher', () {
-      final container = harness();
-      container
-          .read(deliveryAttentionProvider.notifier)
-          .observe('s1', withPr(checks: const ChecksSummary(failed: 1)));
+    test(
+      'an item that clears is not swept away by the agent watcher',
+      () async {
+        final container = await harness();
+        container
+            .read(deliveryAttentionProvider.notifier)
+            .observe('s1', withPr(checks: const ChecksSummary(failed: 1)));
 
-      // The status poller looks at the same session and sees nothing waiting.
-      // A delivery item is an *event*, so it must survive that — the poller
-      // knows nothing about pull requests.
-      container
-          .read(attentionInboxProvider.notifier)
-          .apply(
-            InboxUpdate(watched: {const AgentSessionKey('claude', 'ext-1')}),
-          );
-      expect(container.read(attentionInboxProvider).items, hasLength(1));
-    });
+        // The status poller looks at the same session and sees nothing waiting.
+        // A delivery item is an *event*, so it must survive that — the poller
+        // knows nothing about pull requests.
+        container
+            .read(attentionInboxProvider.notifier)
+            .apply(
+              InboxUpdate(watched: {const AgentSessionKey('claude', 'ext-1')}),
+            );
+        expect(container.read(attentionInboxProvider).items, hasLength(1));
+      },
+    );
 
-    test('looking at the session retires it', () {
-      final container = harness();
+    test('looking at the session retires it', () async {
+      final container = await harness();
       container
           .read(deliveryAttentionProvider.notifier)
           .observe('s1', withPr(checks: const ChecksSummary(failed: 1)));
@@ -234,8 +241,8 @@ void main() {
       expect(container.read(attentionInboxProvider).items, isEmpty);
     });
 
-    test('a session that has gone files nothing and does not throw', () {
-      final container = harness();
+    test('a session that has gone files nothing and does not throw', () async {
+      final container = await harness();
       container
           .read(deliveryAttentionProvider.notifier)
           .observe('gone', withPr(checks: const ChecksSummary(failed: 1)));

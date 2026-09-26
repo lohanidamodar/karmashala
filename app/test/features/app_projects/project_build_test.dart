@@ -8,12 +8,12 @@ import 'package:karmashala/src/features/app_projects/application/project_build_l
 import 'package:karmashala/src/features/app_projects/application/project_build_tools.dart';
 import 'package:karmashala_flutter_apps/projects.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 
 const EnvironmentPath _project = EnvironmentPath(
   environmentId: 'wsl:Ubuntu',
@@ -99,13 +99,14 @@ void main() {
     return const CommandResult(exitCode: 1, stdout: '', stderr: '');
   }
 
-  void make({CommandResult Function(CommandRequest)? responder}) {
+  Future<void> make({CommandResult Function(CommandRequest)? responder}) async {
     db = AppDatabase.memory();
+    final server = FakeDataServer();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(
       repository(
         id: 'android',
         environmentId: 'wsl:Ubuntu',
@@ -120,6 +121,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
         ),
@@ -157,7 +159,7 @@ void main() {
     test(
       'a Flutter host module is refused by name, not as "no project"',
       () async {
-        make(
+        await make(
           responder: (request) =>
               request.executable == 'cat' &&
                   request.arguments.last.endsWith('settings.gradle.kts')
@@ -180,7 +182,7 @@ void main() {
     test(
       'no wrapper in the project refuses rather than reaching for gradle',
       () async {
-        make(
+        await make(
           responder: (request) =>
               request.executable == 'ls' &&
                   request.arguments.last == '/home/me/android'
@@ -201,7 +203,7 @@ void main() {
     test(
       'a detected iOS project refuses to build, in the descriptor\'s words',
       () async {
-        make(
+        await make(
           responder: (request) => request.executable == 'ls'
               ? switch (request.arguments.last) {
                   '/home/me/android' => const CommandResult(
@@ -290,7 +292,7 @@ void main() {
     test(
       'nothing built yet is "not there", never a path that does not exist',
       () async {
-        make(
+        await make(
           responder: (request) =>
               request.executable == 'ls' &&
                   request.arguments.last.contains('outputs')
@@ -355,7 +357,7 @@ void main() {
     test(
       'a Flutter checkout builds through the same tool and the Flutter SDK',
       () async {
-        make(
+        await make(
           responder: (request) {
             if (request.arguments.contains('exit 0')) {
               return const CommandResult(exitCode: 0, stdout: '', stderr: '');

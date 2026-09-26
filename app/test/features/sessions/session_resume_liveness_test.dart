@@ -7,7 +7,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -24,7 +23,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -55,17 +56,18 @@ const _shareable = AgentDescriptor(
   ),
 );
 
-({ProviderContainer container, AppDatabase db}) harness({
-  AgentDescriptor descriptor = _codexish,
-}) {
+Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+harness({AgentDescriptor descriptor = _codexish}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: descriptor.id));
 
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -75,7 +77,7 @@ const _shareable = AgentDescriptor(
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );
-  return (container: container, db: db);
+  return (container: container, db: db, server: server);
 }
 
 class _StaticSettings extends SettingsController {
@@ -141,7 +143,7 @@ ImportedSession _imported({String externalId = 'ext-1'}) => ImportedSession(
 void main() {
   test('resuming a session that never stopped reopens it, and launches '
       'nothing', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -163,7 +165,7 @@ void main() {
   });
 
   test('a detached session is reattached rather than relaunched', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -194,7 +196,7 @@ void main() {
 
   test('a session whose process has ended is genuinely resumed, in its own '
       'row', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -221,7 +223,7 @@ void main() {
   test(
     'the launcher itself refuses a second writer, and writes no row',
     () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -249,7 +251,7 @@ void main() {
   test(
     'handing a running session to an external terminal is refused, legibly',
     () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -302,7 +304,7 @@ void main() {
         );
 
     test('resuming twice does not grow the table', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -326,7 +328,7 @@ void main() {
     test(
       'reuse continues the session and never renames or re-dates it',
       () async {
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -353,11 +355,11 @@ void main() {
     );
 
     test('a resume onto a different repository writes its own row', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
-      RepositoryDao(h.db).insert(repository(id: 'r2', name: 'other'));
+      h.server.repositoryRows.insert(repository(id: 'r2', name: 'other'));
       final originalId = await _startDeadSession(h.container);
 
       final result = await resume(
@@ -372,7 +374,7 @@ void main() {
     });
 
     test('a resume by a different installation writes its own row', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -390,7 +392,7 @@ void main() {
     test(
       'an archived row is left archived, and a new one is written',
       () async {
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -411,7 +413,7 @@ void main() {
       // Claude Code permits a second process on one conversation, so the
       // refusal does not fire and the reuse check is what stands between "a
       // second session, as asked" and losing the pane the first one is in.
-      final h = harness(descriptor: _shareable);
+      final h = await harness(descriptor: _shareable);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -449,7 +451,7 @@ void main() {
     // the insertion order, so a dead duplicate written first reported the
     // conversation free while a pane was still writing to it.
     test('the live row is found when the dead duplicate came first', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -483,7 +485,7 @@ void main() {
     });
 
     test('the live row is found when the dead duplicate came after', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -495,7 +497,7 @@ void main() {
     });
 
     test('all-dead duplicates leave the conversation free', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -509,7 +511,7 @@ void main() {
   });
 
   test('an unrelated conversation is unaffected by a live one', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 

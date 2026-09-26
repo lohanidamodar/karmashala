@@ -13,7 +13,6 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -24,6 +23,8 @@ import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -393,17 +394,22 @@ void main() {
       ),
     );
 
-    ({ProviderContainer container, AppDatabase db}) harness({
+    Future<
+      ({ProviderContainer container, AppDatabase db, FakeDataServer server})
+    >
+    harness({
       required AgentDescriptor agent,
       Set<String> missingDirectories = const {},
-    }) {
+    }) async {
       final db = AppDatabase.memory();
+      final server = FakeDataServer()..mirrorInto(db);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
       final container = ProviderContainer(
         overrides: [
+          await server.override(),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -426,7 +432,7 @@ void main() {
           hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         ],
       );
-      return (container: container, db: db);
+      return (container: container, db: db, server: server);
     }
 
     const worktreePath = r'C:\src\.karmashala-worktrees\app-s1';
@@ -460,7 +466,7 @@ void main() {
 
     test('archived worktree → the resume still happens, and says the '
         'conversation may not come with it', () async {
-      final h = harness(
+      final h = await harness(
         agent: uncheckedAgent,
         missingDirectories: {worktreePath},
       );
@@ -494,7 +500,7 @@ void main() {
 
     test('the same resume says only what the fallback says, for an agent that '
         'was checked', () async {
-      final h = harness(
+      final h = await harness(
         agent: checkedAgent,
         missingDirectories: {worktreePath},
       );
@@ -525,7 +531,7 @@ void main() {
     test(
       'fork into a new worktree says so for an agent nobody has checked',
       () async {
-        final h = harness(agent: uncheckedAgent);
+        final h = await harness(agent: uncheckedAgent);
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         insertArchivedWorktreeSession(h.db);
@@ -556,7 +562,7 @@ void main() {
     test(
       'fork into a new worktree says nothing for an agent that was checked',
       () async {
-        final h = harness(agent: checkedAgent);
+        final h = await harness(agent: checkedAgent);
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         insertArchivedWorktreeSession(h.db);
@@ -585,12 +591,12 @@ void main() {
     /// archiving and handoff as a way an agent could move a session's checkout;
     /// it is not one. It writes the Explorer's selection and the followed
     /// session's remembered pick, and no session row.
-    test('select_checkout moves the view, never a session directory', () {
-      final h = harness(agent: checkedAgent);
+    test('select_checkout moves the view, never a session directory', () async {
+      final h = await harness(agent: checkedAgent);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       insertArchivedWorktreeSession(h.db);
-      RepositoryDao(h.db).insert(repository(id: 'r2', name: 'api'));
+      h.server.repositoryRows.insert(repository(id: 'r2', name: 'api'));
 
       final before = SessionDao(h.db).getById('src-1')!;
       h.container.read(checkoutPickerProvider).select(repository(id: 'r2'));

@@ -12,21 +12,26 @@ void main() {
   testWidgets('the bypass confirmation survives the window matrix', (
     tester,
   ) async {
+    // One harness per window: `build` is synchronous, and a harness is not.
+    final prepared = [
+      for (var i = 0; i < windowMatrix.length; i++)
+        await harness(
+          agentId: AgentIds.claudeCode,
+          mode: 'mode=manual',
+          externalSessionId: 'ext-1',
+        ),
+    ];
     final databases = <AppDatabase>[];
     addTearDown(() {
-      for (final db in databases) {
-        db.close();
+      for (final h in prepared) {
+        h.db.close();
       }
     });
     await expectSurvivesWindowMatrix(
       tester,
       because: 'a warning that restarts a running session',
       build: () {
-        final h = harness(
-          agentId: AgentIds.claudeCode,
-          mode: 'mode=manual',
-          externalSessionId: 'ext-1',
-        );
+        final h = prepared[databases.length];
         databases.add(h.db);
         return h.app;
       },

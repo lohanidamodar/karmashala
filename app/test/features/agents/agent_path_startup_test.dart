@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'package:karmashala/src/core/data/metadata_keys.dart';
 
@@ -27,20 +28,24 @@ const _real =
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
+    server = FakeDataServer();
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
   });
   tearDown(() => db.close());
 
-  ProviderContainer scoped({
+  Future<ProviderContainer> scoped({
     required PathProbe probe,
     required FakeCommandRunner runner,
-  }) {
+  }) async {
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         pathProbeProvider.overrideWithValue(probe),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
@@ -66,7 +71,10 @@ void main() {
       // waiting on `where` to answer before it can paint. Same shape as the
       // hook install and the CLI import, which the launch already sequences
       // this way.
-      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      server.store.write(
+        MetadataKeys.agentsDiscoveredAt,
+        '2026-07-28T00:00:00Z',
+      );
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
@@ -75,7 +83,7 @@ void main() {
         links: const {_storedDir: _release},
       );
       final runner = findingCodexAt(_real);
-      final container = scoped(probe: probe, runner: runner);
+      final container = await scoped(probe: probe, runner: runner);
       final gate = Completer<void>();
 
       unawaited(
@@ -104,7 +112,10 @@ void main() {
       // The gate is about *when*, never about *whether*: a launch straight to
       // the tray may never paint a frame, and it must not be a launch whose
       // agents stay unlaunchable.
-      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      server.store.write(
+        MetadataKeys.agentsDiscoveredAt,
+        '2026-07-28T00:00:00Z',
+      );
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
@@ -112,7 +123,10 @@ void main() {
         files: const {_real},
         links: const {_storedDir: _release},
       );
-      final container = scoped(probe: probe, runner: findingCodexAt(_real));
+      final container = await scoped(
+        probe: probe,
+        runner: findingCodexAt(_real),
+      );
 
       await AppLifecycle(container).repairAgentPaths(
         afterFirstFrame: () => Future<void>.error(StateError('no binding')),
@@ -132,7 +146,7 @@ void main() {
         ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
         final probe = FakePathProbe();
         final runner = FakeCommandRunner();
-        final container = scoped(probe: probe, runner: runner);
+        final container = await scoped(probe: probe, runner: runner);
 
         await AppLifecycle(container).repairAgentPaths();
 
@@ -143,12 +157,15 @@ void main() {
     );
 
     test('runs once per launch however many callers ask', () async {
-      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      server.store.write(
+        MetadataKeys.agentsDiscoveredAt,
+        '2026-07-28T00:00:00Z',
+      );
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
       final probe = FakePathProbe(files: const {_real});
-      final container = scoped(
+      final container = await scoped(
         probe: probe,
         runner: FakeCommandRunner(
           responder: (_) => fail('a healthy workspace spawns nothing'),
@@ -173,7 +190,10 @@ void main() {
       // Ordered, not just gated: a row the repair moves has had its version
       // re-read by that sweep, and a row whose executable is gone must not be
       // spawned at.
-      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      server.store.write(
+        MetadataKeys.agentsDiscoveredAt,
+        '2026-07-28T00:00:00Z',
+      );
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
@@ -182,7 +202,7 @@ void main() {
         responder: (_) =>
             const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
       );
-      final container = scoped(probe: probe, runner: runner);
+      final container = await scoped(probe: probe, runner: runner);
       final gate = Completer<void>();
 
       unawaited(
@@ -204,7 +224,10 @@ void main() {
     });
 
     test('runs once per launch however many callers ask', () async {
-      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      server.store.write(
+        MetadataKeys.agentsDiscoveredAt,
+        '2026-07-28T00:00:00Z',
+      );
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
@@ -212,7 +235,7 @@ void main() {
         responder: (_) =>
             const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
       );
-      final container = scoped(
+      final container = await scoped(
         probe: FakePathProbe(files: const {_real}),
         runner: runner,
       );
@@ -237,7 +260,7 @@ void main() {
         final runner = FakeCommandRunner(
           responder: (_) => fail('the first-run scan is writing these rows'),
         );
-        final container = scoped(
+        final container = await scoped(
           probe: FakePathProbe(files: const {_real}),
           runner: runner,
         );

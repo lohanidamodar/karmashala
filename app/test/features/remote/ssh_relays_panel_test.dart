@@ -16,6 +16,7 @@ import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../ssh/fake_host_box.dart';
@@ -83,8 +84,12 @@ SshRelayReading _reading(
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
-  setUp(() => db = AppDatabase.memory());
+  setUp(() {
+    db = AppDatabase.memory();
+    server = FakeDataServer(clock: () => testTime);
+  });
   tearDown(() => db.close());
 
   void addHost() => SshHostDao(db).upsert(
@@ -99,7 +104,7 @@ void main() {
     ),
   );
 
-  void addRelay({bool enabled = true}) => db.writeMetadata(
+  void addRelay({bool enabled = true}) => server.store.write(
     kSshRelaysMetadataKey,
     '[{"hostId":"h1","hostName":"do-box","port":8787,"url":"$_url",'
     '"enabled":$enabled}]',
@@ -118,9 +123,11 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),
         sshRelaySetupFactoryProvider.overrideWithValue(
@@ -507,10 +514,12 @@ void main() {
       'buttons wait', (tester) async {
     addHost();
     addRelay();
+    final data = await server.override();
     final never = Completer<SshRelayReading>();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),
         sshRelaySetupFactoryProvider.overrideWithValue(

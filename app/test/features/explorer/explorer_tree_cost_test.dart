@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
@@ -21,6 +20,7 @@ import 'package:karmashala_ssh/connection.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
@@ -56,7 +56,7 @@ void main() {
   /// [count] projects spread evenly over this machine, a WSL distribution and
   /// a host reached over SSH, all in one context — one header and three
   /// machines whatever the count, so the number below is about the projects.
-  CountingDatabase seed(int count) {
+  CountingDatabase seed(FakeDataServer server, int count) {
     final db = CountingDatabase();
     final environments = ExecutionEnvironmentDao(db);
     environments.upsert(windowsEnv());
@@ -64,10 +64,10 @@ void main() {
     environments.upsert(sshEnvFixture());
     SshHostDao(db).upsert(_buildBox());
     const ids = ['windows', 'wsl:Ubuntu', 'ssh:h1'];
-    WorkspaceDao(
-      db,
-    ).insert(Workspace(id: 'w1', name: 'Client work', createdAt: testTime));
-    final projects = ProjectDao(db);
+    server.workspaceRows.insert(
+      Workspace(id: 'w1', name: 'Client work', createdAt: testTime),
+    );
+    final projects = server.projectRows;
     for (var i = 0; i < count; i++) {
       projects.insert(
         project(
@@ -93,10 +93,12 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final db = seed(count);
+    final server = FakeDataServer();
+    final db = seed(server, count);
     addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

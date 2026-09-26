@@ -8,7 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
@@ -23,6 +22,8 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -76,17 +77,22 @@ class _StaticSettings extends SettingsController {
 
 typedef Harness = ({ProviderContainer container, AppDatabase db});
 
-Harness harness({bool installAgent = true, String agentId = 'sharing'}) {
+Future<Harness> harness({
+  bool installAgent = true,
+  String agentId = 'sharing',
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   if (installAgent) {
     AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
   }
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      await server.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       commandRunnerFactoryProvider.overrideWithValue(
@@ -171,7 +177,7 @@ void main() {
     test(
       'a session we are still running is reattached, not relaunched',
       () async {
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         final id = await launchLive(h);
@@ -195,7 +201,7 @@ void main() {
       // launcher had no way to say "this repository, but run over there", so
       // every resume put the agent back in the repository root — a different
       // directory on a different branch from the work being resumed.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final worktree = path(r'C:\src\demo\.karmashala-worktrees\wt-a');
@@ -223,7 +229,7 @@ void main() {
     });
 
     test('a session in no worktree resumes in the repository', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       SessionDao(h.db).insert(stopped());
@@ -239,7 +245,7 @@ void main() {
     test('a session whose CLI id we never learned is only selected', () async {
       // Starting the agent here would be a *new* conversation wearing this
       // row's title, which is worse than doing nothing.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       SessionDao(h.db).insert(stopped(externalId: ''));
@@ -258,7 +264,7 @@ void main() {
       // every database written before it holds duplicate pairs, and the older
       // card is still there to click. `_liveTwinOf` is what keeps that click
       // honest: two rows, one conversation, one process.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       SessionDao(h.db).insert(stopped());
@@ -279,7 +285,7 @@ void main() {
     });
 
     test('an agent that refused to share says so in plain words', () async {
-      final h = harness(agentId: 'exclusive');
+      final h = await harness(agentId: 'exclusive');
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       // A pane of ours died showing the agent's own refusal — the only certain
@@ -317,7 +323,7 @@ void main() {
     test(
       'a session that has been deleted underneath us fails cleanly',
       () async {
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -333,7 +339,7 @@ void main() {
 
   group('starting a session', () {
     test('the + uses the default agent for that environment', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -351,7 +357,7 @@ void main() {
       // Loop 57 had to refuse this: a session needs a repository id and a folder
       // with no row has none. The owning repository supplies the id and
       // `existingWorktree` supplies the directory.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final worktree = path(r'C:\elsewhere\wt-side');
@@ -368,7 +374,7 @@ void main() {
     });
 
     test('no agent installed is a sentence, not an exception', () async {
-      final h = harness(installAgent: false);
+      final h = await harness(installAgent: false);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -381,8 +387,8 @@ void main() {
       expect(h.container.read(sessionDaoProvider).getAll(), isEmpty);
     });
 
-    test('installationsFor lists what the "…with" menu may offer', () {
-      final h = harness();
+    test('installationsFor lists what the "…with" menu may offer', () async {
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 

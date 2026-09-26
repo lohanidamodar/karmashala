@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_bootstrap.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
@@ -14,7 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
-import '../../support/stored_preferences.dart';
+
+import '../../support/fake_data_server.dart';
 
 void main() {
   tearDown(() => Logger.root.level = Level.INFO);
@@ -63,13 +62,12 @@ void main() {
       );
     });
 
-    test('the controller persists debug mode and applies it', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+    test('the controller persists debug mode and applies it', () async {
+      final server = FakeDataServer();
       final diagnostics = Diagnostics(echoToConsole: false);
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          await server.override(),
           diagnosticsProvider.overrideWithValue(diagnostics),
         ],
       );
@@ -79,8 +77,9 @@ void main() {
       controller.setDebugMode(true);
 
       expect(container.read(settingsControllerProvider).debugMode, isTrue);
+      await pumpEventQueue();
       expect(
-        SettingsRepository(StoredPreferences(db)).load().debugMode,
+        SettingsRepository(server.store).load().debugMode,
         isTrue,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -92,13 +91,12 @@ void main() {
       expect(Logger.root.level, Level.INFO);
     });
 
-    test('the controller resizes the live buffer', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+    test('the controller resizes the live buffer', () async {
+      final server = FakeDataServer();
       final diagnostics = Diagnostics(echoToConsole: false);
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          await server.override(),
           diagnosticsProvider.overrideWithValue(diagnostics),
         ],
       );
@@ -109,10 +107,8 @@ void main() {
           .setLogBufferSize(1000);
 
       expect(diagnostics.buffer.capacity, 1000);
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().logBufferSize,
-        1000,
-      );
+      await pumpEventQueue();
+      expect(SettingsRepository(server.store).load().logBufferSize, 1000);
     });
 
     test('applying settings never opens a file when the file is off', () {
@@ -131,12 +127,11 @@ void main() {
 
   group('Settings → Diagnostics', () {
     testWidgets('is reachable and drives the controller', (tester) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+      final server = FakeDataServer();
       final diagnostics = Diagnostics(echoToConsole: false);
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          await server.override(),
           diagnosticsProvider.overrideWithValue(diagnostics),
         ],
       );

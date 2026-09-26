@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/explorer/application/picked_checkouts.da
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +20,7 @@ import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
   group('webUrlForRemote', () {
@@ -58,18 +58,23 @@ void main() {
 
   group('RepositoryInfoView', () {
     late AppDatabase db;
+    late FakeDataServer server;
 
     setUp(() {
       db = AppDatabase.memory();
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server = FakeDataServer()
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
     });
     tearDown(() => db.close());
 
     Future<ProviderContainer> pump(WidgetTester tester) async {
       final container = ProviderContainer(
-        overrides: fakeTerminalOverrides(database: db),
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          await server.override(),
+        ],
       );
       addTearDown(container.dispose);
       await tester.pumpWidget(
@@ -143,6 +148,7 @@ void main() {
     const longBranch = 'agents/loop-73-worktree-navigation-and-a-long-name';
 
     late AppDatabase db;
+    late FakeDataServer server;
     late List<GitWorktree> worktrees;
 
     EnvironmentPath at(String path) =>
@@ -160,16 +166,18 @@ void main() {
     setUp(() {
       db = AppDatabase.memory();
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server = FakeDataServer()
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
       worktrees = family(8);
     });
     tearDown(() => db.close());
 
-    ProviderContainer container() {
+    Future<ProviderContainer> container() async {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
           ),
@@ -196,7 +204,7 @@ void main() {
     );
 
     Future<ProviderContainer> pump(WidgetTester tester) async {
-      final scope = container();
+      final scope = await container();
       await tester.pumpWidget(pane(scope));
       await tester.pumpAndSettle();
       return scope;
@@ -292,7 +300,7 @@ void main() {
     ) async {
       // The explicit verb: `CheckoutPicker`, the same call behind the panel's
       // picker and the `select_checkout` tool.
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(id: 'r2', name: 'agent-2', path: r'C:\src\demo\wt\agent-2'),
       );
       final scope = await pump(tester);
@@ -324,7 +332,7 @@ void main() {
     });
 
     testWidgets('the open list survives the window matrix', (tester) async {
-      final scope = container();
+      final scope = await container();
 
       await expectSurvivesWindowMatrix(
         tester,

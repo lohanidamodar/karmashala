@@ -27,11 +27,11 @@ void main() {
   RateLimitRecord? rollout;
   final rolloutReads = <String>[];
 
-  void build({String agentId = AgentIds.codex}) {
+  Future<void> build({String agentId = AgentIds.codex}) async {
     changes = StreamController<SessionStatusEntry>.broadcast(sync: true);
     rollout = null;
     rolloutReads.clear();
-    h = ResumeHarness(
+    h = await ResumeHarness.create(
       agentId: agentId,
       extra: [
         sessionStatusChangesProvider.overrideWithValue(changes.stream),

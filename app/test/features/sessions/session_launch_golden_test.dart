@@ -61,7 +61,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/session_mcp.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/handoff_packet_files.dart';
@@ -79,7 +78,9 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 const _goldenPath = 'test/features/sessions/session_launches.golden.json';
@@ -156,6 +157,7 @@ void main() {
   test('the launch contract matches the committed golden', () async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
+    final server = FakeDataServer()..mirrorInto(db);
 
     final packets = await Directory.systemTemp.createTemp(
       'karmashala-launch-golden-',
@@ -210,7 +212,7 @@ void main() {
 
     for (final env in environments) {
       ExecutionEnvironmentDao(db).upsert(env.environment);
-      ProjectDao(db).insert(
+      server.projectRows.insert(
         Project(
           id: env.projectId,
           name: env.id,
@@ -218,7 +220,7 @@ void main() {
           createdAt: testTime,
         ),
       );
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         Repository(
           id: env.repositoryId,
           projectId: env.projectId,
@@ -249,6 +251,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
@@ -289,7 +292,7 @@ void main() {
     );
 
     Repository repositoryIn(_Env env) =>
-        RepositoryDao(db).getById(env.repositoryId)!;
+        server.repositoryRows.getById(env.repositoryId)!;
     AgentInstallation installationOf(String agentId, _Env env) =>
         AgentInstallationDao(db).getById('i-$agentId-${env.id}')!;
 

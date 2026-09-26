@@ -2,23 +2,26 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fixtures.dart';
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late SessionDao dao;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     dao = SessionDao(db);
   });
@@ -242,7 +245,7 @@ void main() {
 
   test('deleting the repository cascades to its sessions', () {
     dao.insert(session());
-    RepositoryDao(db).delete('r1');
+    server.repositoryRows.delete('r1');
     expect(dao.getById('s1'), isNull);
   });
 

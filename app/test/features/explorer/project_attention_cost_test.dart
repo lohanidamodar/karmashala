@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +14,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// What one attention-inbox publication costs across project headers.
 ///
@@ -29,13 +30,14 @@ void main() {
       () async {
         final db = _CountingDatabase();
         addTearDown(db.close);
+        final server = FakeDataServer()..mirrorInto(db);
         ExecutionEnvironmentDao(db).upsert(windowsEnv());
         AgentInstallationDao(db).insert(agentInstallation());
         for (var i = 0; i < count; i++) {
-          ProjectDao(db).insert(
+          server.projectRows.insert(
             project(id: 'p$i', name: 'Project $i', path: 'C:\\workspace\\p$i'),
           );
-          RepositoryDao(db).insert(
+          server.repositoryRows.insert(
             repository(
               id: 'r$i',
               projectId: 'p$i',
@@ -59,6 +61,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            await server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],
         );

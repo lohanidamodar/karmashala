@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
@@ -9,7 +11,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -24,6 +25,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -49,6 +52,8 @@ import '../terminal/fake_instance.dart';
 ///   checkout.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
 
   /// `git worktree list --porcelain` for the Alpha clone, so the picker can
   /// tell a worktree from a clone the way production does.
@@ -73,13 +78,15 @@ void main() {
     );
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db)
+    server.projectRows
       ..insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'))
       ..insert(project(id: 'p2', name: 'Beta', path: r'C:\src\beta'));
-    RepositoryDao(db)
+    server.repositoryRows
       ..insert(
         repository(
           id: 'r1',
@@ -108,12 +115,19 @@ void main() {
   });
   tearDown(() => db.close());
 
+  void deleteAllRepositories() {
+    for (final checkout in server.repositoryRows.getAll()) {
+      server.repositoryRows.delete(checkout.id);
+    }
+  }
+
   ProviderContainer containerFor({String? selected, String? plainFolder}) {
     final container = ProviderContainer(
       overrides: [
         // The dialog asks whether the destination is under git before it offers
         // a worktree, and [PlainFolders] is the only disk that can answer
         // "not a repository" rather than "could not look".
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(
           database: db,
           gitFiles: plainFolder == null ? null : PlainFolders({plainFolder}),
@@ -349,8 +363,9 @@ void main() {
     testWidgets('says so instead of offering an empty dropdown', (
       tester,
     ) async {
-      db.execute('DELETE FROM repositories;');
-      db.execute('DELETE FROM projects;');
+      server.projectRows
+        ..delete('p1')
+        ..delete('p2');
       final container = containerFor();
       await open(tester, container);
 
@@ -374,10 +389,10 @@ void main() {
     ) async {
       final folder = Directory.systemTemp.createTempSync('ks-no-git');
       addTearDown(() => folder.deleteSync(recursive: true));
-      db.execute('DELETE FROM repositories;');
-      ProjectDao(
-        db,
-      ).update(project(id: 'p1', name: 'Alpha', path: folder.path));
+      deleteAllRepositories();
+      server.projectRows.update(
+        project(id: 'p1', name: 'Alpha', path: folder.path),
+      );
 
       final container = containerFor(plainFolder: folder.path);
       await open(tester, container);
@@ -385,7 +400,7 @@ void main() {
 
       expect(find.textContaining('nowhere recorded to run in'), findsNothing);
       expect(
-        RepositoryDao(db).getByProject('p1').single.path.path,
+        server.repositoryRows.getByProject('p1').single.path.path,
         folder.path,
       );
       expect(tester.widget<FilledButton>(startButton()).onPressed, isNotNull);
@@ -396,7 +411,7 @@ void main() {
     testWidgets('and one whose folder is gone says so, naming it', (
       tester,
     ) async {
-      db.execute('DELETE FROM repositories;');
+      deleteAllRepositories();
       final container = containerFor();
       await open(tester, container);
 

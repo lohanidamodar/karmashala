@@ -10,7 +10,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/pending_live_switches.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -24,7 +23,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **Live where supported, next launch otherwise — and never into a busy pane.**
@@ -45,19 +46,22 @@ class _StaticSettings extends SettingsController {
   Settings build() => _settings;
 }
 
-({ProviderContainer container, AppDatabase db}) harness({
+Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+harness({
   String agentId = AgentIds.claudeCode,
   AgentActivityStatus status = AgentActivityStatus.idle,
   AgentActivityStatus Function()? statusNow,
   Stream<String>? becameIdle,
-}) {
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -87,7 +91,7 @@ class _StaticSettings extends SettingsController {
       ),
     ],
   );
-  return (container: container, db: db);
+  return (container: container, db: db, server: server);
 }
 
 Future<({String id, List<String> written})> launched(
@@ -116,7 +120,7 @@ void main() {
   test(
     'idle and slash-capable: the command is sent and the row is written',
     () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
@@ -139,7 +143,7 @@ void main() {
   test(
     'working: nothing is typed, and the override is still recorded',
     () async {
-      final h = harness(status: AgentActivityStatus.working);
+      final h = await harness(status: AgentActivityStatus.working);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
@@ -163,7 +167,7 @@ void main() {
   test('a state no source can vouch for counts as busy', () async {
     // `unknown` is the ordinary answer for a session with no hooks, and a key
     // we are not sure lands at a prompt is a key we do not send.
-    final h = harness(status: AgentActivityStatus.unknown);
+    final h = await harness(status: AgentActivityStatus.unknown);
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
@@ -179,7 +183,7 @@ void main() {
   test(
     'just resumed, no hook yet: the agent\'s own idle footer is enough',
     () async {
-      final h = harness(status: AgentActivityStatus.unknown);
+      final h = await harness(status: AgentActivityStatus.unknown);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
@@ -200,7 +204,7 @@ void main() {
   );
 
   test('just resumed, mid-turn on screen: still nothing is typed', () async {
-    final h = harness(status: AgentActivityStatus.unknown);
+    final h = await harness(status: AgentActivityStatus.unknown);
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
@@ -220,7 +224,7 @@ void main() {
   });
 
   test('an open prompt is not typed into either', () async {
-    final h = harness(status: AgentActivityStatus.awaitingApproval);
+    final h = await harness(status: AgentActivityStatus.awaitingApproval);
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
@@ -235,7 +239,7 @@ void main() {
   test(
     'Codex, idle: its own picker is opened, since /model takes no argument',
     () async {
-      final h = harness(agentId: AgentIds.codex);
+      final h = await harness(agentId: AgentIds.codex);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container, agentId: AgentIds.codex);
@@ -253,7 +257,7 @@ void main() {
   );
 
   test('Codex mid-turn: nothing is typed, not even the picker', () async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.codex,
       status: AgentActivityStatus.working,
     );
@@ -273,7 +277,7 @@ void main() {
     var status = AgentActivityStatus.working;
     final idle = StreamController<String>.broadcast();
     addTearDown(idle.close);
-    final h = harness(statusNow: () => status, becameIdle: idle.stream);
+    final h = await harness(statusNow: () => status, becameIdle: idle.stream);
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
@@ -301,7 +305,7 @@ void main() {
   });
 
   test('a session nothing is running is deferred, not refused', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
@@ -323,7 +327,7 @@ void main() {
   });
 
   test('handing the session back to the default clears the row', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
@@ -348,7 +352,7 @@ void main() {
     // resolution to drift from, so this asserts the same value twice from the
     // two places that must never disagree.
     for (final live in [true, false]) {
-      final h = harness(
+      final h = await harness(
         status: live ? AgentActivityStatus.idle : AgentActivityStatus.working,
       );
       addTearDown(h.db.close);
@@ -393,7 +397,7 @@ void main() {
   });
 
   test('a session that never chose passes no model flag at all', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final result = await h.container

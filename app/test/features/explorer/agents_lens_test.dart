@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
@@ -26,15 +25,18 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **The Agents entry and the page it opens**, drawn: the count appears only
 /// above zero, the page groups by state in its order with its folds, and
 /// leaving it puts the tree back.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late AgentHookReceiver receiver;
   late SessionStatusRegistry registry;
   late List<WatchedSession> watched;
@@ -68,12 +70,13 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     AgentInstallationDao(db).insert(agentInstallation());
-    ProjectDao(
-      db,
-    ).insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'));
-    RepositoryDao(db).insert(
+    server.projectRows.insert(
+      project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'),
+    );
+    server.repositoryRows.insert(
       repository(
         id: 'r1',
         projectId: 'p1',
@@ -112,6 +115,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(

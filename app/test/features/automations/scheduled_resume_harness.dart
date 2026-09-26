@@ -4,6 +4,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -16,7 +18,6 @@ import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -30,6 +31,8 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Records what would have reached the OS.
 class RecordingPresenter implements NotificationPresenter {
@@ -73,20 +76,22 @@ class ResumingLauncher extends SessionLauncher {
 /// Everything a scheduled-resume test needs, with nothing that waits: the
 /// clock is moved and the one timer is fired by hand.
 class ResumeHarness {
-  ResumeHarness({
-    String agentId = AgentIds.codex,
-    List<Override> extra = const [],
+  ResumeHarness._(
+    this.server,
+    DataClient client, {
+    required String agentId,
+    required List<Override> extra,
   }) {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.mirrorInto(db);
     AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
     clock = MovableClock(DateTime.utc(2026, 9, 17, 12));
     usage = FakeAgentUsageService(clock: clock);
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db, usageService: usage),
+        dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('resume-')),
         automationTimerProvider.overrideWithValue(timer),
@@ -101,7 +106,25 @@ class ResumeHarness {
     );
   }
 
+  /// The project and checkout every case works in, on a fake server whose
+  /// client the container reads the workspace from.
+  static Future<ResumeHarness> create({
+    String agentId = AgentIds.codex,
+    List<Override> extra = const [],
+  }) async {
+    final server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    return ResumeHarness._(
+      server,
+      await server.connect(),
+      agentId: agentId,
+      extra: extra,
+    );
+  }
+
   late final AppDatabase db;
+  final FakeDataServer server;
   late final MovableClock clock;
   late final FakeAgentUsageService usage;
   late final ProviderContainer container;

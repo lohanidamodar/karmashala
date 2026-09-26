@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open_item.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
@@ -8,7 +9,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
 import 'package:karmashala/src/features/snippets/data/command_snippet_dao.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
@@ -19,6 +19,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 
 /// Snippets as a **group of quick open**, rather than a second palette.
 ///
@@ -29,12 +30,14 @@ import '../terminal/fake_instance.dart';
 /// observable by reading what the pane would have handed its PTY.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Karmashala'));
-    RepositoryDao(db).insert(repository(name: 'app'));
+    server = FakeDataServer()
+      ..projectRows.insert(project(name: 'Karmashala'))
+      ..repositoryRows.insert(repository(name: 'app'));
   });
   tearDown(() => db.close());
 
@@ -54,6 +57,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
@@ -312,6 +316,7 @@ void main() {
         updatedAt: testTime,
       ),
     );
+    final client = await server.connect();
     await expectSurvivesWindowMatrix(
       tester,
       because: 'quick open with the snippets group listed',
@@ -319,6 +324,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             ...fakeTerminalOverrides(database: db),
+            dataClientProvider.overrideWithValue(client),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],
         );

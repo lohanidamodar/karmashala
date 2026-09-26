@@ -7,13 +7,14 @@ import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dar
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Which sessions a repository takes, and which the Claude store is asked
 /// for.**
@@ -24,6 +25,7 @@ import '../../support/fixtures.dart';
 void main() {
   late AppDatabase db;
   late List<StoreScanRequest> asked;
+  late FakeDataServer server;
 
   EnvironmentPath at(String path) =>
       EnvironmentPath(environmentId: 'windows', path: path);
@@ -67,8 +69,9 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(db).insert(
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
       Repository(
         id: 'r1',
         projectId: 'p1',
@@ -80,7 +83,7 @@ void main() {
   });
   tearDown(() => db.close());
 
-  List<Repository> repos() => RepositoryDao(db).getAll();
+  List<Repository> repos() => server.repositoryRows.getAll();
 
   test('a session in the repository itself is imported', () async {
     final service = serviceFor([sessionIn(r'C:\hub', 's1')]);

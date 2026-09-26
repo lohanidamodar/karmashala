@@ -52,10 +52,10 @@ void main() {
   late _RecordingLink link;
   late _NoFiring firing;
 
-  setUp(() {
+  setUp(() async {
     link = _RecordingLink();
     firing = _NoFiring();
-    h = ResumeHarness(
+    h = await ResumeHarness.create(
       extra: [
         automationsAtHostProvider.overrideWithValue(true),
         hostAutomationsLinkProvider.overrideWithValue(link),

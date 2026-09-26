@@ -18,13 +18,14 @@ import 'package:karmashala/src/features/notifications/application/notification_p
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala/src/features/projects/application/cli_store_purge.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
 
 /// **Deleting a project does not hold the UI, and does not fail in silence.**
@@ -42,6 +43,7 @@ import '../../support/temp_directory.dart';
 /// see it, and the irreversible half runs behind them and reports what it did.
 void main() {
   late Directory tmp;
+  late FakeDataServer server;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_delx_'));
   tearDown(() => removeTempDirectory(tmp));
 
@@ -51,8 +53,9 @@ void main() {
   AppDatabase seed(int count, {String projectId = 'p1'}) {
     final db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: projectId));
-    RepositoryDao(db).insert(repository(projectId: projectId));
+    server = FakeDataServer(clock: () => testTime)..mirrorInto(db);
+    server.projectRows.insert(project(id: projectId));
+    server.repositoryRows.insert(repository(projectId: projectId));
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < count; i++) {
       final id = 'x$i';
@@ -82,15 +85,16 @@ void main() {
     return db;
   }
 
-  ProviderContainer mount(
+  Future<ProviderContainer> mount(
     AppDatabase db, {
     CliSessionMutator? mutator,
     _RecordingPresenter? presenter,
     bool autoDispose = true,
-  }) {
+  }) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(
           mutator ?? CliSessionMutator(),
@@ -112,7 +116,7 @@ void main() {
     test('the project is gone before a single transcript is', () async {
       final db = seed(8);
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       final runner = container.read(cliStorePurgeRunnerProvider);
 
       await container
@@ -122,7 +126,7 @@ void main() {
       // The caller's future is already complete, and the list it reads has
       // already been refreshed — no frame is waiting on the filesystem.
       expect(container.read(projectsControllerProvider), isEmpty);
-      expect(ProjectDao(db).getById('p1'), isNull);
+      expect(server.projectRows.getById('p1'), isNull);
       expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
       // …and the store work has genuinely not finished yet. This is the
       // assertion that would fail if the purge were awaited inline again.
@@ -141,7 +145,7 @@ void main() {
     test('nothing is started when the store is not being touched', () async {
       final db = seed(3);
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
 
       await container
           .read(projectsControllerProvider.notifier)
@@ -161,7 +165,7 @@ void main() {
       final db = seed(5);
       addTearDown(db.close);
       final presenter = _RecordingPresenter();
-      final container = mount(
+      final container = await mount(
         db,
         mutator: _RefusingMutator(const {'x2'}),
         presenter: presenter,
@@ -204,7 +208,7 @@ void main() {
         final db = seed(4);
         addTearDown(db.close);
         final presenter = _RecordingPresenter();
-        final container = mount(
+        final container = await mount(
           db,
           mutator: _RefusingMutator(const {'x0', 'x1', 'x2', 'x3'}),
           presenter: presenter,
@@ -217,8 +221,8 @@ void main() {
 
         // Not one transcript could be removed, and the workspace still lost the
         // project cleanly — no half-deleted project, and nothing silent.
-        expect(ProjectDao(db).getById('p1'), isNull);
-        expect(RepositoryDao(db).getByProject('p1'), isEmpty);
+        expect(server.projectRows.getById('p1'), isNull);
+        expect(server.repositoryRows.getByProject('p1'), isEmpty);
         expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
         expect(container.read(projectsControllerProvider), isEmpty);
         expect(transcriptsRemain(4), isTrue);
@@ -234,7 +238,7 @@ void main() {
       final db = seed(3);
       addTearDown(db.close);
       final presenter = _RecordingPresenter();
-      final container = mount(db, presenter: presenter);
+      final container = await mount(db, presenter: presenter);
 
       await container
           .read(projectsControllerProvider.notifier)
@@ -250,7 +254,7 @@ void main() {
       final db = seed(2);
       addTearDown(db.close);
       SessionDao(db).insert(session(id: 'n1'));
-      final container = mount(db);
+      final container = await mount(db);
       container.read(selectedProjectIdProvider.notifier).select('p1');
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
       container.read(selectedSessionIdProvider.notifier).select('n1');
@@ -273,9 +277,9 @@ void main() {
     test('a selection pointing elsewhere is left alone', () async {
       final db = seed(1);
       addTearDown(db.close);
-      ProjectDao(db).insert(project(id: 'p2', name: 'Other'));
-      RepositoryDao(db).insert(repository(id: 'r2', projectId: 'p2'));
-      final container = mount(db);
+      server.projectRows.insert(project(id: 'p2', name: 'Other'));
+      server.repositoryRows.insert(repository(id: 'r2', projectId: 'p2'));
+      final container = await mount(db);
       container.read(selectedProjectIdProvider.notifier).select('p2');
       container.read(selectedRepositoryIdProvider.notifier).select('r2');
 
@@ -293,7 +297,7 @@ void main() {
       final db = seed(4);
       addTearDown(db.close);
       final presenter = _RecordingPresenter();
-      final container = mount(
+      final container = await mount(
         db,
         mutator: _RefusingMutator(const {'x0'}),
         presenter: presenter,
@@ -319,7 +323,7 @@ void main() {
     test('the runner holds nothing once it has settled', () async {
       final db = seed(6);
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       final runner = container.read(cliStorePurgeRunnerProvider);
 
       await container

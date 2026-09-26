@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -33,7 +32,9 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **Two visible levels and one right-hand column, for every row kind.**
@@ -71,19 +72,22 @@ class _Inbox extends AttentionInboxController {
 }
 
 void main() {
-  AppDatabase seeded() {
+  AppDatabase seeded(FakeDataServer server) {
     final db = AppDatabase.memory();
+    server.mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(posixEnv());
-    WorkspaceDao(
-      db,
-    ).insert(Workspace(id: 'w1', name: 'Game dev', createdAt: testTime));
-    ProjectDao(
-      db,
-    ).insert(project(id: 'p1', name: _long, path: _path, workspaceId: 'w1'));
-    ProjectDao(db).insert(project(id: 'p2', name: 'Loose', path: '/srv/p2'));
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r1', projectId: 'p1', path: _path));
+    server.workspaceRows.insert(
+      Workspace(id: 'w1', name: 'Game dev', createdAt: testTime),
+    );
+    server.projectRows.insert(
+      project(id: 'p1', name: _long, path: _path, workspaceId: 'w1'),
+    );
+    server.projectRows.insert(
+      project(id: 'p2', name: 'Loose', path: '/srv/p2'),
+    );
+    server.repositoryRows.insert(
+      repository(id: 'r1', projectId: 'p1', path: _path),
+    );
     AgentInstallationDao(db).insert(agentInstallation());
     for (final (id, title, status) in [
       ('s-run', 'Running session', SessionStatus.running),
@@ -104,13 +108,15 @@ void main() {
     tester.view.physicalSize = const Size(1000, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final db = seeded();
+    final server = FakeDataServer();
+    final db = seeded(server);
     addTearDown(db.close);
     await tester.pumpWidget(
       ProviderScope(
         // A second pump in one test is a second scope, not new overrides.
         key: UniqueKey(),
         overrides: [
+          await server.override(),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

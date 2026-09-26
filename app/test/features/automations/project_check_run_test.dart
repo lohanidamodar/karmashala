@@ -16,7 +16,6 @@ import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
@@ -28,10 +27,13 @@ import 'package:karmashala_verification/verification.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The checks a checkout says must still pass, run after the automation's
 /// session ends — and never reported as a pass unless one was observed.
 void main() {
+  late FakeDataServer server;
   late AppDatabase db;
   late ProviderContainer container;
   late Directory artifacts;
@@ -102,12 +104,13 @@ void main() {
     await until(() => verdicts().length > before);
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     artifacts = Directory.systemTemp.createTempSync('automation-checks');
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -127,6 +130,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('id-')),
         verificationRootProvider.overrideWithValue(artifacts),
@@ -249,7 +253,8 @@ void main() {
         createdAt: testTime,
       ),
     );
-    db.execute("UPDATE repositories SET environment_id = 'wsl:gone';");
+    server.repositoryRows.update(repository(environmentId: 'wsl:gone'));
+    await pumpEventQueue();
     await endTheAgentsSession(opensPane: false);
     await container.read(automationCheckRunnerProvider).drain();
 

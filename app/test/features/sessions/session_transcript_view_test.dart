@@ -6,7 +6,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -26,7 +25,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -132,10 +133,11 @@ void main() {
     List<SystemTerminal> terminals = const [],
   }) async {
     final db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.antigravity));
@@ -155,6 +157,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         availableSystemTerminalsProvider.overrideWith((ref) async => terminals),
         sessionDeliveryProvider.overrideWith(

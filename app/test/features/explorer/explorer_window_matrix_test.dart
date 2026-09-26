@@ -2,6 +2,8 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:flutter/material.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +23,6 @@ import 'package:karmashala/src/features/file_explorer/presentation/file_explorer
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
@@ -35,9 +36,11 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -98,6 +101,44 @@ Widget _column(double width, Widget surface) => MaterialApp(
 const _longHost = 'a-build-box-with-a-long-host-name';
 
 void main() {
+  late FakeDataServer server;
+  late DataClient data;
+
+  /// The workspace rows every cell shares, and the one client they read.
+  Future<void> serve() async {
+    server = FakeDataServer();
+    server.workspaceRows.insert(
+      Workspace(
+        id: 'w1',
+        name: 'A context with a long name',
+        createdAt: testTime,
+      ),
+    );
+    server.projectRows.insert(
+      project(id: 'p1', name: _long, path: r'C:\src\a\very\deep\path\p1'),
+    );
+    server.projectRows.insert(
+      project(id: 'p2', name: 'Filed', path: r'C:\src\p2', workspaceId: 'w1'),
+    );
+    server.projectRows.insert(
+      project(
+        id: 'p3',
+        name: 'Remote',
+        path: '/srv/a/very/deep/path/p3',
+        environmentId: 'ssh:h1',
+        workspaceId: 'w1',
+      ),
+    );
+    server.repositoryRows.insert(
+      repository(
+        id: 'r1',
+        projectId: 'p1',
+        path: r'C:\src\a\very\deep\path\p1',
+      ),
+    );
+    data = await server.connect();
+  }
+
   AppDatabase seeded({bool third = false}) {
     final db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -117,35 +158,7 @@ void main() {
       ),
     );
     ExecutionEnvironmentDao(db).upsert(sshEnvFixture(name: _longHost));
-    WorkspaceDao(db).insert(
-      Workspace(
-        id: 'w1',
-        name: 'A context with a long name',
-        createdAt: testTime,
-      ),
-    );
-    ProjectDao(db).insert(
-      project(id: 'p1', name: _long, path: r'C:\src\a\very\deep\path\p1'),
-    );
-    ProjectDao(db).insert(
-      project(id: 'p2', name: 'Filed', path: r'C:\src\p2', workspaceId: 'w1'),
-    );
-    ProjectDao(db).insert(
-      project(
-        id: 'p3',
-        name: 'Remote',
-        path: '/srv/a/very/deep/path/p3',
-        environmentId: 'ssh:h1',
-        workspaceId: 'w1',
-      ),
-    );
-    RepositoryDao(db).insert(
-      repository(
-        id: 'r1',
-        projectId: 'p1',
-        path: r'C:\src\a\very\deep\path\p1',
-      ),
-    );
+    server.mirrorInto(db);
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < 4; i++) {
       SessionDao(db).insert(
@@ -165,6 +178,7 @@ void main() {
     return ProviderScope(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -200,6 +214,7 @@ void main() {
   testWidgets('the Explorer at its 200px minimum, a project open', (
     tester,
   ) async {
+    await serve();
     await expectSurvivesWindowMatrix(
       tester,
       build: () => explorer(200),
@@ -211,6 +226,7 @@ void main() {
   testWidgets('the Explorer at a 240px side-panel width, a project open', (
     tester,
   ) async {
+    await serve();
     await expectSurvivesWindowMatrix(
       tester,
       build: () => explorer(240),
@@ -225,6 +241,7 @@ void main() {
   for (final width in [200.0, 240.0]) {
     testWidgets('the Explorer at ${width.toInt()}px with a session working '
         'and a row focused by the arrow keys, up to 2x text', (tester) async {
+      await serve();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => explorer(width, working: true),
@@ -258,6 +275,7 @@ void main() {
   for (final width in [200.0, 240.0]) {
     testWidgets('the Explorer at ${width.toInt()}px with three machines, up '
         'to 2x text', (tester) async {
+      await serve();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => explorer(width, third: true),

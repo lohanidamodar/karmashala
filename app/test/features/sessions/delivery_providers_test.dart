@@ -1,10 +1,11 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -13,6 +14,8 @@ import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -28,6 +31,8 @@ import '../terminal/fake_instance.dart';
 /// null behind, never a confident zero.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late List<List<String>> gitCalls;
   late List<List<String>> ghCalls;
 
@@ -56,7 +61,7 @@ void main() {
       '"pullRequest":{"reviewThreads":{"nodes":'
       '[{"isResolved":false},{"isResolved":true}]}}}}}';
 
-  setUp(() {
+  setUp(() async {
     statusOutput = porcelainV2(
       branch: 'work',
       upstream: 'origin/work',
@@ -79,9 +84,11 @@ void main() {
     gitCalls = [];
     ghCalls = [];
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -141,6 +148,7 @@ void main() {
     overlap = _OverlapRunner(responder: respond);
     final container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -155,6 +163,7 @@ void main() {
   ProviderContainer harness() {
     final container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -477,6 +486,7 @@ void main() {
       statusOutput = porcelainV2(branch: 'work', ahead: 0, behind: 0);
       final container = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -534,6 +544,7 @@ void main() {
     addSession('s1', at: null);
     final container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -563,6 +574,7 @@ void main() {
       addSession('s1', at: null);
       final container = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(

@@ -2,7 +2,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -14,6 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// What a terminal tab is called.
 ///
@@ -65,14 +66,20 @@ void main() {
     late ProviderContainer container;
     late TerminalSessionsController controller;
 
-    setUp(() {
+    setUp(() async {
       db = AppDatabase.memory();
       // A session row has foreign keys into all of these.
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      final server = FakeDataServer().mirrorInto(db)
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
-      container = fakeTerminalContainer(database: db);
+      container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          await server.override(),
+        ],
+      );
       controller = container.read(terminalSessionsControllerProvider.notifier);
     });
     tearDown(() {

@@ -4,7 +4,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -19,6 +18,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -30,16 +31,17 @@ import '../terminal/fake_instance.dart';
 ///
 /// [live] opens a (process-free) pane and points the row at it, which is what
 /// decides whether the card can offer to type anything at all.
-({AppDatabase db, Widget app, ProviderContainer container}) harness({
+Future<({AppDatabase db, Widget app, ProviderContainer container})> harness({
   required String agentId,
   required AgentStatusReport report,
   bool live = true,
   List<Override> overrides = const [],
-}) {
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
   final dao = SessionDao(db)
     ..insert(
@@ -57,6 +59,7 @@ import '../terminal/fake_instance.dart';
 
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
       agentSessionStatusProvider.overrideWith(
@@ -111,7 +114,7 @@ AgentStatusReport report({
 
 void main() {
   testWidgets('nothing is drawn unless an approval is pending', (tester) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       report: report(
         agentId: AgentIds.claudeCode,
@@ -132,7 +135,7 @@ void main() {
   testWidgets('quotes the agent screen verbatim, without interpreting it', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       report: report(
         agentId: AgentIds.claudeCode,
@@ -159,7 +162,7 @@ void main() {
   testWidgets('says it does not know when the source carried nothing', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       report: report(
         agentId: AgentIds.claudeCode,
@@ -182,7 +185,7 @@ void main() {
   testWidgets('offers both answers for Claude Code, and names the keys', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       report: report(
         agentId: AgentIds.claudeCode,
@@ -205,7 +208,7 @@ void main() {
   });
 
   testWidgets('offers no Deny for Codex, and says why', (tester) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.codex,
       report: report(
         agentId: AgentIds.codex,
@@ -230,7 +233,7 @@ void main() {
   testWidgets('a session with no live pane cannot be answered here', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       report: report(
         agentId: AgentIds.claudeCode,
@@ -260,7 +263,7 @@ void main() {
     testWidgets('an idle nudge says so and offers nothing to press', (
       tester,
     ) async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         report: report(
           agentId: AgentIds.claudeCode,
@@ -291,7 +294,7 @@ void main() {
     testWidgets('an unrecognised notice refuses to guess an approval', (
       tester,
     ) async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         report: report(
           agentId: AgentIds.claudeCode,
@@ -316,7 +319,7 @@ void main() {
     ) async {
       // The asymmetry survives the split: Codex names Enter and names no way to
       // decline, and that is a different question from whether a prompt is open.
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.codex,
         report: report(
           agentId: AgentIds.codex,
@@ -341,7 +344,7 @@ void main() {
     // a `hostedOnTerminal` flag suppressed it. The terminal answers its own
     // prompts now and the card is the conversation's alone, so there is one
     // wording and one route out — and nothing may reintroduce a second.
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.codex,
       report: report(agentId: AgentIds.codex),
     );
@@ -391,7 +394,7 @@ void main() {
     }
 
     testWidgets('its own options, and no Approve', (tester) async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         report: report(agentId: AgentIds.claudeCode),
         overrides: menuPane(),
@@ -410,7 +413,7 @@ void main() {
     testWidgets('choosing moves to the option, then confirms it', (
       tester,
     ) async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         report: report(agentId: AgentIds.claudeCode),
         overrides: menuPane(),
@@ -435,7 +438,7 @@ void main() {
   group('a question is answered with the options picked', () {
     testWidgets('its options, no Approve, and the answer sent', (tester) async {
       final sent = <RemoteQuestionAnswerRequest>[];
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         report: report(
           agentId: AgentIds.claudeCode,

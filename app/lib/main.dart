@@ -115,16 +115,15 @@ Future<void> _bootstrap(AppLogger logger) async {
   // through the server's data API (docs/daemon-architecture.md, slice 1).
   final database = AppDatabase.open(await serverDataDirectory());
 
-  // Notes, todos and preferences go through this machine's server, dialled
-  // (and started, as the launch would) before anything reads a setting.
+  // Notes, todos and preferences live at this machine's server, started (or
+  // adopted) and dialled before anything reads a setting. One that does not
+  // come up leaves the app saying so — it never keeps them itself.
   final hostAccess = localHostSessionAccessFor(probe);
-  final data = await connectLocalServerData(
-    database: database,
-    access: hostAccess,
-    logger: logger,
-  );
+  final data = await connectLocalServerData(access: hostAccess, logger: logger);
   final preferences = AppPreferences(data);
-  bootstrapMetadata(preferences, logger: logger);
+  // Only what the server said: an unread copy is not a first run.
+  final preferencesRead = data.preferences.isPrimed;
+  if (preferencesRead) bootstrapMetadata(preferences, logger: logger);
 
   // The verification artifact root, before the first frame: a Riverpod provider
   // that threw stays errored for the life of the process. Best-effort.
@@ -168,6 +167,10 @@ Future<void> _bootstrap(AppLogger logger) async {
     ],
   );
 
+  // The supervisor keeps the server up; the data link follows it back.
+  final supervisor = container.read(localHostSupervisorProvider);
+  if (supervisor != null) superviseDataLink(data, supervisor);
+
   // Before any pane exists: a row still claiming to run from a previous run is
   // one we lost sight of — unless this machine's host feed will say otherwise.
   final followsLocalHost = container.read(hostLifecycleSourceProvider) != null;
@@ -190,7 +193,8 @@ Future<void> _bootstrap(AppLogger logger) async {
 
   // First run, or one that never completed: probe every environment once, in
   // the background. The controller's state updates when it finishes.
-  if (preferences.read(MetadataKeys.agentsDiscoveredAt) == null) {
+  if (preferencesRead &&
+      preferences.read(MetadataKeys.agentsDiscoveredAt) == null) {
     unawaited(_discoverAgentsOnFirstRun(container, preferences, clock, logger));
   }
 

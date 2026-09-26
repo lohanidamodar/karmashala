@@ -21,7 +21,6 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -29,9 +28,14 @@ import 'package:karmashala_session/session.dart';
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
+import '../../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
 
   /// "Now" for the rendered ages, and the instant every reading below is
   /// measured back from. Fixed, because an age drawn from a real clock is a
@@ -43,12 +47,14 @@ void main() {
   /// the last-active provider itself keeps the real rule under test.
   final reports = <String, AgentStatusReport>{};
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     reports.clear();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Karmashala'));
-    RepositoryDao(db).insert(repository(name: 'app'));
+    server.projectRows.insert(project(name: 'Karmashala'));
+    server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -86,6 +92,7 @@ void main() {
   Future<ProviderContainer> open(WidgetTester tester) async {
     final container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(now)),
         sessionStatusLookupProvider.overrideWithValue((id) => reports[id]),

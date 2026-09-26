@@ -14,7 +14,6 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -30,6 +29,9 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// The inbox in the shell: one count, three places that show it, and a list
 /// that jumps to the thing it names.
@@ -46,6 +48,8 @@ void main() {
   setUp(() => commandKeyIsMeta = false);
 
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late ProviderContainer container;
 
   const key = AgentSessionKey('claudeCode', 'cli-1');
@@ -56,11 +60,13 @@ void main() {
     imported: false,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Fix login'));
   });
@@ -69,6 +75,7 @@ void main() {
   Future<void> pump(WidgetTester tester) async {
     container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // Session cards ask git about their checkout; the shell must never

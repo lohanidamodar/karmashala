@@ -2,12 +2,13 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
@@ -86,8 +87,9 @@ void main() {
   /// A session row, which is what makes an installation undeletable: the
   /// schema declares `sessions.agent_installation_id ... ON DELETE RESTRICT`.
   void giveItASession({String sessionId = 's1', String installationId = 'a1'}) {
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     SessionDao(
       db,
     ).insert(session(id: sessionId, agentInstallationId: installationId));

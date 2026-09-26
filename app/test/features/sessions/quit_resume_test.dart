@@ -6,14 +6,18 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/quit_resume.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -23,6 +27,8 @@ import '../../support/fixtures.dart';
 /// it will not bring back says why.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late ProviderContainer container;
   var now = testTime;
 
@@ -35,6 +41,7 @@ void main() {
   ProviderContainer build() => ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
+      dataClientProvider.overrideWithValue(data),
       clockProvider.overrideWithValue(MovableClock(now)),
       sessionIsHostedLiveProvider.overrideWithValue(live.contains),
       sessionStatusLookupProvider.overrideWithValue(
@@ -60,15 +67,17 @@ void main() {
         ).copyWith(externalSessionId: 'conv-$id'),
       );
 
-  setUp(() {
+  setUp(() async {
     now = testTime;
     live.clear();
     working.clear();
     db = AppDatabase.memory();
+    server = FakeDataServer(clock: () => now)..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
+    data = await server.connect();
     container = build();
   });
   tearDown(() {
@@ -142,11 +151,14 @@ void main() {
       expect(service().planForLaunch().isEmpty, isTrue);
     });
 
-    test('an unreadable record is dropped rather than guessed at', () {
-      db.writeMetadata(kQuitResumeKey, 'not json at all');
+    test('an unreadable record is dropped rather than guessed at', () async {
+      server.writeAsAnotherClient([
+        const PreferenceChanged(kQuitResumeKey, 'not json at all'),
+      ]);
       expect(service().planForLaunch().isEmpty, isTrue);
       // And it does not stay to be misread on the next launch too.
-      expect(db.readMetadata(kQuitResumeKey), '');
+      await pumpEventQueue();
+      expect(server.preferences[kQuitResumeKey], '');
     });
   });
 
@@ -220,12 +232,14 @@ void main() {
 
     test('a record with no timestamp is refused rather than trusted', () {
       seed('s1', 'Undated');
-      db.writeMetadata(
-        kQuitResumeKey,
-        jsonEncode({
-          'sessions': ['s1'],
-        }),
-      );
+      server.writeAsAnotherClient([
+        PreferenceChanged(
+          kQuitResumeKey,
+          jsonEncode({
+            'sessions': ['s1'],
+          }),
+        ),
+      ]);
       expect(
         service().planForLaunch().skipped.single.reason,
         contains('unreadable time'),

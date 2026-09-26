@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
@@ -12,6 +11,8 @@ import 'package:karmashala_store/database.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 Future<void> _settle() async {
@@ -31,8 +32,9 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final fake = FakeDataServer()..mirrorInto(db);
+    fake.projectRows.insert(project());
+    fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     dao = SessionDao(db)
       ..insert(session(id: 's1', title: 'Work'))
@@ -41,6 +43,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
       ],

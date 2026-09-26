@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala_ui/panes.dart';
@@ -26,7 +27,6 @@ import 'package:karmashala/src/features/github/application/github_providers.dart
 import 'package:karmashala/src/features/github/presentation/github_view.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -36,6 +36,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
 
 /// One header, six surfaces.
 ///
@@ -194,12 +195,15 @@ void main() {
 
   group('database-backed surfaces', () {
     late AppDatabase db;
+    late Override data;
 
-    setUp(() {
+    setUp(() async {
       db = AppDatabase.memory();
+      final server = FakeDataServer();
+      data = await server.override();
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
     });
     tearDown(() => db.close());
@@ -208,6 +212,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),

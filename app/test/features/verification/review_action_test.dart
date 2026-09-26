@@ -18,8 +18,8 @@ import '../fanout/fanout_harness.dart';
 void main() {
   late Harness h;
 
-  setUp(() {
-    h = harness();
+  setUp(() async {
+    h = await connectedHarness();
     // The work under review: an ordinary row, run by the first installation.
     SessionDao(h.db).insert(
       session(

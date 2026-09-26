@@ -9,20 +9,23 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
 import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The live half of the signal: what the observer does with a status change in
 /// a session whose row still says `running`.
 void main() {
   late AppDatabase db;
+  late Override data;
   late FollowUpDao followUps;
   late StreamController<AgentStatusReport> reports;
 
@@ -34,11 +37,13 @@ void main() {
     source: AgentStatusSource.terminalGrid,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', status: SessionStatus.running));
     followUps = FollowUpDao(db);
@@ -52,6 +57,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentSessionStatusProvider.overrideWith((ref, id) => reports.stream),
       ],

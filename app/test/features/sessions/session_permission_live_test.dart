@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/pending_live_switches.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -22,7 +21,9 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// A running session's permission mode is moved in place where the agent
@@ -37,14 +38,16 @@ void main() {
   late ProviderContainer container;
   var status = AgentActivityStatus.idle;
   late StreamController<String> idle;
+  late FakeDataServer server;
 
   setUp(() {
     status = AgentActivityStatus.idle;
     idle = StreamController<String>.broadcast();
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
   });
 
   tearDown(() async {
@@ -53,10 +56,11 @@ void main() {
     await idle.close();
   });
 
-  ProviderContainer build(String agentId) {
+  Future<ProviderContainer> build(String agentId) async {
     AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
     return container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -134,7 +138,7 @@ void main() {
   test(
     'idle: stepped to the mode asked for, read back off the screen',
     () async {
-      build(AgentIds.claudeCode);
+      await build(AgentIds.claudeCode);
       final session = await launched(AgentIds.claudeCode);
       choose(session.id, 'plan');
 
@@ -148,7 +152,7 @@ void main() {
   );
 
   test('a mode this session does not offer comes round and says so', () async {
-    build(AgentIds.claudeCode);
+    await build(AgentIds.claudeCode);
     // Launched without auto available: the cycle skips it.
     final session = await launched(
       AgentIds.claudeCode,
@@ -167,7 +171,7 @@ void main() {
   test(
     'mid-turn: switched at once, since the key works while it works',
     () async {
-      build(AgentIds.claudeCode);
+      await build(AgentIds.claudeCode);
       final session = await launched(AgentIds.claudeCode);
       status = AgentActivityStatus.working;
       choose(session.id, 'plan');
@@ -182,7 +186,7 @@ void main() {
   );
 
   test('a slow redraw is waited for, not read as a lap', () async {
-    build(AgentIds.claudeCode);
+    await build(AgentIds.claudeCode);
     final session = await launched(
       AgentIds.claudeCode,
       redrawAfter: const Duration(milliseconds: 150),
@@ -198,7 +202,7 @@ void main() {
   });
 
   test('a screen that never redraws is pressed once, and said so', () async {
-    build(AgentIds.claudeCode);
+    await build(AgentIds.claudeCode);
     final session = await launched(AgentIds.claudeCode, redrawAfter: null);
     choose(session.id, 'plan');
 
@@ -214,7 +218,7 @@ void main() {
   });
 
   test('an open prompt: nothing is pressed until it is idle', () async {
-    build(AgentIds.claudeCode);
+    await build(AgentIds.claudeCode);
     final session = await launched(AgentIds.claudeCode);
     container.read(pendingLiveSwitchesProvider);
     status = AgentActivityStatus.awaitingApproval;
@@ -233,7 +237,7 @@ void main() {
   });
 
   test('a mode outside the cycle waits for the next launch', () async {
-    build(AgentIds.claudeCode);
+    await build(AgentIds.claudeCode);
     final session = await launched(AgentIds.claudeCode);
     choose(session.id, 'dontAsk');
 
@@ -246,7 +250,7 @@ void main() {
   });
 
   test('Codex: its own permission picker is opened in the pane', () async {
-    build(AgentIds.codex);
+    await build(AgentIds.codex);
     final session = await launched(AgentIds.codex);
 
     final outcome = await container

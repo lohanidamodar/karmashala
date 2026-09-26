@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/cli_detection/application/subagent_provi
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/subagent_turns_tile.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -19,9 +18,12 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -76,6 +78,12 @@ void main() {
   /// Counts every subagent transcript read, by path.
   final reads = <String>[];
 
+  /// One server for the whole test, connected once, because the window
+  /// matrix builds the view again per size and its `build` cannot wait; each
+  /// fresh database mirrors the rows it already holds.
+  late FakeDataServer server;
+  late Override data;
+
   Widget build({
     required List<TranscriptMessage> messages,
     Map<String, List<TranscriptMessage>> turns = const {},
@@ -83,8 +91,7 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.mirrorInto(db);
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -105,6 +112,7 @@ void main() {
     return ProviderScope(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),
@@ -168,7 +176,13 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  setUp(reads.clear);
+  setUp(() async {
+    reads.clear();
+    server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    data = await server.override();
+  });
 
   testWidgets('a Task call with a subagent renders its turns when expanded', (
     tester,

@@ -11,11 +11,12 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
-import 'package:karmashala_projects/store.dart';
 
 import '../../support/fixtures.dart';
 import 'session_media_fixture.dart';
 import '../../support/temp_directory.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Turning a `[Image #6]` printed in a pane into the picture it names — or into
 /// a sentence saying why it cannot.
@@ -38,8 +39,9 @@ void main() {
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     dir = Directory.systemTemp.createTempSync('image_lookup');
   });
   tearDown(() {

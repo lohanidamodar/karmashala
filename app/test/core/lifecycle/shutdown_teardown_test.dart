@@ -9,7 +9,6 @@ import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -26,6 +25,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// What quitting has to end, beyond the components the lifecycle owner builds
 /// itself.
@@ -39,14 +41,18 @@ import '../../support/fixtures.dart';
 /// the agent CLIs outlived the app that started them.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late SessionDao sessionDao;
   late SessionEventDao eventDao;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     sessionDao = SessionDao(db);
     eventDao = SessionEventDao(db);
@@ -133,6 +139,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           chatProtocolResolverProvider.overrideWithValue((_) => adapter),
         ],
       );
@@ -172,6 +179,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           sshConnectionPoolProvider.overrideWithValue(pool),
         ],
       );

@@ -12,15 +12,16 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 
 import '../features/terminal/fake_instance.dart';
+import '../support/fake_data_server.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
+import '../support/workspace_mirror.dart';
 
 /// Right-click a terminal selection and keep it: as a todo, or as a note.
 ///
@@ -37,13 +38,21 @@ void main() {
     db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
 
+    // The server files by where the text came from: s1 is in r1, in p1.
+    final server = FakeDataServer(
+      clock: () => testTime,
+      repositoryOfSession: {'s1': 'r1'},
+      projectOfRepository: {'r1': 'p1'},
+    )..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         notesEnabledProvider.overrideWithValue(notesEnabled),
       ],

@@ -15,13 +15,14 @@ import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Records what it was asked to capture, and captures nothing.
 class _FakeCheckpoints extends CheckpointService {
@@ -123,11 +124,12 @@ void main() {
 
   AutomationRun theRun() => AutomationDao(db).runsFor('auto1').single;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -136,6 +138,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('run-')),
         checkpointServiceProvider.overrideWithValue(checkpoints),

@@ -1,0 +1,787 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
+
+/// **The one fake Karmashala server the app's tests talk to** — in memory,
+/// no database, no `DataService`. It answers the data protocol the way the
+/// server does as far as a client can tell: numbered writes (revisions),
+/// changes told to every *other* subscribed link, refusals, and a server that
+/// can stop and come back. Its domain rules are the shared ones in
+/// `karmashala_notes`; the server's own validation is tested in
+/// `server/test/data/`, not here.
+///
+/// ```dart
+/// final server = FakeDataServer();
+/// final client = await server.connect();   // primed, torn down with the test
+/// ProviderContainer(overrides: [dataClientProvider.overrideWithValue(client)]);
+/// ```
+class FakeDataServer {
+  FakeDataServer({
+    this.projects,
+    Map<String, String>? projectOfRepository,
+    Map<String, String>? repositoryOfSession,
+    DateTime Function()? clock,
+  }) : projectOfRepository = projectOfRepository ?? {},
+       repositoryOfSession = repositoryOfSession ?? {},
+       _now = clock ?? (() => DateTime.now().toUtc());
+
+  /// The projects a note or todo may be filed under; null accepts any.
+  final Set<String>? projects;
+
+  /// The filing lookups the server makes from its own tables.
+  final Map<String, String> projectOfRepository;
+  final Map<String, String> repositoryOfSession;
+
+  final DateTime Function() _now;
+
+  final notes = <String, Note>{};
+  final todos = <String, Todo>{};
+  final preferences = <String, String>{};
+
+  /// The workspace domain's four tables, shaped like the server's DAOs so a
+  /// test seeds them the way the server's store is written. A write here
+  /// after a client connected reaches it as another client's change.
+  late final workspaceRows = FakeRows<Workspace>._(
+    this,
+    (row) => row.id,
+    WorkspaceChanged.new,
+    WorkspaceRemoved.new,
+  );
+  late final projectRows = FakeRows<Project>._(
+    this,
+    (row) => row.id,
+    ProjectChanged.new,
+    ProjectRemoved.new,
+  );
+  late final repositoryRows = FakeRows<Repository>._(
+    this,
+    (row) => row.id,
+    RepositoryChanged.new,
+    RepositoryRemoved.new,
+  );
+  late final sectionRows = FakeRows<StoredSection>._(
+    this,
+    (row) => row.id,
+    SectionChanged.new,
+    SectionRemoved.new,
+  );
+
+  /// Told every workspace row this server writes, however it was written —
+  /// what `workspace_mirror.dart` copies into a test's database for the
+  /// domains that still read those tables there.
+  final rowListeners = <void Function(RowChange change)>[];
+
+  /// [preferences] as a store — for a test to seed before a client
+  /// connects, or to read back what one wrote (once it has landed).
+  late final PreferenceStore store = _MapStore(preferences);
+
+  /// The number of the last write.
+  int revision = 0;
+
+  /// Every request answered, by kind, in order.
+  final requests = <String>[];
+
+  /// When set, answers wait for it — a slow server, or one mid-answer.
+  Completer<void>? hold;
+
+  final _links = <FakeDataLink>{};
+  var _running = true;
+
+  /// A client of this server, primed, closed when the test ends. [wait] is
+  /// how long its writes wait for a server that is down.
+  Future<DataClient> connect({
+    Duration wait = const Duration(seconds: 20),
+  }) async {
+    final client = await DataClient.connect(dial, waitForServer: wait);
+    addTearDown(client.close);
+    return client;
+  }
+
+  /// [connect], as the override a test's container takes.
+  Future<Override> override() async =>
+      dataClientProvider.overrideWithValue(await connect());
+
+  /// What a client dials: a new link, or nothing while stopped.
+  Future<DataEndpoint?> dial() async {
+    if (!_running) return null;
+    final link = FakeDataLink._(this);
+    _links.add(link);
+    return link;
+  }
+
+  /// The server goes away: every link closes and nothing answers a dial.
+  void stop() {
+    _running = false;
+    for (final link in [..._links]) {
+      link._drop();
+    }
+  }
+
+  /// It comes back; clients redial on their own backoff.
+  void start() => _running = true;
+
+  /// Another client's write, told to every subscribed link.
+  void writeAsAnotherClient(List<DataChange> changes) {
+    for (final change in changes) {
+      switch (change) {
+        case NoteChanged(:final note):
+          notes[note.id] = note;
+        case NoteRemoved(:final id):
+          notes.remove(id);
+        case TodoChanged(:final todo):
+          todos[todo.id] = todo;
+        case TodoRemoved(:final id):
+          todos.remove(id);
+        case PreferenceChanged(:final key, :final value):
+          value == null ? preferences.remove(key) : preferences[key] = value;
+        case final RowChange row:
+          _applyRow(row);
+      }
+    }
+    _tell(null, changes);
+  }
+
+  void _applyRow(RowChange change) => switch (change) {
+    WorkspaceChanged(:final workspace) => workspaceRows._put(workspace),
+    ProjectChanged(:final project) => projectRows._put(project),
+    RepositoryChanged(:final repository) => repositoryRows._put(repository),
+    SectionChanged(:final section) => sectionRows._put(section),
+    WorkspaceRemoved(:final id) => workspaceRows._remove(id),
+    ProjectRemoved(:final id) => projectRows._remove(id),
+    RepositoryRemoved(:final id) => repositoryRows._remove(id),
+    SectionRemoved(:final id) => sectionRows._remove(id),
+  };
+
+  static Project _withWorkspace(Project project, String? workspaceId) =>
+      Project(
+        id: project.id,
+        name: project.name,
+        root: project.root,
+        createdAt: project.createdAt,
+        workspaceId: workspaceId,
+        defaultRepositoryId: project.defaultRepositoryId,
+      );
+
+  static Project _withDefault(Project project, String? repositoryId) => Project(
+    id: project.id,
+    name: project.name,
+    root: project.root,
+    createdAt: project.createdAt,
+    workspaceId: project.workspaceId,
+    defaultRepositoryId: repositoryId,
+  );
+
+  void _tell(FakeDataLink? origin, List<DataChange> changes) {
+    if (changes.isEmpty) return;
+    final batch = DataChanges(++revision, List.unmodifiable(changes));
+    for (final link in _links) {
+      if (link != origin && link._subscribed) link._changes.add(batch);
+    }
+  }
+
+  DataReply<R> _handle<R>(FakeDataLink origin, DataRequest<R> request) {
+    requests.add(request.kind);
+    final changes = <DataChange>[];
+    final Object result = switch (request) {
+      DataSubscribe() => _subscribe(origin),
+      NotesList(:final sessionId) => [
+        for (final note in notes.values)
+          if (sessionId == null || note.sourceSessionId == sessionId) note,
+      ]..sort(compareNotes),
+      final NoteCapture r => _capture(r, changes),
+      final NoteEdit r => _changedNote(
+        _note(r.id).copyWith(
+          body: r.body,
+          title: noteTitleOf(r.title),
+          clearTitle: noteTitleOf(r.title) == null,
+          projectId: _project(r.projectId),
+          clearProjectId: r.projectId == null,
+          updatedAt: _now(),
+        ),
+        changes,
+      ),
+      final NoteFile r => _changedNote(
+        _note(r.id).copyWith(
+          projectId: _project(r.projectId),
+          clearProjectId: r.projectId == null,
+        ),
+        changes,
+      ),
+      NoteDelete(:final id) => _removeNote(id, changes),
+      TodosList() => [...todos.values]..sort(compareTodos),
+      final TodoAdd r => _add(r, changes),
+      final TodoSetDone r => _setDone(r, changes),
+      final TodoEdit r => _changedTodo(
+        _todo(r.id).copyWith(body: _body(r.body)),
+        changes,
+      ),
+      final TodoFile r => _changedTodo(
+        _todo(r.id).copyWith(
+          projectId: _project(r.projectId),
+          clearProjectId: r.projectId == null,
+        ),
+        changes,
+      ),
+      final TodoMove r => _move(r, changes),
+      TodoDelete(:final id) => _removeTodo(id, changes),
+      TodosClearDone(:final ids) => _clearDone(ids, changes),
+      PreferencesGet() => Map.of(preferences),
+      PreferenceSet(:final key, :final value) => _setPreference(
+        key,
+        value,
+        changes,
+      ),
+      PreferenceRemove(:final key) => _setPreference(key, null, changes),
+      WorkspaceList() => WorkspaceSnapshot(
+        workspaces: workspaceRows.getAll(),
+        projects: projectRows.getAll(),
+        repositories: repositoryRows.getAll(),
+        sections: sectionRows.getAll(),
+      ),
+      final WorkspacePut r => _putWorkspace(r, changes),
+      final WorkspaceSetColor r => _rowChanged(
+        changes,
+        _workspace(r.id).copyWith(color: r.color, clearColor: r.color == null),
+      ),
+      WorkspaceDelete(:final id) => _deleteWorkspace(id, changes),
+      final ProjectCreate r => _createProject(r, changes),
+      final ProjectUpdate r => _updateProject(r, changes),
+      ProjectsFile(:final placements) => _fileProjects(placements, changes),
+      ProjectDelete(:final id) => _deleteProject(id, changes),
+      ProjectsUsingEnvironment(:final environmentId) => [
+        for (final p in projectRows.getAll())
+          if (p.environmentId == environmentId) p.name,
+      ],
+      final CheckoutsAdd r => _addCheckouts(r, changes),
+      CheckoutsRetire(:final ids) => _retireCheckouts(ids, changes),
+      final CheckoutsIdentify r => _identify(r, changes),
+      SectionPut(:final section) => _rowChanged(changes, section),
+      SectionsReorder(:final ids) => _reorderSections(ids, changes),
+      SectionDelete(:final id) => _deleteSection(id, changes),
+    };
+    _tell(origin, changes);
+    return DataReply(result as R, revision, List.unmodifiable(changes));
+  }
+
+  // The workspace domain.
+
+  var _ids = 0;
+  String _freshId(String prefix) => '$prefix-fake-${++_ids}';
+
+  /// The records that keep a checkout from being retired, by its id — what
+  /// the server counts in session history.
+  final historyReferences = <String, int>{};
+
+  Workspace _workspace(String id) =>
+      workspaceRows.getById(id) ??
+      (throw DataRefused.notFound('no context with id $id'));
+
+  Project _existingProject(String id) =>
+      projectRows.getById(id) ??
+      (throw DataRefused.notFound('no project with id $id'));
+
+  T _rowChanged<T extends Object>(List<DataChange> changes, T row) {
+    changes.add(_rowTable(row)._put(row));
+    return row;
+  }
+
+  FakeRows<Object> _rowTable(Object row) => switch (row) {
+    Workspace() => workspaceRows,
+    Project() => projectRows,
+    Repository() => repositoryRows,
+    StoredSection() => sectionRows,
+    _ => throw ArgumentError('not a workspace row: $row'),
+  };
+
+  Workspace _putWorkspace(WorkspacePut r, List<DataChange> changes) {
+    final name =
+        rowNameOf(r.workspaceName) ??
+        (throw const DataRefused.invalid('A context needs a name.'));
+    for (final other in workspaceRows.getAll()) {
+      if (other.id != r.id && sameContextName(other.name, name)) {
+        throw DataRefused.invalid('A context called "$name" already exists.');
+      }
+    }
+    final existing = workspaceRows.getById(r.id);
+    return _rowChanged(
+      changes,
+      Workspace(
+        id: r.id,
+        name: name,
+        description: descriptionOf(r.description),
+        color: existing?.color,
+        createdAt: existing?.createdAt ?? _now(),
+      ),
+    );
+  }
+
+  DataAck _deleteWorkspace(String id, List<DataChange> changes) {
+    _workspace(id);
+    changes.add(workspaceRows._remove(id));
+    for (final project in projectRows.getAll()) {
+      if (project.workspaceId == id) {
+        _rowChanged(changes, _withWorkspace(project, null));
+      }
+    }
+    return const DataAck();
+  }
+
+  ProjectCheckouts _createProject(ProjectCreate r, List<DataChange> changes) {
+    final name =
+        rowNameOf(r.projectName) ??
+        (throw const DataRefused.invalid('A project needs a name.'));
+    if (r.workspaceId case final id?) _workspace(id);
+    final project = _rowChanged(
+      changes,
+      Project(
+        id: _freshId('project'),
+        name: name,
+        root: r.root,
+        createdAt: _now(),
+        workspaceId: r.workspaceId,
+      ),
+    );
+    final checkouts = checkoutsForNewProject(
+      project,
+      r.found,
+      newId: () => _freshId('repository'),
+    );
+    for (final checkout in checkouts) {
+      _rowChanged(changes, checkout);
+    }
+    return ProjectCheckouts(project, checkouts);
+  }
+
+  ProjectUpdated _updateProject(ProjectUpdate r, List<DataChange> changes) {
+    final project = _existingProject(r.id);
+    final name = r.projectName == null
+        ? project.name
+        : (rowNameOf(r.projectName!) ??
+              (throw const DataRefused.invalid('A project needs a name.')));
+    final root = r.root;
+    var rebased = const <Repository>[];
+    var leftBehind = const <Repository>[];
+    var added = const <Repository>[];
+    if (root != null && rootMoves(project.root, root)) {
+      (:rebased, :leftBehind) = rebaseCheckouts(
+        project.root,
+        root,
+        repositoryRows.getByProject(project.id),
+      );
+      for (final row in rebased) {
+        _rowChanged(changes, row);
+      }
+      added = checkoutsToAdd(
+        project,
+        [...rebased, ...leftBehind],
+        r.found,
+        newId: () => _freshId('repository'),
+        now: _now(),
+      );
+      for (final row in added) {
+        _rowChanged(changes, row);
+      }
+    }
+    final wanted = r.clearDefaultRepository
+        ? null
+        : (r.defaultRepositoryId ?? project.defaultRepositoryId);
+    final owned = repositoryRows
+        .getByProject(project.id)
+        .any((checkout) => checkout.id == wanted);
+    final updated = _rowChanged(
+      changes,
+      Project(
+        id: project.id,
+        name: name,
+        root: root ?? project.root,
+        createdAt: project.createdAt,
+        workspaceId: project.workspaceId,
+        defaultRepositoryId: owned ? wanted : null,
+      ),
+    );
+    return ProjectUpdated(
+      project: updated,
+      rebased: rebased,
+      leftBehind: leftBehind,
+      discovered: added,
+    );
+  }
+
+  DataAck _fileProjects(
+    Map<String, String?> placements,
+    List<DataChange> changes,
+  ) {
+    placements.forEach((projectId, workspaceId) {
+      final project = _existingProject(projectId);
+      if (workspaceId != null) _workspace(workspaceId);
+      _rowChanged(changes, _withWorkspace(project, workspaceId));
+    });
+    return const DataAck();
+  }
+
+  DataAck _deleteProject(String id, List<DataChange> changes) {
+    _existingProject(id);
+    changes.addAll(projectRows._removeCascading(id));
+    for (final note in [...notes.values]) {
+      if (note.projectId == id) {
+        _changedNote(note.copyWith(clearProjectId: true), changes);
+      }
+    }
+    for (final todo in [...todos.values]) {
+      if (todo.projectId == id) {
+        _changedTodo(todo.copyWith(clearProjectId: true), changes);
+      }
+    }
+    return const DataAck();
+  }
+
+  List<Repository> _addCheckouts(CheckoutsAdd r, List<DataChange> changes) {
+    final project = _existingProject(r.projectId);
+    final added = checkoutsToAdd(
+      project,
+      repositoryRows.getByProject(project.id),
+      r.found,
+      newId: () => _freshId('repository'),
+      orRoot: r.orRoot,
+      now: _now(),
+    );
+    for (final row in added) {
+      _rowChanged(changes, row);
+    }
+    return added;
+  }
+
+  Map<String, int> _retireCheckouts(
+    List<String> ids,
+    List<DataChange> changes,
+  ) {
+    final answer = <String, int>{};
+    for (final id in ids) {
+      final checkout = repositoryRows.getById(id);
+      if (checkout == null) continue;
+      final records = answer[id] = historyReferences[id] ?? 0;
+      if (records > 0) continue;
+      changes.add(repositoryRows._remove(id));
+      final project = projectRows.getById(checkout.projectId);
+      if (project != null && project.defaultRepositoryId == id) {
+        _rowChanged(changes, _withDefault(project, null));
+      }
+    }
+    return answer;
+  }
+
+  List<Repository> _identify(CheckoutsIdentify r, List<DataChange> changes) => [
+    for (final row in repositoryRows.getAll())
+      if (Checkout(row.path) == Checkout(r.path) &&
+          row.canonicalId != r.canonicalId)
+        _rowChanged(
+          changes,
+          Repository(
+            id: row.id,
+            projectId: row.projectId,
+            name: row.name,
+            path: row.path,
+            createdAt: row.createdAt,
+            canonicalId: r.canonicalId,
+          ),
+        ),
+  ];
+
+  List<StoredSection> _reorderSections(
+    List<String> ids,
+    List<DataChange> changes,
+  ) {
+    for (var i = 0; i < ids.length; i++) {
+      final section = sectionRows.getById(ids[i]);
+      if (section != null && section.position != i) {
+        _rowChanged(changes, section.copyWith(position: i));
+      }
+    }
+    return sectionRows.getAll()..sort(compareSections);
+  }
+
+  DataAck _deleteSection(String id, List<DataChange> changes) {
+    if (sectionRows.getById(id) == null) {
+      throw DataRefused.notFound('no section with id $id');
+    }
+    changes.add(sectionRows._remove(id));
+    return const DataAck();
+  }
+
+  DataAck _subscribe(FakeDataLink origin) {
+    origin._subscribed = true;
+    return const DataAck();
+  }
+
+  String? _project(String? id) {
+    if (id != null && !(projects?.contains(id) ?? true)) {
+      throw DataRefused.notFound('no project with id $id');
+    }
+    return id;
+  }
+
+  void _newId(String id, bool taken) {
+    final problem = recordIdProblem(id);
+    if (problem != null) throw DataRefused.invalid(problem);
+    if (taken) throw DataRefused.invalid('id $id is taken');
+  }
+
+  Note _note(String id) =>
+      notes[id] ?? (throw DataRefused.notFound('no note with id $id'));
+
+  Todo _todo(String id) =>
+      todos[id] ?? (throw DataRefused.notFound('no todo with id $id'));
+
+  String _body(String body) =>
+      todoBodyOf(body) ?? (throw const DataRefused.invalid('a todo is blank'));
+
+  Note _capture(NoteCapture r, List<DataChange> changes) {
+    _newId(r.id, notes.containsKey(r.id));
+    final session = r.sourceSessionId;
+    final repository =
+        r.sourceRepositoryId ??
+        (session == null ? null : repositoryOfSession[session]);
+    final project =
+        r.projectId ??
+        (r.inheritProject && repository != null
+            ? projectOfRepository[repository]
+            : null);
+    final now = _now();
+    return _changedNote(
+      Note(
+        id: r.id,
+        title: noteTitleOf(r.title),
+        body: r.body,
+        projectId: _project(project),
+        sourceSessionId: session,
+        sourceRepositoryId: repository,
+        sourceMessageOrdinal: r.sourceMessageOrdinal,
+        sourceMessageRole: r.sourceMessageRole,
+        createdAt: now,
+        updatedAt: now,
+      ),
+      changes,
+    );
+  }
+
+  Note _changedNote(Note note, List<DataChange> changes) {
+    notes[note.id] = note;
+    changes.add(NoteChanged(note));
+    return note;
+  }
+
+  DataAck _removeNote(String id, List<DataChange> changes) {
+    _note(id);
+    notes.remove(id);
+    changes.add(NoteRemoved(id));
+    return const DataAck();
+  }
+
+  Todo _add(TodoAdd r, List<DataChange> changes) {
+    _newId(r.id, todos.containsKey(r.id));
+    final body = _body(r.body);
+    final fromSession = r.projectOfSession;
+    final repository = fromSession == null
+        ? null
+        : repositoryOfSession[fromSession];
+    return _changedTodo(
+      Todo(
+        id: r.id,
+        body: body,
+        projectId: _project(
+          r.projectId ??
+              (repository == null ? null : projectOfRepository[repository]),
+        ),
+        position: nextTodoPosition(todos.values),
+        createdAt: _now(),
+      ),
+      changes,
+    );
+  }
+
+  Todo _setDone(TodoSetDone r, List<DataChange> changes) {
+    final todo = _todo(r.id);
+    if (todo.isDone == r.done) return todo;
+    return _changedTodo(
+      r.done ? todo.copyWith(doneAt: _now()) : todo.copyWith(clearDoneAt: true),
+      changes,
+    );
+  }
+
+  Todo _changedTodo(Todo todo, List<DataChange> changes) {
+    todos[todo.id] = todo;
+    changes.add(TodoChanged(todo));
+    return todo;
+  }
+
+  List<Todo> _move(TodoMove r, List<DataChange> changes) {
+    _todo(r.id);
+    final order = openOrderAfterMove(todos.values, r.id, up: r.up);
+    for (var i = 0; i < (order?.length ?? 0); i++) {
+      final todo = todos[order![i]]!;
+      if (todo.position != i) _changedTodo(todo.copyWith(position: i), changes);
+    }
+    return [...todos.values]..sort(compareTodos);
+  }
+
+  DataAck _removeTodo(String id, List<DataChange> changes) {
+    _todo(id);
+    todos.remove(id);
+    changes.add(TodoRemoved(id));
+    return const DataAck();
+  }
+
+  int _clearDone(List<String> ids, List<DataChange> changes) {
+    final going = [
+      for (final id in ids)
+        if (todos[id]?.isDone ?? false) id,
+    ];
+    for (final id in going) {
+      todos.remove(id);
+      changes.add(TodoRemoved(id));
+    }
+    return going.length;
+  }
+
+  DataAck _setPreference(String key, String? value, List<DataChange> changes) {
+    final problem =
+        PreferenceKeys.keyProblem(key) ??
+        (value == null ? null : PreferenceKeys.valueProblem(value));
+    if (problem != null) throw DataRefused.invalid(problem);
+    if (PreferenceKeys.isReserved(key)) {
+      throw DataRefused(DataRefusalCode.reserved, '"$key" is not a preference');
+    }
+    value == null ? preferences.remove(key) : preferences[key] = value;
+    changes.add(PreferenceChanged(key, value));
+    return const DataAck();
+  }
+}
+
+/// One workspace table of a [FakeDataServer], in memory.
+class FakeRows<T extends Object> {
+  FakeRows._(this._server, this._idOf, this._changed, this._removed);
+
+  final FakeDataServer _server;
+  final String Function(T row) _idOf;
+  final RowChange Function(T row) _changed;
+  final RowChange Function(String id) _removed;
+  final _rows = <String, T>{};
+
+  T? getById(String id) => _rows[id];
+
+  List<T> getAll() => [..._rows.values];
+
+  void insert(T row) => _server._tell(null, [_put(row)]);
+
+  void update(T row) => insert(row);
+
+  /// Removes [id]; a project takes its checkouts with it, as the schema's
+  /// cascade does.
+  void delete(String id) => _server._tell(null, _removeCascading(id));
+
+  RowChange _put(T row) {
+    _rows[_idOf(row)] = row;
+    return _told(_changed(row));
+  }
+
+  RowChange _remove(String id) {
+    _rows.remove(id);
+    return _told(_removed(id));
+  }
+
+  List<RowChange> _removeCascading(String id) => [
+    if (identical(this, _server.projectRows))
+      for (final checkout in _server.repositoryRows.getByProject(id))
+        _server.repositoryRows._remove(checkout.id),
+    _remove(id),
+  ];
+
+  RowChange _told(RowChange change) {
+    for (final listener in _server.rowListeners) {
+      listener(change);
+    }
+    return change;
+  }
+}
+
+extension FakeWorkspaceRows on FakeRows<Workspace> {
+  void updateColor(String id, String? color) =>
+      update(getById(id)!.copyWith(color: color, clearColor: color == null));
+}
+
+extension FakeProjectRows on FakeRows<Project> {
+  void setWorkspace(String id, String? workspaceId) =>
+      update(FakeDataServer._withWorkspace(getById(id)!, workspaceId));
+
+  void setDefaultRepository(String id, String? repositoryId) =>
+      update(FakeDataServer._withDefault(getById(id)!, repositoryId));
+}
+
+extension FakeRepositoryRows on FakeRows<Repository> {
+  List<Repository> getByProject(String projectId) => [
+    for (final row in getAll())
+      if (row.projectId == projectId) row,
+  ]..sort(compareRepositories);
+}
+
+extension FakeSectionRows on FakeRows<StoredSection> {
+  void put(StoredSection section) => insert(section);
+}
+
+class _MapStore implements PreferenceStore {
+  _MapStore(this._map);
+
+  final Map<String, String> _map;
+
+  @override
+  String? read(String key) => _map[key];
+
+  @override
+  void write(String key, String value) => _map[key] = value;
+
+  @override
+  void remove(String key) => _map.remove(key);
+}
+
+/// One client's link to a [FakeDataServer], asynchronous like a socket.
+class FakeDataLink implements DataEndpoint {
+  FakeDataLink._(this._server);
+
+  final FakeDataServer _server;
+  final _changes = StreamController<DataChanges>.broadcast(sync: true);
+  final _done = Completer<void>();
+  var _subscribed = false;
+
+  @override
+  Future<DataReply<R>> send<R>(DataRequest<R> request) async {
+    await _server.hold?.future;
+    if (_done.isCompleted) {
+      throw const DataRefused.unavailable('the link closed');
+    }
+    return _server._handle(this, request);
+  }
+
+  @override
+  Stream<DataChanges> get changes => _changes.stream;
+
+  @override
+  Future<void> get done => _done.future;
+
+  void _drop() {
+    _server._links.remove(this);
+    if (!_done.isCompleted) _done.complete();
+  }
+
+  @override
+  Future<void> close() async {
+    _drop();
+    await _changes.close();
+  }
+}

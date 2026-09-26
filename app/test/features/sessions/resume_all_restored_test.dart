@@ -34,7 +34,7 @@ void main() {
 
   test('resuming four restored sessions is one layout write, where four '
       'separate resumes are four', () async {
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
 
     final first = containerOver(db);
@@ -111,7 +111,7 @@ void main() {
 
   test('a frame is handed back between every pane, and not around the '
       'edges', () async {
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
 
     final first = containerOver(db);
@@ -143,7 +143,7 @@ void main() {
   });
 
   test('nothing dormant is nothing done, and no frame given up', () async {
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
     var yields = 0;
     final container = containerOver(db, frameYield: () async => yields++);
@@ -164,7 +164,7 @@ void main() {
 
   test('one session that cannot be resumed does not hold the other three '
       'back, and is still reported', () async {
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
 
     final first = containerOver(db);

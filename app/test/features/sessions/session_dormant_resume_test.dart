@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -8,7 +10,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -23,6 +24,8 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -61,12 +64,19 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-AppDatabase seededDatabase() {
+/// The data client each seeded database's workspace is served through — one
+/// server per database, so a restart (a second container over the same db)
+/// sees the same workspace.
+final _clients = Expando<DataClient>();
+
+Future<AppDatabase> seededDatabase() async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: 'sharing'));
+  _clients[db] = await server.connect();
   return db;
 }
 
@@ -85,6 +95,7 @@ ProviderContainer containerOver(
   Future<void> Function()? frameYield,
 }) => ProviderContainer(
   overrides: [
+    dataClientProvider.overrideWithValue(_clients[db]!),
     ...fakeTerminalOverrides(database: db),
     clockProvider.overrideWithValue(FixedClock(testTime)),
     hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -135,7 +146,7 @@ String paneOf(ProviderContainer container, String sessionId) =>
 void main() {
   test('a session restored from disk resumes in the pane it came back in, '
       'not beside it', () async {
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
 
     final first = containerOver(db);
@@ -192,7 +203,7 @@ void main() {
     // belongs to *this* run of the app, its buffer has moved on since anything
     // was restored into it, and it is a record of a process that failed or was
     // ended rather than history waiting to be continued.
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
     final container = containerOver(db);
     addTearDown(container.dispose);
@@ -222,7 +233,7 @@ void main() {
   });
 
   test('a session with no pane at all still gets one', () async {
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
     final container = containerOver(db);
     addTearDown(container.dispose);
@@ -251,7 +262,7 @@ void main() {
     // The property `livePaneFor` exists to hold, restated as the thing that
     // must not change: the double-writer refusal, the archive guard and the
     // permission chip all read it, and a restored pane is not a process.
-    final db = seededDatabase();
+    final db = await seededDatabase();
     addTearDown(db.close);
 
     final first = containerOver(db);
@@ -282,7 +293,7 @@ void main() {
   group('the pane bar', () {
     test('resumes a restored agent pane instead of running its opening '
         'prompt again', () async {
-      final db = seededDatabase();
+      final db = await seededDatabase();
       addTearDown(db.close);
 
       final first = containerOver(db);
@@ -339,7 +350,7 @@ void main() {
     });
 
     test('says so when the pane is not one of our sessions', () async {
-      final db = seededDatabase();
+      final db = await seededDatabase();
       addTearDown(db.close);
       final container = containerOver(db);
       addTearDown(container.dispose);

@@ -5,7 +5,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -13,7 +12,9 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// Which checkout a session's work belongs to, and what follows it.
@@ -30,16 +31,20 @@ void main() {
   const hub = r'C:\src\demo';
   const nested = r'C:\src\demo\projects\app\app';
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(path: hub));
-    RepositoryDao(db)
+    server.projectRows.insert(project(path: hub));
+    server.repositoryRows
       ..insert(repository(id: 'hub', name: 'demo', path: hub))
       ..insert(repository(id: 'nested', name: 'app', path: nested));
     AgentInstallationDao(db).insert(agentInstallation());
     container = ProviderContainer(
-      overrides: fakeTerminalOverrides(database: db),
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        await server.override(),
+      ],
     );
     addTearDown(container.dispose);
   });

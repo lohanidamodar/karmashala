@@ -3,36 +3,37 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/projects/application/project_service.dart';
-import 'package:karmashala_projects/store.dart';
+import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
   late AppDatabase db;
-  late ProjectDao projectDao;
-  late RepositoryDao repositoryDao;
+  late FakeDataServer server;
+  late WorkspaceData workspace;
   late FakeRepositoryDiscoveryService discovery;
 
   EnvironmentPath root(String path) =>
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
   ProjectService build({CommandRunnerFactory? runnerFactory}) => ProjectService(
-    workspace: workspaceOver(db),
+    workspace: workspace,
     discovery: discovery,
     runnerFactory: runnerFactory,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv(id: localHostEnvironmentId))
       ..upsert(wslEnv())
       ..upsert(sshEnvFixture());
-    projectDao = ProjectDao(db);
-    repositoryDao = RepositoryDao(db);
+    server = FakeDataServer();
+    workspace = await workspaceOf(server);
     discovery = FakeRepositoryDiscoveryService();
   });
   tearDown(() => db.close());
@@ -50,8 +51,8 @@ void main() {
 
     expect(result.project.name, 'Workspace');
     expect(result.repositories.map((r) => r.name), ['app', 'api']);
-    expect(projectDao.getAll().single.name, 'Workspace');
-    expect(repositoryDao.getByProject(result.project.id).length, 2);
+    expect(server.projectRows.getAll().single.name, 'Workspace');
+    expect(server.repositoryRows.getByProject(result.project.id).length, 2);
   });
 
   group('a folder that is not a clone', () {
@@ -80,7 +81,7 @@ void main() {
       build().createProjectByDiscovery(name: 'X', root: root(r'C:\missing')),
       throwsA(isA<RepositoryDiscoveryException>()),
     );
-    expect(projectDao.getAll(), isEmpty);
+    expect(server.projectRows.getAll(), isEmpty);
   });
 
   test(
@@ -128,7 +129,7 @@ void main() {
             'git for this project runs in WSL, so the row is spelled its way',
       );
       expect(
-        repositoryDao.getByProject(created.project.id).length,
+        server.repositoryRows.getByProject(created.project.id).length,
         2,
         reason: 'the root was already recorded and must not be added twice',
       );

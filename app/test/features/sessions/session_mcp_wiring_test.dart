@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/session_mcp.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -23,7 +22,9 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// A launched session actually being told the tools exist — the gap this whole
@@ -41,13 +42,17 @@ void main() {
     executable: 'wt.exe',
   );
 
+  /// The server each seeded database's workspace lives at.
+  final serverOf = Expando<FakeDataServer>();
+
   AppDatabase seededDatabase() {
     final db = AppDatabase.memory();
+    final server = serverOf[db] = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db)
       ..insert(agentInstallation(agentId: AgentIds.claudeCode))
       ..insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
@@ -57,13 +62,14 @@ void main() {
   /// A container over [db]. The id prefix is a parameter because a second
   /// container over one database is what a restart *is*, and two generators
   /// counting from zero would hand out ids the first run already used.
-  ProviderContainer containerOver(
+  Future<ProviderContainer> containerOver(
     AppDatabase db, {
     SessionMcp? mcp,
     String idPrefix = 's-',
     FakeCommandRunner? runner,
-  }) => ProviderContainer(
+  }) async => ProviderContainer(
     overrides: [
+      await serverOf[db]!.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
@@ -76,12 +82,14 @@ void main() {
     ],
   );
 
-  ({ProviderContainer container, AppDatabase db, FakeCommandRunner runner})
-  harness({SessionMcp? mcp}) {
+  Future<
+    ({ProviderContainer container, AppDatabase db, FakeCommandRunner runner})
+  >
+  harness({SessionMcp? mcp}) async {
     final db = seededDatabase();
     final runner = FakeCommandRunner();
     return (
-      container: containerOver(db, mcp: mcp, runner: runner),
+      container: await containerOver(db, mcp: mcp, runner: runner),
       db: db,
       runner: runner,
     );
@@ -133,7 +141,9 @@ void main() {
 
   group('a pane launch carries it', () {
     test('Claude Code is handed the config file it can open', () async {
-      final h = harness(mcp: _FixedMcp(configPath: '/mnt/c/x/session.json'));
+      final h = await harness(
+        mcp: _FixedMcp(configPath: '/mnt/c/x/session.json'),
+      );
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -145,7 +155,7 @@ void main() {
 
     test('Codex is handed the URL, and no file is asked for', () async {
       final mcp = _FixedMcp(configPath: '/mnt/c/x/session.json');
-      final h = harness(mcp: mcp);
+      final h = await harness(mcp: mcp);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -166,7 +176,7 @@ void main() {
       'the session named in the URL is the session that was launched',
       () async {
         final mcp = _FixedMcp(configPath: '/mnt/c/x/session.json');
-        final h = harness(mcp: mcp);
+        final h = await harness(mcp: mcp);
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -190,7 +200,7 @@ void main() {
     test('because both surfaces share one argument builder', () async {
       // "Open this in Windows Terminal instead" must produce the same agent, on
       // the same endpoint, speaking as the same session.
-      final h = harness(mcp: _FixedMcp(configPath: r'C:\x\session.json'));
+      final h = await harness(mcp: _FixedMcp(configPath: r'C:\x\session.json'));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -228,7 +238,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
 
-      final first = containerOver(
+      final first = await containerOver(
         db,
         mcp: _FixedMcp(
           url: 'http://127.0.0.1:1111/mcp/yesterday',
@@ -245,7 +255,7 @@ void main() {
 
       // The restart: a different port, a different credential, a config
       // directory that was emptied on the way in.
-      final next = containerOver(
+      final next = await containerOver(
         db,
         idPrefix: 't-',
         mcp: _FixedMcp(
@@ -278,7 +288,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
 
-      final first = containerOver(
+      final first = await containerOver(
         db,
         mcp: _FixedMcp(url: 'http://127.0.0.1:1111/mcp/yesterday'),
       );
@@ -290,7 +300,7 @@ void main() {
       first.read(terminalSessionsControllerProvider.notifier).persistLayout();
       first.dispose();
 
-      final next = containerOver(
+      final next = await containerOver(
         db,
         idPrefix: 't-',
         mcp: _FixedMcp(url: 'http://127.0.0.1:2222/mcp/today'),
@@ -317,7 +327,7 @@ void main() {
         final db = seededDatabase();
         addTearDown(db.close);
 
-        final first = containerOver(
+        final first = await containerOver(
           db,
           mcp: _FixedMcp(configPath: '/gone/session-abc.json'),
         );
@@ -325,7 +335,7 @@ void main() {
         first.read(terminalSessionsControllerProvider.notifier).persistLayout();
         first.dispose();
 
-        final next = containerOver(db, idPrefix: 't-');
+        final next = await containerOver(db, idPrefix: 't-');
         addTearDown(next.dispose);
         next
             .read(terminalSessionsControllerProvider.notifier)
@@ -347,7 +357,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
 
-      final first = containerOver(db);
+      final first = await containerOver(db);
       final paneId = (await launchIn(first)).paneId!;
       first.read(terminalSessionsControllerProvider.notifier).persistLayout();
       first.dispose();
@@ -369,7 +379,7 @@ void main() {
         paneId,
       ]);
 
-      final next = containerOver(db, idPrefix: 't-');
+      final next = await containerOver(db, idPrefix: 't-');
       addTearDown(next.dispose);
       next.read(terminalSessionsControllerProvider.notifier).startPane(paneId);
 
@@ -384,7 +394,7 @@ void main() {
 
   group('nothing changes when there is nothing to say', () {
     test('no control server means the launch of yesterday', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -401,7 +411,7 @@ void main() {
       () async {
         // What a session over SSH gets, and a WSL session on a host with no
         // switch: the provisioner answers null and the command line is untouched.
-        final h = harness(mcp: _FixedMcp(access: null));
+        final h = await harness(mcp: _FixedMcp(access: null));
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -417,7 +427,7 @@ void main() {
     test('a provisioner that throws never fails a launch', () async {
       // The one rule that outranks everything else here: a session that opens
       // without its tools is a smaller loss than a session that does not open.
-      final h = harness(mcp: _ThrowingMcp());
+      final h = await harness(mcp: _ThrowingMcp());
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -441,7 +451,7 @@ void main() {
       addTearDown(() {
         if (tmp.existsSync()) tmp.deleteSync(recursive: true);
       });
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 

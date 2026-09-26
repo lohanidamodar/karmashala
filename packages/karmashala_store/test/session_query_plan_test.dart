@@ -1,6 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import 'package:test/test.dart';
 
 /// **What the planner does with the sessions table.**
 ///
@@ -204,10 +203,7 @@ void main() {
     }
   });
 
-  test('and the dao still answers with the row', () {
-    // The guard against a green plan over a query that stopped working: an
-    // index is only correct if the read it serves still returns the right row.
-    final dao = SessionDao(db);
-    expect(dao.getByExternalSessionId('nobody'), isNull);
-  });
+  // The guard against a green plan over a query that stopped working — that
+  // `SessionDao` still answers the lookup — lives with the DAO in
+  // karmashala_session_engine's session_dao_lookup_test.dart.
 }

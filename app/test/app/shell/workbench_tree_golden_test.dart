@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -31,6 +30,9 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// The workbench's rendered widget tree, frozen for its main states.
 ///
@@ -74,17 +76,22 @@ const _narrow = Size(760, 620);
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late ProviderContainer container;
   final captured = <String, String>{};
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         // Every id in the dump is a name a reader can follow between states.
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),

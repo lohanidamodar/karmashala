@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -30,6 +29,9 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// **The quota in its new home: the bar that belongs to the session.**
 ///
@@ -52,6 +54,8 @@ import '../../support/window_matrix.dart';
 ///   row is paid for in runs.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late ProviderContainer container;
   late FakeAgentUsageService service;
   late MovableClock clock;
@@ -73,6 +77,7 @@ void main() {
   ProviderContainer containerFor({Duration floor = Duration.zero}) {
     final made = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(
           database: db,
           usageService: service,
@@ -90,11 +95,13 @@ void main() {
     return made;
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);

@@ -19,8 +19,8 @@ import 'package:path/path.dart' as p;
 import '../../support/temp_directory.dart';
 import 'fake_instance.dart';
 
-/// The session host is started as the app starts, while local panes are
-/// host-backed — before the agents' hooks are installed and before the
+/// The session host is started as the app starts, whatever the panes setting
+/// (the app's data lives there) — before the agents' hooks are installed and before the
 /// lifecycle subscriber dials — so the first session's first turn is heard.
 void main() {
   late Directory home;
@@ -125,17 +125,19 @@ void main() {
     },
   );
 
-  test('with host-backed panes off, nothing is started', () async {
+  test('with host-backed panes off, the host still starts — the data '
+      'lives there — but no hook points at it and no feed dials', () async {
     final host = access();
     final container = containerWith(host, hostBacked: false);
 
     container.listen(hostLifecycleSubscriberProvider, (_, _) {});
+    final reading = await container.read(localHostStartupProvider)!;
     await pumpEventQueue();
 
-    expect(container.read(localHostStartupProvider), isNull);
+    expect(reading?.status, HostDeploymentStatus.ready);
     expect(container.read(hostLifecycleSubscriberProvider), isNull);
-    expect(host.starts, 0);
-    expect(events, isEmpty);
+    expect(host.starts, 1);
+    expect(events, ['start']);
   });
 
   test('with no host reachable here, nothing is started', () {

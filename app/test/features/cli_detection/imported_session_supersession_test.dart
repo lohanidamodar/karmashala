@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -24,11 +23,15 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// One CLI session, one row in the workspace.
 ///
@@ -82,15 +85,19 @@ Session native({
 );
 
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   late AppDatabase db;
   late ImportedSessionDao dao;
   late SessionDao sessions;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -212,6 +219,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          dataClientProvider.overrideWithValue(client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('p-')),
         ],
@@ -261,6 +269,7 @@ void main() {
         ProviderScope(
           overrides: [
             ...fakeTerminalOverrides(database: db),
+            dataClientProvider.overrideWithValue(client),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
             commandRunnerFactoryProvider.overrideWithValue(
@@ -295,6 +304,7 @@ void main() {
       final c = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          dataClientProvider.overrideWithValue(client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
           commandRunnerFactoryProvider.overrideWithValue(

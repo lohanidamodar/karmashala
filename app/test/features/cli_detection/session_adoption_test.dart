@@ -7,15 +7,17 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Adopting a session the user started by hand in one of our panes.
 ///
@@ -85,12 +87,16 @@ DetectedSession detected(
   modifiedAt: modifiedAt,
 );
 
+/// The workspace every harness reads: one project with one checkout, on a
+/// fake server `main`'s setUp connects to before each case.
+late FakeDataServer server;
+late WorkspaceData workspace;
+
 Harness harness({AppDatabase? database, bool installAgents = true}) {
   final db = database ?? AppDatabase.memory();
   if (database == null) {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.mirrorInto(db);
     if (installAgents) {
       AgentInstallationDao(db)
         ..insert(agentInstallation(agentId: AgentIds.claudeCode))
@@ -119,7 +125,7 @@ Harness harness({AppDatabase? database, bool installAgents = true}) {
   final service = SessionAdoptionService(
     sessionDao: SessionDao(db),
     importedSessionDao: ImportedSessionDao(db),
-    workspace: workspaceOver(db),
+    workspace: workspace,
     environmentDao: ExecutionEnvironmentDao(db),
     installationDao: AgentInstallationDao(db),
     linkDao: SessionRepositoryDao(db),
@@ -176,6 +182,13 @@ void typeCommand(
 }
 
 void main() {
+  setUp(() async {
+    server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    workspace = await workspaceOf(server);
+  });
+
   group('a pane that starts an agent', () {
     test('is adopted once, and a second signal adds no second row', () {
       final h = harness();
@@ -345,8 +358,7 @@ void main() {
     test('an agent with no installation in the repository\'s environment', () {
       final db = AppDatabase.memory();
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.mirrorInto(db);
       final h = harness(database: db);
       typeCommand(h, 'pane-1', 'cmd-0', 'claude');
 

@@ -19,23 +19,27 @@ import 'package:karmashala/src/features/terminal/application/terminal_theme_cont
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
-import '../../support/stored_preferences.dart';
 
 /// Settings › Appearance › Side panel: the rail's checklist where a person who
 /// never right-clicks the rail will look for it.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
-  ProviderContainer prepared() {
+  Future<ProviderContainer> prepared() async {
     db = AppDatabase.memory();
     addTearDown(db.close);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer(clock: () => testTime);
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
@@ -65,7 +69,7 @@ void main() {
       ..physicalSize = size
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final container = prepared();
+    final container = await prepared();
     await tester.pumpWidget(app(container, home));
     await tester.pumpAndSettle();
     return container;
@@ -83,7 +87,7 @@ void main() {
       .value!;
 
   List<String> stored() =>
-      SettingsRepository(StoredPreferences(db)).load().hiddenSidePanelSurfaces;
+      SettingsRepository(server.store).load().hiddenSidePanelSurfaces;
 
   testWidgets('the Explorer\'s project details are a switch here, on until '
       'turned off', (tester) async {
@@ -109,7 +113,7 @@ void main() {
       isFalse,
     );
     expect(
-      SettingsRepository(StoredPreferences(db)).load().explorerProjectDetails,
+      SettingsRepository(server.store).load().explorerProjectDetails,
       isFalse,
     );
   });
@@ -204,7 +208,7 @@ void main() {
   });
 
   testWidgets('survives the window matrix', (tester) async {
-    final container = prepared();
+    final container = await prepared();
     container
         .read(settingsControllerProvider.notifier)
         .setSidePanelSurfaceHidden('media', hidden: true);

@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'comparison_fixtures.dart';
 
@@ -24,6 +25,11 @@ import 'comparison_fixtures.dart';
 /// blocks a merge — G3 step 2 is where policy changes — it only makes the fact
 /// legible at the two places the decision is read and made.
 void main() {
+  // Where each test's project and repository live; the screens read the
+  // workspace through a client of it.
+  late FakeDataServer server;
+  setUp(() => server = FakeDataServer());
+
   ComparisonCandidate winnerWith(String? producerSessionId) =>
       ComparisonCandidate(
         id: 'cand-win',
@@ -121,10 +127,13 @@ void main() {
   });
 
   group('the outcome carries it on screen', () {
-    Future<void> pumpList(WidgetTester tester, AppDatabase db) =>
+    Future<void> pumpList(WidgetTester tester, AppDatabase db) async =>
         tester.pumpWidget(
           ProviderScope(
-            overrides: [databaseProvider.overrideWithValue(db)],
+            overrides: [
+              databaseProvider.overrideWithValue(db),
+              await server.override(),
+            ],
             child: MaterialApp(
               home: Scaffold(
                 body: ComparisonList(onOpen: (_) {}, onNew: () {}),
@@ -135,7 +144,7 @@ void main() {
 
     /// Rewrites the winner's producer, which is the only thing under test.
     AppDatabase seedWithProducer(String? producerSessionId) {
-      final db = seedDatabase();
+      final db = seedDatabase(server: server);
       ComparisonDao(db).updateEvidence(
         'cand-win',
         CandidateEvidence(
@@ -176,7 +185,7 @@ void main() {
     });
 
     testWidgets('an unsettled comparison claims no verifier', (tester) async {
-      final db = seedDatabase(merged: false);
+      final db = seedDatabase(merged: false, server: server);
       addTearDown(db.close);
 
       await pumpList(tester, db);
@@ -190,7 +199,7 @@ void main() {
     /// The merge action needs a live session row behind the candidate;
     /// `resultsFor` returns nothing without one, and the button stays off.
     AppDatabase seedMergeable(String? producerSessionId) {
-      final db = seedDatabase(merged: false);
+      final db = seedDatabase(merged: false, server: server);
       AgentInstallationDao(db).insert(agentInstallation());
       SessionDao(db).insert(session(id: 's-win', title: 'The winner'));
       ComparisonDao(db).updateEvidence(
@@ -207,7 +216,10 @@ void main() {
     Future<void> openMergeDialog(WidgetTester tester, AppDatabase db) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [databaseProvider.overrideWithValue(db)],
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            await server.override(),
+          ],
           child: MaterialApp(
             home: Scaffold(
               body: ComparisonView(comparisonId: 'cmp-1', onBack: () {}),

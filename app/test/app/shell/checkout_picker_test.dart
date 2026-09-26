@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/git/application/checkout_probe_queue.dar
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -32,6 +31,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// Picking the checkout the repository-scoped surfaces describe.
 ///
@@ -44,6 +46,8 @@ void main() {
   const inboxPath = r'C:\src\demo\projects\wt-inbox';
 
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late FakeCommandRunner git;
   late FakeRepositoryDiscoveryService discovery;
 
@@ -106,17 +110,19 @@ void main() {
 
   /// Every checkout in the hub project, in the order discovery records them.
   void insertAllCheckouts() {
-    RepositoryDao(db)
+    server.repositoryRows
       ..insert(repository(id: 'hub', name: 'demo', path: hubPath))
       ..insert(repository(id: 'app', name: 'app', path: appPath))
       ..insert(repository(id: 'relay', name: 'wt-relay', path: relayPath))
       ..insert(repository(id: 'inbox', name: 'wt-inbox', path: inboxPath));
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Demo', path: hubPath));
+    server.projectRows.insert(project(id: 'p1', name: 'Demo', path: hubPath));
     AgentInstallationDao(db).insert(agentInstallation());
     git = FakeCommandRunner(responder: respond);
     discovery = FakeRepositoryDiscoveryService();
@@ -127,6 +133,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -267,9 +274,9 @@ void main() {
       // no caret, nothing to click, and no way to say that the clone inside it
       // was simply never scanned for. A list of one is worth opening when the
       // thing under it is Rescan.
-      RepositoryDao(
-        db,
-      ).insert(repository(id: 'hub', name: 'demo', path: hubPath));
+      server.repositoryRows.insert(
+        repository(id: 'hub', name: 'demo', path: hubPath),
+      );
       final container = makeContainer();
       container.read(selectedRepositoryIdProvider.notifier).select('hub');
       await pump(tester, container);
@@ -396,6 +403,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -438,7 +446,7 @@ void main() {
     tester,
   ) async {
     // Agents cut worktrees while the app is open; the rescan is all it takes.
-    RepositoryDao(db)
+    server.repositoryRows
       ..insert(repository(id: 'hub', name: 'demo', path: hubPath))
       ..insert(repository(id: 'app', name: 'app', path: appPath));
     final container = makeContainer();
@@ -468,11 +476,11 @@ void main() {
 
   test('the picker only ever offers checkouts of one project', () {
     // Offering another project's clones would move the Explorer under the user.
-    ProjectDao(
-      db,
-    ).insert(project(id: 'p2', name: 'Other', path: r'C:\src\other'));
+    server.projectRows.insert(
+      project(id: 'p2', name: 'Other', path: r'C:\src\other'),
+    );
     insertAllCheckouts();
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       repository(
         id: 'other',
         projectId: 'p2',

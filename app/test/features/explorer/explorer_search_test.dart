@@ -3,12 +3,12 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 
 void main() {
@@ -16,7 +16,8 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db)
+    final server = FakeDataServer();
+    server.projectRows
       ..insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'))
       ..insert(project(id: 'p2', name: 'Beta', path: r'C:\src\beta'));
 
@@ -24,6 +25,7 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           // A session card asks git for its checkout's changes; a widget test
           // must never spawn one.
           commandRunnerFactoryProvider.overrideWithValue(
@@ -51,16 +53,18 @@ void main() {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      final server = FakeDataServer();
       for (var i = 0; i < 80; i++) {
         final n = '$i'.padLeft(2, '0');
-        ProjectDao(
-          db,
-        ).insert(project(id: 'p$n', name: 'Project $n', path: 'C:\\src\\p$n'));
+        server.projectRows.insert(
+          project(id: 'p$n', name: 'Project $n', path: 'C:\\src\\p$n'),
+        );
       }
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            await server.override(),
             commandRunnerFactoryProvider.overrideWithValue(
               FakeCommandRunnerFactory(),
             ),

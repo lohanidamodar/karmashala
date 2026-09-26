@@ -23,10 +23,10 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/system_health_fakes.dart';
-import '../../support/stored_preferences.dart';
 
 /// "Pair a phone…" lives where the machine is shown — its SSH card, its
 /// environment card, the health panel — and every one opens the same dialog.
@@ -34,9 +34,11 @@ import '../../support/stored_preferences.dart';
 /// `explorer_scope_test.dart`.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer(clock: () => testTime);
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(sshEnvFixture());
@@ -58,10 +60,12 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    final data = await server.override();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
           // Opening the dialog must not reach for a machine.
@@ -144,7 +148,7 @@ void main() {
   testWidgets('and says it from the store, so it survives a restart', (
     tester,
   ) async {
-    CompanionRouteStore(StoredPreferences(db)).write('h1', HostRoute.relay);
+    CompanionRouteStore(server.store).write('h1', HostRoute.relay);
     await pump(
       tester,
       const SingleChildScrollView(child: EnvironmentsSection()),

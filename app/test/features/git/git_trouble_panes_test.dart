@@ -8,15 +8,18 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **The three states a pane can be in when it has no git facts, and the words
 /// each one gets.**
@@ -38,6 +41,9 @@ import '../terminal/fake_instance.dart';
 /// | could not reach  | no — we don't know  | calm, muted, a broken link |
 /// | git failed       | yes, a fault        | the red box, git's words   |
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
+
   /// §11's compact cell. These are side panes that are dragged narrow, so the
   /// phone width is also the realistic narrow-panel width.
   const phone = WindowCell('390x844 (phone)', Size(390, 844));
@@ -49,11 +55,13 @@ void main() {
     path: r'C:\src\demo\app',
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
   });
   tearDown(() => db.close());
 
@@ -79,6 +87,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(client),
         repositoryChangesProvider.overrideWith((ref) async => throw error),
         repoWorktreesProvider.overrideWith((ref) async => throw error),
         currentBranchProvider.overrideWith((ref) async => throw error),
@@ -213,6 +222,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          dataClientProvider.overrideWithValue(client),
           repoWorktreesProvider.overrideWith(
             (ref) async => const <GitWorktree>[],
           ),
@@ -263,6 +273,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          dataClientProvider.overrideWithValue(client),
           repoWorktreesProvider.overrideWith(
             (ref) async => const <GitWorktree>[],
           ),

@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_tree_state
 import 'package:karmashala/src/features/explorer/application/project_head.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -31,8 +30,10 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// A disk that is a map, and keeps what it was asked for. A branch name is
@@ -73,6 +74,7 @@ class HeadFiles implements GitFiles {
 /// something that moves a branch has happened.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late HeadFiles files;
   late FakeCommandRunner git;
 
@@ -100,12 +102,12 @@ void main() {
       String environmentId = 'windows',
       List<String>? repositories,
     }) {
-      ProjectDao(db).insert(
+      server.projectRows.insert(
         project(id: id, name: name, path: path, environmentId: environmentId),
       );
       final paths = repositories ?? [path];
       for (var i = 0; i < paths.length; i++) {
-        RepositoryDao(db).insert(
+        server.repositoryRows.insert(
           repository(
             id: 'r-$id-$i',
             projectId: id,
@@ -140,6 +142,7 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     files = HeadFiles({
       '/w/app/.git/HEAD': 'ref: refs/heads/main\n',
       '/w/app-polish/.git': 'gitdir: /w/app/.git/worktrees/app-polish\n',
@@ -177,6 +180,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db, gitFiles: files),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -279,10 +283,10 @@ void main() {
     await pump(
       tester,
       alsoSeed: () {
-        ProjectDao(db).insert(project(id: 'unc', name: 'unc', path: share));
-        RepositoryDao(
-          db,
-        ).insert(repository(id: 'r-unc', projectId: 'unc', path: share));
+        server.projectRows.insert(project(id: 'unc', name: 'unc', path: share));
+        server.repositoryRows.insert(
+          repository(id: 'r-unc', projectId: 'unc', path: share),
+        );
       },
     );
 

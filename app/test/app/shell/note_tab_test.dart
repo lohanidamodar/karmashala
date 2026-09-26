@@ -6,6 +6,8 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
@@ -13,7 +15,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notes/application/note_drafts.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -23,22 +24,25 @@ import 'package:karmashala_ui/transcript.dart';
 import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import 'package:karmashala_notes/store.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 
 /// **A note opens in a workbench tab of its own**, edited with the app's one
 /// code editor and read as rendered markdown.
 void main() {
   late CountingDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
 
-  setUp(() {
+  setUp(() async {
+    server = FakeDataServer();
+    data = await server.connect();
     commandKeyIsMeta = false;
     db = CountingDatabase();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -47,6 +51,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(data),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
@@ -179,17 +184,11 @@ void main() {
 
     await typeBody(tester, 'draft, grown');
     expect(find.text('Saving…'), findsOneWidget);
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      'draft',
-    );
+    expect(server.notes[note.id]!.body, 'draft');
 
     await tester.pump(NoteDrafts.autosaveDelay);
     await settle(tester);
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      'draft, grown',
-    );
+    expect(server.notes[note.id]!.body, 'draft, grown');
     expect(find.text('Saved'), findsOneWidget);
   });
 
@@ -219,10 +218,7 @@ void main() {
 
     await typeBody(tester, '# Heading\n\nchanged');
     await pressCommand(tester, LogicalKeyboardKey.keyS);
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      '# Heading\n\nchanged',
-    );
+    expect(server.notes[note.id]!.body, '# Heading\n\nchanged');
 
     await pressCommand(tester, LogicalKeyboardKey.keyE);
     expect(
@@ -247,10 +243,7 @@ void main() {
     await tester.pump(NoteDrafts.autosaveDelay);
     await settle(tester);
 
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.title,
-      'Compact tabs',
-    );
+    expect(server.notes[note.id]!.title, 'Compact tabs');
     final tabId = noteTabsIn(container).single;
     expect(
       container
@@ -279,7 +272,7 @@ void main() {
     );
     await settle(tester);
 
-    expect(NoteDao(container.read(databaseProvider)).getById(note.id), isNull);
+    expect(server.notes[note.id], isNull);
     expect(noteTabsIn(container), isEmpty);
     expect(find.byType(NoteTabView), findsNothing);
   });
@@ -327,17 +320,11 @@ void main() {
     expect(find.textContaining('changed elsewhere'), findsWidgets);
     await tester.pump(NoteDrafts.autosaveDelay * 2);
     await settle(tester);
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      'theirs',
-    );
+    expect(server.notes[note.id]!.body, 'theirs');
 
     await tester.tap(find.text('Keep mine'));
     await settle(tester);
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      'mine, unsaved',
-    );
+    expect(server.notes[note.id]!.body, 'mine, unsaved');
   });
 
   testWidgets('closing a tab in conflict asks which to keep', (tester) async {
@@ -364,10 +351,7 @@ void main() {
     await settle(tester);
 
     expect(noteTabsIn(container), isEmpty);
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      'mine',
-    );
+    expect(server.notes[note.id]!.body, 'mine');
   });
 
   testWidgets('closing an empty new note does not keep it', (tester) async {
@@ -382,11 +366,16 @@ void main() {
 
     expect(noteTabsIn(container), isEmpty);
     expect(container.read(notesProvider), isEmpty);
-    expect(NoteDao(container.read(databaseProvider)).list(), isEmpty);
+    expect(server.notes, isEmpty);
   });
 
   testWidgets('it comes back after a restart', (tester) async {
-    final first = fakeTerminalContainer(database: db);
+    final first = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(data),
+      ],
+    );
     final note = first.read(notesProvider.notifier).capture(body: 'kept');
     final terminals = first.read(terminalSessionsControllerProvider.notifier);
     terminals.openTab(TerminalProfile.powerShell);
@@ -407,7 +396,12 @@ void main() {
   });
 
   testWidgets('a restored tab whose note is gone closes', (tester) async {
-    final first = fakeTerminalContainer(database: db);
+    final first = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(data),
+      ],
+    );
     final terminals = first.read(terminalSessionsControllerProvider.notifier);
     terminals.openTab(TerminalProfile.powerShell);
     terminals.openDocumentTab(notePaneId('note-that-was-deleted'));

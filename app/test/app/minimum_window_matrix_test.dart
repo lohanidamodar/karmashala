@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -37,6 +36,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_theme_cont
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../features/fanout/comparison_fixtures.dart';
@@ -46,6 +46,8 @@ import '../support/fakes.dart';
 import '../support/fixtures.dart';
 import '../support/system_health_fakes.dart';
 import '../support/window_matrix.dart';
+import '../support/fake_data_server.dart';
+import '../support/workspace_mirror.dart';
 
 /// The minimum-window and accessibility matrix, applied to the surfaces the
 /// audit flagged.
@@ -87,19 +89,18 @@ void main() {
   group('FanOutDialog', () {
     // The dialog the audit named: it asks for 1180x780, which is 460 wider and
     // 220 taller than the whole supported window.
-    AppDatabase seeded() {
-      final db = seedDatabase();
+    Future<ProviderContainer> withRepositorySelected() async {
+      final server = FakeDataServer();
+      final db = seedDatabase(server: server);
       AgentInstallationDao(db)
         ..insert(agentInstallation(id: 'a1', agentId: 'claudeCode'))
         ..insert(agentInstallation(id: 'a2', agentId: 'codex'));
       addTearDown(db.close);
-      return db;
-    }
-
-    ProviderContainer withRepositorySelected(AppDatabase db) {
+      final data = await server.override();
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           ...noProcessOverrides(),
         ],
       );
@@ -109,7 +110,7 @@ void main() {
     }
 
     testWidgets('the comparison list', (tester) async {
-      final container = withRepositorySelected(seeded());
+      final container = await withRepositorySelected();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(container, const FanOutDialog()),
@@ -118,7 +119,7 @@ void main() {
     });
 
     testWidgets('the new-fan-out setup form', (tester) async {
-      final container = withRepositorySelected(seeded());
+      final container = await withRepositorySelected();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(container, const FanOutDialog()),
@@ -132,7 +133,7 @@ void main() {
     });
 
     testWidgets('an open comparison', (tester) async {
-      final container = withRepositorySelected(seeded());
+      final container = await withRepositorySelected();
       await expectSurvivesWindowMatrix(
         tester,
         build: () =>
@@ -143,11 +144,14 @@ void main() {
   });
 
   testWidgets('ComparisonView on its own', (tester) async {
-    final db = seedDatabase();
+    final server = FakeDataServer();
+    final db = seedDatabase(server: server);
     addTearDown(db.close);
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
       ],
     );
@@ -164,17 +168,20 @@ void main() {
   });
 
   group('NewSessionDialog', () {
-    ProviderContainer prepared() {
+    Future<ProviderContainer> prepared() async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      final server = FakeDataServer();
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
 
+      final data = await server.override();
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          data,
           ...noProcessOverrides(),
           // Detecting terminals really probes PATH; the picker only needs a list.
           availableSystemTerminalsProvider.overrideWith(
@@ -199,7 +206,7 @@ void main() {
     }
 
     testWidgets('running in the app', (tester) async {
-      final container = prepared();
+      final container = await prepared();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(container, const NewSessionDialog()),
@@ -209,7 +216,7 @@ void main() {
     testWidgets('running in an external terminal', (tester) async {
       // Picking the external terminal adds a whole dropdown to a dialog that
       // was already close to the bottom of the window.
-      final container = prepared();
+      final container = await prepared();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(container, const NewSessionDialog()),
@@ -237,8 +244,11 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    // The session is still in the database, and its foreign keys reach the
+    // workspace rows the server holds.
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       Session(
@@ -256,9 +266,11 @@ void main() {
       ),
     );
 
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionDeliveryProvider.overrideWith(
@@ -319,12 +331,15 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
 
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         ...noProcessOverrides(),
       ],
     );
@@ -429,13 +444,17 @@ void main() {
     // the size it will actually be used.
     /// [coverage] stands in for the status registry's watch-set measurement,
     /// which no cycle has produced in a widget test.
-    ProviderContainer prepared({SessionStatusCoverage? coverage}) {
+    ProviderContainer prepared(
+      Override data, {
+      SessionStatusCoverage? coverage,
+    }) {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           ...noProcessOverrides(),
           // The Terminal page reads the session host's status, and the one running
           // on this machine is not the test's to dial.
@@ -453,9 +472,10 @@ void main() {
     }
 
     testWidgets('the default landing (nav plus General)', (tester) async {
+      final data = await FakeDataServer().override();
       await expectSurvivesWindowMatrix(
         tester,
-        build: () => app(prepared(), const SettingsScreen()),
+        build: () => app(prepared(data), const SettingsScreen()),
         matrix: const [...windowMatrix, desktopLargeText],
         because:
             'the grouped rail, the search box and the general rows must hold at '
@@ -471,10 +491,11 @@ void main() {
       // two, and their labels are the CLI's own words rather than three short
       // shared ones. Four dropdowns across do not fit 720x560, which is why
       // the card wraps — and this is what proves it does.
+      final data = await FakeDataServer().override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
-          prepared(),
+          prepared(data),
           const SettingsScreen(initialSection: SettingsSectionId.permissions),
         ),
         matrix: const [...windowMatrix, desktopLargeText],
@@ -487,10 +508,11 @@ void main() {
     testWidgets('the diagnostics section, watch-set readout and all', (
       tester,
     ) async {
+      final data = await FakeDataServer().override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
-          prepared(),
+          prepared(data),
           const SettingsScreen(initialSection: SettingsSectionId.diagnostics),
         ),
         matrix: const [...windowMatrix, desktopLargeText],
@@ -505,10 +527,12 @@ void main() {
     ) async {
       // The measured state, not the "nothing yet" one: three value rows and,
       // when the rotation is behind, a paragraph of error text under them.
+      final data = await FakeDataServer().override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
           prepared(
+            data,
             coverage: const SessionStatusCoverage(
               tracked: 900,
               hookAnswered: 10,
@@ -529,10 +553,11 @@ void main() {
     });
 
     testWidgets('the terminal section', (tester) async {
+      final data = await FakeDataServer().override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
-          prepared(),
+          prepared(data),
           const SettingsScreen(initialSection: SettingsSectionId.terminal),
         ),
         matrix: const [...windowMatrix, desktopLargeText],
@@ -550,9 +575,11 @@ void main() {
       ..upsert(windowsEnv())
       ..upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
 
+    final data = await FakeDataServer().override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],

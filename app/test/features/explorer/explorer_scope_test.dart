@@ -8,6 +8,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -25,7 +27,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_project_r
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
@@ -47,6 +48,7 @@ import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -60,6 +62,10 @@ import '../terminal/fake_instance.dart';
 /// names an affordance the old tree had and finds it in the new one.
 void main() {
   late AppDatabase db;
+  // One client for every container a test makes: a "restart" reads the
+  // settings back from the same server.
+  late DataClient data;
+  late FakeDataServer server;
 
   /// Three machines — one of them holding nothing — two contexts that hold
   /// projects and one that does not, and a project in no context. A [fourth]
@@ -96,12 +102,12 @@ void main() {
         ('w2', 'Game dev'),
         ('w3', 'Shelf'),
       ]) {
-        WorkspaceDao(
-          db,
-        ).insert(Workspace(id: id, name: name, createdAt: testTime));
+        server.workspaceRows.insert(
+          Workspace(id: id, name: name, createdAt: testTime),
+        );
       }
     }
-    final projects = ProjectDao(db);
+    final projects = server.projectRows;
     String? filed(String id) => contexts ? id : null;
     projects
       ..insert(
@@ -135,13 +141,18 @@ void main() {
     AgentInstallationDao(db).insert(agentInstallation());
   }
 
-  setUp(() => db = AppDatabase.memory());
+  setUp(() async {
+    db = AppDatabase.memory();
+    server = FakeDataServer();
+    data = await server.connect();
+  });
   tearDown(() => db.close());
 
   ProviderContainer newContainer() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -1000,9 +1011,9 @@ void main() {
       tester,
     ) async {
       seed(machines: false);
-      WorkspaceDao(
-        db,
-      ).insert(Workspace(id: 'long', name: 'Zebra cross', createdAt: testTime));
+      server.workspaceRows.insert(
+        Workspace(id: 'long', name: 'Zebra cross', createdAt: testTime),
+      );
       final container = newContainer();
       container
           .read(workspaceScopeProvider.notifier)
@@ -1021,7 +1032,7 @@ void main() {
         'force never does', (tester) async {
       seed(machines: false);
       for (var i = 0; i < 6; i++) {
-        WorkspaceDao(db).insert(
+        server.workspaceRows.insert(
           Workspace(id: 'x$i', name: 'Zebra crossing $i', createdAt: testTime),
         );
       }
@@ -1096,7 +1107,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(workspacesControllerProvider), hasLength(2));
-      expect(ProjectDao(db).getById('p2')!.workspaceId, isNull);
+      await tester.pump();
+      expect(server.projectRows.getById('p2')!.workspaceId, isNull);
       expect(drawn(tester), containsAllInOrder(['NO CONTEXT', 'roguelike']));
     });
 
@@ -1166,7 +1178,7 @@ void main() {
         'out by the next', (tester) async {
       seed(machines: false);
       for (var i = 0; i < 40; i++) {
-        ProjectDao(db).insert(
+        server.projectRows.insert(
           project(
             id: 'c$i',
             name: 'client-$i',
@@ -1174,9 +1186,9 @@ void main() {
             workspaceId: 'w1',
           ),
         );
-        ProjectDao(
-          db,
-        ).insert(project(id: 'l$i', name: 'loose-$i', path: '/l/$i'));
+        server.projectRows.insert(
+          project(id: 'l$i', name: 'loose-$i', path: '/l/$i'),
+        );
       }
       await pump(tester, size: const Size(420, 600));
       final top = tester.getTopLeft(find.byType(ListView)).dy;
@@ -1262,7 +1274,7 @@ void main() {
         'header', (tester) async {
       seed(machines: false);
       for (var i = 0; i < 40; i++) {
-        ProjectDao(db).insert(
+        server.projectRows.insert(
           project(
             id: 'c$i',
             name: 'client-$i',
@@ -1305,7 +1317,7 @@ void main() {
     ) async {
       seed(machines: false);
       for (var i = 0; i < 300; i++) {
-        ProjectDao(db).insert(
+        server.projectRows.insert(
           project(
             id: 'c$i',
             name: 'client-$i',

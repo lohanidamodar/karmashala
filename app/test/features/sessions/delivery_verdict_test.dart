@@ -1,10 +1,11 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -19,6 +20,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -33,12 +36,16 @@ import '../terminal/fake_instance.dart';
 /// its own words, and the test that matters most is the one for no run at all.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -93,6 +100,7 @@ void main() {
 
   Widget strip() => ProviderScope(
     overrides: [
+      dataClientProvider.overrideWithValue(data),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
@@ -229,6 +237,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sessionDeliveryProvider.overrideWith((ref, _) async => delivery),

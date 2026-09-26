@@ -7,7 +7,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -32,6 +31,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import 'fake_instance.dart';
 import 'package:karmashala_ui/rows.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The owner: *"in the terminals with an active session, can we add an icon or
 /// something like cmux does that shows whether the session is actually running,
@@ -71,10 +72,11 @@ void _say(
   );
 }
 
-ProviderContainer harness(AppDatabase db) {
+Future<ProviderContainer> harness(AppDatabase db, FakeDataServer server) async {
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      await server.override(),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       availableSystemTerminalsProvider.overrideWith(
         (ref) async => const <SystemTerminal>[],
@@ -108,14 +110,15 @@ ProviderContainer harness(AppDatabase db) {
   return container;
 }
 
-AppDatabase workspace() {
+(AppDatabase, FakeDataServer) workspace() {
   final db = AppDatabase.memory();
   addTearDown(db.close);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  final server = FakeDataServer().mirrorInto(db)
+    ..projectRows.insert(project())
+    ..repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation());
-  return db;
+  return (db, server);
 }
 
 /// Puts a running session row in [paneId], the way a launch or an adoption
@@ -201,8 +204,8 @@ void main() {
     testWidgets('says what the agent is doing, in words as well as a glyph', (
       tester,
     ) async {
-      final db = workspace();
-      final container = harness(db);
+      final (db, server) = workspace();
+      final container = await harness(db, server);
       final paneId = openPane(container);
       placeSession(db, 's1', paneId);
 
@@ -260,8 +263,8 @@ void main() {
     });
 
     testWidgets('a plain shell tab has no agent to report on', (tester) async {
-      final db = workspace();
-      final container = harness(db);
+      final (db, server) = workspace();
+      final container = await harness(db, server);
       final paneId = openPane(container);
 
       await pumpChips(tester, container, [paneId]);
@@ -275,8 +278,8 @@ void main() {
     testWidgets('a pane whose process is gone falls back to liveness', (
       tester,
     ) async {
-      final db = workspace();
-      final container = harness(db);
+      final (db, server) = workspace();
+      final container = await harness(db, server);
       final paneId = openPane(container);
       placeSession(db, 's1', paneId);
 
@@ -308,8 +311,8 @@ void main() {
     testWidgets('a status change redraws one chip, not the header', (
       tester,
     ) async {
-      final db = workspace();
-      final container = harness(db);
+      final (db, server) = workspace();
+      final container = await harness(db, server);
       final panes = [for (var i = 0; i < 3; i++) openPane(container)];
       for (final (index, paneId) in panes.indexed) {
         placeSession(db, 's$index', paneId);
@@ -363,8 +366,8 @@ void main() {
     testWidgets('and the workbench strip is no wider', (tester) async {
       // The same property one level up: the workbench chip folds every pane in
       // its tab, so the fold is where an over-broad watch would hide.
-      final db = workspace();
-      final container = harness(db);
+      final (db, server) = workspace();
+      final container = await harness(db, server);
       final panes = [for (var i = 0; i < 3; i++) openPane(container)];
       for (final (index, paneId) in panes.indexed) {
         placeSession(db, 's$index', paneId);

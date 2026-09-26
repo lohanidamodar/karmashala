@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -24,6 +23,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart';
@@ -44,21 +45,24 @@ const _rover = AgentDescriptor(
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
   late List<({FrameType type, String? id, Map<String, Object?> payload})> sent;
   late HostSessionApi api;
   var seq = 0;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
@@ -199,7 +203,7 @@ void main() {
       // The reported case: one project, the same repository checked out under
       // Windows and inside a WSL distribution. Two rows called "app" whose
       // only difference used to be a path the phone's owner had to decode.
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(
           id: 'r2',
           environmentId: 'wsl:Ubuntu',
@@ -227,7 +231,7 @@ void main() {
           createdAt: testTime,
         ),
       );
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(id: 'r2', environmentId: 'wsl:', path: '/srv/demo/web'),
       );
 
@@ -243,7 +247,9 @@ void main() {
     });
 
     test('a project with no checkout is absent, not an empty offer', () async {
-      ProjectDao(db).insert(project(id: 'p2', name: 'Empty', path: r'C:\none'));
+      server.projectRows.insert(
+        project(id: 'p2', name: 'Empty', path: r'C:\none'),
+      );
 
       expect((await workspace()).map((p) => p.projectId), ['p1']);
     });

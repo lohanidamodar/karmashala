@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -24,7 +23,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -96,21 +97,24 @@ typedef Harness = ({
   ProviderContainer container,
   AppDatabase db,
   _RecordingTerminals terminals,
+  FakeDataServer server,
 });
 
-Harness harness(
+Future<Harness> harness(
   AgentDescriptor agent, {
   Set<String> missingDirectories = const {},
-}) {
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: agent.id));
 
   final terminals = _RecordingTerminals();
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -126,7 +130,7 @@ Harness harness(
       ),
     ],
   );
-  return (container: container, db: db, terminals: terminals);
+  return (container: container, db: db, terminals: terminals, server: server);
 }
 
 /// Starts a session in a pane and pins its CLI id — the join between an imported
@@ -169,8 +173,8 @@ ImportedSession imported(AgentDescriptor agent) => ImportedSession(
 
 void main() {
   group('the launcher answers the capability question once', () {
-    test('for every agent it knows, and false for one it does not', () {
-      final h = harness(_sharing);
+    test('for every agent it knows, and false for one it does not', () async {
+      final h = await harness(_sharing);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launcher = h.container.read(sessionLauncherProvider);
@@ -186,7 +190,7 @@ void main() {
     });
 
     test('knowing we host it by either of the session\'s two names', () async {
-      final h = harness(_exclusive);
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -203,7 +207,7 @@ void main() {
   group('reattaching wins wherever it is on offer', () {
     for (final agent in [_sharing, _exclusive]) {
       test('${agent.id}: resuming a session we host reopens it', () async {
-        final h = harness(agent);
+        final h = await harness(agent);
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -230,7 +234,7 @@ void main() {
 
   group('handing a live conversation to a terminal we do not own', () {
     test('is allowed when the agent permits it — the Claude case', () async {
-      final h = harness(_sharing);
+      final h = await harness(_sharing);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -252,7 +256,7 @@ void main() {
     });
 
     test('is refused when the agent forbids it — the Codex case', () async {
-      final h = harness(_exclusive);
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -292,7 +296,7 @@ void main() {
       // Codex will not accept a session id, so our row carries none until one is
       // discovered. A guard that only joined on the external id let every native
       // Codex session straight through.
-      final h = harness(_exclusive);
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -309,7 +313,7 @@ void main() {
     });
 
     test('is allowed once nothing of ours is running it', () async {
-      final h = harness(_exclusive);
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -327,7 +331,7 @@ void main() {
 
   group('the launcher backstop', () {
     test('lets a permitted second process through, and records it', () async {
-      final h = harness(_sharing);
+      final h = await harness(_sharing);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -355,7 +359,7 @@ void main() {
     });
 
     test('refuses a forbidden one before anything is written', () async {
-      final h = harness(_exclusive);
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -378,7 +382,7 @@ void main() {
     });
 
     test('does not stand in the way of an unrelated conversation', () async {
-      final h = harness(_exclusive);
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -417,7 +421,7 @@ void main() {
     }
 
     test('an external terminal starts in the recorded directory', () async {
-      final h = harness(_exclusive);
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adopted(h);
@@ -429,8 +433,8 @@ void main() {
       expect(h.terminals.directories.single, subdirectory);
     });
 
-    test('the copied resume command cds where the agent ran', () {
-      final h = harness(_exclusive);
+    test('the copied resume command cds where the agent ran', () async {
+      final h = await harness(_exclusive);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adopted(h);
@@ -449,7 +453,10 @@ void main() {
         // reasons that have nothing to do with the conversation — an unmounted
         // drive, a deleted scratch folder — and refusing would be worse than
         // starting one level up.
-        final h = harness(_exclusive, missingDirectories: const {subdirectory});
+        final h = await harness(
+          _exclusive,
+          missingDirectories: const {subdirectory},
+        );
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         adopted(h);
@@ -486,7 +493,7 @@ void main() {
           createdAt: testTime,
         ),
       );
-      RepositoryDao(h.db).insert(
+      h.server.repositoryRows.insert(
         repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
       );
     }
@@ -497,7 +504,7 @@ void main() {
     test(
       'an imported entry refuses rather than spelling a broken line',
       () async {
-        final h = harness(_sharing);
+        final h = await harness(_sharing);
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         broken(h);
@@ -527,7 +534,7 @@ void main() {
     );
 
     test('and one of our own sessions refuses in the same words', () async {
-      final h = harness(_sharing);
+      final h = await harness(_sharing);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       broken(h);

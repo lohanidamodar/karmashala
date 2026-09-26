@@ -11,12 +11,14 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/imported_session_view.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The header's "open in a system terminal" menu.
 ///
@@ -36,8 +38,9 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     ImportedSessionDao(db).insertIfAbsent(
       ImportedSession(
         id: 'i1',
@@ -54,10 +57,12 @@ void main() {
       ),
     );
 
+    final client = await server.connect();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          dataClientProvider.overrideWithValue(client),
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => terminals,
           ),

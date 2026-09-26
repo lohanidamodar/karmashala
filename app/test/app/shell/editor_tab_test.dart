@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/editor/domain/source_document.dart';
 import 'package:karmashala/src/features/editor/presentation/editor_tab_view.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
@@ -32,6 +31,8 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// **A file opens in a tab of this app, and closing one cannot lose an edit.**
 ///
@@ -121,13 +122,17 @@ class _FakeStore extends DocumentStore {
 
 void main() {
   late CountingDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late _FakeStore store;
 
-  setUp(() {
+  setUp(() async {
     db = CountingDatabase();
+    server = FakeDataServer();
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     store = _FakeStore({
       _path: _initial,
@@ -141,6 +146,7 @@ void main() {
   ProviderContainer shellContainer() {
     final container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         documentStoreProvider.overrideWithValue(store),
         commandRunnerFactoryProvider.overrideWithValue(

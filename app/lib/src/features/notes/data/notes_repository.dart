@@ -15,15 +15,9 @@ class NotesRepository {
   Stream<void> get changes => _client.notes.changes;
 
   /// Every note, newest first.
-  List<Note> list() {
-    _client.ensurePrimed(DataDomain.notes);
-    return [..._client.notes.values]..sort(compareNotes);
-  }
+  List<Note> list() => [..._client.notes.values]..sort(compareNotes);
 
-  Note? byId(String id) {
-    _client.ensurePrimed(DataDomain.notes);
-    return _client.notes[id];
-  }
+  Note? byId(String id) => _client.notes[id];
 
   /// Keeps [draft] — its id, body and origin — filing it by the server's
   /// rule when [inheritProject] and it names no project.

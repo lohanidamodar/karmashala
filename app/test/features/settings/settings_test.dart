@@ -1,6 +1,4 @@
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
@@ -9,7 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/permission_fixtures.dart';
-import '../../support/stored_preferences.dart';
+import '../../support/fake_data_server.dart';
+
+/// The settings as the fake server holds them, once the writes in flight
+/// have landed.
+Future<Settings> _stored(FakeDataServer server) async {
+  await pumpEventQueue();
+  return SettingsRepository(server.store).load();
+}
 
 void main() {
   group('simulator slimming', _simulatorSlimmingTests);
@@ -38,12 +43,9 @@ void main() {
       );
     });
 
-    test('the controller persists it', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('the controller persists it', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
 
       container
@@ -55,9 +57,7 @@ void main() {
         isTrue,
       );
       expect(
-        SettingsRepository(
-          StoredPreferences(db),
-        ).load().shellIntegrationEnabled,
+        (await _stored(server)).shellIntegrationEnabled,
         isTrue,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -87,12 +87,9 @@ void main() {
       );
     });
 
-    test('the controller persists it', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('the controller persists it', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
 
       container
@@ -104,7 +101,7 @@ void main() {
         isTrue,
       );
       expect(
-        SettingsRepository(StoredPreferences(db)).load().hostBackedLocalPanes,
+        (await _stored(server)).hostBackedLocalPanes,
         isTrue,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -142,12 +139,9 @@ void main() {
       );
     });
 
-    test('the controller persists a concrete choice', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('the controller persists a concrete choice', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
 
       container
@@ -159,9 +153,7 @@ void main() {
         isFalse,
       );
       expect(
-        SettingsRepository(
-          StoredPreferences(db),
-        ).load().letAgentsUpdateThemselves,
+        (await _stored(server)).letAgentsUpdateThemselves,
         isFalse,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -192,12 +184,9 @@ void main() {
       expect(const Settings(restoreLivePanes: false), isNot(const Settings()));
     });
 
-    test('the controller persists it', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('the controller persists it', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
 
       container
@@ -209,7 +198,7 @@ void main() {
         isFalse,
       );
       expect(
-        SettingsRepository(StoredPreferences(db)).load().restoreLivePanes,
+        (await _stored(server)).restoreLivePanes,
         isFalse,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -228,28 +217,22 @@ void main() {
       expect(restored, s);
     });
 
-    test('the controller persists it, and can clear it again', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('the controller persists it, and can clear it again', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
       final controller = container.read(settingsControllerProvider.notifier);
 
       controller.setTerminalThemeSource(r'ghostty:C:\themes\Nord');
       expect(
-        SettingsRepository(StoredPreferences(db)).load().terminalThemeSource,
+        (await _stored(server)).terminalThemeSource,
         r'ghostty:C:\themes\Nord',
       );
 
       // Clearing must actually clear — a plain `?? this.x` copyWith cannot
       // express "set this back to null".
       controller.setTerminalThemeSource(null);
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().terminalThemeSource,
-        isNull,
-      );
+      expect((await _stored(server)).terminalThemeSource, isNull);
     });
   });
 
@@ -345,27 +328,26 @@ void main() {
       );
     });
 
-    test('the controller persists it, clamped to the supported range', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
-      addTearDown(container.dispose);
-      final controller = container.read(settingsControllerProvider.notifier);
+    test(
+      'the controller persists it, clamped to the supported range',
+      () async {
+        final server = FakeDataServer();
+        final container = ProviderContainer(
+          overrides: [await server.override()],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(settingsControllerProvider.notifier);
 
-      controller.setUiTextScale(1.25);
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().uiTextScale,
-        1.25,
-      );
+        controller.setUiTextScale(1.25);
+        expect((await _stored(server)).uiTextScale, 1.25);
 
-      controller.setUiTextScale(5.0);
-      expect(
-        container.read(settingsControllerProvider).uiTextScale,
-        Settings.maxUiTextScale,
-      );
-    });
+        controller.setUiTextScale(5.0);
+        expect(
+          container.read(settingsControllerProvider).uiTextScale,
+          Settings.maxUiTextScale,
+        );
+      },
+    );
   });
 
   group('terminal font size', () {
@@ -386,80 +368,67 @@ void main() {
       expect(Settings.fromJson(s.toJson()), s);
     });
 
-    test('adjust, reset and clamping all persist through the controller', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
-      addTearDown(container.dispose);
-      final controller = container.read(settingsControllerProvider.notifier);
+    test(
+      'adjust, reset and clamping all persist through the controller',
+      () async {
+        final server = FakeDataServer();
+        final container = ProviderContainer(
+          overrides: [await server.override()],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(settingsControllerProvider.notifier);
 
-      controller.adjustTerminalFontSize(1);
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().terminalFontSize,
-        14.0,
-      );
+        controller.adjustTerminalFontSize(1);
+        expect((await _stored(server)).terminalFontSize, 14.0);
 
-      controller.adjustTerminalFontSize(-2);
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().terminalFontSize,
-        12.0,
-      );
+        controller.adjustTerminalFontSize(-2);
+        expect((await _stored(server)).terminalFontSize, 12.0);
 
-      controller.resetTerminalFontSize();
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().terminalFontSize,
-        Settings.defaultTerminalFontSize,
-      );
+        controller.resetTerminalFontSize();
+        expect(
+          (await _stored(server)).terminalFontSize,
+          Settings.defaultTerminalFontSize,
+        );
 
-      controller.setTerminalFontSize(100);
-      expect(
-        container.read(settingsControllerProvider).terminalFontSize,
-        Settings.maxTerminalFontSize,
-      );
-      controller.setTerminalFontSize(1);
-      expect(
-        container.read(settingsControllerProvider).terminalFontSize,
-        Settings.minTerminalFontSize,
-      );
-    });
+        controller.setTerminalFontSize(100);
+        expect(
+          container.read(settingsControllerProvider).terminalFontSize,
+          Settings.maxTerminalFontSize,
+        );
+        controller.setTerminalFontSize(1);
+        expect(
+          container.read(settingsControllerProvider).terminalFontSize,
+          Settings.minTerminalFontSize,
+        );
+      },
+    );
   });
 
   group('SettingsRepository', () {
-    late AppDatabase db;
-    setUp(() => db = AppDatabase.memory());
-    tearDown(() => db.close());
-
     test('load returns defaults when nothing is stored', () {
       expect(
-        SettingsRepository(StoredPreferences(db)).load(),
+        SettingsRepository(FakeDataServer().store).load(),
         const Settings(),
       );
     });
 
     test('save then load round-trips', () {
-      final repo = SettingsRepository(StoredPreferences(db));
+      final repo = SettingsRepository(FakeDataServer().store);
       repo.save(const Settings(defaultAgent: AgentIds.antigravity));
       expect(repo.load().defaultAgent, AgentIds.antigravity);
     });
   });
 
   group('SettingsController', () {
-    late AppDatabase db;
+    late FakeDataServer server;
     late ProviderContainer container;
-    setUp(() {
-      db = AppDatabase.memory();
-      container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    setUp(() async {
+      server = FakeDataServer();
+      container = ProviderContainer(overrides: [await server.override()]);
     });
-    tearDown(() {
-      container.dispose();
-      db.close();
-    });
+    tearDown(() => container.dispose());
 
-    test('setting the default agent persists', () {
+    test('setting the default agent persists', () async {
       container
           .read(settingsControllerProvider.notifier)
           .setDefaultAgent(AgentIds.codex);
@@ -468,13 +437,10 @@ void main() {
         AgentIds.codex,
       );
       // A fresh repository sees the persisted value.
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().defaultAgent,
-        AgentIds.codex,
-      );
+      expect((await _stored(server)).defaultAgent, AgentIds.codex);
     });
 
-    test('setting a permission persists per agent and session kind', () {
+    test('setting a permission persists per agent and session kind', () async {
       container.read(settingsControllerProvider.notifier)
         ..setNewSessionPermission(AgentIds.claudeCode, claudeBypassStored)
         ..setExistingSessionPermission(
@@ -482,7 +448,7 @@ void main() {
           claudeAcceptEditsStored,
         );
 
-      final loaded = SettingsRepository(StoredPreferences(db)).load();
+      final loaded = (await _stored(server));
       expect(
         loaded.permissionsFor(AgentIds.claudeCode).newSessions,
         claudeBypassStored,

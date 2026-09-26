@@ -1,4 +1,3 @@
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +15,7 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -24,13 +24,16 @@ import '../../support/fixtures.dart';
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server = FakeDataServer(clock: () => testTime);
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('new-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         repositoryDiscoveryServiceProvider.overrideWithValue(
@@ -46,9 +49,9 @@ void main() {
   tearDown(() => db.close());
 
   /// A context holding one project, so the folder has something to be near.
-  Workspace seedGames() {
-    final games = createContext(container, 'Game dev');
-    ProjectDao(container.read(databaseProvider)).insert(
+  Future<Workspace> seedGames() async {
+    final games = await createContext(container, 'Game dev');
+    server.projectRows.insert(
       Project(
         id: 'p-existing',
         name: 'Roguelike',
@@ -60,7 +63,6 @@ void main() {
         workspaceId: games.id,
       ),
     );
-    rereadWorkspace(container);
     return games;
   }
 
@@ -97,7 +99,7 @@ void main() {
   testWidgets('the folder prefills the context it sits nearest', (
     tester,
   ) async {
-    seedGames();
+    await seedGames();
     await pumpDialog(tester);
     expect(shownContext(tester), 'None');
 
@@ -107,8 +109,8 @@ void main() {
   });
 
   testWidgets('the guess is overridable, and stays overridden', (tester) async {
-    seedGames();
-    createContext(container, 'Personal');
+    await seedGames();
+    await createContext(container, 'Personal');
     await pumpDialog(tester);
     await typeFolder(tester, r'C:\Users\dlohani\projects\games\shmup');
     expect(shownContext(tester), 'Game dev');
@@ -127,7 +129,7 @@ void main() {
   testWidgets('"None" is a complete answer and survives a re-guess', (
     tester,
   ) async {
-    seedGames();
+    await seedGames();
     await pumpDialog(tester);
     await typeFolder(tester, r'C:\Users\dlohani\projects\games\shmup');
     expect(shownContext(tester), 'Game dev');
@@ -142,7 +144,7 @@ void main() {
   });
 
   testWidgets('a folder near nothing suggests nothing', (tester) async {
-    seedGames();
+    await seedGames();
     await pumpDialog(tester);
 
     await typeFolder(tester, r'D:\somewhere\else');
@@ -153,10 +155,10 @@ void main() {
   testWidgets('the prefill never reassigns an existing project', (
     tester,
   ) async {
-    final games = seedGames();
+    final games = await seedGames();
     // A second, unassigned project sitting right beside the filed one — the
     // exact case an eager classifier would "helpfully" file.
-    ProjectDao(container.read(databaseProvider)).insert(
+    server.projectRows.insert(
       Project(
         id: 'p-unfiled',
         name: 'Platformer',
@@ -167,7 +169,6 @@ void main() {
         createdAt: testTime,
       ),
     );
-    rereadWorkspace(container);
 
     await pumpDialog(tester);
     await typeFolder(tester, r'C:\Users\dlohani\projects\games\shmup');

@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +12,8 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// What one sweep costs, counted in database round trips rather than timed.
 ///
@@ -32,42 +33,47 @@ import '../../support/fixtures.dart';
 ///   verified, so only a *clean* finish pays for one.
 void main() {
   for (final count in [10, 100, 1000]) {
-    test('$count ended sessions: a quiet sweep is a constant few reads', () {
-      final db = _CountingDatabase();
-      addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
-      final sessions = SessionDao(db);
-      for (var i = 0; i < count; i++) {
-        sessions.insert(session(id: 's$i', status: SessionStatus.failed));
-      }
+    test(
+      '$count ended sessions: a quiet sweep is a constant few reads',
+      () async {
+        final db = _CountingDatabase();
+        addTearDown(db.close);
+        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        final server = FakeDataServer()..mirrorInto(db);
+        server.projectRows.insert(project());
+        server.repositoryRows.insert(repository());
+        AgentInstallationDao(db).insert(agentInstallation());
+        final sessions = SessionDao(db);
+        for (var i = 0; i < count; i++) {
+          sessions.insert(session(id: 's$i', status: SessionStatus.failed));
+        }
 
-      final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          clockProvider.overrideWithValue(FixedClock(testTime)),
-        ],
-      );
-      addTearDown(container.dispose);
-      final service = container.read(followUpServiceProvider);
+        final container = ProviderContainer(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            await server.override(),
+            clockProvider.overrideWithValue(FixedClock(testTime)),
+          ],
+        );
+        addTearDown(container.dispose);
+        final service = container.read(followUpServiceProvider);
 
-      // The first sweep raises one follow-up per session and pays for it. That
-      // is the once-per-ending cost the feature exists for; it is the *repeat*
-      // that has to be free.
-      service.sweep(sessions.getAll());
+        // The first sweep raises one follow-up per session and pays for it. That
+        // is the once-per-ending cost the feature exists for; it is the *repeat*
+        // that has to be free.
+        service.sweep(sessions.getAll());
 
-      final rows = sessions.getAll();
-      db.queries = 0;
-      for (var pass = 0; pass < 5; pass++) {
-        service.sweep(rows);
-      }
+        final rows = sessions.getAll();
+        db.queries = 0;
+        for (var pass = 0; pass < 5; pass++) {
+          service.sweep(rows);
+        }
 
-      // One read of the open list per pass, and nothing else. Not one per
-      // session, and not one per session per pass.
-      expect(db.queries, 5, reason: '$count sessions');
-    });
+        // One read of the open list per pass, and nothing else. Not one per
+        // session, and not one per session per pass.
+        expect(db.queries, 5, reason: '$count sessions');
+      },
+    );
   }
 }
 

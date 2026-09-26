@@ -5,13 +5,16 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **What a folder that is not a git repository costs, counted in processes.**
 ///
@@ -31,6 +34,8 @@ import '../../support/fixtures.dart';
 /// The second row is the backstop: the probe may answer `unknown` whenever it
 /// is unsure, so the states must be reachable from git's own refusal too.
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   late AppDatabase db;
   late FakeCommandRunner git;
 
@@ -45,11 +50,13 @@ void main() {
         'fatal: not a git repository (or any of the parent directories): .git',
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository(path: checkout));
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository(path: checkout));
+    client = await server.connect();
     git = FakeCommandRunner(responder: notARepository);
   });
   tearDown(() => db.close());
@@ -60,6 +67,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),
         ),

@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
@@ -11,7 +13,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/agent_store_server_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -20,6 +21,8 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:logging/logging.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -57,16 +60,20 @@ void main() {
 
   group('a rename says what the CLI store did with it', () {
     late AppDatabase db;
+    late FakeDataServer dataServer;
+    late DataClient data;
     late FakeCodexAppServer server;
     late FakeCommandRunner runner;
 
-    setUp(() {
+    setUp(() async {
       db = AppDatabase.memory();
+      dataServer = FakeDataServer()..mirrorInto(db);
+      data = await dataServer.connect();
       server = FakeCodexAppServer();
       runner = FakeCommandRunner(processFactory: (_) => server);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      dataServer.projectRows.insert(project());
+      dataServer.repositoryRows.insert(repository());
     });
     tearDown(() => db.close());
 
@@ -83,6 +90,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          dataClientProvider.overrideWithValue(data),
           agentStoreServersProvider.overrideWithValue(
             AgentStoreServers(
               runnerFactory: FakeCommandRunnerFactory(fallback: runner),
@@ -131,14 +139,17 @@ void main() {
       // write path into the agent — but which of the three was taken decides
       // whether a second process was started, and nothing on screen says.
       final db = AppDatabase.memory();
+      final server = FakeDataServer()..mirrorInto(db);
+      final data = await server.connect();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation(agentId: 'demo'));
 
       final container = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],
@@ -170,6 +181,8 @@ void main() {
 
   group('an archive says what it decided', () {
     late AppDatabase db;
+    late FakeDataServer server;
+    late DataClient data;
     late FakeCommandRunner git;
     var statusOutput = '';
 
@@ -178,12 +191,14 @@ void main() {
       path: r'C:\src\.karmashala-worktrees\app-s1',
     );
 
-    setUp(() {
+    setUp(() async {
       statusOutput = '';
       db = AppDatabase.memory();
+      server = FakeDataServer()..mirrorInto(db);
+      data = await server.connect();
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       git = FakeCommandRunner(
         responder: (request) => request.arguments.contains('status')
@@ -209,6 +224,7 @@ void main() {
     SessionArchiveService service() {
       final container = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(

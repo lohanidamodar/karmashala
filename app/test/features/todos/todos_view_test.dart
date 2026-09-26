@@ -6,14 +6,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 import 'package:karmashala/src/features/todos/domain/project_scope.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 
+import 'package:karmashala_notes/karmashala_notes.dart';
+
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 
@@ -39,7 +42,8 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db)
+    final server = FakeDataServer();
+    server.projectRows
       ..insert(project())
       ..insert(project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'));
 
@@ -48,8 +52,12 @@ void main() {
     // controller — whose autosave timer would outlive a widget test. The
     // faked terminal is the sanctioned way to hold that still; nothing here
     // is about the terminal.
+    final data = await server.override();
     final container = ProviderContainer(
-      overrides: fakeTerminalOverrides(database: db),
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        data,
+      ],
     );
     addTearDown(container.dispose);
 
@@ -607,6 +615,16 @@ void main() {
       // The panel is 240px at its narrowest, which is narrower than any phone;
       // this pumps the surface at the full window width instead, so the two
       // form factors CLAUDE.md asks about are both actually measured.
+      final server = FakeDataServer();
+      server.projectRows.insert(project());
+      server.todos['t1'] = Todo(
+        id: 't1',
+        body: longTodo,
+        projectId: 'p1',
+        position: 0,
+        createdAt: testTime,
+      );
+      final data = await server.connect();
       await expectSurvivesWindowMatrix(
         tester,
         matrix: const [
@@ -620,14 +638,13 @@ void main() {
           final db = AppDatabase.memory();
           addTearDown(db.close);
           ExecutionEnvironmentDao(db).upsert(windowsEnv());
-          ProjectDao(db).insert(project());
           final container = ProviderContainer(
-            overrides: [databaseProvider.overrideWithValue(db)],
+            overrides: [
+              databaseProvider.overrideWithValue(db),
+              dataClientProvider.overrideWithValue(data),
+            ],
           );
           addTearDown(container.dispose);
-          container
-              .read(todosProvider.notifier)
-              .add(body: longTodo, projectId: 'p1');
           return UncontrolledProviderScope(
             container: container,
             child: const MaterialApp(home: Scaffold(body: TodosView())),
@@ -638,6 +655,24 @@ void main() {
   });
 
   testWidgets('survives the window matrix', (tester) async {
+    final server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.todos
+      ..['t1'] = Todo(
+        id: 't1',
+        body: 'A todo long enough to need the whole width of a narrow panel',
+        projectId: 'p1',
+        position: 0,
+        createdAt: testTime,
+      )
+      ..['t2'] = Todo(
+        id: 't2',
+        body: 'and one already finished',
+        position: 1,
+        createdAt: testTime,
+        doneAt: testTime,
+      );
+    final data = await server.connect();
     await expectSurvivesWindowMatrix(
       tester,
       because:
@@ -647,18 +682,13 @@ void main() {
         final db = AppDatabase.memory();
         addTearDown(db.close);
         ExecutionEnvironmentDao(db).upsert(windowsEnv());
-        ProjectDao(db).insert(project());
         final container = ProviderContainer(
-          overrides: [databaseProvider.overrideWithValue(db)],
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            dataClientProvider.overrideWithValue(data),
+          ],
         );
         addTearDown(container.dispose);
-        final todos = container.read(todosProvider.notifier);
-        todos.add(
-          body: 'A todo long enough to need the whole width of a narrow panel',
-          projectId: 'p1',
-        );
-        final done = todos.add(body: 'and one already finished');
-        todos.setDone(done.id, true);
         return UncontrolledProviderScope(
           container: container,
           child: const MaterialApp(

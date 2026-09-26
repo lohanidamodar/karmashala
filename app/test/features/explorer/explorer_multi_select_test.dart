@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -27,8 +26,10 @@ import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **Multi-select in the Explorer: the conventional gestures, both row kinds,
@@ -39,19 +40,25 @@ import '../terminal/fake_instance.dart';
 /// the verb is *Move to*. A selection holds one kind at a time.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    WorkspaceDao(
-      db,
-    ).insert(Workspace(id: 'w1', name: 'Game dev', createdAt: testTime));
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    ProjectDao(db).insert(project(id: 'p2', name: 'Alpha', path: r'C:\alpha'));
-    ProjectDao(db).insert(project(id: 'p3', name: 'Beta', path: r'C:\beta'));
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+    server.workspaceRows.insert(
+      Workspace(id: 'w1', name: 'Game dev', createdAt: testTime),
+    );
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.projectRows.insert(
+      project(id: 'p2', name: 'Alpha', path: r'C:\alpha'),
+    );
+    server.projectRows.insert(
+      project(id: 'p3', name: 'Beta', path: r'C:\beta'),
+    );
+    server.repositoryRows.insert(
+      repository(id: 'r1', name: 'hub', path: r'C:\hub'),
+    );
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < 4; i++) {
       SessionDao(db).insert(
@@ -80,6 +87,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -132,7 +140,7 @@ void main() {
   }
 
   String? contextOf(String projectId) =>
-      ProjectDao(db).getById(projectId)!.workspaceId;
+      server.projectRows.getById(projectId)!.workspaceId;
 
   List<String> sessionTitlesTopDown(WidgetTester tester) {
     final titles = [for (var i = 0; i < 4; i++) 'Session $i'];
@@ -307,9 +315,9 @@ void main() {
       await tester.tap(find.text('Create'));
       await tester.pumpAndSettle();
 
-      final tools = WorkspaceDao(
-        db,
-      ).getAll().singleWhere((w) => w.name == 'Tools');
+      final tools = server.workspaceRows.getAll().singleWhere(
+        (w) => w.name == 'Tools',
+      );
       expect(contextOf('p2'), tools.id);
       expect(contextOf('p3'), tools.id);
     });
@@ -317,8 +325,8 @@ void main() {
     testWidgets('Remove from context takes them out, and keeps them', (
       tester,
     ) async {
-      ProjectDao(db).setWorkspace('p2', 'w1');
-      ProjectDao(db).setWorkspace('p3', 'w1');
+      server.projectRows.setWorkspace('p2', 'w1');
+      server.projectRows.setWorkspace('p3', 'w1');
       await pump(tester, openHub: false);
       await selectAlphaAndBeta(tester);
 
@@ -327,7 +335,7 @@ void main() {
 
       expect(contextOf('p2'), isNull);
       expect(contextOf('p3'), isNull);
-      expect(ProjectDao(db).getById('p2'), isNotNull);
+      expect(server.projectRows.getById('p2'), isNotNull);
       expect(
         find.text('Removed 2 projects from their context.'),
         findsOneWidget,

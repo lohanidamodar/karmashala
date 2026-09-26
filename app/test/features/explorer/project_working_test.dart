@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/explorer/application/session_diff_stat.d
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
@@ -18,8 +17,10 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Whether a project's running mark turns.** "Running" is the row's record
 /// of what it started; "working" is the agent in a turn right now, and it comes
@@ -27,6 +28,7 @@ import '../../support/fixtures.dart';
 /// that a turn starting in one project wakes that project's header alone.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late AgentHookReceiver receiver;
   late SessionStatusRegistry registry;
   late List<WatchedSession> watched;
@@ -39,18 +41,19 @@ void main() {
     imported: false,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(posixEnv());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final (projectId, sessions) in [
       ('p1', ['s1', 's2']),
       ('p2', ['s3']),
     ]) {
-      ProjectDao(
-        db,
-      ).insert(project(id: projectId, name: projectId, path: '/w/$projectId'));
-      RepositoryDao(db).insert(
+      server.projectRows.insert(
+        project(id: projectId, name: projectId, path: '/w/$projectId'),
+      );
+      server.repositoryRows.insert(
         repository(
           id: 'r-$projectId',
           projectId: projectId,
@@ -94,6 +97,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(clock),
         sessionStatusRegistryProvider.overrideWithValue(registry),
       ],

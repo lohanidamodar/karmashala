@@ -11,16 +11,14 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_ui/code.dart';
 
 import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import 'package:karmashala_notes/store.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 
 /// Ctrl+S from a note's focused body on a desktop platform. `note_tab_test`
 /// runs on the test default (Android), where `re_editor` binds no shortcuts,
@@ -33,12 +31,15 @@ void main() {
     final db = CountingDatabase();
     addTearDown(db.close);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
@@ -89,10 +90,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      'kept at once',
-    );
+    expect(server.notes[note.id]!.body, 'kept at once');
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));

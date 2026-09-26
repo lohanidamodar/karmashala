@@ -8,7 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -19,6 +18,8 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
@@ -103,11 +104,12 @@ typedef Harness = ({
   _RecordingTerminals terminals,
 });
 
-Harness harness(AgentDescriptor agent) {
+Future<Harness> harness(AgentDescriptor agent) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(
     db,
   ).insert(agentInstallation(agentId: agent.id, path: r'C:\bin\agent.exe'));
@@ -118,6 +120,7 @@ Harness harness(AgentDescriptor agent) {
   final terminals = _RecordingTerminals();
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -155,8 +158,8 @@ Matcher _refusesToStartSomethingNew(String displayName) => throwsA(
 
 void main() {
   group('an agent that declares a resume convention gets it', () {
-    test('the imported "copy command" carries the declared flag', () {
-      final h = harness(_conversational);
+    test('the imported "copy command" carries the declared flag', () async {
+      final h = await harness(_conversational);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -170,8 +173,8 @@ void main() {
       );
     });
 
-    test('the native "copy command" carries it too', () {
-      final h = harness(_conversational);
+    test('the native "copy command" carries it too', () async {
+      final h = await harness(_conversational);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -181,40 +184,43 @@ void main() {
       );
     });
 
-    test('and a session recorded in another environment gets that shell', () {
-      // The repository is Windows; this session actually runs in a worktree
-      // inside a WSL distribution. The copied line has to be spelled for the
-      // shell that opens *in the working directory* — naming a POSIX path in a
-      // PowerShell `Set-Location` would be as wrong as the reverse, which is
-      // the bug that started this: one syntax was emitted for every
-      // environment in the app.
-      final h = harness(_conversational);
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
+    test(
+      'and a session recorded in another environment gets that shell',
+      () async {
+        // The repository is Windows; this session actually runs in a worktree
+        // inside a WSL distribution. The copied line has to be spelled for the
+        // shell that opens *in the working directory* — naming a POSIX path in a
+        // PowerShell `Set-Location` would be as wrong as the reverse, which is
+        // the bug that started this: one syntax was emitted for every
+        // environment in the app.
+        final h = await harness(_conversational);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
 
-      ExecutionEnvironmentDao(h.db).upsert(wslEnv());
-      SessionDao(h.db).insert(
-        session(
-          id: 'n2',
-          title: 'Worktree work',
-          workingDirectory: const EnvironmentPath(
-            environmentId: 'wsl:Ubuntu',
-            path: '/home/me/wt',
+        ExecutionEnvironmentDao(h.db).upsert(wslEnv());
+        SessionDao(h.db).insert(
+          session(
+            id: 'n2',
+            title: 'Worktree work',
+            workingDirectory: const EnvironmentPath(
+              environmentId: 'wsl:Ubuntu',
+              path: '/home/me/wt',
+            ),
           ),
-        ),
-      );
-      SessionDao(h.db).updateExternalSessionId('n2', 'ext-2');
+        );
+        SessionDao(h.db).updateExternalSessionId('n2', 'ext-2');
 
-      final line = h.container
-          .read(sessionActionsProvider)
-          .nativeResumeShellCommand('n2');
-      expect(line, startsWith('cd /home/me/wt && '));
-      expect(line, contains('--conversation ext-2'));
-      expect(line, isNot(contains('Set-Location')));
-    });
+        final line = h.container
+            .read(sessionActionsProvider)
+            .nativeResumeShellCommand('n2');
+        expect(line, startsWith('cd /home/me/wt && '));
+        expect(line, contains('--conversation ext-2'));
+        expect(line, isNot(contains('Set-Location')));
+      },
+    );
 
     test('and so does the external-terminal open', () async {
-      final h = harness(_conversational);
+      final h = await harness(_conversational);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -230,8 +236,8 @@ void main() {
   });
 
   group('an agent that declares none is refused in words', () {
-    test('the imported "copy command" refuses', () {
-      final h = harness(_silent);
+    test('the imported "copy command" refuses', () async {
+      final h = await harness(_silent);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -243,8 +249,8 @@ void main() {
       );
     });
 
-    test('the native "copy command" refuses', () {
-      final h = harness(_silent);
+    test('the native "copy command" refuses', () async {
+      final h = await harness(_silent);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -256,24 +262,27 @@ void main() {
       );
     });
 
-    test('the imported external-terminal open refuses, launching nothing', () {
-      final h = harness(_silent);
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
+    test(
+      'the imported external-terminal open refuses, launching nothing',
+      () async {
+        final h = await harness(_silent);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
 
-      expect(
-        () => h.container
-            .read(sessionActionsProvider)
-            .openInSystemTerminal(_imported(_silent), _terminal),
-        _refusesToStartSomethingNew('Silent Agent'),
-      );
-      expect(h.terminals.launches, isEmpty);
-    });
+        expect(
+          () => h.container
+              .read(sessionActionsProvider)
+              .openInSystemTerminal(_imported(_silent), _terminal),
+          _refusesToStartSomethingNew('Silent Agent'),
+        );
+        expect(h.terminals.launches, isEmpty);
+      },
+    );
 
     test(
       'the native external-terminal open refuses, launching nothing',
       () async {
-        final h = harness(_silent);
+        final h = await harness(_silent);
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -291,7 +300,7 @@ void main() {
       // The third copy button goes through the same decision, and the honest
       // answer for it is "nothing to refuse": it names no conversation, so it
       // cannot be mistaken for continuing one.
-      final h = harness(_silent);
+      final h = await harness(_silent);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -304,38 +313,41 @@ void main() {
     });
   });
 
-  test('a copied command refuses an environment the workspace has lost', () {
-    // No process starts here — this only spells a line — but the *shell* it is
-    // spelled for is the environment's, so an environment nobody can name
-    // cannot be guessed at. Same resolver, same words as the launch paths.
-    final h = harness(_conversational);
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
+  test(
+    'a copied command refuses an environment the workspace has lost',
+    () async {
+      // No process starts here — this only spells a line — but the *shell* it is
+      // spelled for is the environment's, so an environment nobody can name
+      // cannot be guessed at. Same resolver, same words as the launch paths.
+      final h = await harness(_conversational);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
 
-    expect(
-      () => h.container
-          .read(sessionActionsProvider)
-          .resumeShellCommand(
-            ImportedSession(
-              id: 'i2',
-              repositoryId: 'r1',
-              cli: _conversational.id,
-              externalId: 'ext-1',
-              environmentId: 'wsl:Gone',
-              filePath: '/store/rollout-ext-1.jsonl',
-              storeHome: '/store',
-              isSubagent: false,
-              preview: 'earlier work',
-              createdAt: testTime,
+      expect(
+        () => h.container
+            .read(sessionActionsProvider)
+            .resumeShellCommand(
+              ImportedSession(
+                id: 'i2',
+                repositoryId: 'r1',
+                cli: _conversational.id,
+                externalId: 'ext-1',
+                environmentId: 'wsl:Gone',
+                filePath: '/store/rollout-ext-1.jsonl',
+                storeHome: '/store',
+                isSubagent: false,
+                preview: 'earlier work',
+                createdAt: testTime,
+              ),
             ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'Unknown environment: wsl:Gone',
           ),
-      throwsA(
-        isA<StateError>().having(
-          (e) => e.message,
-          'message',
-          'Unknown environment: wsl:Gone',
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 }

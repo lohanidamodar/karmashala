@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -23,18 +22,22 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// What the user actually sees: the follow-up as a row in the one list the app
 /// has, with the words that let them decide whether to open the session.
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -43,6 +46,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(
           FixedClock(testTime.add(const Duration(hours: 2))),
         ),

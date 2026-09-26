@@ -1,5 +1,6 @@
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -17,8 +18,6 @@ import 'package:karmashala_session/delivery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:karmashala_projects/store.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -52,6 +51,7 @@ void main() {
             (ref) => _RecordingActions(ref, sent),
           ),
           databaseProvider.overrideWithValue(harness.db),
+          dataClientProvider.overrideWithValue(harness.client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(
             SequentialIdGenerator('scope-thread-'),
@@ -116,7 +116,9 @@ void main() {
   testWidgets('an attached thread hangs off the line it was written on', (
     tester,
   ) async {
-    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    final harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    );
     addTearDown(harness.dispose);
     await harness.service.open(
       repositoryId: 'r1',
@@ -139,7 +141,9 @@ void main() {
   testWidgets('a thread whose file changed leaves the line and says why', (
     tester,
   ) async {
-    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    final harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    );
     addTearDown(harness.dispose);
     await harness.service.open(
       repositoryId: 'r1',
@@ -171,7 +175,9 @@ void main() {
   testWidgets('a file-level thread is shown above the diff, not lost', (
     tester,
   ) async {
-    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    final harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    );
     addTearDown(harness.dispose);
     await harness.service.open(
       repositoryId: 'r1',
@@ -209,6 +215,7 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(harness.db),
+          dataClientProvider.overrideWithValue(harness.client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(
             SequentialIdGenerator('scope-thread-'),
@@ -262,11 +269,14 @@ void main() {
   testWidgets('a tab draws its own repository, not the sidebar\'s', (
     tester,
   ) async {
-    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    final harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    );
     addTearDown(harness.dispose);
-    RepositoryDao(
-      harness.db,
-    ).insert(repository(id: 'r2', name: 'other', path: r'C:\src\demo\other'));
+    harness.server.repositoryRows.insert(
+      repository(id: 'r2', name: 'other', path: r'C:\src\demo\other'),
+    );
+    await tester.pump();
     await harness.service.open(
       repositoryId: 'r1',
       path: 'lib/a.dart',
@@ -300,7 +310,9 @@ void main() {
     // Restore rebuilds a diff tab before the sidebar has picked a repository.
     // The button used to be disabled on a perfectly good diff, with no reason
     // given anywhere.
-    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    final harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    );
     addTearDown(harness.dispose);
 
     await pumpTab(tester, harness, sidebar: null);
@@ -312,7 +324,9 @@ void main() {
   testWidgets('sending gathers the pending set and clears nothing', (
     tester,
   ) async {
-    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    final harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    );
     addTearDown(harness.dispose);
     final wanted = await harness.service.open(
       repositoryId: 'r1',
@@ -357,7 +371,9 @@ void main() {
   testWidgets('diff text sits inside a SelectionArea, so it can be copied', (
     tester,
   ) async {
-    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    final harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    );
     addTearDown(harness.dispose);
     await pumpTab(tester, harness, sidebar: null);
 

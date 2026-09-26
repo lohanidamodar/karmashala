@@ -4,11 +4,11 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 
 /// A `.git` that answers for one clone and nothing else.
 class _OneRemote implements GitFiles {
@@ -83,21 +83,23 @@ void main() {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      final server = FakeDataServer()
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
 
       final container = ProviderContainer(
-        overrides: fakeTerminalOverrides(
-          database: db,
-          gitFiles: _OneRemote(url),
-        ),
+        overrides: [
+          ...fakeTerminalOverrides(database: db, gitFiles: _OneRemote(url)),
+          await server.override(),
+        ],
       );
       addTearDown(container.dispose);
 
       await container.read(
         repositoryOriginProvider(Checkout(repository().path)).future,
       );
-      return RepositoryDao(db).getById('r1')!.canonicalId;
+      await pumpEventQueue();
+      return server.repositoryRows.getById('r1')!.canonicalId;
     }
 
     test('reading a checkout is what records what it is', () async {

@@ -13,14 +13,15 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Notes and the inbox, over the endpoint.
 ///
@@ -45,14 +46,21 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_attention_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final fake = FakeDataServer(
+      clock: () => testTime,
+      repositoryOfSession: {'s1': 'r1'},
+      projectOfRepository: {'r1': 'p1'},
+    )..mirrorInto(db);
+    fake.projectRows.insert(project());
+    fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Fix login'));
 
+    final data = await fake.override();
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );

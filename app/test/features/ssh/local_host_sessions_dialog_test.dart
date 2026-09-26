@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
@@ -18,6 +17,8 @@ import 'package:karmashala_terminal_runtime/host_link.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// This computer's host, holding what a test puts in it.
 class _LocalHost extends LocalHostSessionAccess {
@@ -54,20 +55,24 @@ SessionSummary _summary(String id, List<String> argv) => SessionSummary(
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   setUp(() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester, _LocalHost host) async {
+    final workspace = await server.override();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          workspace,
           localHostSessionAccessProvider.overrideWithValue(host),
         ],
         child: const MaterialApp(home: HostSessionsDialog.local()),

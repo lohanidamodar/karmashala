@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
@@ -16,7 +18,6 @@ import 'package:karmashala/src/features/explorer/application/session_selection.d
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -25,9 +26,11 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -48,17 +51,21 @@ import '../terminal/fake_instance.dart';
 /// delete.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late FakeRepositoryDiscoveryService discovery;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
+      repository(id: 'r1', name: 'hub', path: r'C:\hub'),
+    );
     AgentInstallationDao(db).insert(agentInstallation());
     discovery = FakeRepositoryDiscoveryService();
+    data = await server.connect();
   });
   tearDown(() => db.close());
 
@@ -95,7 +102,7 @@ void main() {
       );
 
   Widget host() {
-    final container = _container(db, discovery);
+    final container = _container(db, data, discovery);
     addTearDown(container.dispose);
     return UncontrolledProviderScope(
       container: container,
@@ -111,7 +118,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final container = _container(db, discovery);
+    final container = _container(db, data, discovery);
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -552,10 +559,12 @@ void main() {
 
 ProviderContainer _container(
   AppDatabase db,
+  DataClient data,
   FakeRepositoryDiscoveryService discovery,
 ) => ProviderContainer(
   overrides: [
     ...fakeTerminalOverrides(database: db),
+    dataClientProvider.overrideWithValue(data),
     clockProvider.overrideWithValue(FixedClock(testTime)),
     idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
     commandRunnerFactoryProvider.overrideWithValue(FakeCommandRunnerFactory()),

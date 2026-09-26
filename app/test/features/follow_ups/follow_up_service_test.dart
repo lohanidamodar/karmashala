@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/follow_ups/application/follow_up_service
 import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/decision_recorder.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
@@ -17,14 +16,18 @@ import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The service that turns "a session ended" into an offer — and, in the last
 /// group, the thing it must never do.
 void main() {
   late AppDatabase db;
+  late Override data;
   late ProviderContainer container;
   late SessionDao sessions;
   late FollowUpDao followUps;
@@ -33,6 +36,7 @@ void main() {
     final made = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
@@ -40,11 +44,13 @@ void main() {
     return made;
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     sessions = SessionDao(db);
     followUps = FollowUpDao(db);

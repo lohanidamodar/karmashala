@@ -6,7 +6,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -32,6 +31,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   testWidgets('a tab\'s close button sits at its edge, not beside the text', (
@@ -122,14 +123,17 @@ void main() {
     late AppDatabase db;
     late ProviderContainer container;
 
-    setUp(() {
+    setUp(() async {
       db = AppDatabase.memory();
+      final server = FakeDataServer()..mirrorInto(db);
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
+      final data = await server.override();
       container = ProviderContainer(
         overrides: [
+          data,
           ...fakeTerminalOverrides(database: db),
           // A selected session brings the chat surface with it, and every one
           // of these otherwise polls on a real timer or reaches the host. The

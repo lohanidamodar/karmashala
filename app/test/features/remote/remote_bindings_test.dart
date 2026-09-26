@@ -21,7 +21,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
@@ -40,6 +39,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
@@ -50,6 +50,9 @@ import 'fake_bindings.dart';
 import '../../support/fakes.dart';
 import '../../support/sync_bindings.dart';
 import '../../support/temp_directory.dart';
+
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The store scan, answered from a map, so nothing here walks the owner's own
 /// `~/.claude` — and so an Antigravity session can be given a store that keeps
@@ -69,13 +72,17 @@ class _FixedLocator implements SessionTranscriptLocator {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late _FixedLocator locator;
   late ProviderContainer container;
   late FakeRepositoryDiscoveryService discovery;
   final now = DateTime.utc(2026, 8, 31, 10);
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ExecutionEnvironmentDao(db).upsert(
       ExecutionEnvironment(
         id: localHostEnvironmentId,
@@ -89,6 +96,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         sessionTranscriptLocatorProvider.overrideWithValue(locator),
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         autoImportRunnerProvider.overrideWithValue(
@@ -125,10 +133,10 @@ void main() {
         createdAt: now,
       ),
     );
-    ProjectDao(db).insert(
+    server.projectRows.insert(
       Project(id: 'p1', name: 'Proj', root: path(r'C:\work'), createdAt: now),
     );
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       Repository(
         id: 'r1',
         projectId: 'p1',
@@ -166,7 +174,7 @@ void main() {
         throwsA(isA<RemoteApiRefusal>()),
       );
     }
-    expect(ProjectDao(db).getAll(), isEmpty);
+    expect(server.projectRows.getAll(), isEmpty);
   });
 
   test('project add uses a real folder and refreshes controller', () async {
@@ -177,7 +185,7 @@ void main() {
     expect(container.read(projectsControllerProvider), hasLength(1));
     final second = await bindings.addProject('Renamed', folder.path);
     expect(second.projectId, first.projectId);
-    expect(ProjectDao(db).getAll(), hasLength(1));
+    expect(server.projectRows.getAll(), hasLength(1));
   });
 
   test('same in-flight path dedupes and a failed path can be retried', () async {
@@ -186,6 +194,7 @@ void main() {
     final gatedImport = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         autoImportRunnerProvider.overrideWithValue(
           (_) => gate.future.then((_) => const ImportSummary()),
@@ -201,7 +210,7 @@ void main() {
     gate.complete();
     final results = await Future.wait([a, b]);
     expect(results[0].projectId, results[1].projectId);
-    expect(ProjectDao(db).getAll(), hasLength(1));
+    expect(server.projectRows.getAll(), hasLength(1));
 
     final missing = Directory(
       '${Directory.systemTemp.path}\\remote-retry-${DateTime.now().microsecondsSinceEpoch}',
@@ -239,7 +248,7 @@ void main() {
       AgentInstallationDao(db).insert(resumableInstallation);
       final result = await launcher.launch(
         SessionLaunchRequest(
-          repository: RepositoryDao(db).getById('r1')!,
+          repository: server.repositoryRows.getById('r1')!,
           installation: resumableInstallation,
           title: 'Active',
           purpose: SessionPurpose.newSession,
@@ -716,6 +725,7 @@ void main() {
         container = ProviderContainer(
           overrides: [
             ...fakeTerminalOverrides(database: db),
+            data,
             sessionTranscriptLocatorProvider.overrideWithValue(locator),
             repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
             autoImportRunnerProvider.overrideWithValue(
@@ -917,6 +927,7 @@ void main() {
       final built = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          data,
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
           ),
@@ -1273,6 +1284,7 @@ void main() {
       final built = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          data,
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
           ),
@@ -1486,6 +1498,7 @@ void main() {
       final built = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          data,
           remoteDeliveryStageProvider.overrideWithValue(
             (sessionId) async => 'working',
           ),
@@ -1754,6 +1767,7 @@ void main() {
       container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          data,
           sessionTranscriptLocatorProvider.overrideWithValue(locator),
           repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
           autoImportRunnerProvider.overrideWithValue(

@@ -6,7 +6,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_export.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -16,7 +15,9 @@ import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// An export is a formatter over what Karmashala already recorded. Its one
 /// job beyond that is to be honest about the parts it could not read — an
@@ -39,14 +40,19 @@ void main() {
   AppDatabase? db;
   late Directory temp;
   ProviderContainer? container;
+  late FakeDataServer server;
 
-  ProviderContainer build({String? transcriptPath, bool seedRow = true}) {
+  Future<ProviderContainer> build({
+    String? transcriptPath,
+    bool seedRow = true,
+  }) async {
     final opened = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(opened);
     db = opened;
     ExecutionEnvironmentDao(opened).upsert(windowsEnv());
     if (seedRow) {
-      ProjectDao(db!).insert(project());
-      RepositoryDao(db!).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db!).insert(agentInstallation());
       SessionDao(db!).insert(
         session(
@@ -56,6 +62,7 @@ void main() {
     }
     return ProviderContainer(
       overrides: [
+        await server.override(),
         databaseProvider.overrideWithValue(opened),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionTranscriptLocatorProvider.overrideWithValue(
@@ -111,13 +118,13 @@ void main() {
       container!.read(sessionExporterProvider).build('s1');
 
   test('names the archive after the session, and after its id', () async {
-    container = build();
+    container = await build();
     final export = await exportIt();
     expect(export.fileName, 'port-the-importer-s1.zip');
   });
 
   test('carries a README, the data and the conversation', () async {
-    container = build(transcriptPath: writeTranscript(2));
+    container = await build(transcriptPath: writeTranscript(2));
     final export = await exportIt();
     expect(
       export.entries.map((e) => e.name),
@@ -131,7 +138,7 @@ void main() {
   });
 
   test('the JSON names the session by the id the app uses', () async {
-    container = build(transcriptPath: writeTranscript(1));
+    container = await build(transcriptPath: writeTranscript(1));
     final data =
         jsonDecode(entry(await exportIt(), 'session.json'))
             as Map<String, Object?>;
@@ -145,7 +152,7 @@ void main() {
   test(
     'a transcript nobody could find is said, not silently dropped',
     () async {
-      container = build();
+      container = await build();
       final export = await exportIt();
       expect(export.transcriptRefusal, contains('was not found'));
       expect(entry(export, 'transcript.md'), contains('no transcript'));
@@ -161,9 +168,9 @@ void main() {
   test(
     'a session that never opened a conversation is empty, not lost',
     () async {
-      container = build(seedRow: false);
-      ProjectDao(db!).insert(project());
-      RepositoryDao(db!).insert(repository());
+      container = await build(seedRow: false);
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db!).insert(agentInstallation());
       SessionDao(db!).insert(session(title: 'Fresh'));
 
@@ -174,7 +181,7 @@ void main() {
   );
 
   test('the README says what is not in the archive', () async {
-    container = build(transcriptPath: writeTranscript(1));
+    container = await build(transcriptPath: writeTranscript(1));
     final readme = entry(await exportIt(), 'README.md');
     expect(readme, contains('What is **not** in here'));
     // The three things a reader would otherwise assume they had.
@@ -186,7 +193,7 @@ void main() {
   test(
     'decisions travel as their own readable file, with attribution',
     () async {
-      container = build(transcriptPath: writeTranscript(1));
+      container = await build(transcriptPath: writeTranscript(1));
       container!
           .read(decisionRecordDaoProvider)
           .append(
@@ -210,14 +217,14 @@ void main() {
   );
 
   test('no decisions means no decisions file, not an empty one', () async {
-    container = build(transcriptPath: writeTranscript(1));
+    container = await build(transcriptPath: writeTranscript(1));
     final export = await exportIt();
     expect(export.entries.map((e) => e.name), isNot(contains('decisions.md')));
     expect(entry(export, 'README.md'), contains('nothing was recorded'));
   });
 
   test('a session that is gone is refused rather than half-exported', () async {
-    container = build();
+    container = await build();
     expect(
       () => container!.read(sessionExporterProvider).build('missing'),
       throwsA(isA<StateError>()),

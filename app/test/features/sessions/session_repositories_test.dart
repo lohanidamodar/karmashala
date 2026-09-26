@@ -9,26 +9,29 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
   late SessionRepositoryDao linkDao;
   late SessionRepositoriesService service;
+  late FakeDataServer server;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db)
+    server.projectRows
       ..insert(project(id: 'p1'))
       ..insert(project(id: 'p2', name: 'Other'));
-    RepositoryDao(db)
+    server.repositoryRows
       ..insert(repository(id: 'r1', projectId: 'p1', name: 'app'))
       ..insert(repository(id: 'r2', projectId: 'p1', name: 'api'))
       ..insert(repository(id: 'rX', projectId: 'p2', name: 'other'));
@@ -38,7 +41,7 @@ void main() {
     linkDao.link('s1', 'r1', role: SessionRepositoryRole.primary);
     service = SessionRepositoriesService(
       sessionDao: SessionDao(db),
-      workspace: workspaceOver(db),
+      workspace: await workspaceOf(server),
       linkDao: linkDao,
     );
   });
@@ -82,7 +85,10 @@ void main() {
   group('the Add repo menu', () {
     Future<void> pump(WidgetTester tester) async {
       final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          await server.override(),
+        ],
       );
       addTearDown(container.dispose);
       container.read(selectedSessionIdProvider.notifier).select('s1');

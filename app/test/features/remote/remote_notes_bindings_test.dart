@@ -4,35 +4,37 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/remote/application/remote_notes_bindings.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import 'package:karmashala_notes/store.dart';
 
 /// `notes.get` on the desktop: the notes and todos the panels show, in their
 /// order, with project names rather than ids.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
+    server.projectRows.insert(project());
   });
   tearDown(() => db.close());
 
-  Future<RemoteNotesSnapshot> read({bool notesEnabled = true}) {
+  Future<RemoteNotesSnapshot> read({bool notesEnabled = true}) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         notesEnabledProvider.overrideWithValue(notesEnabled),
       ],
     );
     addTearDown(container.dispose);
-    return container.read(
+    return await container.read(
       Provider<Future<RemoteNotesSnapshot> Function()>(
         (ref) =>
             () => remoteNotesSnapshot(ref),
@@ -40,30 +42,30 @@ void main() {
     )();
   }
 
-  void note(String id, DateTime at, {String? projectId}) => NoteDao(db).insert(
-    Note(
-      id: id,
-      body: 'Body of $id\nsecond line',
-      createdAt: at,
-      updatedAt: at,
-      projectId: projectId,
-    ),
-  );
+  void note(String id, DateTime at, {String? projectId}) =>
+      server.notes[id] = Note(
+        id: id,
+        body: 'Body of $id\nsecond line',
+        createdAt: at,
+        updatedAt: at,
+        projectId: projectId,
+      );
 
   test('notes newest first, todos open first, projects by name', () async {
     note('old', testTime);
     note('new', testTime.add(const Duration(hours: 1)), projectId: 'p1');
-    TodoDao(db).insert(
-      Todo(id: 't1', body: 'open one', position: 0, createdAt: testTime),
+    server.todos['t1'] = Todo(
+      id: 't1',
+      body: 'open one',
+      position: 0,
+      createdAt: testTime,
     );
-    TodoDao(db).insert(
-      Todo(
-        id: 't2',
-        body: 'done one',
-        position: 1,
-        createdAt: testTime,
-        doneAt: testTime,
-      ),
+    server.todos['t2'] = Todo(
+      id: 't2',
+      body: 'done one',
+      position: 1,
+      createdAt: testTime,
+      doneAt: testTime,
     );
 
     final snapshot = await read();

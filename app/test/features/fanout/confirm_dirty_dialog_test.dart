@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -8,13 +9,14 @@ import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import 'comparison_fixtures.dart' show worktree;
 
 const _candidates = 9;
@@ -62,11 +64,10 @@ class _AllDirty extends FanOutService {
   );
 }
 
-AppDatabase _seeded() {
+AppDatabase _seeded(FakeDataServer server) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.mirrorInto(db);
   ComparisonDao(db).insert(
     Comparison(
       id: 'cmp-dirty',
@@ -98,6 +99,10 @@ void main() {
   testWidgets('eight dirty worktrees to confirm fit a 720x560 window', (
     tester,
   ) async {
+    final server = FakeDataServer()
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
+    final client = await server.connect();
     await expectSurvivesWindowMatrix(
       tester,
       matrix: const [minimumWindow, minimumWindowLargeText],
@@ -105,11 +110,12 @@ void main() {
           'one checkbox row per dirty worktree, each with a three-line '
           'subtitle, in a dialog that did not scroll',
       build: () {
-        final db = _seeded();
+        final db = _seeded(server);
         addTearDown(db.close);
         final container = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            dataClientProvider.overrideWithValue(client),
             fanOutServiceProvider.overrideWith(_AllDirty.new),
             commandRunnerFactoryProvider.overrideWithValue(
               FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

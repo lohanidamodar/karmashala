@@ -1,4 +1,3 @@
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -15,6 +14,7 @@ import 'package:karmashala/src/features/workspaces/application/workspaces_contro
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -22,13 +22,16 @@ import '../../support/window_matrix.dart';
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server = FakeDataServer(clock: () => testTime);
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
@@ -38,9 +41,8 @@ void main() {
   tearDown(() => db.close());
 
   void seedProjects([int count = 3]) {
-    final dao = ProjectDao(container.read(databaseProvider));
     for (var i = 0; i < count; i++) {
-      dao.insert(
+      server.projectRows.insert(
         Project(
           id: 'p$i',
           name: 'Project $i',
@@ -54,7 +56,6 @@ void main() {
         ),
       );
     }
-    rereadWorkspace(container);
   }
 
   Widget dialogApp() => UncontrolledProviderScope(
@@ -70,13 +71,15 @@ void main() {
     // node inside its machine now, and choosing a scope is Quick Open's act —
     // where new work goes, rather than what the tree lists. What still has to
     // hold is that a scope never outlives the context it names.
-    test('a deleted context does not leave the scope naming it', () {
-      final games = createContext(container, 'Game dev');
+    test('a deleted context does not leave the scope naming it', () async {
+      final games = await createContext(container, 'Game dev');
       container
           .read(workspaceScopeProvider.notifier)
           .select(WorkspaceScope.of(games.id));
 
-      container.read(workspacesControllerProvider.notifier).delete(games.id);
+      await container
+          .read(workspacesControllerProvider.notifier)
+          .delete(games.id);
 
       expect(container.read(workspaceScopeProvider).isAll, isTrue);
     });
@@ -125,7 +128,7 @@ void main() {
     testWidgets('describes a context, and empties the description again', (
       tester,
     ) async {
-      final personal = createContext(container, 'Personal');
+      final personal = await createContext(container, 'Personal');
       await tester.pumpWidget(dialogApp());
       await tester.pumpAndSettle();
       // With nothing said, the row says the one thing it knows for free.
@@ -163,7 +166,7 @@ void main() {
       tester,
     ) async {
       seedProjects();
-      final games = createContext(container, 'Game dev');
+      final games = await createContext(container, 'Game dev');
       await container
           .read(workspacesControllerProvider.notifier)
           .assign('p1', games.id);
@@ -194,7 +197,7 @@ void main() {
 
     testWidgets('assigns a project, and unassigns it again', (tester) async {
       seedProjects();
-      final games = createContext(container, 'Game dev');
+      final games = await createContext(container, 'Game dev');
       await tester.pumpWidget(dialogApp());
       await tester.pumpAndSettle();
 
@@ -229,8 +232,8 @@ void main() {
       tester,
     ) async {
       seedProjects(31);
-      createContext(container, 'Personal');
-      createContext(container, 'PopupBits');
+      await createContext(container, 'Personal');
+      await createContext(container, 'PopupBits');
       await expectSurvivesWindowMatrix(
         tester,
         // A 720x560 box on a 1440x900 screen.
@@ -256,8 +259,8 @@ void main() {
 
     testWidgets('the contexts dialog survives 720x560', (tester) async {
       seedProjects(1);
-      createContext(container, 'Personal');
-      createContext(container, 'PopupBits');
+      await createContext(container, 'Personal');
+      await createContext(container, 'PopupBits');
       final controller = container.read(workspacesControllerProvider.notifier);
       await controller.assign(
         'p0',
@@ -275,10 +278,10 @@ void main() {
     ) async {
       // The owner's own scale, which is the case that scrolls.
       seedProjects(31);
-      createContext(container, 'Personal');
-      createContext(container, 'PopupBits');
-      createContext(container, 'Appwrite');
-      createContext(container, 'Game dev');
+      await createContext(container, 'Personal');
+      await createContext(container, 'PopupBits');
+      await createContext(container, 'Appwrite');
+      await createContext(container, 'Game dev');
       await expectSurvivesWindowMatrix(
         tester,
         build: dialogApp,

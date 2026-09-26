@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/todos/domain/project_scope.dart';
 
+import 'package:karmashala_notes/karmashala_notes.dart';
+
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/window_matrix.dart';
 
 /// Which project a note belongs to, and how it says so.
@@ -25,14 +29,18 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db)
+    // The server files a note under its source repository's project.
+    final server = FakeDataServer(projectOfRepository: {'r1': 'p1'})
+      ..mirrorInto(db);
+    server.projectRows
       ..insert(project())
       ..insert(project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'));
-    RepositoryDao(db).insert(repository());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
+    final data = await server.override();
 
     final container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [databaseProvider.overrideWithValue(db), data],
     );
     addTearDown(container.dispose);
     container.read(sessionDaoProvider).insert(session(title: 'Toolbar rework'));
@@ -60,7 +68,7 @@ void main() {
     return container;
   }
 
-  testWidgets('a note captured from a session is filed under its project', (
+  testWidgets('a note filed under a project leads its card with it', (
     tester,
   ) async {
     final container = await pump(tester);
@@ -74,7 +82,6 @@ void main() {
         );
     await tester.pumpAndSettle();
 
-    // A lookup, not a guess: a repository belongs to exactly one project.
     expect(container.read(notesProvider).single.projectId, 'p1');
     // And the card leads with it, because that is what the filter acts on.
     expect(find.textContaining('Demo  ·  From Toolbar rework'), findsOneWidget);
@@ -129,6 +136,19 @@ void main() {
   });
 
   testWidgets('survives the window matrix', (tester) async {
+    final server = FakeDataServer();
+    server.projectRows.insert(project(name: 'A project with a long name'));
+    server.repositoryRows.insert(repository());
+    server.notes['n1'] = Note(
+      id: 'n1',
+      body: 'A note long enough to need the width of a narrow panel',
+      projectId: 'p1',
+      sourceSessionId: 's1',
+      sourceRepositoryId: 'r1',
+      createdAt: testTime,
+      updatedAt: testTime,
+    );
+    final data = await server.connect();
     await expectSurvivesWindowMatrix(
       tester,
       because:
@@ -138,21 +158,16 @@ void main() {
         final db = AppDatabase.memory();
         addTearDown(db.close);
         ExecutionEnvironmentDao(db).upsert(windowsEnv());
-        ProjectDao(db).insert(project(name: 'A project with a long name'));
-        RepositoryDao(db).insert(repository());
+        server.mirrorInto(db);
         AgentInstallationDao(db).insert(agentInstallation());
         final container = ProviderContainer(
-          overrides: [databaseProvider.overrideWithValue(db)],
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            dataClientProvider.overrideWithValue(data),
+          ],
         );
         addTearDown(container.dispose);
         container.read(sessionDaoProvider).insert(session(title: 'Toolbar'));
-        container
-            .read(notesProvider.notifier)
-            .capture(
-              body: 'A note long enough to need the width of a narrow panel',
-              sourceSessionId: 's1',
-              sourceRepositoryId: 'r1',
-            );
         container
             .read(noteScopeProvider.notifier)
             .select(const ProjectScope.project('p1'));

@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -27,7 +26,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **What a project costs per recorded checkout**, at the size the owner's
@@ -136,13 +137,15 @@ void main() {
   const scale = [1, 10, 69];
 
   late AppDatabase db;
+  late FakeDataServer server;
   late _ProbeRunner git;
   late _ProbeFiles files;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     AgentInstallationDao(db).insert(agentInstallation());
     git = _ProbeRunner(responder: _git);
     files = _ProbeFiles();
@@ -157,11 +160,11 @@ void main() {
   /// One session on the hub, so the tree has something to place and the
   /// measurement is of checkouts rather than of an empty project.
   void seed(int count) {
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r0', name: 'hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
+      repository(id: 'r0', name: 'hub', path: r'C:\hub'),
+    );
     for (var i = 1; i < count; i++) {
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(
           id: 'r$i',
           name: 'clone$i',
@@ -229,6 +232,7 @@ void main() {
         // A real `.git` for every seeded clone, so the two facts that are
         // files really are read here rather than falling back to `git` — the
         // rest of the suite takes `noGitFiles` and never touches a disk.
+        await server.override(),
         ...fakeTerminalOverrides(
           database: db,
           frameGatedProbes: true,
@@ -600,9 +604,9 @@ void main() {
     /// One clone, [worktrees] worktrees of it, and a session in each — the
     /// shape a fan-out over one repository leaves behind.
     void seedWorktrees() {
-      RepositoryDao(
-        db,
-      ).insert(repository(id: 'r0', name: 'hub', path: r'C:\hub'));
+      server.repositoryRows.insert(
+        repository(id: 'r0', name: 'hub', path: r'C:\hub'),
+      );
       for (var i = 0; i < worktrees; i++) {
         SessionDao(db).insert(
           Session(
@@ -628,6 +632,7 @@ void main() {
         overrides: [
           // The neutral gate the rest of the suite takes — see
           // `headlessProbeGate`. This container has no widget tree.
+          await server.override(),
           ...fakeTerminalOverrides(database: db, gitFiles: files),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

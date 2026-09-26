@@ -15,10 +15,13 @@ import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The lookup half of the gate, against the app's own tables.
 ///
@@ -28,6 +31,8 @@ import '../../support/fixtures.dart';
 /// declared axes, and that the environment answer is the resolver's, in the
 /// resolver's own words.
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   late AppDatabase db;
   late ProviderContainer container;
 
@@ -67,17 +72,20 @@ void main() {
       ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          dataClientProvider.overrideWithValue(client),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('c-')),
           ...extra,
         ],
       );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -109,8 +117,9 @@ void main() {
       expect(refusalFor(automation()), isNull);
     });
 
-    test('another checkout\'s checks do not count for this one', () {
-      RepositoryDao(db).insert(repository(id: 'r2', name: 'other'));
+    test('another checkout\'s checks do not count for this one', () async {
+      server.repositoryRows.insert(repository(id: 'r2', name: 'other'));
+      await pumpEventQueue();
       makeReady();
       final elsewhere = refusalFor(automation(repositoryId: 'r2'))!;
       expect(elsewhere.kind, UnattendedRefusalKind.verificationDisabled);
@@ -196,7 +205,7 @@ void main() {
 
   group('the environment has to be reachable from here', () {
     test('an SSH checkout with no connection pool is refused, in the '
-        'resolver\'s words', () {
+        'resolver\'s words', () async {
       ExecutionEnvironmentDao(db).upsert(
         ExecutionEnvironment(
           id: 'ssh:build',
@@ -205,7 +214,7 @@ void main() {
           createdAt: testTime,
         ),
       );
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(
           id: 'r2',
           name: 'remote',
@@ -213,6 +222,7 @@ void main() {
           path: '/home/me/app',
         ),
       );
+      await pumpEventQueue();
       // A container composed without a pool: exactly "this app cannot reach
       // where the agent would run".
       container.dispose();
@@ -250,7 +260,7 @@ void main() {
 
     test(
       'a WSL checkout whose distribution went away is refused as unnamed',
-      () {
+      () async {
         ExecutionEnvironmentDao(db).upsert(
           ExecutionEnvironment(
             id: 'wsl:gone',
@@ -259,7 +269,7 @@ void main() {
             createdAt: testTime,
           ),
         );
-        RepositoryDao(db).insert(
+        server.repositoryRows.insert(
           repository(
             id: 'r3',
             name: 'inside',
@@ -267,6 +277,7 @@ void main() {
             path: '/home/me/app',
           ),
         );
+        await pumpEventQueue();
         container
             .read(projectCheckDaoProvider)
             .setVerificationEnabled('r3', enabled: true, now: testTime);

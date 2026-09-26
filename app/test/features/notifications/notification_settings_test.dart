@@ -1,12 +1,10 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/persistence.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import '../../support/stored_preferences.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
   test('the defaults are restrained but useful', () {
@@ -46,27 +44,23 @@ void main() {
   });
 
   group('persistence', () {
-    late AppDatabase db;
+    late FakeDataServer server;
     late ProviderContainer container;
 
-    setUp(() {
-      db = AppDatabase.memory();
-      container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    setUp(() async {
+      server = FakeDataServer();
+      container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
-      addTearDown(db.close);
     });
 
-    test('the controller writes every change through', () {
+    test('the controller writes every change through', () async {
       container
           .read(notificationSettingsControllerProvider.notifier)
           .setOnlyWhenUnfocused(false);
 
+      await pumpEventQueue();
       expect(
-        NotificationSettingsRepository(
-          StoredPreferences(db),
-        ).load().onlyWhenUnfocused,
+        NotificationSettingsRepository(server.store).load().onlyWhenUnfocused,
         isFalse,
       );
     });

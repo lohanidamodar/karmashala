@@ -9,15 +9,14 @@ import 'package:karmashala/src/features/git/application/worktree_cleanup_provide
 import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
 import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
-import '../../support/stored_preferences.dart';
 
 /// A service whose preview is scripted: the page is under test, not git.
 class _CannedService extends WorktreeCleanupService {
@@ -52,6 +51,7 @@ class _CannedService extends WorktreeCleanupService {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
   late _CannedService service;
 
@@ -67,10 +67,11 @@ void main() {
     branch: branch,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
+    server = FakeDataServer(clock: () => testTime);
+    server.projectRows.insert(project());
     final clock = FixedClock(testTime);
     service = _CannedService(
       WorktreeCleanupReport(
@@ -97,9 +98,11 @@ void main() {
       ),
       clock,
     );
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         clockProvider.overrideWithValue(clock),
         worktreeCleanupServiceProvider.overrideWithValue(service),
       ],
@@ -130,7 +133,7 @@ void main() {
   Finder cleanupNow() => find.byKey(const ValueKey('worktree-cleanup-now'));
 
   WorktreeCleanupSettings stored() =>
-      WorktreeCleanupStore(StoredPreferences(db)).settings();
+      WorktreeCleanupStore(server.store).settings();
 
   testWidgets('off by default, with the squash-merge caveat on the page', (
     tester,

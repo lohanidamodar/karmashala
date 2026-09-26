@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +18,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
+import '../../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../../support/workspace_mirror.dart';
 
 /// The dialog's side of the file index: that it draws what is cached, notices
 /// the index refreshing behind it, and lets go of a walk it no longer wants.
@@ -27,13 +29,17 @@ import '../../../support/fixtures.dart';
 /// `repo_file_index_test.dart`; this is only the wiring.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late Directory root;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Karmashala'));
-    RepositoryDao(db).insert(repository(name: 'app'));
+    server.projectRows.insert(project(name: 'Karmashala'));
+    server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Fix login redirect'));
     root = Directory.systemTemp.createTempSync('cg_qo_index');
@@ -60,6 +66,7 @@ void main() {
   /// export, so containers are assembled here rather than passed as lists.
   ProviderContainer containerWith(RepoFileIndex index) => ProviderContainer(
     overrides: [
+      data,
       ...fakeTerminalOverrides(database: db),
       quickOpenFileRootProvider.overrideWithValue(root.path),
       repoFileIndexProvider.overrideWithValue(index),
@@ -248,6 +255,7 @@ void main() {
         tester,
         ProviderContainer(
           overrides: [
+            data,
             ...fakeTerminalOverrides(database: db),
             quickOpenFileRootProvider.overrideWith((ref) => selected),
             repoFileIndexProvider.overrideWithValue(index),

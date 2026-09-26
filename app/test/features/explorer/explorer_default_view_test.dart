@@ -12,15 +12,16 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **The Explorer's default view, as a reader perceives it**, frozen: every
 /// semantics node under the panel with its words and its rectangle.
@@ -41,15 +42,17 @@ const _goldenPath = 'test/features/explorer/explorer_default_view.golden.txt';
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     AgentInstallationDao(db).insert(agentInstallation());
-    ProjectDao(db)
+    server.projectRows
       ..insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'))
       ..insert(project(id: 'p2', name: 'Beta', path: r'C:\src\beta'));
-    RepositoryDao(db)
+    server.repositoryRows
       ..insert(
         repository(
           id: 'r1',
@@ -93,6 +96,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -101,7 +105,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    createContext(container, 'Game dev');
+    await createContext(container, 'Game dev');
     // One project open, so session rows are part of what is frozen.
     container.read(explorerExpandedProjectsProvider.notifier).open('p1');
     await tester.pumpWidget(

@@ -11,7 +11,6 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -22,11 +21,15 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The owner's bug, end to end, on a real `.codex` store.
 ///
@@ -43,6 +46,8 @@ import '../terminal/fake_instance.dart';
 /// placeholder (the tab strip), and left `hostedLive` unable to see that the
 /// conversation had a pane (the inbox's "not active").
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   late Directory tmp;
   late String storeHome;
   late AppDatabase db;
@@ -51,13 +56,15 @@ void main() {
   const threadName = "hey let's work on karmashala app, i";
   const repoPath = r'C:\src\demo\app';
 
-  setUp(() {
+  setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_codex_identity_');
     storeHome = p.join(tmp.path, '.codex');
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
     AgentInstallationDao(db).insert(agentInstallation(agentId: AgentIds.codex));
   });
   tearDown(() {
@@ -111,6 +118,7 @@ void main() {
   ProviderContainer container() => ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      dataClientProvider.overrideWithValue(client),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       cliStoreLocatorProvider.overrideWithValue(
         FixedLocator([

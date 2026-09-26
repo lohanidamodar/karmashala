@@ -9,8 +9,8 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/stored_preferences.dart';
 
 void main() {
   final now = DateTime.utc(2026, 9, 21, 12);
@@ -83,10 +83,9 @@ void main() {
       expect(on.effectiveFor('off'), isNull);
     });
 
-    test('survive a round trip through app_metadata, with no migration', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final store = WorktreeCleanupStore(StoredPreferences(db));
+    test('survive a round trip through the preferences, with no migration', () {
+      final preferences = FakeDataServer().store;
+      final store = WorktreeCleanupStore(preferences);
       expect(store.settings().enabled, isFalse);
 
       final settings = WorktreeCleanupSettings(
@@ -108,15 +107,13 @@ void main() {
       expect(back.policyFor('p1').mode, WorktreeCleanupMode.off);
       expect(back.changedAt, now);
       expect(
-        db.readMetadata(WorktreeCleanupStore.settingsKey),
+        preferences.read(WorktreeCleanupStore.settingsKey),
         contains('"inactiveDays":30'),
       );
     });
 
     test('the removal log keeps the newest entries, capped', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final store = WorktreeCleanupStore(StoredPreferences(db));
+      final store = WorktreeCleanupStore(FakeDataServer().store);
       for (var i = 0; i < WorktreeCleanupStore.logLimit + 5; i++) {
         store.appendLog(
           WorktreeCleanupLogEntry(

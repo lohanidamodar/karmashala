@@ -20,7 +20,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -32,6 +31,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -45,15 +46,16 @@ import '../terminal/fake_instance.dart';
 /// order the list draws them — built or not, since the list is lazy.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   void seed({int extra = 0}) {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     for (final (id, name) in [('w1', 'Client work'), ('w2', 'Game dev')]) {
-      WorkspaceDao(
-        db,
-      ).insert(Workspace(id: id, name: name, createdAt: testTime));
+      server.workspaceRows.insert(
+        Workspace(id: id, name: name, createdAt: testTime),
+      );
     }
-    final projects = ProjectDao(db);
+    final projects = server.projectRows;
     for (final (id, name, context) in [
       ('p1', 'alpha', 'w1'),
       ('p2', 'bravo', 'w1'),
@@ -82,7 +84,7 @@ void main() {
         ),
       );
     }
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       repository(
         id: 'r1',
         projectId: 'p1',
@@ -107,7 +109,10 @@ void main() {
     }
   }
 
-  setUp(() => db = AppDatabase.memory());
+  setUp(() {
+    db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+  });
   tearDown(() => db.close());
 
   Future<ProviderContainer> pump(
@@ -120,6 +125,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

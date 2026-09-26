@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
@@ -16,10 +18,10 @@ import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/primitives.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'fake_host_box.dart';
-import '../../support/stored_preferences.dart';
 
 /// A box that answers the two questions the dialog asks, and remembers how it
 /// was asked the second one.
@@ -104,7 +106,13 @@ void main() {
     createdAt: testTime,
   );
 
-  setUp(() => db = AppDatabase.memory());
+  late FakeDataServer server;
+  late DataClient data;
+  setUp(() async {
+    db = AppDatabase.memory();
+    server = FakeDataServer(clock: () => testTime);
+    data = await server.connect();
+  });
   tearDown(() => db.close());
 
   /// Not `pumpAndSettle`: the busy line spins, and the expiry timer is real.
@@ -138,6 +146,7 @@ void main() {
         key: UniqueKey(),
         overrides: [
           databaseProvider.overrideWithValue(db),
+          dataClientProvider.overrideWithValue(data),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sshCompanionSetupProvider.overrideWith(
             (ref, host) async => await (setupFor?.call(host) ?? setup),
@@ -310,10 +319,7 @@ void main() {
       await tester.tap(find.text('Hosted relay'));
       await settle(tester);
 
-      expect(
-        CompanionRouteStore(StoredPreferences(db)).read('h1'),
-        HostRoute.relay,
-      );
+      expect(CompanionRouteStore(server.store).read('h1'), HostRoute.relay);
       expect(setup.relays, ['', kDefaultRelayUrl]);
       expect(
         setup.dials,
@@ -456,6 +462,7 @@ void main() {
         ProviderScope(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            dataClientProvider.overrideWithValue(data),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             sshCompanionSetupProvider.overrideWith(
               (ref, host) async => _Setup(local, reachable: true),

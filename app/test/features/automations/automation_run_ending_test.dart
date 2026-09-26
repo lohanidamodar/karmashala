@@ -9,7 +9,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/automations/application/automation_runner.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
@@ -25,10 +24,13 @@ import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// When an automation's session has ended: the recorded row for a hosted one,
 /// the pane and live status for one without host facts.
 void main() {
+  late FakeDataServer server;
   late AppDatabase db;
   late Directory artifacts;
   late StreamController<AgentStatusReport> reports;
@@ -36,12 +38,13 @@ void main() {
 
   final due = DateTime.utc(2026, 9, 9, 3);
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     artifacts = Directory.systemTemp.createTempSync('automation-endings');
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -93,6 +96,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('id-')),
         verificationRootProvider.overrideWithValue(artifacts),

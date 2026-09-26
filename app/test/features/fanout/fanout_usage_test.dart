@@ -18,13 +18,13 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_usage_strip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../agents/usage_fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// Usage at the point of decision.
 ///
@@ -53,11 +53,16 @@ AgentUsage windowAt(
   fetchedAt: testTime,
 );
 
+/// The workspace the dialog reads: one project with its checkout `r1`.
+Future<Override> seededWorkspace() =>
+    (FakeDataServer()
+          ..projectRows.insert(project())
+          ..repositoryRows.insert(repository()))
+        .override();
+
 AppDatabase seeded() {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
   AgentInstallationDao(db)
     ..insert(agentInstallation(id: 'a1', agentId: AgentIds.claudeCode))
     ..insert(
@@ -85,6 +90,7 @@ Future<ProviderContainer> pumpSetup(
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
+      await seededWorkspace(),
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
       ),
@@ -348,6 +354,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await seededWorkspace(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
@@ -397,6 +404,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await seededWorkspace(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),

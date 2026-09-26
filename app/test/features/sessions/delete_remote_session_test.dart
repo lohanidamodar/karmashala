@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
@@ -9,11 +11,12 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -29,6 +32,8 @@ import '../../support/fixtures.dart';
 /// other machine is reported as left rather than claimed.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
 
   ExecutionEnvironment sshEnv() => ExecutionEnvironment(
     id: 'ssh:box',
@@ -37,14 +42,16 @@ void main() {
     createdAt: testTime,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(sshEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
-    RepositoryDao(db).insert(
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    server.repositoryRows.insert(
       repository(
         id: 'r-remote',
         name: 'projects',
@@ -75,6 +82,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(mutator),
         cliStoreLocatorProvider.overrideWithValue(FixedLocator(const [])),

@@ -14,7 +14,6 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -34,6 +33,8 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../sessions/fixture_menu_screen.dart';
 import '../terminal/fake_instance.dart';
 
@@ -54,6 +55,7 @@ const _silent = AgentDescriptor(
 void main() {
   late Directory tmp;
   late AppDatabase db;
+  late FakeDataServer fake;
   late ProviderContainer container;
   late LauncherControlServer server;
 
@@ -92,8 +94,9 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_session_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    fake = FakeDataServer()..mirrorInto(db);
+    fake.projectRows.insert(project());
+    fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Work'));
 
@@ -108,6 +111,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await fake.override(),
         sessionStatusLookupProvider.overrideWithValue(
           (sessionId) => statusLookup(sessionId),
         ),
@@ -1056,14 +1060,14 @@ void main() {
     test('runs in the project\'s own folder, which it records', () async {
       final folder = Directory.systemTemp.createTempSync('ks-mcp-no-git');
       addTearDown(() => folder.deleteSync(recursive: true));
-      db.execute('DELETE FROM repositories;');
-      ProjectDao(db).update(project(path: folder.path));
+      fake.repositoryRows.delete('r1');
+      fake.projectRows.update(project(path: folder.path));
 
       final result = await callTool('open_new_session', {'projectId': 'p1'});
 
       expect(result.text, isNot(contains('no repositories to run in')));
       expect(
-        RepositoryDao(db).getByProject('p1').single.path.path,
+        fake.repositoryRows.getByProject('p1').single.path.path,
         folder.path,
       );
     });
@@ -1141,6 +1145,7 @@ void main() {
       container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await fake.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           agentRegistryProvider.overrideWithValue(
             const AgentRegistry([
@@ -1215,7 +1220,7 @@ void main() {
     // command from a hard-coded switch, and the only one with no guard at all:
     // an agent outside that switch got the bare executable, so the tool opened
     // a terminal running a *new* conversation and reported success.
-    setUp(() {
+    setUp(() async {
       AgentInstallationDao(db).insert(
         agentInstallation(
           id: 'a-silent',
@@ -1256,7 +1261,7 @@ void main() {
         // to *every* other agent. A window that dies on an unknown option is the
         // good outcome there; the bad one is a flag that means something else.
         ExecutionEnvironmentDao(db).upsert(wslEnv());
-        RepositoryDao(db).insert(
+        fake.repositoryRows.insert(
           repository(
             id: 'r-wsl',
             environmentId: 'wsl:Ubuntu',

@@ -18,7 +18,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_tree_state
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -30,7 +29,9 @@ import 'package:karmashala_ui/rows.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 
@@ -52,17 +53,18 @@ const _contexts = 10;
 const _rowBound = 90;
 
 void main() {
-  CountingDatabase seed() {
+  CountingDatabase seed(FakeDataServer server) {
     final db = CountingDatabase();
+    server.mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(posixEnv());
     AgentInstallationDao(db).insert(agentInstallation());
     for (var c = 0; c < _contexts; c++) {
-      WorkspaceDao(
-        db,
-      ).insert(Workspace(id: 'w$c', name: 'Context $c', createdAt: testTime));
+      server.workspaceRows.insert(
+        Workspace(id: 'w$c', name: 'Context $c', createdAt: testTime),
+      );
     }
-    final projects = ProjectDao(db);
-    final repositories = RepositoryDao(db);
+    final projects = server.projectRows;
+    final repositories = server.repositoryRows;
     final sessions = SessionDao(db);
     db.execute('BEGIN');
     for (var p = 0; p < _projects; p++) {
@@ -102,10 +104,12 @@ void main() {
     tester.view.physicalSize = const Size(320, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final db = seed();
+    final server = FakeDataServer();
+    final db = seed(server);
     addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),

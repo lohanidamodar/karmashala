@@ -6,9 +6,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
-import 'package:karmashala_store/database.dart';
 
-import 'in_process_data_endpoint.dart';
 import 'keyed_replica.dart';
 
 /// The domains this app reads through the server.
@@ -16,14 +14,16 @@ enum DataDomain { notes, todos, preferences, workspace }
 
 /// How this app reaches the server's data now.
 enum DataLinkState {
-  /// Over the server's socket.
+  /// Dialling: the server is starting, or the link closed and is being
+  /// redialled. Writes wait for it.
+  connecting,
+
+  /// Over the server's socket, every copy primed.
   connected,
 
-  /// The server went away; writes wait for it to come back.
-  reconnecting,
-
-  /// No server: the temporary in-process fallback ([InProcessDataEndpoint]).
-  inProcess,
+  /// The last dial found no server; [DataConnection.reason] says why. Still
+  /// redialled in the background when a server may run here at all.
+  unavailable,
 }
 
 /// [state], and in words why when it is not [DataLinkState.connected].
@@ -40,85 +40,61 @@ class DataConnection {
 /// This app's client of the server's data: one link, a copy of each domain
 /// the server keeps up to date ([notes], [todos], [preferences]), and the
 /// writes, which land in the copy at once and at the server after. Reading
-/// never waits: the copies are primed before the first frame.
+/// never waits; before a server has answered, nothing is known (the copies
+/// are not primed) and the app says so rather than guessing.
 class DataClient {
   DataClient._(
     this._dial,
-    this._endpoint,
-    this._connection, {
+    this._connection,
+    this._waitForServer, {
     AppLogger? logger,
   }) : _log = logger ?? AppLogger.named('data');
 
-  /// **Temporary fallback** — the server's handlers in this process, over
-  /// [database]. Used under `flutter test` and where no server could be
-  /// started; [reason] says which. Answers synchronously.
-  factory DataClient.inProcess(
-    AppDatabase database, {
-    String reason = 'no Karmashala server runs here',
-    DateTime Function()? clock,
-    AppLogger? logger,
-  }) => DataClient.over(
-    InProcessDataEndpoint(database, clock: clock),
-    reason: reason,
-    logger: logger,
-  );
+  /// A client with no server to reach — [reason] says why. Reads find
+  /// nothing and writes are refused at once. What a container gets that
+  /// `main` did not connect.
+  factory DataClient.unavailable(String reason, {AppLogger? logger}) =>
+      DataClient._(
+        null,
+        DataConnection(DataLinkState.unavailable, reason),
+        Duration.zero,
+        logger: logger,
+      );
 
-  /// The fallback over [endpoint] — for a test, two clients of one service.
-  factory DataClient.over(
-    InProcessDataEndpoint endpoint, {
-    String reason = 'no Karmashala server runs here',
-    AppLogger? logger,
-  }) {
-    final client = DataClient._(
-      null,
-      endpoint,
-      DataConnection(DataLinkState.inProcess, reason),
-      logger: logger,
-    );
-    client._listen(endpoint);
-    endpoint.sendNow(const DataSubscribe());
-    return client;
-  }
-
-  /// Dials the server with [dial] and primes every copy. Throws
-  /// [DataRefused] when the first dial finds no server — the caller decides
-  /// what that means. After it, a lost server is redialled for as long as
-  /// the client lives, and writes wait up to [waitForServer] for it.
+  /// Dials the server with [dial] and, when it answers, primes every copy
+  /// before returning. When it does not, the client comes back
+  /// [DataLinkState.unavailable] ([unavailableReason], or what the dial
+  /// said) and keeps redialling. Writes wait up to [waitForServer] for a
+  /// server that is not there, then are refused.
   static Future<DataClient> connect(
     Future<DataEndpoint?> Function() dial, {
+    String? unavailableReason,
     Duration waitForServer = const Duration(seconds: 20),
     AppLogger? logger,
   }) async {
     final client = DataClient._(
       dial,
-      null,
-      const DataConnection(DataLinkState.reconnecting, 'not connected yet'),
+      const DataConnection(
+        DataLinkState.connecting,
+        'starting the Karmashala server',
+      ),
+      waitForServer,
       logger: logger,
-    ).._waitForServer = waitForServer;
-    final endpoint = await dial();
-    if (endpoint == null) {
-      throw const DataRefused.unavailable(
-        'the Karmashala server is not running',
-      );
-    }
-    try {
-      await client._attach(endpoint);
-    } on Object {
-      await client.close();
-      await endpoint.close();
-      rethrow;
+    );
+    if (!await client._dialOnce(unavailableReason)) {
+      unawaited(client._redial());
     }
     return client;
   }
 
   final Future<DataEndpoint?> Function()? _dial;
   final AppLogger _log;
+  final Duration _waitForServer;
   DataEndpoint? _endpoint;
   DataConnection _connection;
-  Duration _waitForServer = const Duration(seconds: 20);
-  Completer<void>? _ready;
   StreamSubscription<DataChanges>? _changesSubscription;
   final _connectionChanges = StreamController<DataConnection>.broadcast();
+  final _waiting = <_Waiter>[];
   var _closed = false;
 
   final notes = KeyedReplica<Note>();
@@ -135,51 +111,16 @@ class DataClient {
 
   Stream<DataConnection> get connectionChanges => _connectionChanges.stream;
 
-  /// Primes [domain]'s copy now when this client can answer synchronously
-  /// (the fallback) and it has not been; a server's copies are primed when
-  /// it attaches.
-  void ensurePrimed(DataDomain domain) {
-    final endpoint = _endpoint;
-    if (endpoint is! InProcessDataEndpoint || _replica(domain).isPrimed) {
-      return;
-    }
-    _prime(domain, endpoint);
-  }
-
-  void _prime(DataDomain domain, InProcessDataEndpoint endpoint) {
-    switch (domain) {
-      case DataDomain.notes:
-        _replaceNotes(endpoint.sendNow(const NotesList()));
-      case DataDomain.todos:
-        _replaceTodos(endpoint.sendNow(const TodosList()));
-      case DataDomain.preferences:
-        _replacePreferences(endpoint.sendNow(const PreferencesGet()));
-      case DataDomain.workspace:
-        _replaceWorkspace(endpoint.sendNow(const WorkspaceList()));
-    }
-  }
-
   /// Sends [request] and applies its answer — every row it changed, and
-  /// [apply] for what the changes do not say — synchronously, before this
-  /// returns, on the fallback. A refusal re-reads [domain] (the local write
-  /// it undoes is gone with it) and is rethrown.
+  /// [apply] for what the changes do not say. A refusal other than "no
+  /// server" re-reads [domain] (the local write it undoes is gone with it)
+  /// and is rethrown.
   Future<R> write<R>(
     DataRequest<R> request, {
     required DataDomain domain,
     void Function(R value, int revision)? apply,
   }) {
-    final endpoint = _endpoint;
-    if (endpoint is InProcessDataEndpoint) {
-      try {
-        final reply = endpoint.sendNow(request);
-        _applyReply(reply, apply);
-        return Future.value(reply.value);
-      } on DataRefused catch (refusal) {
-        _prime(domain, endpoint);
-        return Future.error(refusal);
-      }
-    }
-    final write = _writeToServer(request, domain, apply);
+    final write = _write(request, domain, apply);
     _inFlight.add(write);
     unawaited(
       write
@@ -189,29 +130,22 @@ class DataClient {
     return write;
   }
 
-  void _applyReply<R>(
-    DataReply<R> reply,
-    void Function(R value, int revision)? apply,
-  ) {
-    apply?.call(reply.value, reply.revision);
-    _onChanges(DataChanges(reply.revision, reply.changes));
-  }
-
   /// Writes sent and not yet answered, which [close] waits for: a setting
   /// changed as the app quits must still reach the server.
   final _inFlight = <Future<Object?>>{};
 
-  Future<R> _writeToServer<R>(
+  Future<R> _write<R>(
     DataRequest<R> request,
     DataDomain domain,
     void Function(R value, int revision)? apply,
   ) async {
     try {
       final reply = await send(request);
-      _applyReply(reply, apply);
+      apply?.call(reply.value, reply.revision);
+      _onChanges(DataChanges(reply.revision, reply.changes));
       return reply.value;
     } on DataRefused catch (refusal) {
-      // A server that went away mid-write is re-read whole when it is back.
+      // A server that is away is re-read whole when it is back.
       if (refusal.code != DataRefusalCode.unavailable) {
         unawaited(resync(domain).catchError((Object _) {}));
       }
@@ -219,39 +153,40 @@ class DataClient {
     }
   }
 
-  /// [request] answered by the server, waiting up to the bound for one that
-  /// is reconnecting. Throws [DataRefused].
-  Future<DataReply<R>> send<R>(DataRequest<R> request) async {
+  /// [request] answered by the server. With no server now, it waits up to
+  /// the bound for one — in the order asked, ahead of the snapshot a
+  /// returning server is read with. Throws [DataRefused].
+  Future<DataReply<R>> send<R>(DataRequest<R> request) {
     if (_closed) {
-      throw const DataRefused.unavailable('the data client is closed');
+      return Future.error(
+        const DataRefused.unavailable('the data client is closed'),
+      );
     }
-    var endpoint = _endpoint;
-    if (endpoint == null) {
-      final ready = _ready ??= Completer<void>();
-      try {
-        await ready.future.timeout(_waitForServer);
-      } on TimeoutException {
-        throw DataRefused.unavailable(
-          'the Karmashala server is not running'
-          '${_connection.reason == null ? '' : ' (${_connection.reason})'}',
-        );
-      }
-      endpoint = _endpoint;
-      if (endpoint == null) {
-        throw const DataRefused.unavailable('the Karmashala server went away');
-      }
-    }
-    return endpoint.send(request);
+    final endpoint = _endpoint;
+    if (endpoint != null) return endpoint.send(request);
+    if (_dial == null) return Future.error(_notRunning());
+    final answer = Completer<DataReply<R>>();
+    late final _Waiter waiter;
+    waiter = _Waiter(
+      go: (endpoint) => answer.complete(endpoint.send(request)),
+      fail: answer.completeError,
+      timer: Timer(_waitForServer, () {
+        _waiting.remove(waiter);
+        answer.completeError(_notRunning());
+      }),
+    );
+    _waiting.add(waiter);
+    return answer.future;
   }
+
+  DataRefused _notRunning() => DataRefused.unavailable(
+    'the Karmashala server is not running'
+    '${_connection.reason == null ? '' : ' (${_connection.reason})'}',
+  );
 
   /// Reads [domain] again, whole — after a write this app made to its rows
   /// some other way (a project deleted clears their filing).
   Future<void> resync(DataDomain domain) async {
-    final endpoint = _endpoint;
-    if (endpoint is InProcessDataEndpoint) {
-      _prime(domain, endpoint);
-      return;
-    }
     switch (domain) {
       case DataDomain.notes:
         _replaceNotes(await send(const NotesList()));
@@ -264,12 +199,23 @@ class DataClient {
     }
   }
 
-  KeyedReplica<Object> _replica(DataDomain domain) => switch (domain) {
-    DataDomain.notes => notes,
-    DataDomain.todos => todos,
-    DataDomain.preferences => preferences,
-    DataDomain.workspace => projects,
-  };
+  /// Dials now rather than at the next backoff step — the person pressed
+  /// Retry, or the server was just started again.
+  void retry() {
+    if (_closed || _dial == null || _endpoint != null) return;
+    _setConnection(
+      const DataConnection(
+        DataLinkState.connecting,
+        'dialling the Karmashala server',
+      ),
+    );
+    final wake = _wake;
+    if (_redialing && wake != null && !wake.isCompleted) {
+      wake.complete();
+    } else {
+      unawaited(_redial());
+    }
+  }
 
   void _replaceNotes(DataReply<List<Note>> reply) => notes.replaceAll({
     for (final note in reply.value) note.id: note,
@@ -324,11 +270,6 @@ class DataClient {
     SectionRemoved(:final id) => sections.applyAt(id, null, revision),
   };
 
-  void _listen(DataEndpoint endpoint) {
-    unawaited(_changesSubscription?.cancel());
-    _changesSubscription = endpoint.changes.listen(_onChanges);
-  }
-
   void _onChanges(DataChanges batch) {
     for (final change in batch.changes) {
       switch (change) {
@@ -349,16 +290,19 @@ class DataClient {
   }
 
   Future<void> _attach(DataEndpoint endpoint) async {
-    _listen(endpoint);
+    unawaited(_changesSubscription?.cancel());
+    _changesSubscription = endpoint.changes.listen(_onChanges);
     await endpoint.send(const DataSubscribe());
     _endpoint = endpoint;
     unawaited(endpoint.done.then((_) => _lost(endpoint)));
-    _setConnection(const DataConnection(DataLinkState.connected));
     // Writes that waited go first, in the order they were made; the
     // snapshot after them then includes them.
-    _ready?.complete();
-    _ready = null;
-    await Future<void>.delayed(Duration.zero);
+    final waiting = [..._waiting];
+    _waiting.clear();
+    for (final waiter in waiting) {
+      waiter.timer.cancel();
+      waiter.go(endpoint);
+    }
     final snapshot = await Future.wait([
       endpoint.send(const NotesList()),
       endpoint.send(const TodosList()),
@@ -369,6 +313,40 @@ class DataClient {
     _replaceTodos(snapshot[1] as DataReply<List<Todo>>);
     _replacePreferences(snapshot[2] as DataReply<Map<String, String>>);
     _replaceWorkspace(snapshot[3] as DataReply<WorkspaceSnapshot>);
+    _setConnection(const DataConnection(DataLinkState.connected));
+  }
+
+  /// One dial. True when a server answered and every copy is primed.
+  Future<bool> _dialOnce([String? unavailableReason]) async {
+    DataEndpoint? endpoint;
+    try {
+      endpoint = await _dial!();
+      if (_closed) {
+        await endpoint?.close();
+        return false;
+      }
+      if (endpoint == null) {
+        _setConnection(
+          DataConnection(
+            DataLinkState.unavailable,
+            unavailableReason ?? 'nothing answers on its socket',
+          ),
+        );
+        return false;
+      }
+      await _attach(endpoint);
+      return true;
+    } on Object catch (error) {
+      if (identical(_endpoint, endpoint)) _endpoint = null;
+      await endpoint?.close();
+      _setConnection(
+        DataConnection(
+          DataLinkState.unavailable,
+          error is DataRefused ? error.message : '$error',
+        ),
+      );
+      return false;
+    }
   }
 
   void _lost(DataEndpoint endpoint) {
@@ -376,16 +354,16 @@ class DataClient {
     _endpoint = null;
     _setConnection(
       const DataConnection(
-        DataLinkState.reconnecting,
+        DataLinkState.connecting,
         'the link to the Karmashala server closed',
       ),
     );
-    if (_redialing) return;
     _log.warning('The link to the Karmashala server closed; redialling.');
     unawaited(_redial());
   }
 
   var _redialing = false;
+  Completer<void>? _wake;
 
   static const _backoff = [
     Duration(milliseconds: 250),
@@ -395,35 +373,29 @@ class DataClient {
   ];
 
   Future<void> _redial() async {
-    final dial = _dial;
-    if (dial == null) return;
+    if (_redialing || _dial == null) return;
     _redialing = true;
     try {
-      await _redialLoop(dial);
+      for (var attempt = 0; !_closed && _endpoint == null; attempt++) {
+        await _sleep(_backoff[math.min(attempt, _backoff.length - 1)]);
+        if (_closed || _endpoint != null) return;
+        if (await _dialOnce()) {
+          _log.info('Connected to the Karmashala server.');
+          return;
+        }
+      }
     } finally {
       _redialing = false;
     }
   }
 
-  Future<void> _redialLoop(Future<DataEndpoint?> Function() dial) async {
-    for (var attempt = 0; !_closed; attempt++) {
-      await Future<void>.delayed(
-        _backoff[math.min(attempt, _backoff.length - 1)],
-      );
-      if (_closed) return;
-      DataEndpoint? endpoint;
-      try {
-        endpoint = await dial();
-        if (endpoint == null) continue;
-        await _attach(endpoint);
-        _log.info('Reconnected to the Karmashala server.');
-        return;
-      } on Object catch (error) {
-        if (identical(_endpoint, endpoint)) _endpoint = null;
-        await endpoint?.close();
-        _setConnection(DataConnection(DataLinkState.reconnecting, '$error'));
-      }
-    }
+  /// [delay], cut short by [retry] or [close].
+  Future<void> _sleep(Duration delay) {
+    final wake = _wake = Completer<void>();
+    final timer = Timer(delay, () {
+      if (!wake.isCompleted) wake.complete();
+    });
+    return wake.future.whenComplete(timer.cancel);
   }
 
   void _setConnection(DataConnection connection) {
@@ -432,11 +404,12 @@ class DataClient {
   }
 
   /// Closes the link once the writes in flight are answered, or after
-  /// [flushWithin].
+  /// [flushWithin]. Writes still waiting for a server are refused now.
   Future<void> close({
     Duration flushWithin = const Duration(seconds: 2),
   }) async {
     if (_closed) return;
+    if (_endpoint == null) _failWaiting();
     if (_inFlight.isNotEmpty) {
       await Future.wait([
         for (final write in _inFlight)
@@ -444,23 +417,39 @@ class DataClient {
       ]).timeout(flushWithin, onTimeout: () => const []);
     }
     _closed = true;
-    final ready = _ready;
-    _ready = null;
-    if (ready != null && !ready.isCompleted) {
-      ready.completeError(
-        const DataRefused.unavailable('the data client is closed'),
-      );
-      unawaited(ready.future.catchError((Object _) {}));
-    }
+    _failWaiting();
+    final wake = _wake;
+    if (wake != null && !wake.isCompleted) wake.complete();
     await _changesSubscription?.cancel();
     await _endpoint?.close();
     _endpoint = null;
-    await _connectionChanges.close();
-    await notes.dispose();
-    await todos.dispose();
-    await preferences.dispose();
+    // Not awaited: a listener that paused (a provider nobody watches now)
+    // would hold the done event, and close would never return.
+    unawaited(_connectionChanges.close());
+    unawaited(notes.dispose());
+    unawaited(todos.dispose());
+    unawaited(preferences.dispose());
     for (final replica in [workspaces, projects, repositories, sections]) {
-      await replica.dispose();
+      unawaited(replica.dispose());
     }
   }
+
+  void _failWaiting() {
+    final waiting = [..._waiting];
+    _waiting.clear();
+    for (final waiter in waiting) {
+      waiter.timer.cancel();
+      waiter.fail(const DataRefused.unavailable('the data client is closed'));
+    }
+  }
+}
+
+/// A request waiting for a server: sent when one attaches, refused when the
+/// wait runs out.
+class _Waiter {
+  _Waiter({required this.go, required this.fail, required this.timer});
+
+  final void Function(DataEndpoint endpoint) go;
+  final void Function(Object refusal) fail;
+  final Timer timer;
 }

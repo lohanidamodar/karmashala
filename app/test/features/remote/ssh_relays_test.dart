@@ -18,8 +18,8 @@ import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
 import '../../support/memory_server_config.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../../support/stored_preferences.dart';
 
 const _token = '0123456789abcdef0123456789abcdef';
 final _url = Uri.parse('ws://203.0.113.9:8787/k/$_token');
@@ -80,19 +80,24 @@ SshRelayReading _reading(SshRelayStatus status, {bool withUrl = true}) =>
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late _Access access;
 
-  setUp(() => db = AppDatabase.memory());
+  setUp(() {
+    db = AppDatabase.memory();
+    server = FakeDataServer();
+  });
   tearDown(() => db.close());
 
-  ProviderContainer containerWith({
+  Future<ProviderContainer> containerWith({
     _Setup? setup,
     Object? factoryError,
     List<int>? ports,
-  }) {
+  }) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         localRelayStatusProvider.overrideWithValue(
           const LocalRelayStatus.stopped(),
         ),
@@ -113,57 +118,75 @@ void main() {
   }
 
   group('what is remembered', () {
-    test('a box survives a restart, with whether it is served through', () {
-      final first = containerWith();
-      first
-          .read(sshRelaysProvider.notifier)
-          .put(
-            SshRelayEntry(
-              hostId: 'h1',
-              hostName: 'do-box',
-              port: 8787,
-              url: _url,
-            ),
-          );
-      first.read(sshRelaysProvider.notifier).setEnabled('h1', false);
+    test(
+      'a box survives a restart, with whether it is served through',
+      () async {
+        final first = await containerWith();
+        first
+            .read(sshRelaysProvider.notifier)
+            .put(
+              SshRelayEntry(
+                hostId: 'h1',
+                hostName: 'do-box',
+                port: 8787,
+                url: _url,
+              ),
+            );
+        first.read(sshRelaysProvider.notifier).setEnabled('h1', false);
 
-      final entry = SshRelaysController.readFrom(StoredPreferences(db)).single;
-      expect(entry.url, _url);
-      expect(entry.port, 8787);
-      expect(entry.hostName, 'do-box');
-      expect(entry.enabled, isFalse);
-      expect(containerWith().read(activeSshRelayUrlsProvider), isEmpty);
-    });
+        await pumpEventQueue();
+        final entry = SshRelaysController.readFrom(server.store).single;
+        expect(entry.url, _url);
+        expect(entry.port, 8787);
+        expect(entry.hostName, 'do-box');
+        expect(entry.enabled, isFalse);
+        expect(
+          (await containerWith()).read(activeSshRelayUrlsProvider),
+          isEmpty,
+        );
+      },
+    );
 
-    test('one relay per host: setting it up again replaces, never doubles', () {
-      final container = containerWith();
-      final relays = container.read(sshRelaysProvider.notifier);
-      relays.put(
-        SshRelayEntry(hostId: 'h1', hostName: 'do-box', port: 8787, url: _url),
-      );
-      relays.put(
-        SshRelayEntry(hostId: 'h1', hostName: 'renamed', port: 8787, url: _url),
-      );
+    test(
+      'one relay per host: setting it up again replaces, never doubles',
+      () async {
+        final container = await containerWith();
+        final relays = container.read(sshRelaysProvider.notifier);
+        relays.put(
+          SshRelayEntry(
+            hostId: 'h1',
+            hostName: 'do-box',
+            port: 8787,
+            url: _url,
+          ),
+        );
+        relays.put(
+          SshRelayEntry(
+            hostId: 'h1',
+            hostName: 'renamed',
+            port: 8787,
+            url: _url,
+          ),
+        );
 
-      expect(container.read(sshRelaysProvider).single.hostName, 'renamed');
-      relays.remove('h1');
-      expect(SshRelaysController.readFrom(StoredPreferences(db)), isEmpty);
-    });
+        expect(container.read(sshRelaysProvider).single.hostName, 'renamed');
+        relays.remove('h1');
+        await pumpEventQueue();
+        expect(SshRelaysController.readFrom(server.store), isEmpty);
+      },
+    );
 
     test('a garbled entry costs itself and nothing else', () {
-      db.writeMetadata(
+      server.store.write(
         kSshRelaysMetadataKey,
         '[{"hostId":"h1","port":8787,"url":"$_url"},{"hostId":7},"junk",'
         '{"hostId":"h2","port":8787,"url":"not a url"}]',
       );
-      expect(
-        SshRelaysController.readFrom(
-          StoredPreferences(db),
-        ).map((e) => e.hostId),
-        ['h1'],
-      );
-      db.writeMetadata(kSshRelaysMetadataKey, 'not json');
-      expect(SshRelaysController.readFrom(StoredPreferences(db)), isEmpty);
+      expect(SshRelaysController.readFrom(server.store).map((e) => e.hostId), [
+        'h1',
+      ]);
+      server.store.write(kSshRelaysMetadataKey, 'not json');
+      expect(SshRelaysController.readFrom(server.store), isEmpty);
     });
 
     test('the token is in the URL and in nothing that prints', () {
@@ -188,52 +211,58 @@ void main() {
   });
 
   group('what a new pairing is offered', () {
-    test('an enabled box sits before the hosted relay, under its own name', () {
-      final container = containerWith();
-      setRemoteAccessNow(container, enabled: true);
-      container
-          .read(sshRelaysProvider.notifier)
-          .put(
-            SshRelayEntry(
-              hostId: 'h1',
-              hostName: 'do-box',
-              port: 8787,
-              url: _url,
-            ),
-          );
+    test(
+      'an enabled box sits before the hosted relay, under its own name',
+      () async {
+        final container = await containerWith();
+        setRemoteAccessNow(container, enabled: true);
+        container
+            .read(sshRelaysProvider.notifier)
+            .put(
+              SshRelayEntry(
+                hostId: 'h1',
+                hostName: 'do-box',
+                port: 8787,
+                url: _url,
+              ),
+            );
 
-      final offered = container.read(relayEndpointsProvider);
-      expect(offered.map((o) => o.kind), [
-        RelayEndpointKind.sshHost,
-        RelayEndpointKind.internet,
-      ]);
-      expect(offered.first.label, 'do-box');
-      expect(offered.first.url, _url, reason: 'the phone needs the token');
-      expect(
-        container.read(pairingRelayEndpointsProvider).first.kind,
-        PairingRelayKind.sshHost,
-      );
-    });
+        final offered = container.read(relayEndpointsProvider);
+        expect(offered.map((o) => o.kind), [
+          RelayEndpointKind.sshHost,
+          RelayEndpointKind.internet,
+        ]);
+        expect(offered.first.label, 'do-box');
+        expect(offered.first.url, _url, reason: 'the phone needs the token');
+        expect(
+          container.read(pairingRelayEndpointsProvider).first.kind,
+          PairingRelayKind.sshHost,
+        );
+      },
+    );
 
-    test('a stopped box is not offered: nobody would be listening there', () {
-      final container = containerWith();
-      setRemoteAccessNow(container, enabled: true);
-      container
-          .read(sshRelaysProvider.notifier)
-          .put(
-            SshRelayEntry(
-              hostId: 'h1',
-              hostName: 'do-box',
-              port: 8787,
-              url: _url,
-              enabled: false,
-            ),
-          );
+    test(
+      'a stopped box is not offered: nobody would be listening there',
+      () async {
+        final container = await containerWith();
+        setRemoteAccessNow(container, enabled: true);
+        container
+            .read(sshRelaysProvider.notifier)
+            .put(
+              SshRelayEntry(
+                hostId: 'h1',
+                hostName: 'do-box',
+                port: 8787,
+                url: _url,
+                enabled: false,
+              ),
+            );
 
-      expect(container.read(relayEndpointsProvider).map((o) => o.kind), [
-        RelayEndpointKind.internet,
-      ]);
-    });
+        expect(container.read(relayEndpointsProvider).map((o) => o.kind), [
+          RelayEndpointKind.internet,
+        ]);
+      },
+    );
   });
 
   group('what a reading from the box does', () {
@@ -242,7 +271,7 @@ void main() {
       () async {
         final ports = <int>[];
         final setup = _Setup({'start': _reading(SshRelayStatus.running)});
-        final container = containerWith(setup: setup, ports: ports);
+        final container = await containerWith(setup: setup, ports: ports);
 
         final reading = await container
             .read(sshRelayControllerProvider.notifier)
@@ -262,7 +291,7 @@ void main() {
       'one that runs but does not answer is remembered and NOT served',
       () async {
         final setup = _Setup({'start': _reading(SshRelayStatus.unreachable)});
-        final container = containerWith(setup: setup);
+        final container = await containerWith(setup: setup);
 
         await container
             .read(sshRelayControllerProvider.notifier)
@@ -279,7 +308,7 @@ void main() {
       final setup = _Setup({
         'start': _reading(SshRelayStatus.cannotStart, withUrl: false),
       });
-      final container = containerWith(setup: setup);
+      final container = await containerWith(setup: setup);
 
       await container
           .read(sshRelayControllerProvider.notifier)
@@ -300,7 +329,7 @@ void main() {
           'start': _reading(SshRelayStatus.running),
           'check': _reading(SshRelayStatus.outdated),
         });
-        final container = containerWith(setup: setup);
+        final container = await containerWith(setup: setup);
         final controller = container.read(sshRelayControllerProvider.notifier);
         await controller.use(_host, port: 8787);
 
@@ -318,7 +347,7 @@ void main() {
         'start': _reading(SshRelayStatus.running),
         'check': _reading(SshRelayStatus.unknown, withUrl: false),
       });
-      final container = containerWith(setup: setup);
+      final container = await containerWith(setup: setup);
       final controller = container.read(sshRelayControllerProvider.notifier);
       await controller.use(_host, port: 8787);
 
@@ -332,7 +361,7 @@ void main() {
         'start': _reading(SshRelayStatus.running),
         'stop': _reading(SshRelayStatus.stopped),
       });
-      final container = containerWith(setup: setup);
+      final container = await containerWith(setup: setup);
       final controller = container.read(sshRelayControllerProvider.notifier);
       await controller.use(_host, port: 8787);
 
@@ -349,7 +378,7 @@ void main() {
         // It would not stop: still running there.
         'remove': _reading(SshRelayStatus.running),
       });
-      final container = containerWith(setup: stubborn);
+      final container = await containerWith(setup: stubborn);
       final controller = container.read(sshRelayControllerProvider.notifier);
       await controller.use(_host, port: 8787);
 
@@ -372,7 +401,7 @@ void main() {
     test(
       'a machine that cannot be reached is a failure in words, not a crash',
       () async {
-        final container = containerWith(
+        final container = await containerWith(
           factoryError: StateError(
             'The Karmashala host could not be put on do-box',
           ),

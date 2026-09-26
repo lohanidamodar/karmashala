@@ -9,6 +9,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../explorer/application/session_context.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../settings/presentation/data_connection_notice.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
@@ -88,6 +89,7 @@ class _TodosViewState extends ConsumerState<TodosView> {
               ),
           ],
         ),
+        const DataConnectionNotice(padding: DataConnectionNotice.inPanel),
         _Composer(
           controller: _composer,
           focusNode: _composerFocus,

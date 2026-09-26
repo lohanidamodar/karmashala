@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -11,7 +13,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_agent_statuses.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
@@ -28,6 +29,8 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -64,18 +67,22 @@ Future<void> _settle() async {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late SessionDao dao;
   late FakeHostLifecycle host;
   late ProviderContainer container;
   late _RecordingRecorder recorder;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(sshEnvFixture());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db)
+    server.projectRows.insert(project());
+    server.repositoryRows
       ..insert(repository())
       ..insert(
         repository(id: 'r-ssh', environmentId: 'ssh:h1', path: '/srv/app'),
@@ -87,6 +94,7 @@ void main() {
     host = FakeHostLifecycle(db);
     container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
@@ -139,6 +147,7 @@ void main() {
       feedOnly = FakeHostLifecycle();
       client = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(feedOnly),
@@ -433,6 +442,7 @@ void main() {
       // What the HTTP route would have made of the same callback.
       final direct = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(null),
@@ -670,6 +680,7 @@ void main() {
       // The app opens again.
       container = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(host),
@@ -731,6 +742,7 @@ void main() {
       addTearDown(storeSync.complete);
       final app = ProviderContainer(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(host),
@@ -851,6 +863,7 @@ void main() {
     // An in-app or external-terminal session: the hook is all there is.
     final plain = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(null),

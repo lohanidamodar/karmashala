@@ -11,6 +11,7 @@ import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 
 /// Cleanup rides the automations' one timer: nothing is armed for it while it
@@ -23,7 +24,7 @@ void main() {
   late ProviderContainer container;
   late int sweeps;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     clock = MovableClock(DateTime.utc(2026, 9, 21, 9));
     timer = ManualAutomationTimer();
@@ -31,6 +32,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await FakeDataServer(clock: () => clock.nowUtc()).override(),
         clockProvider.overrideWithValue(clock),
         automationTimerProvider.overrideWithValue(timer),
         // A sweep that finds no projects: what is under test is *when* it

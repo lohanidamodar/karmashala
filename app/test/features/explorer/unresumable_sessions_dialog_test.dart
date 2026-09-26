@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/unresumable_sessions.dart';
 import 'package:karmashala/src/features/explorer/presentation/unresumable_sessions_dialog.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -24,6 +23,8 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -76,12 +77,15 @@ void main() {
   void emptyStore() =>
       Directory(p.join(storeHome(), 'projects')).createSync(recursive: true);
 
+  late FakeDataServer server;
+
   AppDatabase seededDatabase() {
     final db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ExecutionEnvironmentDao(db).upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
     return db;
   }
@@ -102,10 +106,14 @@ void main() {
     );
   }
 
-  ProviderContainer containerOver(AppDatabase db, {bool locatable = true}) {
+  Future<ProviderContainer> containerOver(
+    AppDatabase db, {
+    bool locatable = true,
+  }) async {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -183,7 +191,7 @@ void main() {
         seedDeadRow(db, id: 'dead-1', title: 'Refactor the parser');
         seedDeadRow(db, id: 'dead-2', title: 'Chase the flake');
 
-        await pumpAt(tester, containerOver(db), size);
+        await pumpAt(tester, await containerOver(db), size);
 
         // The rows themselves, not just a count — a set assembled from a scan
         // is exactly where a user needs to see what is in it.
@@ -205,7 +213,7 @@ void main() {
         seedDeadRow(db, id: 'dead-1', title: 'One');
         seedDeadRow(db, id: 'dead-2', title: 'Two');
 
-        await pumpAt(tester, containerOver(db), size);
+        await pumpAt(tester, await containerOver(db), size);
         expect(find.text('Remove 2 sessions'), findsOneWidget);
 
         await tester.tap(find.byType(Checkbox).first);
@@ -222,7 +230,7 @@ void main() {
         emptyStore();
         seedDeadRow(db, id: 'dead-1', title: 'One');
 
-        await pumpAt(tester, containerOver(db), size);
+        await pumpAt(tester, await containerOver(db), size);
         await tester.tap(find.text('Remove 1 session'));
         await tester.pumpAndSettle();
 
@@ -252,7 +260,7 @@ void main() {
           ),
         );
 
-        await pumpAt(tester, containerOver(db), size);
+        await pumpAt(tester, await containerOver(db), size);
 
         expect(find.text('Judged'), findsOneWidget);
         expect(find.text('Unjudged'), findsOneWidget);
@@ -277,7 +285,7 @@ void main() {
         addTearDown(db.close);
         seedDeadRow(db, id: 'dead-1', title: 'Cannot say');
 
-        await pumpAt(tester, containerOver(db, locatable: false), size);
+        await pumpAt(tester, await containerOver(db, locatable: false), size);
 
         expect(
           find.textContaining('No CLI store could be read'),
@@ -299,7 +307,7 @@ void main() {
         emptyStore();
         seedDeadRow(db, id: 'dead-1', title: 'One');
 
-        await pumpAt(tester, containerOver(db), size);
+        await pumpAt(tester, await containerOver(db), size);
 
         // §19: a reading that is not live must not look live.
         expect(find.textContaining('Checked '), findsOneWidget);
@@ -313,7 +321,7 @@ void main() {
         addTearDown(db.close);
         emptyStore();
 
-        await pumpAt(tester, containerOver(db), size);
+        await pumpAt(tester, await containerOver(db), size);
 
         expect(
           find.textContaining('Every session here names a conversation'),
@@ -345,7 +353,7 @@ void main() {
       ),
     );
 
-    final container = containerOver(db);
+    final container = await containerOver(db);
     await tester.runAsync(
       () => container.read(unresumableSessionsProvider.notifier).refresh(),
     );

@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_wait.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -20,7 +19,9 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **The wait, driven by events and never by a clock.**
@@ -54,11 +55,12 @@ void main() {
     sourceModifiedAt: modifiedAt,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Helper'));
 
@@ -68,6 +70,7 @@ void main() {
     inboxItems = [];
     container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // A fixed inbox. The real controller listens to half the app to decide

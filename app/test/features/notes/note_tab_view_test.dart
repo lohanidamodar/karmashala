@@ -4,16 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
-import 'package:karmashala_notes/store.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 
 const _longBody =
     '# Rework the tab strip\n\n'
@@ -24,15 +22,21 @@ const _longBody =
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
   late String noteId;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer();
+    final data = await server.override();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
+    server.projectRows.insert(project());
     container = ProviderContainer(
-      overrides: fakeTerminalOverrides(database: db),
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        data,
+      ],
     );
     noteId = container
         .read(notesProvider.notifier)
@@ -85,7 +89,7 @@ void main() {
     await tester.tap(find.text('No project').last);
     await tester.pumpAndSettle();
 
-    final stored = NoteDao(container.read(databaseProvider)).getById(noteId)!;
+    final stored = server.notes[noteId]!;
     expect(stored.projectId, isNull);
     expect(find.text('No project'), findsOneWidget);
   });

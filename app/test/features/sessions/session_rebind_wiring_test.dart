@@ -14,14 +14,15 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/application/session_adoption_service.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_rebind_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **The row a `/clear` left behind.**
 ///
@@ -34,12 +35,14 @@ void main() {
   late AppDatabase db;
   late SessionDao sessions;
   late AgentHookReports reports;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     sessions = SessionDao(db);
     reports = AgentHookReports();
@@ -68,9 +71,13 @@ void main() {
         ),
       );
 
-  ProviderContainer containerWith(List<String> livePaneIds, {Clock? clock}) {
+  Future<ProviderContainer> containerWith(
+    List<String> livePaneIds, {
+    Clock? clock,
+  }) async {
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(clock ?? FixedClock(testTime)),
         agentHookReportsProvider.overrideWithValue(reports),
@@ -105,64 +112,70 @@ void main() {
     paneSessionId: paneSessionId,
   );
 
-  test('a hook from an unknown conversation re-points the quiet pane', () {
-    launched('s1', paneId: 'pane-1');
-    final container = containerWith(['pane-1']);
+  test(
+    'a hook from an unknown conversation re-points the quiet pane',
+    () async {
+      launched('s1', paneId: 'pane-1');
+      final container = await containerWith(['pane-1']);
 
-    expect(rebind(container, 'cli-new'), 's1');
-    // The row keeps its identity; only the conversation it names changed.
-    expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
-    expect(sessions.getById('s1')!.paneId, 'pane-1');
-    expect(sessions.getById('s1')!.title, 'Work');
-  });
+      expect(rebind(container, 'cli-new'), 's1');
+      // The row keeps its identity; only the conversation it names changed.
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+      expect(sessions.getById('s1')!.paneId, 'pane-1');
+      expect(sessions.getById('s1')!.title, 'Work');
+    },
+  );
 
-  test('a pane still reporting keeps its conversation', () {
+  test('a pane still reporting keeps its conversation', () async {
     launched('s1', paneId: 'pane-1');
     heardFrom('cli-s1', testTime);
-    final container = containerWith(['pane-1']);
+    final container = await containerWith(['pane-1']);
 
     expect(rebind(container, 'cli-new'), isNull);
     expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
   });
 
-  test('a conversation some row already holds is left alone', () {
+  test('a conversation some row already holds is left alone', () async {
     launched('s1', paneId: 'pane-1');
     launched('s2', paneId: 'pane-2');
-    final container = containerWith(['pane-1', 'pane-2']);
+    final container = await containerWith(['pane-1', 'pane-2']);
 
     expect(rebind(container, 'cli-s2'), isNull);
     expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
   });
 
-  test('a conversation named after one of our own rows is that row\'s', () {
-    // Claude Code is launched with the row id as its session id, so an id that
-    // names a row belongs to it — even while that row names something else,
-    // which is how one wrong rebind turned into a chain of them.
-    launched('s1', paneId: 'pane-1');
-    sessions.insert(session(id: 's2', status: SessionStatus.running));
-    sessions.updateExternalSessionId('s2', 'cli-elsewhere');
-    final container = containerWith(['pane-1']);
+  test(
+    'a conversation named after one of our own rows is that row\'s',
+    () async {
+      // Claude Code is launched with the row id as its session id, so an id that
+      // names a row belongs to it — even while that row names something else,
+      // which is how one wrong rebind turned into a chain of them.
+      launched('s1', paneId: 'pane-1');
+      sessions.insert(session(id: 's2', status: SessionStatus.running));
+      sessions.updateExternalSessionId('s2', 'cli-elsewhere');
+      final container = await containerWith(['pane-1']);
 
-    expect(rebind(container, 's2'), isNull);
-    expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
-  });
+      expect(rebind(container, 's2'), isNull);
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+    },
+  );
 
-  test('two quiet panes are a coin toss, and nothing is written', () {
+  test('two quiet panes are a coin toss, and nothing is written', () async {
     launched('s1', paneId: 'pane-1');
     launched('s2', paneId: 'pane-2');
-    final container = containerWith(['pane-1', 'pane-2']);
+    final container = await containerWith(['pane-1', 'pane-2']);
 
     expect(rebind(container, 'cli-new'), isNull);
     expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
     expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
   });
 
-  test('one pane still reporting leaves the other unambiguous', () {
+  test('one pane still reporting leaves the other unambiguous', () async {
     launched('s1', paneId: 'pane-1');
     launched('s2', paneId: 'pane-2');
     heardFrom('cli-s1', testTime);
     final clock = MovableClock(testTime);
-    final container = containerWith(['pane-1', 'pane-2'], clock: clock);
+    final container = await containerWith(['pane-1', 'pane-2'], clock: clock);
 
     // s1 was active a moment before the new conversation appeared, so it may
     // be the pane that moved: nobody is chosen yet.
@@ -182,88 +195,103 @@ void main() {
       heardFrom('cli-s2', testTime.subtract(const Duration(minutes: 15)));
     }
 
-    test('the pane naming itself takes it, whatever the heuristic says', () {
-      twoPanes();
-      heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 12)));
-      final clock = MovableClock(testTime);
-      final container = containerWith(['pane-1', 'pane-2'], clock: clock);
+    test(
+      'the pane naming itself takes it, whatever the heuristic says',
+      () async {
+        twoPanes();
+        heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 12)));
+        final clock = MovableClock(testTime);
+        final container = await containerWith([
+          'pane-1',
+          'pane-2',
+        ], clock: clock);
 
-      // Its old conversation has not said it ended yet: held, not guessed.
-      expect(rebind(container, 'cli-new', paneSessionId: 's1'), isNull);
-      clock.advance(const Duration(seconds: 6));
-      heardFrom(
-        'cli-s1',
-        testTime.subtract(const Duration(seconds: 11)),
-        ended: true,
-      );
-      expect(rebind(container, 'cli-new', paneSessionId: 's1'), 's1');
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
-      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
-    });
+        // Its old conversation has not said it ended yet: held, not guessed.
+        expect(rebind(container, 'cli-new', paneSessionId: 's1'), isNull);
+        clock.advance(const Duration(seconds: 6));
+        heardFrom(
+          'cli-s1',
+          testTime.subtract(const Duration(seconds: 11)),
+          ended: true,
+        );
+        expect(rebind(container, 'cli-new', paneSessionId: 's1'), 's1');
+        expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+        expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+      },
+    );
 
-    test('without an identity, the ending picks the pane that moved', () {
+    test('without an identity, the ending picks the pane that moved', () async {
       twoPanes();
       heardFrom(
         'cli-s1',
         testTime.subtract(const Duration(seconds: 12)),
         ended: true,
       );
-      final container = containerWith(['pane-1', 'pane-2']);
+      final container = await containerWith(['pane-1', 'pane-2']);
 
       expect(rebind(container, 'cli-new'), 's1');
       expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
     });
 
     test('without an identity or an ending, the idle pane is never handed '
-        'it', () {
+        'it', () async {
       twoPanes();
       heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 12)));
-      final container = containerWith(['pane-1', 'pane-2']);
+      final container = await containerWith(['pane-1', 'pane-2']);
 
       expect(rebind(container, 'cli-new'), isNull);
       expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
       expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
     });
 
-    test('a child agent that inherited the pane\'s id moves nothing', () {
+    test('a child agent that inherited the pane\'s id moves nothing', () async {
       // The pane's own agent is mid-turn, running `claude -p` in a shell.
       twoPanes();
       heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 2)));
-      final container = containerWith(['pane-1', 'pane-2']);
+      final container = await containerWith(['pane-1', 'pane-2']);
 
       expect(rebind(container, 'cli-child', paneSessionId: 's1'), isNull);
       expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
       expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
     });
 
-    test('an identity naming no candidate row is nobody, not a guess', () {
-      twoPanes();
-      final container = containerWith(['pane-1', 'pane-2']);
+    test(
+      'an identity naming no candidate row is nobody, not a guess',
+      () async {
+        twoPanes();
+        final container = await containerWith(['pane-1', 'pane-2']);
 
-      expect(rebind(container, 'cli-new', paneSessionId: 'gone'), isNull);
-      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
-    });
+        expect(rebind(container, 'cli-new', paneSessionId: 'gone'), isNull);
+        expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+      },
+    );
 
-    test('the intake both transports share hands the identity through', () {
-      twoPanes();
-      heardFrom(
-        'cli-s1',
-        testTime.subtract(const Duration(seconds: 12)),
-        ended: true,
-      );
-      final container = containerWith(['pane-1', 'pane-2']);
+    test(
+      'the intake both transports share hands the identity through',
+      () async {
+        twoPanes();
+        heardFrom(
+          'cli-s1',
+          testTime.subtract(const Duration(seconds: 12)),
+          ended: true,
+        );
+        final container = await containerWith(['pane-1', 'pane-2']);
 
-      applyAgentHookCallback(
-        container,
-        agentId: AgentIds.claudeCode,
-        event: 'UserPromptSubmit',
-        body: jsonEncode({'session_id': 'cli-new', 'cwd': r'C:\src\demo\app'}),
-        paneSessionId: 's1',
-      );
+        applyAgentHookCallback(
+          container,
+          agentId: AgentIds.claudeCode,
+          event: 'UserPromptSubmit',
+          body: jsonEncode({
+            'session_id': 'cli-new',
+            'cwd': r'C:\src\demo\app',
+          }),
+          paneSessionId: 's1',
+        );
 
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
-      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
-    });
+        expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+        expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+      },
+    );
 
     group('a real /clear through the intake', () {
       void hook(
@@ -281,10 +309,10 @@ void main() {
 
       for (final identified in [true, false]) {
         test('moves the conversation, keeps the row running '
-            '(${identified ? 'pane named' : 'no identity'})', () {
+            '(${identified ? 'pane named' : 'no identity'})', () async {
           twoPanes();
           heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 12)));
-          final container = containerWith(['pane-1', 'pane-2']);
+          final container = await containerWith(['pane-1', 'pane-2']);
           final pane = identified ? 's1' : null;
 
           hook(container, 'SessionEnd', {
@@ -311,9 +339,9 @@ void main() {
       }
     });
 
-    test('a malformed identity is no identity', () {
+    test('a malformed identity is no identity', () async {
       launched('s1', paneId: 'pane-1');
-      final container = containerWith(['pane-1']);
+      final container = await containerWith(['pane-1']);
 
       expect(rebind(container, 'cli-new', paneSessionId: 'a b;c'), 's1');
     });
@@ -324,18 +352,18 @@ void main() {
     // before any message: it fired hooks, carried no pane id, and was never
     // written. The quiet pane was re-pointed at it and every resume failed.
     for (final event in ['SessionStart', 'SessionEnd', 'Notification', null]) {
-      test('a bare $event moves nothing', () {
+      test('a bare $event moves nothing', () async {
         launched('s1', paneId: 'pane-1');
-        final container = containerWith(['pane-1']);
+        final container = await containerWith(['pane-1']);
 
         expect(rebind(container, 'cli-ghost', event: event ?? ''), isNull);
         expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
       });
     }
 
-    test('the same conversation moves the row once it has a turn', () {
+    test('the same conversation moves the row once it has a turn', () async {
       launched('s1', paneId: 'pane-1');
-      final container = containerWith(['pane-1']);
+      final container = await containerWith(['pane-1']);
 
       applyAgentHookCallback(
         container,
@@ -354,9 +382,9 @@ void main() {
       expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
     });
 
-    test('a pane naming itself still needs a turn', () {
+    test('a pane naming itself still needs a turn', () async {
       launched('s1', paneId: 'pane-1');
-      final container = containerWith(['pane-1']);
+      final container = await containerWith(['pane-1']);
 
       expect(
         rebind(
@@ -372,22 +400,25 @@ void main() {
     });
   });
 
-  test('a pane with no live session of ours is nothing to re-point', () {
+  test('a pane with no live session of ours is nothing to re-point', () async {
     launched('s1', paneId: 'pane-1');
-    final container = containerWith(const []);
+    final container = await containerWith(const []);
 
     expect(rebind(container, 'cli-new'), isNull);
   });
 
-  test('the same unknown conversation is not re-examined every callback', () {
-    launched('s1', paneId: 'pane-1');
-    launched('s2', paneId: 'pane-2');
-    final container = containerWith(['pane-1', 'pane-2']);
+  test(
+    'the same unknown conversation is not re-examined every callback',
+    () async {
+      launched('s1', paneId: 'pane-1');
+      launched('s2', paneId: 'pane-2');
+      final container = await containerWith(['pane-1', 'pane-2']);
 
-    // Refused: two quiet panes. The second callback arrives a moment later and
-    // must cost a map lookup, not another pane list and another query.
-    expect(rebind(container, 'cli-new'), isNull);
-    heardFrom('cli-s1', testTime);
-    expect(rebind(container, 'cli-new'), isNull);
-  });
+      // Refused: two quiet panes. The second callback arrives a moment later and
+      // must cost a map lookup, not another pane list and another query.
+      expect(rebind(container, 'cli-new'), isNull);
+      heardFrom('cli-s1', testTime);
+      expect(rebind(container, 'cli-new'), isNull);
+    },
+  );
 }

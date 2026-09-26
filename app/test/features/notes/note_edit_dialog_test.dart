@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/notes/presentation/note_edit_dialog.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 
@@ -20,9 +21,10 @@ void main() {
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final at = DateTime.utc(2026, 9, 16);
+    final data = await FakeDataServer().override();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: [databaseProvider.overrideWithValue(db), data],
         child: MaterialApp(
           home: NoteEditDialog(
             note: Note(id: '', body: '', createdAt: at, updatedAt: at),
@@ -43,6 +45,8 @@ void main() {
     final body = [
       for (var i = 1; i <= 40; i++) 'Line $i of a note pasted from a session.',
     ].join('\n');
+    final server = FakeDataServer()..projectRows.insert(project());
+    final client = await server.connect();
     await expectSurvivesWindowMatrix(
       tester,
       because:
@@ -52,9 +56,11 @@ void main() {
         final db = AppDatabase.memory();
         addTearDown(db.close);
         ExecutionEnvironmentDao(db).upsert(windowsEnv());
-        ProjectDao(db).insert(project());
         final container = ProviderContainer(
-          overrides: [databaseProvider.overrideWithValue(db)],
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            dataClientProvider.overrideWithValue(client),
+          ],
         );
         addTearDown(container.dispose);
         final at = DateTime.utc(2026, 9, 16);

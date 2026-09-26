@@ -19,15 +19,16 @@ import 'package:karmashala/src/features/explorer/application/bulk_session_delete
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_cli_store_locator.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
 
 /// **Deleting a ticked set of sessions.**
@@ -65,13 +66,15 @@ void main() {
   }
 
   late AppDatabase db;
+  late FakeDataServer server;
   late _StoreDetection detection;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     detection = _StoreDetection([]);
   });
@@ -126,14 +129,15 @@ void main() {
     );
   }
 
-  ({ProviderContainer container, CliSessionMutator mutator}) mount({
+  Future<({ProviderContainer container, CliSessionMutator mutator})> mount({
     CliSessionMutator? mutator,
     _RecordingPresenter? presenter,
-  }) {
+  }) async {
     final effective = mutator ?? CliSessionMutator();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(effective),
         cliStoreLocatorProvider.overrideWithValue(FixedLocator(const [])),
@@ -153,7 +157,7 @@ void main() {
         addNative('n0', title: 'Native one');
         addNative('n1', title: 'Native two');
         addImported('i0', title: 'Imported one');
-        final (:container, :mutator) = mount();
+        final (:container, :mutator) = await mount();
         final bulk = container.read(sessionBulkDeleteProvider);
 
         final targets = bulk.resolve(const ['n0', 'i0', 'n1']);
@@ -178,9 +182,9 @@ void main() {
       },
     );
 
-    test('an id that names nothing is dropped rather than carried', () {
+    test('an id that names nothing is dropped rather than carried', () async {
       addNative('n0', title: 'Native one');
-      final (:container, :mutator) = mount();
+      final (:container, :mutator) = await mount();
 
       final targets = container.read(sessionBulkDeleteProvider).resolve(const [
         'n0',
@@ -196,7 +200,7 @@ void main() {
       () async {
         addNative('n0', title: 'Native one');
         addImported('i0', title: 'Imported one');
-        final (:container, :mutator) = mount();
+        final (:container, :mutator) = await mount();
         container.read(selectedSessionIdProvider.notifier).select('n0');
         container.read(selectedImportedSessionIdProvider.notifier).select('i0');
         final bulk = container.read(sessionBulkDeleteProvider);
@@ -211,7 +215,7 @@ void main() {
     test('the ticked set empties itself as the rows leave', () async {
       addNative('n0', title: 'Native one');
       addNative('n1', title: 'Native two');
-      final (:container, :mutator) = mount();
+      final (:container, :mutator) = await mount();
       final selection = container.read(sessionSelectionProvider.notifier)
         ..enter()
         ..toggle('n0')
@@ -231,7 +235,7 @@ void main() {
     test('unticked leaves every transcript on disk', () async {
       addNative('n0', title: 'Native one');
       addImported('i0', title: 'Imported one');
-      final (:container, :mutator) = mount();
+      final (:container, :mutator) = await mount();
       final bulk = container.read(sessionBulkDeleteProvider);
 
       bulk.run(bulk.resolve(const ['n0', 'i0']), deleteFromCli: false);
@@ -250,7 +254,7 @@ void main() {
       () async {
         addNative('n0', title: 'Native one');
         addImported('i0', title: 'Imported one');
-        final (:container, :mutator) = mount();
+        final (:container, :mutator) = await mount();
         final bulk = container.read(sessionBulkDeleteProvider);
 
         bulk.run(bulk.resolve(const ['n0', 'i0']), deleteFromCli: true);
@@ -277,7 +281,7 @@ void main() {
         addNative('n0', title: 'Native one');
         detection.sessions.clear();
         final presenter = _RecordingPresenter();
-        final (:container, :mutator) = mount(presenter: presenter);
+        final (:container, :mutator) = await mount(presenter: presenter);
         final bulk = container.read(sessionBulkDeleteProvider);
 
         bulk.run(bulk.resolve(const ['n0']), deleteFromCli: true);
@@ -298,7 +302,7 @@ void main() {
       addImported('i0', title: 'Imported one');
       addImported('i1', title: 'Imported two');
       final presenter = _RecordingPresenter();
-      final (:container, :mutator) = mount(
+      final (:container, :mutator) = await mount(
         mutator: _RefusingMutator(const {'ext-n1'}),
         presenter: presenter,
       );
@@ -336,7 +340,7 @@ void main() {
         addImported('i$i', title: 'Imported $i');
       }
       final presenter = _RecordingPresenter();
-      final (:container, :mutator) = mount(
+      final (:container, :mutator) = await mount(
         mutator: _RefusingMutator(const {
           'cli-i0',
           'cli-i1',
@@ -362,7 +366,7 @@ void main() {
       addNative('n0', title: 'Native one');
       addImported('i0', title: 'Imported one');
       final presenter = _RecordingPresenter();
-      final (:container, :mutator) = mount(presenter: presenter);
+      final (:container, :mutator) = await mount(presenter: presenter);
       final bulk = container.read(sessionBulkDeleteProvider);
 
       bulk.run(bulk.resolve(const ['n0', 'i0']), deleteFromCli: true);
@@ -379,6 +383,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           cliSessionMutatorProvider.overrideWithValue(
             _RefusingMutator(const {'cli-i0'}),

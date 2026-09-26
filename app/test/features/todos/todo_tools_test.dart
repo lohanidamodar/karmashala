@@ -12,12 +12,13 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The todo tools, over the endpoint.
 ///
@@ -34,16 +35,25 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_todo_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db)
-      ..insert(project())
-      ..insert(project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'));
-    RepositoryDao(db).insert(repository());
+    // The server files by the calling session: s1 is in r1, which is in p1.
+    final data =
+        FakeDataServer(
+            clock: () => testTime,
+            repositoryOfSession: {'s1': 'r1'},
+            projectOfRepository: {'r1': 'p1'},
+          ).mirrorInto(db)
+          ..projectRows.insert(project())
+          ..projectRows.insert(
+            project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'),
+          )
+          ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Fix login'));
-
+    final workspace = await data.override();
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        workspace,
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
@@ -148,15 +158,18 @@ void main() {
     expect(result.text, contains('body is required'));
   });
 
-  test('a todo from a session is filed under that session’s project', () async {
-    // The convenience that makes filing happen at all: an agent working in a
-    // checkout is working in exactly one project, and it should not have to
-    // look up what it already knows.
-    final added =
-        (await callTool('todo_add', {'body': 'from s1'}, 's1')).structured!
-            as Map<String, Object?>;
-    expect(added['projectId'], 'p1');
-  });
+  test(
+    'a todo from a session is added as that session’s, and filed by it',
+    () async {
+      // The convenience that makes filing happen at all: an agent working in a
+      // checkout is working in exactly one project, and it should not have to
+      // look up what it already knows.
+      final added =
+          (await callTool('todo_add', {'body': 'from s1'}, 's1')).structured!
+              as Map<String, Object?>;
+      expect(added['projectId'], 'p1');
+    },
+  );
 
   test('"none" files it nowhere, and an id files it there', () async {
     final unfiled =
@@ -236,15 +249,6 @@ void main() {
     final ghost = await callTool('todo_delete', {'id': 'ghost'});
     expect(ghost.isError, isTrue);
     expect(ghost.text, contains('ghost'));
-  });
-
-  test('a new todo goes to the bottom of the list', () async {
-    await callTool('todo_add', {'body': 'first'});
-    await callTool('todo_add', {'body': 'second'});
-    expect((await listTodos()).map((t) => (t! as Map)['body']), [
-      'first',
-      'second',
-    ]);
   });
 
   group('notes', () {

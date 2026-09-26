@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -36,6 +35,9 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// **What one session switch costs.**
 ///
@@ -102,6 +104,8 @@ import '../../support/fixtures.dart';
 /// changing behaviour anywhere that relies on identity.
 void main() {
   late CountingDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late FakeCommandRunner git;
   late _Rebuilds rebuilds;
   late ProviderContainer container;
@@ -116,13 +120,15 @@ void main() {
   /// store and a two-second poll timer.
   final chatSubscriptions = <String>[];
 
-  setUp(() {
+  setUp(() async {
     db = CountingDatabase();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     terminals.clear();
     chatSubscriptions.clear();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     // Two running sessions in one repository — the owner's exact workspace —
     // plus a third the switch never touches, which is what makes a fan-out
@@ -149,6 +155,7 @@ void main() {
       overrides: [
         // Every pane's buffer counts what reads it, so a switch that re-encodes
         // scrollback shows up in the unit `layout_save_cost_test` uses.
+        data,
         ...fakeTerminalOverrides(
           database: db,
           instanceFactory: _countingFactory(terminals),

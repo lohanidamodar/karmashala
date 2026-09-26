@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
@@ -28,6 +27,8 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
 import '../terminal/fake_instance.dart';
 
@@ -144,8 +145,9 @@ void main() {
     db = AppDatabase.memory();
     final clock = FixedClock(testTime);
     final envId = ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
-    ProjectDao(db).insert(project(environmentId: envId, path: hub));
-    RepositoryDao(db).insert(repository(environmentId: envId, path: hub));
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project(environmentId: envId, path: hub));
+    server.repositoryRows.insert(repository(environmentId: envId, path: hub));
     AgentInstallationDao(db).insert(agentInstallation(environmentId: envId));
     SessionDao(db)
       ..insert(
@@ -178,6 +180,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(clock),
         agentHookReportsProvider.overrideWithValue(reports),
         sessionStatusRegistryProvider.overrideWithValue(registry),

@@ -13,13 +13,13 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// `project_add` and `project_update` over the endpoint an agent really calls.
 ///
@@ -32,16 +32,19 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
   late LauncherControlServer server;
+  late FakeDataServer fake;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_project_tools_');
     work = Directory.systemTemp.createTempSync('karmashala_project_work_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    fake = FakeDataServer(clock: () => testTime);
 
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
@@ -123,7 +126,7 @@ void main() {
       expect(added['path'], folder.path);
       expect(added['projectId'], isA<String>());
 
-      final stored = ProjectDao(db).getAll().single;
+      final stored = fake.projectRows.getAll().single;
       expect(stored.name, 'sample-app');
       expect(stored.root.path, folder.path);
     });
@@ -132,7 +135,7 @@ void main() {
       final folder = Directory(p.join(work.path, 'sample-app'))
         ..createSync(recursive: true);
       await callTool('project_add', {'path': folder.path, 'name': 'Chosen'});
-      expect(ProjectDao(db).getAll().single.name, 'Chosen');
+      expect(fake.projectRows.getAll().single.name, 'Chosen');
     });
 
     test(
@@ -141,7 +144,7 @@ void main() {
         final call = await callTool('project_add');
         expect(call.isError, isTrue);
         expect(call.text, contains('path'));
-        expect(ProjectDao(db).getAll(), isEmpty);
+        expect(fake.projectRows.getAll(), isEmpty);
       },
     );
 
@@ -153,7 +156,7 @@ void main() {
       });
       expect(call.isError, isTrue);
       expect(call.text, contains('nowhere'));
-      expect(ProjectDao(db).getAll(), isEmpty);
+      expect(fake.projectRows.getAll(), isEmpty);
     });
 
     test('a folder that is not there changes nothing', () async {
@@ -161,14 +164,14 @@ void main() {
         'path': p.join(work.path, 'never-created'),
       });
       expect(call.isError, isTrue);
-      expect(ProjectDao(db).getAll(), isEmpty);
+      expect(fake.projectRows.getAll(), isEmpty);
     });
   });
 
   group('project_update', () {
     setUp(() {
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      fake.projectRows.insert(project());
+      fake.repositoryRows.insert(repository());
     });
 
     test('renames without touching the root', () async {
@@ -178,7 +181,7 @@ void main() {
       });
       expect(call.isError, isFalse, reason: call.text);
 
-      final stored = ProjectDao(db).getById('p1')!;
+      final stored = fake.projectRows.getById('p1')!;
       expect(stored.name, 'Renamed');
       expect(stored.root.path, r'C:\src\demo');
     });
@@ -188,19 +191,19 @@ void main() {
         'projectId': 'p1',
         'defaultRepositoryId': 'r1',
       });
-      expect(ProjectDao(db).getById('p1')!.defaultRepositoryId, 'r1');
+      expect(fake.projectRows.getById('p1')!.defaultRepositoryId, 'r1');
 
       await callTool('project_update', {
         'projectId': 'p1',
         'defaultRepositoryId': null,
       });
-      expect(ProjectDao(db).getById('p1')!.defaultRepositoryId, isNull);
+      expect(fake.projectRows.getById('p1')!.defaultRepositoryId, isNull);
     });
 
     test('omitting the default leaves the one already chosen', () async {
-      ProjectDao(db).setDefaultRepository('p1', 'r1');
+      fake.projectRows.setDefaultRepository('p1', 'r1');
       await callTool('project_update', {'projectId': 'p1', 'name': 'Again'});
-      expect(ProjectDao(db).getById('p1')!.defaultRepositoryId, 'r1');
+      expect(fake.projectRows.getById('p1')!.defaultRepositoryId, 'r1');
     });
 
     test('a move rebases the checkouts and keeps their ids', () async {
@@ -208,8 +211,8 @@ void main() {
         ..createSync(recursive: true);
       Directory(p.join(moved.path, 'app')).createSync();
 
-      ProjectDao(db).update(
-        ProjectDao(db)
+      fake.projectRows.update(
+        fake.projectRows
             .getById('p1')!
             .copyWith(
               root: EnvironmentPath(
@@ -218,8 +221,8 @@ void main() {
               ),
             ),
       );
-      RepositoryDao(db).update(
-        RepositoryDao(db)
+      fake.repositoryRows.update(
+        fake.repositoryRows
             .getById('r1')!
             .copyWith(
               path: EnvironmentPath(
@@ -240,11 +243,11 @@ void main() {
           .cast<Map<String, Object?>>();
       expect(rebased.single['repositoryId'], 'r1');
       expect(
-        RepositoryDao(db).getById('r1')!.path.path,
+        fake.repositoryRows.getById('r1')!.path.path,
         p.join(moved.path, 'app'),
       );
       expect(
-        RepositoryDao(db).getById('r1'),
+        fake.repositoryRows.getById('r1'),
         isNotNull,
         reason: 'the row every session references is still the same row',
       );

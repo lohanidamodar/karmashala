@@ -5,12 +5,13 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fake_cli_store_locator.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// An [AgentUsageService] that answers from the test.
 ///
@@ -122,11 +123,19 @@ const usageFixtureFloor = Duration(minutes: 3);
 
 /// A workspace with one repository, one agent installation and one session on
 /// it — everything `focusedUsageInstallationProvider` has to walk.
-AppDatabase seedUsageDatabase({String agentId = AgentIds.claudeCode}) {
+///
+/// The project and repository are seeded on [server] (a fresh one when
+/// omitted) and mirrored into the database for the session's foreign keys;
+/// a container that reads the workspace takes `await server.override()`.
+AppDatabase seedUsageDatabase({
+  String agentId = AgentIds.claudeCode,
+  FakeDataServer? server,
+}) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  (server ?? FakeDataServer()).mirrorInto(db)
+    ..projectRows.insert(project())
+    ..repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
   SessionDao(db).insert(session());
   return db;

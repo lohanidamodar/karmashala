@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -13,7 +14,6 @@ import 'package:karmashala/src/features/explorer/application/session_selection.d
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_keyboard.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -23,8 +23,10 @@ import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **The saved views are a list of rows too, and take the tree's keys.**
@@ -34,16 +36,19 @@ import '../terminal/fake_instance.dart';
 /// them — which is also what a Shift-click ranges over here.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   const failures = 'section-ended-in-failure';
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    seedDefaultSections(server);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(
-      db,
-    ).insert(project(id: 'p1', name: 'Demo', path: r'C:\src\demo'));
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(
+      project(id: 'p1', name: 'Demo', path: r'C:\src\demo'),
+    );
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final (i, title) in ['Alpha fix', 'Bravo fix', 'Delta fix'].indexed) {
       SessionDao(db).insert(
@@ -70,6 +75,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -310,4 +316,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Rename session'), findsOneWidget);
   });
+}
+
+/// The four sections a new workspace starts with — seeded by the server's
+/// own schema, which the fake does not have.
+void seedDefaultSections(FakeDataServer server) {
+  for (final (id, name, kind, position) in const [
+    ('section-pinned', 'Pinned', 'pinned', 0),
+    ('section-checks-failing', 'Checks failing', 'checksFailing', 1),
+    ('section-awaiting-input', 'Awaiting input', 'awaitingInput', 2),
+    ('section-ended-in-failure', 'Ended in failure', 'endedInFailure', 3),
+  ]) {
+    server.sectionRows.put(
+      StoredSection(id: id, name: name, kind: kind, position: position),
+    );
+  }
 }

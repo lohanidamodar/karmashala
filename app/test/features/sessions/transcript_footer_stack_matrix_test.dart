@@ -8,7 +8,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
@@ -31,7 +30,9 @@ import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../app/minimum_window_matrix_test.dart' show noProcessOverrides;
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -45,10 +46,11 @@ void main() {
     Future<void> Function(WidgetTester tester)? check,
   }) async {
     final db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -101,6 +103,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),

@@ -12,10 +12,11 @@ import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A clock a test moves by hand. **Count work, never time it**: nothing here
 /// waits for a millisecond, and every "later" is an assignment.
@@ -116,12 +117,13 @@ void main() {
     return container.read(automationSchedulerProvider.notifier);
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
-    RepositoryDao(db).insert(repository(id: 'r2', name: 'other'));
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    server.repositoryRows.insert(repository(id: 'r2', name: 'other'));
     dao = AutomationDao(db);
     clock = _MovableClock(at(2026, 9, 8, 17));
     timer = ManualAutomationTimer();
@@ -129,6 +131,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('run-')),
         automationTimerProvider.overrideWithValue(timer),

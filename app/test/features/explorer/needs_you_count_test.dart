@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/explorer/application/session_row_attenti
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
@@ -22,7 +21,9 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **The Agents entry's count is the app's own "needs you".** It counts the
 /// sessions the rest of the app already calls waiting — the needs-approval
@@ -31,6 +32,7 @@ import '../../support/fixtures.dart';
 /// before the watcher's next pass. It invents no model of its own.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late AgentHookReceiver receiver;
   late SessionStatusRegistry registry;
   late List<WatchedSession> watched;
@@ -43,18 +45,19 @@ void main() {
     imported: false,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(posixEnv());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final (projectId, sessions) in [
       ('p1', ['s1', 's2']),
       ('p2', ['s3', 's4']),
     ]) {
-      ProjectDao(
-        db,
-      ).insert(project(id: projectId, name: projectId, path: '/w/$projectId'));
-      RepositoryDao(db).insert(
+      server.projectRows.insert(
+        project(id: projectId, name: projectId, path: '/w/$projectId'),
+      );
+      server.repositoryRows.insert(
         repository(
           id: 'r-$projectId',
           projectId: projectId,
@@ -100,6 +103,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(clock),
         sessionStatusRegistryProvider.overrideWithValue(registry),
       ],

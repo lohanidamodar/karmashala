@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_actions.da
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -34,6 +33,8 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **An idle app draws nothing.**
 ///
@@ -63,12 +64,13 @@ void main() {
   /// panel has an answer or is still waiting for one.
   late Stream<List<SessionMediaItem>> media;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     media = Stream.value(const []);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final id in ['s1', 's2']) {
       SessionDao(db).insert(
@@ -85,9 +87,11 @@ void main() {
       );
     }
     final git = FakeCommandRunner();
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),

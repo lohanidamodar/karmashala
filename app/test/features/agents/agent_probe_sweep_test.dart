@@ -14,9 +14,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/stored_preferences.dart';
 
 /// The owner's machine, in miniature: `agy` is on the login PATH inside WSL and
 /// nowhere on Windows, and `claude`/`codex` are found by neither call because
@@ -47,6 +47,7 @@ FakeCommandRunner agyInWslRunner() => FakeCommandRunner(
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
   late FakeCommandRunner runner;
 
@@ -69,15 +70,18 @@ void main() {
     }
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv(id: 'wsl:archlinux', distro: 'archlinux'));
     runner = agyInWslRunner();
+    server = FakeDataServer();
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         // No host variables, so the descriptors' declared Windows install
@@ -157,10 +161,9 @@ void main() {
       isEmpty,
       reason: 'a miss is recorded, so the next launch spawns nothing at all',
     );
+    await pumpEventQueue();
     expect(
-      AgentProbeLog(
-        StoredPreferences(db),
-      ).hasProbed(AgentIds.antigravity, 'windows'),
+      AgentProbeLog(server.store).hasProbed(AgentIds.antigravity, 'windows'),
       isTrue,
     );
   });
@@ -178,10 +181,9 @@ void main() {
       // Startup must not reach out to every saved machine. The pair stays
       // unrecorded because it was skipped, not searched — "Discover agents" on
       // that environment still has work to do.
+      await pumpEventQueue();
       expect(
-        AgentProbeLog(
-          StoredPreferences(db),
-        ).hasProbed(AgentIds.antigravity, 'ssh:h1'),
+        AgentProbeLog(server.store).hasProbed(AgentIds.antigravity, 'ssh:h1'),
         isFalse,
       );
     },

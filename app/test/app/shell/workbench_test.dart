@@ -19,7 +19,6 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_notifications/toasts.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -51,6 +50,9 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// The minimum window at Windows' largest text step. Not in the shared matrix
 /// — adding it there would silently change what every existing surface
@@ -75,6 +77,8 @@ final paneTailProvider = Provider<List<String> Function(String)>(
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late ProviderContainer container;
 
   /// A checkout nested inside the project's first repository.
@@ -103,11 +107,13 @@ void main() {
     ),
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db)
+    server.projectRows.insert(project());
+    server.repositoryRows
       ..insert(repository())
       // A clone nested inside the first checkout: the shape behind "the sidebar
       // shows the hub, not the repository I am actually working in".
@@ -123,6 +129,7 @@ void main() {
     );
     container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         // Both of these poll on a real timer, which would outlive the widget
         // tree and trip flutter_test's pending-timer check. The workbench does

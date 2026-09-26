@@ -4,16 +4,17 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// The line that says which checkout the panel is describing.
 ///
@@ -24,12 +25,15 @@ import '../../support/fixtures.dart';
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    final server = FakeDataServer();
+    data = await server.override();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(path: r'C:\src\demo'));
-    RepositoryDao(db)
+    server.projectRows.insert(project(path: r'C:\src\demo'));
+    server.repositoryRows
       ..insert(repository(id: 'hub', name: 'demo', path: r'C:\src\demo'))
       ..insert(
         repository(
@@ -39,7 +43,7 @@ void main() {
         ),
       );
     container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [databaseProvider.overrideWithValue(db), data],
     );
     addTearDown(container.dispose);
   });
@@ -86,6 +90,7 @@ void main() {
     final worktrees = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         selectedCheckoutWorktreesProvider.overrideWith(
           (ref) async => const [
             GitWorktree(

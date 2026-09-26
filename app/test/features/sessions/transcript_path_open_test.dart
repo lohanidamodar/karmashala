@@ -8,7 +8,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -22,7 +21,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// What a click on a path in the conversation actually does — and, the headline
 /// requirement, what **rendering** one costs.
@@ -37,6 +38,7 @@ void main() {
   late FakeCommandRunner host;
   late List<String> probed;
   late FileSystemEntityType answer;
+  late FakeDataServer server;
 
   /// Seeds one session in [environment], running in [workingDirectory].
   void seed({
@@ -46,8 +48,8 @@ void main() {
     final env = environment ?? windowsEnv();
     ExecutionEnvironmentDao(db).upsert(env);
     if (env.id != 'windows') ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       Session(
@@ -68,6 +70,7 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     host = FakeCommandRunner();
     probed = [];
     answer = FileSystemEntityType.file;
@@ -93,6 +96,7 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           sessionTranscriptProvider.overrideWith(
             (ref, id) => Stream.value([
               SessionEvent(

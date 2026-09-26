@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
@@ -15,6 +14,8 @@ import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
+import '../../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// **Switching context from the palette.**
 ///
@@ -26,22 +27,29 @@ import '../../../support/fixtures.dart';
 /// way in.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer();
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Karmashala'));
-    RepositoryDao(db).insert(repository(name: 'app'));
+    server.projectRows.insert(project(name: 'Karmashala'));
+    server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
 
   Future<ProviderContainer> open(
     WidgetTester tester, {
-    void Function(ProviderContainer container)? before,
+    Future<void> Function(ProviderContainer container)? before,
   }) async {
     final container = ProviderContainer(
-      overrides: [...fakeTerminalOverrides(database: db)],
+      overrides: [
+        data,
+        ...fakeTerminalOverrides(database: db),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -61,7 +69,7 @@ void main() {
     );
     container.read(selectedProjectIdProvider.notifier).select('p1');
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
-    before?.call(container);
+    await before?.call(container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     return container;
@@ -78,13 +86,13 @@ void main() {
     late String gamesId;
     final container = await open(
       tester,
-      before: (container) {
-        createContext(container, 'Personal');
-        gamesId = createContext(
+      before: (container) async {
+        await createContext(container, 'Personal');
+        gamesId = (await createContext(
           container,
           'Game dev',
           description: 'Weekend things',
-        ).id;
+        )).id;
       },
     );
 
@@ -106,8 +114,8 @@ void main() {
   ) async {
     final container = await open(
       tester,
-      before: (container) {
-        final games = createContext(container, 'Game dev');
+      before: (container) async {
+        final games = await createContext(container, 'Game dev');
         container
             .read(workspaceScopeProvider.notifier)
             .select(WorkspaceScope.of(games.id));
@@ -127,8 +135,8 @@ void main() {
   testWidgets('the current scope is marked, not hidden', (tester) async {
     await open(
       tester,
-      before: (container) {
-        container
+      before: (container) async {
+        await container
             .read(workspacesControllerProvider.notifier)
             .create('Personal');
       },

@@ -74,12 +74,12 @@ final hostBackedLocalPanesProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).hostBackedLocalPanes,
 );
 
-/// What keeps this machine's host up while the app is open, or null when local
-/// panes are not host-backed or no host may be reached. Started by
-/// `localHostStartupProvider`; one per app run.
+/// What keeps this machine's host up while the app is open, or null when no
+/// host may be reached. Whatever the panes setting: the app's data lives at
+/// the server. Started by `localHostStartupProvider`; one per app run.
 final localHostSupervisorProvider = Provider<LocalHostSupervisor?>((ref) {
   final access = ref.watch(localHostSessionAccessProvider);
-  if (access == null || !ref.watch(hostBackedLocalPanesProvider)) return null;
+  if (access == null) return null;
   final supervisor = LocalHostSupervisor(access: access);
   ref.onDispose(() => unawaited(supervisor.dispose()));
   return supervisor;

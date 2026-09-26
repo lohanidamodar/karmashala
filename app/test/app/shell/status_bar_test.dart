@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_tab.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
@@ -29,6 +28,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
 
 /// The window's status bar as a user meets it: what each item says, what it
 /// opens, and what gives way first when the window narrows.
@@ -63,15 +63,16 @@ void main() {
     },
   );
 
-  ProviderContainer barContainer({
+  Future<ProviderContainer> barContainer({
     int attention = 0,
     bool onWsl = false,
     AgentActivityStatus? agent,
-  }) {
-    final db = seedUsageDatabase();
+  }) async {
+    final server = FakeDataServer();
+    final db = seedUsageDatabase(server: server);
     addTearDown(db.close);
     if (onWsl) ExecutionEnvironmentDao(db).upsert(wslEnv());
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       repository(
         id: 'r2',
         name: repoName,
@@ -80,8 +81,10 @@ void main() {
       ),
     );
     final runner = git();
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -177,7 +180,7 @@ void main() {
     testWidgets('carries a glyph and a word at a desktop width', (
       tester,
     ) async {
-      final container = barContainer(attention: 2);
+      final container = await barContainer(attention: 2);
       openTabs(container, 2);
       await pumpAt(tester, container, const Size(1440, 900));
 
@@ -199,7 +202,7 @@ void main() {
     });
 
     testWidgets('names its action in its tooltip', (tester) async {
-      final container = barContainer(attention: 1);
+      final container = await barContainer(attention: 1);
       await pumpAt(tester, container, const Size(1440, 900));
 
       expect(
@@ -228,7 +231,7 @@ void main() {
     testWidgets('the branch says how dirty and how far ahead it is', (
       tester,
     ) async {
-      final container = barContainer();
+      final container = await barContainer();
       await pumpAt(tester, container, const Size(1440, 900));
 
       expect(inBar(find.byIcon(AppIcons.pencilSimple)), findsOneWidget);
@@ -241,7 +244,7 @@ void main() {
     });
 
     testWidgets('a WSL checkout names its distribution', (tester) async {
-      final container = barContainer(onWsl: true);
+      final container = await barContainer(onWsl: true);
       await pumpAt(tester, container, const Size(1440, 900));
 
       expect(inBar(find.byIcon(AppIcons.terminalWindow)), findsOneWidget);
@@ -254,7 +257,7 @@ void main() {
     testWidgets('attention is drawn in the attention colour, not the accent', (
       tester,
     ) async {
-      final container = barContainer(attention: 3);
+      final container = await barContainer(attention: 3);
       await pumpAt(tester, container, const Size(1440, 900));
 
       final context = tester.element(find.byType(ShellStatusBar));
@@ -273,7 +276,7 @@ void main() {
     testWidgets('a background session is a count, not the accent', (
       tester,
     ) async {
-      final container = barContainer();
+      final container = await barContainer();
       openTabs(container, 2);
       await pumpAt(tester, container, const Size(1440, 900));
       detachFirstTab(container);
@@ -293,7 +296,7 @@ void main() {
 
   group('clicks open the surface an item describes', () {
     testWidgets('the branch opens Changes', (tester) async {
-      final container = barContainer();
+      final container = await barContainer();
       container.read(sidePanelProvider.notifier).collapse();
       await pumpAt(tester, container, const Size(1440, 900));
 
@@ -304,7 +307,7 @@ void main() {
     });
 
     testWidgets('the repository opens the Repository panel', (tester) async {
-      final container = barContainer();
+      final container = await barContainer();
       await pumpAt(tester, container, const Size(1440, 900));
 
       await tester.tap(inBar(find.text(repoName)));
@@ -316,7 +319,7 @@ void main() {
     testWidgets('the environment opens Settings on Environments', (
       tester,
     ) async {
-      final container = barContainer();
+      final container = await barContainer();
       await pumpAt(tester, container, const Size(1440, 900));
 
       await tester.tap(inBar(find.text('Windows')));
@@ -329,7 +332,7 @@ void main() {
     });
 
     testWidgets('attention opens the Inbox', (tester) async {
-      final container = barContainer(attention: 2);
+      final container = await barContainer(attention: 2);
       await pumpAt(tester, container, const Size(1440, 900));
 
       await tester.tap(inBar(find.text('2 need you')));
@@ -339,7 +342,7 @@ void main() {
     });
 
     testWidgets('background sessions open their list', (tester) async {
-      final container = barContainer();
+      final container = await barContainer();
       openTabs(container, 2);
       await pumpAt(tester, container, const Size(1440, 900));
       detachFirstTab(container);
@@ -354,7 +357,7 @@ void main() {
     testWidgets('the keyboard reaches an item and Enter runs it', (
       tester,
     ) async {
-      final container = barContainer();
+      final container = await barContainer();
       container.read(sidePanelProvider.notifier).collapse();
       await pumpAt(tester, container, const Size(1440, 900));
 
@@ -372,7 +375,7 @@ void main() {
     testWidgets('with no room, a panel item says so instead of doing nothing', (
       tester,
     ) async {
-      final container = barContainer();
+      final container = await barContainer();
       container.read(sidePanelRoomProvider.notifier).report(false);
       await pumpAt(tester, container, const Size(1440, 900));
 
@@ -386,7 +389,7 @@ void main() {
 
   group('narrowing gives way in priority order', () {
     testWidgets('1440: everything in words', (tester) async {
-      final container = barContainer(attention: 2);
+      final container = await barContainer(attention: 2);
       openTabs(container, 3);
       await pumpAt(tester, container, const Size(1440, 900));
       expect(inBar(find.text('3 tabs')), findsOneWidget);
@@ -396,7 +399,7 @@ void main() {
     });
 
     testWidgets('1000: the tab count drops its noun first', (tester) async {
-      final container = barContainer(attention: 2);
+      final container = await barContainer(attention: 2);
       openTabs(container, 3);
       await pumpAt(tester, container, const Size(900, 900));
       expect(inBar(find.text('3 tabs')), findsNothing);
@@ -409,7 +412,7 @@ void main() {
     testWidgets('720: tabs overflow, the environment is a glyph', (
       tester,
     ) async {
-      final container = barContainer(attention: 2);
+      final container = await barContainer(attention: 2);
       openTabs(container, 3);
       await pumpAt(tester, container, const Size(720, 560));
       expect(inBar(find.byIcon(AppIcons.dotsThree)), findsOneWidget);
@@ -424,7 +427,7 @@ void main() {
     testWidgets('640 at 2x text: context moves into the overflow menu', (
       tester,
     ) async {
-      final container = barContainer(attention: 5);
+      final container = await barContainer(attention: 5);
       openTabs(container, 3);
       await pumpAt(tester, container, const Size(640, 900), textScale: 2);
 
@@ -459,7 +462,7 @@ void main() {
     });
 
     testWidgets('nothing overflows at the small cells', (tester) async {
-      final container = barContainer(attention: 12, onWsl: true);
+      final container = await barContainer(attention: 12, onWsl: true);
       openTabs(container, 3);
       await expectSurvivesWindowMatrix(
         tester,
@@ -479,7 +482,7 @@ void main() {
     testWidgets('a working agent shows the status glyph and a count', (
       tester,
     ) async {
-      final container = barContainer(agent: AgentActivityStatus.working);
+      final container = await barContainer(agent: AgentActivityStatus.working);
       openTabs(container, 2);
       await pumpAt(
         tester,
@@ -502,7 +505,7 @@ void main() {
   testWidgets('detaching a tab redraws the tab and background items only', (
     tester,
   ) async {
-    final container = barContainer();
+    final container = await barContainer();
     openTabs(container, 2);
     await pumpAt(tester, container, const Size(1440, 900));
 

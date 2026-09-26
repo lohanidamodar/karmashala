@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:async';
 
 import 'package:karmashala_store/database.dart';
@@ -8,7 +10,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
@@ -27,6 +28,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -71,13 +74,17 @@ void main() {
 
   late int subscriptions;
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
 
-  setUp(() {
+  setUp(() async {
     subscriptions = 0;
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       Session(
@@ -103,6 +110,7 @@ void main() {
     required Clock clock,
   }) => [
     databaseProvider.overrideWithValue(db),
+    dataClientProvider.overrideWithValue(data),
     clockProvider.overrideWithValue(clock),
     agentSessionStatusProvider.overrideWith(
       (ref, id) => Stream.value(

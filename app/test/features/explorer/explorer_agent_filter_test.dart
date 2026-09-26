@@ -17,17 +17,19 @@ import 'package:karmashala/src/features/explorer/application/explorer_agent_filt
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
 import 'package:karmashala/src/features/explorer/domain/agent_filter.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **Showing one agent's sessions, or two, without losing the rest.**
@@ -51,6 +53,8 @@ void main() {
 
   /// A workspace with one session per agent plus an imported Claude Code
   /// conversation — the owner's shape in miniature.
+  late FakeDataServer server;
+
   AppDatabase seed({
     bool withAntigravity = true,
     bool retiredAgent = false,
@@ -58,9 +62,21 @@ void main() {
     String importedCli = AgentIds.claudeCode,
   }) {
     final db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    // The server seeds its built-in sections; the fake starts with none.
+    for (final (id, name, kind, position) in const [
+      ('section-pinned', 'Pinned', 'pinned', 0),
+      ('section-checks-failing', 'Checks failing', 'checksFailing', 1),
+      ('section-awaiting-input', 'Awaiting input', 'awaitingInput', 2),
+      ('section-ended-in-failure', 'Ended in failure', 'endedInFailure', 3),
+    ]) {
+      server.sectionRows.put(
+        StoredSection(id: id, name: name, kind: kind, position: position),
+      );
+    }
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(db).insert(
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
       repository(id: 'r1', projectId: 'p1', name: 'hub', path: r'C:\hub'),
     );
     final agents = AgentInstallationDao(db);
@@ -133,10 +149,11 @@ void main() {
     return db;
   }
 
-  ProviderContainer mount(AppDatabase db) {
+  Future<ProviderContainer> mount(AppDatabase db) async {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -235,10 +252,10 @@ void main() {
   });
 
   group("a project's rows", () {
-    test('are everything until somebody narrows them', () {
+    test('are everything until somebody narrows them', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
 
       expect(shown(container), [
         'Agy work',
@@ -249,10 +266,10 @@ void main() {
       expect(hiddenIn(container), 0);
     });
 
-    test('narrow to one agent, and say how many that cost', () {
+    test('narrow to one agent, and say how many that cost', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       narrowTo(container, {AgentIds.codex});
 
       expect(shown(container), ['Codex work']);
@@ -265,19 +282,19 @@ void main() {
       );
     });
 
-    test('narrow to two, which is the case a section cannot answer', () {
+    test('narrow to two, which is the case a section cannot answer', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       narrowTo(container, {AgentIds.codex, AgentIds.antigravity});
 
       expect(shown(container), ['Agy work', 'Codex work']);
     });
 
-    test('classify imported history rather than exempting it', () {
+    test('classify imported history rather than exempting it', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       narrowTo(container, {AgentIds.claudeCode});
 
       expect(
@@ -297,10 +314,10 @@ void main() {
       );
     });
 
-    test('never hide a session whose agent the workspace cannot name', () {
+    test('never hide a session whose agent the workspace cannot name', () async {
       final db = seed(retiredAgent: true);
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       narrowTo(container, {AgentIds.codex});
 
       expect(
@@ -312,10 +329,10 @@ void main() {
       );
     });
 
-    test('never hide an agent the registry has never heard of', () {
+    test('never hide an agent the registry has never heard of', () async {
       final db = seed(importedCli: 'someOtherCli');
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       narrowTo(container, {AgentIds.codex});
 
       expect(shown(container), ['Codex work', 'Imported history']);
@@ -333,7 +350,7 @@ void main() {
     test('intersect rather than compete', () async {
       final db = seed(withAntigravity: false, failed: true);
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       container
           .read(explorerSectionsProvider.notifier)
           .setCollapsed('section-ended-in-failure', false);
@@ -360,7 +377,7 @@ void main() {
       () async {
         final db = seed(withAntigravity: false, failed: true);
         addTearDown(db.close);
-        final container = mount(db);
+        final container = await mount(db);
         await container.pump();
 
         expect(
@@ -395,7 +412,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final container = mount(db);
+      final container = await mount(db);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,

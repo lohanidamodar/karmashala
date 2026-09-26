@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -25,15 +24,22 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
+import '../../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Karmashala'));
-    RepositoryDao(db).insert(repository(name: 'app'));
+    server.projectRows.insert(project(name: 'Karmashala'));
+    server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db)
       ..insert(session(id: 's1', title: 'Fix login redirect'))
@@ -54,6 +60,7 @@ void main() {
   }) async {
     final container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         if (explorerActions != null)
           explorerActionsProvider.overrideWith(explorerActions),

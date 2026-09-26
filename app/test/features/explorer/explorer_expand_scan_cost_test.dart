@@ -16,10 +16,10 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/repositories.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -35,19 +35,22 @@ import '../../support/fixtures.dart';
 /// deterministic on any machine.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
   late int scans;
 
   EnvironmentPath root(String path) =>
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     scans = 0;
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(),
         ),
@@ -67,7 +70,7 @@ void main() {
 
   void seed({int projects = 3}) {
     for (var i = 0; i < projects; i++) {
-      ProjectDao(container.read(databaseProvider)).insert(
+      server.projectRows.insert(
         Project(
           id: 'p$i',
           name: 'Project $i',
@@ -75,7 +78,7 @@ void main() {
           createdAt: testTime,
         ),
       );
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         Repository(
           id: 'r$i',
           projectId: 'p$i',
@@ -85,7 +88,6 @@ void main() {
         ),
       );
     }
-    rereadWorkspace(container);
   }
 
   Widget app() => UncontrolledProviderScope(

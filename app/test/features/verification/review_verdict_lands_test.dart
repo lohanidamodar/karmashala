@@ -26,8 +26,8 @@ void main() {
   late Directory root;
   late VerificationService verification;
 
-  setUp(() {
-    h = harness();
+  setUp(() async {
+    h = await connectedHarness();
     root = Directory.systemTemp.createTempSync('review-verdict');
     verification = VerificationService(
       VerificationDao(h.db),

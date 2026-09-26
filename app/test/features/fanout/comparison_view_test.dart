@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'comparison_fixtures.dart';
 
@@ -18,19 +19,27 @@ import 'comparison_fixtures.dart';
 /// worktrees are gone. These pump the record alone — no sessions, no git — and
 /// check that the page still says who ran, what they changed and who won.
 
-Future<void> pump(WidgetTester tester, AppDatabase db, Widget child) =>
-    tester.pumpWidget(
-      ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(db)],
-        child: MaterialApp(home: Scaffold(body: child)),
-      ),
-    );
-
 void main() {
+  // Where each test's project and repository live; the view reads the
+  // repository's name through a client of it.
+  late FakeDataServer server;
+  setUp(() => server = FakeDataServer());
+
+  Future<void> pump(WidgetTester tester, AppDatabase db, Widget child) async =>
+      tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            await server.override(),
+          ],
+          child: MaterialApp(home: Scaffold(body: child)),
+        ),
+      );
+
   testWidgets('a comparison reads with no session and no worktree left', (
     tester,
   ) async {
-    final db = seedDatabase();
+    final db = seedDatabase(server: server);
     addTearDown(db.close);
 
     await pump(
@@ -107,7 +116,7 @@ void main() {
   testWidgets('a candidate that graded its own work is labelled self', (
     tester,
   ) async {
-    final db = seedDatabase();
+    final db = seedDatabase(server: server);
     addTearDown(db.close);
     // s-win is cand-win's own session.
     await pumpWithProducer(tester, db, 's-win');
@@ -120,7 +129,7 @@ void main() {
   testWidgets('a verdict from another session is labelled independent', (
     tester,
   ) async {
-    final db = seedDatabase();
+    final db = seedDatabase(server: server);
     addTearDown(db.close);
     await pumpWithProducer(tester, db, 's-lost');
 
@@ -131,7 +140,7 @@ void main() {
   testWidgets('a candidate with nothing left offers no destructive action', (
     tester,
   ) async {
-    final db = seedDatabase();
+    final db = seedDatabase(server: server);
     addTearDown(db.close);
 
     await pump(
@@ -166,7 +175,7 @@ void main() {
     );
 
     Future<void> pumpAt(WidgetTester tester, Size size) async {
-      final db = seedDatabase();
+      final db = seedDatabase(server: server);
       addTearDown(db.close);
       tester.view
         ..physicalSize = size
@@ -207,7 +216,7 @@ void main() {
     expect(find.byType(PanePlaceholder), findsOneWidget);
     expect(find.textContaining('No comparisons yet'), findsOneWidget);
 
-    final seeded = seedDatabase();
+    final seeded = seedDatabase(server: server);
     addTearDown(seeded.close);
     ComparisonDao(seeded).insert(
       Comparison(
@@ -229,7 +238,7 @@ void main() {
   });
 
   testWidgets('the list shows every comparison and opens one', (tester) async {
-    final db = seedDatabase(merged: false);
+    final db = seedDatabase(merged: false, server: server);
     addTearDown(db.close);
     String? opened;
 
@@ -249,7 +258,7 @@ void main() {
   });
 
   testWidgets('archiving takes a comparison out of the list', (tester) async {
-    final db = seedDatabase();
+    final db = seedDatabase(server: server);
     addTearDown(db.close);
     late WidgetRef captured;
 

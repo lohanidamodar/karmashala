@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -21,7 +20,9 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// A live transcript is re-read whole on every poll, so every tick hands the
@@ -125,10 +126,11 @@ void main() {
     addTearDown(polls.close);
 
     final db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -155,6 +157,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => const <SystemTerminal>[],
           ),

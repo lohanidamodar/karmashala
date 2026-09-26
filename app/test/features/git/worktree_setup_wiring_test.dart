@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/git/application/git_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -18,12 +17,15 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import 'worktree_processes.dart';
 
 /// The app's own wiring, end to end: a worktree created through
 /// `worktreeServiceProvider` reads the setting out of the database, opens a
 /// real pane through the terminal controller, and records a verdict.
 void main() {
+  late FakeDataServer server;
   late AppDatabase db;
   late FakeCommandRunner runner;
   late ProviderContainer container;
@@ -33,15 +35,16 @@ void main() {
     path: '/home/me/app',
   );
 
-  void build() {
+  Future<void> build() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(
-      db,
-    ).insert(repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'));
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(
+      repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
+    );
     runner = FakeCommandRunner(
       environmentId: 'wsl:Ubuntu',
       responder: (request) => request.arguments.contains('check-ignore')
@@ -52,6 +55,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
         ),
@@ -144,7 +148,7 @@ void main() {
 
   test('an SSH checkout is pointed at its host, not at this one', () async {
     ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       repository(
         id: 'r2',
         environmentId: 'ssh:h1',
@@ -152,6 +156,7 @@ void main() {
         name: 'remote',
       ),
     );
+    await pumpEventQueue();
     container
         .read(worktreeSetupDaoProvider)
         .save('r2', const WorktreeSetup(command: ['make', 'setup']), testTime);

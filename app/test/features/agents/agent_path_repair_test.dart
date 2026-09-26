@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +20,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The failure this file exists for, described rather than depended on.
 ///
@@ -323,8 +324,9 @@ void main() {
     });
 
     test('a repaired row keeps the sessions that ran on it', () async {
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      FakeDataServer().mirrorInto(db)
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(
         agentInstallation(
           id: 'codex-row',

@@ -7,7 +7,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +14,8 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Antigravity's messages, where the store keeps a readable copy of them.
 ///
@@ -396,12 +397,13 @@ void main() {
 
   group('importedTranscriptProvider', () {
     /// One imported Antigravity conversation, filed at [filePath].
-    ProviderContainer containerFor(String filePath) {
+    Future<ProviderContainer> containerFor(String filePath) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      final server = FakeDataServer()..mirrorInto(db);
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       ImportedSessionDao(db).insertIfAbsent(
         ImportedSession(
           id: 'i1',
@@ -417,7 +419,10 @@ void main() {
         ),
       );
       final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          await server.override(),
+        ],
       );
       addTearDown(container.dispose);
       return container;
@@ -447,7 +452,7 @@ void main() {
           'content': 'from the brain directory',
         },
       ]);
-      final container = containerFor(conversationFile('conv-9'));
+      final container = await containerFor(conversationFile('conv-9'));
 
       final rows = await firstReading(container);
       expect(rows.single.text, 'from the brain directory');
@@ -456,7 +461,7 @@ void main() {
     test('with no transcript in the store the refusal stands', () async {
       // The Windows install here, exactly: a conversation file and an empty
       // brain directory. Nothing is invented to fill the pane.
-      final container = containerFor(conversationFile('conv-9'));
+      final container = await containerFor(conversationFile('conv-9'));
 
       final rows = await firstReading(container);
       expect(rows, isEmpty);

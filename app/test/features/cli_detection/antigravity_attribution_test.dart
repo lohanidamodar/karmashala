@@ -7,14 +7,16 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/directory_conversation_attribution_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import 'package:agent_cli/read.dart';
+import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 
 /// Learning which Antigravity conversation a session we launched is on.
 ///
@@ -34,6 +36,7 @@ void main() {
   late String storeHome;
   late AppDatabase db;
   late SessionDao dao;
+  late WorkspaceData workspace;
 
   const conversation = 'df3c0708-1111-4222-8333-444455556666';
   const other = 'e921cb55-1111-4222-8333-444455556666';
@@ -41,13 +44,15 @@ void main() {
 
   final launchedAt = testTime;
 
-  setUp(() {
+  setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_attr_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    workspace = await workspaceOf(server);
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.antigravity));
@@ -110,7 +115,7 @@ void main() {
   }) => DirectoryConversationAttributionService(
     sessionDao: dao,
     installationDao: AgentInstallationDao(db),
-    workspace: workspaceOver(db),
+    workspace: workspace,
     agents: AgentRegistry.builtIn,
     locateStores: () async => [
       CliStore(

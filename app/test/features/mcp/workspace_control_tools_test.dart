@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +22,8 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The workspace tools, over the endpoint, with git answering the way a test
 /// tells it to.
@@ -52,9 +53,10 @@ branch refs/heads/feature/login
     tmp = Directory.systemTemp.createTempSync('karmashala_workspace_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
-    RepositoryDao(db).insert(
+    final fake = FakeDataServer()..mirrorInto(db);
+    fake.projectRows.insert(project());
+    fake.repositoryRows.insert(repository());
+    fake.repositoryRows.insert(
       repository(
         id: 'r2',
         name: 'app-feature',
@@ -88,6 +90,7 @@ branch refs/heads/feature/login
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),

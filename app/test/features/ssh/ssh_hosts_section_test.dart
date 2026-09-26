@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
@@ -17,14 +16,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
   late AppDatabase db;
   late ExecutionEnvironmentDao environments;
   late SshHostDao hosts;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer();
     environments = ExecutionEnvironmentDao(db);
     environments.upsert(windowsEnv());
     environments.upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
@@ -33,10 +35,12 @@ void main() {
   tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
+    final workspace = await server.override();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          workspace,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         ],
@@ -244,9 +248,9 @@ void main() {
       ),
     );
     environments.upsert(sshEnvFixture(name: 'do-box'));
-    ProjectDao(
-      db,
-    ).insert(project(id: 'p-ssh', name: 'Test ssh', environmentId: 'ssh:h1'));
+    server.projectRows.insert(
+      project(id: 'p-ssh', name: 'Test ssh', environmentId: 'ssh:h1'),
+    );
     await pump(tester);
 
     await tester.tap(find.widgetWithText(TextButton, 'Remove'));

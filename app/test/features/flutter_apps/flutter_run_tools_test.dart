@@ -8,13 +8,13 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_observer.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_run_tools.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 
 const String _appPubspec = '''
 name: demo
@@ -57,20 +57,22 @@ void main() {
     return const CommandResult(exitCode: 0, stdout: '', stderr: '');
   }
 
-  setUp(() {
+  setUp(() async {
     responder = healthy;
     artifacts = Directory.systemTemp.createTempSync('karmashala-tools-test');
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(
-      repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
-    );
+    final server = FakeDataServer()
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(
+        repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
+      );
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
             fallback: FakeCommandRunner(

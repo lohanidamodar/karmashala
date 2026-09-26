@@ -15,15 +15,9 @@ class TodosRepository {
   Stream<void> get changes => _client.todos.changes;
 
   /// Every todo in list order: open ones as arranged, then done ones.
-  List<Todo> list() {
-    _client.ensurePrimed(DataDomain.todos);
-    return [..._client.todos.values]..sort(compareTodos);
-  }
+  List<Todo> list() => [..._client.todos.values]..sort(compareTodos);
 
-  Todo? byId(String id) {
-    _client.ensurePrimed(DataDomain.todos);
-    return _client.todos[id];
-  }
+  Todo? byId(String id) => _client.todos[id];
 
   /// Writes [draft] at the bottom of the list (the server decides the
   /// position; the copy guesses the same). With no project, it is filed

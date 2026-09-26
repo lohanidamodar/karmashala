@@ -32,7 +32,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -40,7 +39,9 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// The owner's Codex, as it was on 2026-09-07: the path its installer
@@ -72,21 +73,23 @@ typedef Harness = ({
   ProviderContainer container,
   AppDatabase db,
   FakeCommandRunner runner,
+  FakeDataServer server,
 });
 
 /// A workspace with one Windows environment, one WSL distribution, a checkout,
 /// whichever installation the case needs, and a described disk.
-Harness harness({
+Future<Harness> harness({
   required PathProbe probe,
   List<AgentInstallation> installations = const [],
   CommandResult Function(CommandRequest)? responder,
-}) {
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db)
     ..upsert(windowsEnv())
     ..upsert(wslEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   final dao = AgentInstallationDao(db);
   for (final installation in installations) {
     dao.insert(installation);
@@ -95,6 +98,7 @@ Harness harness({
   final runner = FakeCommandRunner(responder: responder);
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db, pathProbe: probe),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -112,7 +116,7 @@ Harness harness({
   );
   addTearDown(container.dispose);
   addTearDown(db.close);
-  return (container: container, db: db, runner: runner);
+  return (container: container, db: db, runner: runner, server: server);
 }
 
 Future<SessionLaunchResult> _launch(
@@ -150,7 +154,7 @@ void main() {
   group('a path that opens', () {
     test('starts the session and spawns nothing', () async {
       final row = agentInstallation(path: _claude);
-      final h = harness(
+      final h = await harness(
         probe: FakePathProbe(files: const {_claude}),
         installations: [row],
         responder: (_) => fail('the happy path must not spawn a process'),
@@ -178,7 +182,7 @@ void main() {
         environmentId: 'wsl:Ubuntu',
         path: '/home/d/.local/bin/agy',
       );
-      final h = harness(
+      final h = await harness(
         probe: probe,
         installations: [row],
         responder: (_) => fail('a WSL row must not be probed by a launch'),
@@ -199,7 +203,7 @@ void main() {
         path: _stored,
         version: '0.145.0',
       );
-      final h = harness(
+      final h = await harness(
         // `where codex` cannot find it — the directory it would name is behind
         // the junction — so the reparse walk is the only thing that resolves it.
         probe: FakePathProbe(
@@ -246,7 +250,7 @@ void main() {
   group('a path that cannot', () {
     test('an executable that is gone refuses, and writes no row', () async {
       final row = agentInstallation(path: _claude);
-      final h = harness(
+      final h = await harness(
         probe: FakePathProbe(),
         installations: [row],
         responder: (_) => _notOnPath,
@@ -277,7 +281,7 @@ void main() {
         agentId: AgentIds.codex,
         path: _stored,
       );
-      final h = harness(
+      final h = await harness(
         // Refused rather than absent: nothing about the binary is established,
         // so "not installed" is the one thing that may not be said.
         probe: FakePathProbe(refused: const {_storedDir}),
@@ -308,7 +312,7 @@ void main() {
       'a refused resume leaves the existing row exactly as it was',
       () async {
         final row = agentInstallation(path: _claude);
-        final h = harness(
+        final h = await harness(
           probe: FakePathProbe(),
           installations: [row],
           responder: (_) => _notOnPath,
@@ -343,7 +347,7 @@ void main() {
     test('refuses before it kills the agent it was going to replace', () async {
       final probe = FakePathProbe(files: const {_claude});
       final row = agentInstallation(path: _claude);
-      final h = harness(
+      final h = await harness(
         probe: probe,
         installations: [row],
         responder: (_) => _notOnPath,

@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -23,6 +22,9 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
+import '../../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../../support/workspace_mirror.dart';
 
 /// An [AppDatabase] that records every statement, so a keystroke can be priced.
 class _CountingDatabase extends AppDatabase {
@@ -58,16 +60,20 @@ class _CountingDatabase extends AppDatabase {
 /// rule: a stored path is state, whether it resolves is a measurement.
 void main() {
   late _CountingDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late ConversationIndexDao index;
 
   final indexedAt = DateTime.now().toUtc().subtract(const Duration(hours: 2));
 
-  setUp(() {
+  setUp(() async {
     db = _CountingDatabase();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     index = ConversationIndexDao(db);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Karmashala'));
-    RepositoryDao(db).insert(repository(name: 'app'));
+    server.projectRows.insert(project(name: 'Karmashala'));
+    server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -124,7 +130,10 @@ void main() {
 
   Future<ProviderContainer> open(WidgetTester tester) async {
     final container = ProviderContainer(
-      overrides: [...fakeTerminalOverrides(database: db)],
+      overrides: [
+        data,
+        ...fakeTerminalOverrides(database: db),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(

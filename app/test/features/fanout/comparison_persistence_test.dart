@@ -1,4 +1,3 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
@@ -87,13 +86,17 @@ Future<FanOutLaunch> launchTwo(Harness h) => h.container
     );
 
 /// What the app sees on the next launch: a new container over the same file.
-ProviderContainer afterRestart(AppDatabase db) =>
-    ProviderContainer(overrides: [databaseProvider.overrideWithValue(db)]);
+Future<ProviderContainer> afterRestart(Harness h) async => ProviderContainer(
+  overrides: [
+    databaseProvider.overrideWithValue(h.db),
+    await h.server.override(),
+  ],
+);
 
 void main() {
   group('launch writes the record', () {
     test('one comparison, one candidate per installation, in order', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -129,7 +132,7 @@ void main() {
     test(
       'an agent that never started is a failed candidate, not a gap',
       () async {
-        final h = harness(paneFailsFor: {'flakyCli'});
+        final h = await connectedHarness(paneFailsFor: {'flakyCli'});
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -149,7 +152,7 @@ void main() {
     );
 
     test('refused input writes nothing at all', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -171,12 +174,12 @@ void main() {
     test(
       'a new container reads back the comparison and its candidates',
       () async {
-        final h = harness();
+        final h = await connectedHarness();
         addTearDown(h.db.close);
         final launched = await launchTwo(h);
         h.container.dispose();
 
-        final restarted = afterRestart(h.db);
+        final restarted = await afterRestart(h);
         addTearDown(restarted.dispose);
 
         final comparisons = restarted.read(comparisonsProvider);
@@ -193,12 +196,12 @@ void main() {
     test(
       'the handles to act again are rebuilt from the session rows',
       () async {
-        final h = harness();
+        final h = await connectedHarness();
         addTearDown(h.db.close);
         final launched = await launchTwo(h);
         h.container.dispose();
 
-        final restarted = afterRestart(h.db);
+        final restarted = await afterRestart(h);
         addTearDown(restarted.dispose);
 
         final stored = restarted.read(comparisonsProvider).single;
@@ -214,14 +217,14 @@ void main() {
     );
 
     test('a candidate whose session is gone keeps its record', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       final launched = await launchTwo(h);
       final lost = launched.started.first.session.id;
       SessionDao(h.db).delete(lost);
       h.container.dispose();
 
-      final restarted = afterRestart(h.db);
+      final restarted = await afterRestart(h);
       addTearDown(restarted.dispose);
 
       final stored = restarted.read(comparisonsProvider).single;
@@ -238,7 +241,7 @@ void main() {
     test(
       'files from status, lines from both diffs, commits from rev-list',
       () async {
-        final h = harness(git: _busyGit());
+        final h = await connectedHarness(git: _busyGit());
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         final launched = await launchTwo(h);
@@ -265,7 +268,7 @@ void main() {
     test('a git that cannot answer still records the lines it read', () async {
       // Everything the launch needs works; every question the *stat* asks
       // beyond the unstaged diff fails.
-      final h = harness(
+      final h = await connectedHarness(
         git: (request) {
           final args = request.arguments;
           if (args.contains('diff') && !args.contains('--staged')) {
@@ -309,7 +312,7 @@ void main() {
 
   group('the outcome is recorded', () {
     test('merging a winner names it and the commit it landed on', () async {
-      final h = harness(git: _busyGit(status: ''));
+      final h = await connectedHarness(git: _busyGit(status: ''));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -326,7 +329,7 @@ void main() {
     });
 
     test('a refused merge leaves the comparison pending', () async {
-      final h = harness(git: _busyGit());
+      final h = await connectedHarness(git: _busyGit());
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -344,7 +347,7 @@ void main() {
     });
 
     test('a winner can be named without merging anything', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -361,7 +364,7 @@ void main() {
     });
 
     test('abandoning closes it out without a merge', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -378,7 +381,7 @@ void main() {
 
   group('the record outlives the worktree', () {
     test('a discarded loser is marked, never deleted', () async {
-      final h = harness(git: _busyGit(status: ''));
+      final h = await connectedHarness(git: _busyGit(status: ''));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -400,7 +403,7 @@ void main() {
     });
 
     test('the loser keeps the last diff read from it', () async {
-      final h = harness(git: _busyGit(status: ''));
+      final h = await connectedHarness(git: _busyGit(status: ''));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -420,7 +423,7 @@ void main() {
     });
 
     test('a discarded worktree is not diffed again', () async {
-      final h = harness(git: _busyGit(status: ''));
+      final h = await connectedHarness(git: _busyGit(status: ''));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -444,7 +447,7 @@ void main() {
     });
 
     test('merged, discarded, restarted — and it still reads', () async {
-      final h = harness(git: _busyGit(status: ''));
+      final h = await connectedHarness(git: _busyGit(status: ''));
       addTearDown(h.db.close);
       final launched = await launchTwo(h);
       stopEverything(h, launched);
@@ -457,7 +460,7 @@ void main() {
       );
       h.container.dispose();
 
-      final restarted = afterRestart(h.db);
+      final restarted = await afterRestart(h);
       addTearDown(restarted.dispose);
       final stored = restarted.read(comparisonsProvider).single;
 
@@ -474,7 +477,7 @@ void main() {
 
   group('the list', () {
     test('archived comparisons are put away, not lost', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -493,7 +496,7 @@ void main() {
     });
 
     test('a comparison can be narrowed to one repository', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       await launchTwo(h);
@@ -506,7 +509,7 @@ void main() {
 
   group('the verification seam', () {
     test('a verdict round-trips, and defaults to nothing', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -540,7 +543,7 @@ void main() {
     });
 
     test('who produced the verdict survives the round trip', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);
@@ -574,7 +577,7 @@ void main() {
     });
 
     test('a note can be kept against a candidate', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final launched = await launchTwo(h);

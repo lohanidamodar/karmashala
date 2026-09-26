@@ -12,8 +12,8 @@ import 'review_thread_harness.dart';
 void main() {
   late ReviewThreadHarness harness;
 
-  setUp(() {
-    harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+  setUp(() async {
+    harness = await ReviewThreadHarness.create(shas: {'lib/a.dart': 'sha-one'});
   });
   tearDown(() => harness.dispose());
 

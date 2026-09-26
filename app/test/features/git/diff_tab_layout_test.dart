@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -31,12 +32,17 @@ final _diff =
 void main() {
   late ReviewThreadHarness harness;
 
-  setUp(() => harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'}));
+  setUp(
+    () async => harness = await ReviewThreadHarness.create(
+      shas: {'lib/a.dart': 'sha-one'},
+    ),
+  );
   tearDown(() => harness.dispose());
 
   Widget tab(double width, {Key? key}) => ProviderScope(
     overrides: [
       databaseProvider.overrideWithValue(harness.db),
+      dataClientProvider.overrideWithValue(harness.client),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('t-')),
       changesServiceProvider.overrideWithValue(

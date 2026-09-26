@@ -10,13 +10,16 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_dialog.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Settings → Projects → Worktree setup: where the setting is written, and where its verdict
 /// is read.
@@ -25,6 +28,8 @@ import '../terminal/fake_instance.dart';
 /// the user asked for while thinking about something else, so the place they
 /// configure it has to be the place that says whether it worked.
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   late AppDatabase db;
   late ProviderContainer container;
 
@@ -33,18 +38,21 @@ void main() {
     path: '/home/me/.karmashala-worktrees/app-s1',
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(
-      db,
-    ).insert(repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'));
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(
+      repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
+    );
+    client = await server.connect();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(
           FixedClock(testTime.add(const Duration(hours: 2))),
         ),

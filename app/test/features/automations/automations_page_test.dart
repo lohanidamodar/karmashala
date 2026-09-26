@@ -16,13 +16,14 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Settings → Automations: where one is armed, paused, deleted, and where
 /// "did it run last night" is answered.
@@ -80,17 +81,19 @@ void main() {
         ),
       );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
       ],
     );

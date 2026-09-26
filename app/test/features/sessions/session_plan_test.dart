@@ -4,7 +4,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_plan_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -15,7 +14,9 @@ import 'package:agent_cli/stream.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Which plan is the plan, how old it is, and the four ways there is none.**
 ///
@@ -185,18 +186,19 @@ void main() {
   });
 
   group('the provider, and the four ways there is no plan', () {
-    ProviderContainer containerFor({
+    Future<ProviderContainer> containerFor({
       required List<TranscriptMessage> messages,
       String agentId = AgentIds.claudeCode,
       SessionSurface surface = SessionSurface.pane,
       String? externalSessionId = 'ext-1',
       void Function()? onTranscriptSubscribed,
-    }) {
+    }) async {
       final db = AppDatabase.memory();
+      final server = FakeDataServer()..mirrorInto(db);
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
       SessionDao(db).insert(
         Session(
@@ -213,6 +215,7 @@ void main() {
       );
       final container = ProviderContainer(
         overrides: [
+          await server.override(),
           databaseProvider.overrideWithValue(db),
           sessionChatTranscriptProvider.overrideWith((ref, id) {
             onTranscriptSubscribed?.call();
@@ -236,7 +239,7 @@ void main() {
       bool readsTranscript = true,
       void Function()? onTranscriptSubscribed,
     }) async {
-      final container = containerFor(
+      final container = await containerFor(
         messages: messages,
         agentId: agentId,
         surface: surface,
@@ -357,7 +360,7 @@ void main() {
       // provider is never created and the transcript is never subscribed. The
       // whole feature is behind one rail glyph nobody has clicked.
       var subscribed = 0;
-      final container = containerFor(
+      final container = await containerFor(
         messages: [
           planRow([('One', 'pending')]),
         ],

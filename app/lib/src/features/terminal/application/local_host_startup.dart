@@ -7,10 +7,10 @@ import '../../agents/application/agent_hook_sweep.dart';
 import 'local_host_providers.dart';
 
 /// **This machine's session host, started or adopted as the app starts** — and
-/// then local agents' hooks pointed at the endpoint it writes — while local
-/// panes are host-backed. Null when there is nothing to start: host-backed
-/// panes are off, or no host may be reached here (a test, a companion build, a
-/// probe with no data folder).
+/// then local agents' hooks pointed at the endpoint it writes, when local
+/// panes are host-backed. Started whatever that setting says: the app's data
+/// lives at the server. Null when no host may be reached here (a test, a
+/// companion build, a probe with no data folder).
 ///
 /// The host owns the agent hook endpoint and the lifecycle feed, so the first
 /// session's first turn is heard only if the host is up before that turn runs.

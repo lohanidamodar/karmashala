@@ -7,7 +7,6 @@ import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
@@ -20,6 +19,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// An agent that exists only as data: a registry entry with **no adapter code
 /// of its own** (`DataOnlyAgentAdapter`), so nothing about it is hardcoded
@@ -69,8 +70,9 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     final installationDao = AgentInstallationDao(db)..insert(discovered.single);
     final AgentInstallation stored = installationDao.getAll().single;
 

@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/follow_ups/application/follow_up_provide
 import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
@@ -18,25 +17,31 @@ import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// A hosted session's follow-up is owed by what the recorder wrote to its row,
 /// never by its pane exiting or its live status.
 void main() {
   late AppDatabase db;
+  late Override data;
   late FollowUpDao followUps;
   late StreamController<AgentStatusReport> reports;
   late FakeHostLifecycle host;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', status: SessionStatus.running));
     // Outstanding verification, so a clean finish is owed a follow-up.
@@ -70,6 +75,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentSessionStatusProvider.overrideWith((ref, id) => reports.stream),
         hostLifecycleSourceProvider.overrideWithValue(hosted ? host : null),

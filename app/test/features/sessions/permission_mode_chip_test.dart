@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -23,6 +22,8 @@ import 'package:agent_cli/read.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -53,17 +54,18 @@ const _bypass = 'mode=bypassPermissions';
 const _bypassLabel = 'Bypass (full autonomy)';
 
 /// A session row for [agentId], carrying [mode] (null = inherit).
-({AppDatabase db, ProviderScope app}) harness({
+Future<({AppDatabase db, ProviderScope app})> harness({
   required String agentId,
   String? mode,
   Settings settings = const Settings(),
   AgentRegistry registry = AgentRegistry.builtIn,
   String? externalSessionId,
-}) {
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
   SessionDao(db).insert(
     Session(
@@ -86,6 +88,7 @@ const _bypassLabel = 'Bypass (full autonomy)';
     app: ProviderScope(
       overrides: [
         // Already overrides `databaseProvider`; a second one asserts.
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         // Hermetic: the real probe would read this machine's own agent store.
         conversationPresenceProvider.overrideWithValue(
@@ -153,7 +156,7 @@ void main() {
   testWidgets('shows the session\'s own mode, not the agent default', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _acceptEdits,
       settings: const Settings().withPermissions(
@@ -183,7 +186,7 @@ void main() {
     // is still both halves: the borrowed name earns its place by being the
     // word that is the same across three CLIs, and the CLI's own word is what
     // a person configuring that CLI needs.
-    final h = harness(agentId: AgentIds.claudeCode, mode: _acceptEdits);
+    final h = await harness(agentId: AgentIds.claudeCode, mode: _acceptEdits);
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
@@ -191,7 +194,7 @@ void main() {
   });
 
   testWidgets('and says it once where the CLI already says it', (tester) async {
-    final h = harness(agentId: AgentIds.claudeCode, mode: 'mode=plan');
+    final h = await harness(agentId: AgentIds.claudeCode, mode: 'mode=plan');
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
@@ -204,7 +207,7 @@ void main() {
     // three-value mode had to stand in for two independent flags. There is no
     // approximation left to mark: the chip names what Codex will actually be
     // told, on both axes.
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.codex,
       mode: 'approval=on-request;sandbox=workspace-write',
     );
@@ -220,7 +223,7 @@ void main() {
   testWidgets('says so when the agent\'s modes are not established', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: _unestablished.id,
       registry: const AgentRegistry([DataOnlyAgentAdapter(_unestablished)]),
     );
@@ -233,7 +236,7 @@ void main() {
   testWidgets('an agent with no established modes offers one explained row', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: _unestablished.id,
       registry: const AgentRegistry([DataOnlyAgentAdapter(_unestablished)]),
     );
@@ -263,7 +266,7 @@ void main() {
     // Codex's bypass flag replaces the approval policy outright, so those rows
     // are shown greyed rather than hidden — the same rule, now doing its work
     // on an axis instead of on a mode the CLI never had.
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.codex,
       mode: 'approval=on-request;sandbox=bypass-all',
     );
@@ -286,7 +289,7 @@ void main() {
     // A row written by a newer build. `resolveStored` substitutes the agent's
     // default, which is the only thing it can do — but the chip must not draw
     // the substitute as if the user had picked it.
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: 'mode=somethingNewer',
     );
@@ -304,7 +307,7 @@ void main() {
   testWidgets('the menu draws the house two-line row', (tester) async {
     // Its rows were a `Row`/`Column` of their own inside a plain
     // `PopupMenuItem`; the Explorer's menus a pane away were `DesktopMenuItem`.
-    final h = harness(agentId: AgentIds.claudeCode, mode: _ask);
+    final h = await harness(agentId: AgentIds.claudeCode, mode: _ask);
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
@@ -342,7 +345,7 @@ void main() {
   testWidgets('choosing a mode writes the row and says when it applies', (
     tester,
   ) async {
-    final h = harness(agentId: AgentIds.claudeCode, mode: _ask);
+    final h = await harness(agentId: AgentIds.claudeCode, mode: _ask);
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
@@ -365,7 +368,7 @@ void main() {
   testWidgets('an inherited mode is labelled as inherited in the tooltip', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       settings: const Settings().withPermissions(
         AgentIds.claudeCode,
@@ -390,7 +393,7 @@ void main() {
   testWidgets('a session following the default says so on the chip', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       settings: const Settings().withPermissions(
         AgentIds.claudeCode,
@@ -408,7 +411,7 @@ void main() {
   });
 
   testWidgets('a chosen mode is not labelled as the default', (tester) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _acceptEdits,
       settings: const Settings().withPermissions(
@@ -425,7 +428,7 @@ void main() {
   });
 
   testWidgets('the menu offers the way back to the default', (tester) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _bypass,
       settings: const Settings().withPermissions(
@@ -454,7 +457,7 @@ void main() {
   testWidgets('picking bypass asks first, and cancelling changes nothing', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _ask,
       externalSessionId: 'ext-1',
@@ -492,7 +495,7 @@ void main() {
   testWidgets('the bypass dialog names all three things it costs', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _ask,
       externalSessionId: 'ext-1',
@@ -519,7 +522,7 @@ void main() {
   testWidgets('confirming bypass writes the row and restarts the agent', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _ask,
       externalSessionId: 'ext-1',
@@ -556,7 +559,7 @@ void main() {
   testWidgets('a safe mode offers the restart instead of performing it', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _ask,
       externalSessionId: 'ext-1',
@@ -592,7 +595,7 @@ void main() {
   testWidgets('the restart offer performs the restart when it is taken', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _ask,
       externalSessionId: 'ext-1',
@@ -627,7 +630,7 @@ void main() {
   testWidgets('with nothing running there is nothing to restart', (
     tester,
   ) async {
-    final h = harness(
+    final h = await harness(
       agentId: AgentIds.claudeCode,
       mode: _ask,
       externalSessionId: 'ext-1',
@@ -653,7 +656,7 @@ void main() {
   testWidgets('a session the CLI has never named refuses the restart', (
     tester,
   ) async {
-    final h = harness(agentId: AgentIds.claudeCode, mode: _ask);
+    final h = await harness(agentId: AgentIds.claudeCode, mode: _ask);
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     final pane = startAgent(tester, h.db);

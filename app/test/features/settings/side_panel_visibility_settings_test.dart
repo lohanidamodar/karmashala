@@ -1,12 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
-import 'package:karmashala_store/database.dart';
-import '../../support/stored_preferences.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+
+import '../../support/fake_data_server.dart';
 
 /// Which side-panel surfaces the rail leaves out, stored by id so a surface
 /// added, removed or reordered later cannot shift somebody's choice onto
@@ -34,34 +33,30 @@ void main() {
   });
 
   group('the controller', () {
-    late AppDatabase db;
+    late FakeDataServer server;
     late ProviderContainer container;
     late SettingsController controller;
 
-    setUp(() {
-      db = AppDatabase.memory();
-      container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    setUp(() async {
+      server = FakeDataServer();
+      container = ProviderContainer(overrides: [await server.override()]);
       controller = container.read(settingsControllerProvider.notifier);
     });
-    tearDown(() {
-      container.dispose();
-      db.close();
-    });
+    tearDown(() => container.dispose());
 
-    List<String> stored() => SettingsRepository(
-      StoredPreferences(db),
-    ).load().hiddenSidePanelSurfaces;
+    Future<List<String>> stored() async {
+      await pumpEventQueue();
+      return SettingsRepository(server.store).load().hiddenSidePanelSurfaces;
+    }
 
-    test('hides and shows one surface, persisted and sorted', () {
+    test('hides and shows one surface, persisted and sorted', () async {
       controller.setSidePanelSurfaceHidden('plan', hidden: true);
       controller.setSidePanelSurfaceHidden('media', hidden: true);
       controller.setSidePanelSurfaceHidden('media', hidden: true);
-      expect(stored(), ['media', 'plan']);
+      expect(await stored(), ['media', 'plan']);
 
       controller.setSidePanelSurfaceHidden('plan', hidden: false);
-      expect(stored(), ['media']);
+      expect(await stored(), ['media']);
       expect(
         container.read(settingsControllerProvider).hiddenSidePanelSurfaces,
         ['media'],
@@ -78,21 +73,21 @@ void main() {
       );
     });
 
-    test('show all clears every hidden id, known or not', () {
+    test('show all clears every hidden id, known or not', () async {
       // Written through the server, as another build would: the controller
       // takes it without being asked.
-      container
-          .read(appPreferencesProvider)
-          .write(
-            'settings.v1',
-            '{"hiddenSidePanelSurfaces":["media","fromANewerBuild"]}',
-          );
+      server.writeAsAnotherClient([
+        const PreferenceChanged(
+          'settings.v1',
+          '{"hiddenSidePanelSurfaces":["media","fromANewerBuild"]}',
+        ),
+      ]);
       expect(
         container.read(settingsControllerProvider).hiddenSidePanelSurfaces,
         ['fromANewerBuild', 'media'],
       );
       controller.showAllSidePanelSurfaces();
-      expect(stored(), isEmpty);
+      expect(await stored(), isEmpty);
     });
   });
 }

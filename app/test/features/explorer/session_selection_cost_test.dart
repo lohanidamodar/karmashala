@@ -23,7 +23,6 @@ import 'package:karmashala/src/features/explorer/application/bulk_session_delete
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -33,6 +32,8 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -67,14 +68,18 @@ void main() {
     const rows = 30;
 
     late AppDatabase db;
+    late FakeDataServer server;
 
     setUp(() {
       db = AppDatabase.memory();
+      server = FakeDataServer()..mirrorInto(db);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-      RepositoryDao(
-        db,
-      ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+      server.projectRows.insert(
+        project(id: 'p1', name: 'Hub', path: r'C:\hub'),
+      );
+      server.repositoryRows.insert(
+        repository(id: 'r1', name: 'hub', path: r'C:\hub'),
+      );
       AgentInstallationDao(db).insert(agentInstallation());
       for (var i = 0; i < rows; i++) {
         SessionDao(db).insert(
@@ -102,6 +107,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -230,9 +236,10 @@ void main() {
       test('$count sessions', () async {
         final db = _CountingDatabase();
         addTearDown(db.close);
+        final server = FakeDataServer()..mirrorInto(db);
         ExecutionEnvironmentDao(db).upsert(windowsEnv());
-        ProjectDao(db).insert(project());
-        RepositoryDao(db).insert(repository());
+        server.projectRows.insert(project());
+        server.repositoryRows.insert(repository());
         AgentInstallationDao(db).insert(agentInstallation());
 
         // Half native and half imported, half Claude and half Codex, so the
@@ -320,6 +327,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            await server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             cliSessionMutatorProvider.overrideWithValue(mutator),
             cliStoreLocatorProvider.overrideWithValue(FixedLocator(const [])),

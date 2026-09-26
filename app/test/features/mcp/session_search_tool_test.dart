@@ -7,13 +7,14 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/inventory_tools.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **`session_search`, called the way an agent calls it.** Asserted on what
 /// comes back, never on the schema — the golden file holds that.
@@ -22,18 +23,20 @@ void main() {
   late ConversationIndexDao index;
   late InventoryTools tools;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     index = ConversationIndexDao(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final fake = FakeDataServer()..mirrorInto(db);
+    fake.projectRows.insert(project());
+    fake.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );

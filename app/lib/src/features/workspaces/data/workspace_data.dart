@@ -36,20 +36,18 @@ class WorkspaceData {
             Future.wait([for (final s in listening) s.cancel()]);
       }, isBroadcast: true);
 
-  DataClient get _copy => _client..ensurePrimed(DataDomain.workspace);
-
   List<Workspace> get workspaces =>
-      [..._copy.workspaces.values]..sort(compareWorkspaces);
+      [..._client.workspaces.values]..sort(compareWorkspaces);
 
   List<Project> get projects =>
-      [..._copy.projects.values]..sort(compareProjects);
+      [..._client.projects.values]..sort(compareProjects);
 
-  Project? project(String id) => _copy.projects[id];
+  Project? project(String id) => _client.projects[id];
 
   List<Repository> get repositories =>
-      [..._copy.repositories.values]..sort(compareRepositories);
+      [..._client.repositories.values]..sort(compareRepositories);
 
-  Repository? repository(String id) => _copy.repositories[id];
+  Repository? repository(String id) => _client.repositories[id];
 
   List<Repository> repositoriesOf(String projectId) => [
     for (final repository in repositories)
@@ -63,7 +61,7 @@ class WorkspaceData {
   ];
 
   List<StoredSection> get sections =>
-      [..._copy.sections.values]..sort(compareSections);
+      [..._client.sections.values]..sort(compareSections);
 
   /// Sends [request]; its answer is in the copy when this completes. Throws
   /// [DataRefused].

@@ -10,12 +10,13 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/schedules.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 class _MovableClock implements Clock {
   _MovableClock(this.now);
@@ -104,11 +105,12 @@ void main() {
     return container.read(automationSchedulerProvider.notifier);
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     dao = AutomationDao(db);
     clock = _MovableClock(at(2026, 9, 8, 17));
     timer = ManualAutomationTimer();
@@ -116,6 +118,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('run-')),
         automationTimerProvider.overrideWithValue(timer),

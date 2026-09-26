@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,7 +12,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
@@ -24,6 +25,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -82,22 +85,27 @@ void main() {
   late Directory tmp;
   late String storeHome;
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late _RecordingTerminals terminals;
   late ProviderContainer container;
 
-  setUp(() {
+  setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_resume_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(
       agentInstallation(agentId: AgentIds.antigravity, path: r'C:\bin\agy.exe'),
     );
     terminals = _RecordingTerminals();
     container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),

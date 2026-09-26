@@ -12,7 +12,6 @@ import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala/src/features/verification/presentation/verification_pane.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +25,8 @@ import 'package:path/path.dart' as p;
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'verification_harness.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 final _t0 = DateTime.utc(2026, 8, 30, 12);
 
@@ -238,8 +239,9 @@ void main() {
     tester,
   ) async {
     ExecutionEnvironmentDao(h.db).upsert(windowsEnv());
-    ProjectDao(h.db).insert(project());
-    RepositoryDao(h.db).insert(repository());
+    FakeDataServer().mirrorInto(h.db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(h.db).insert(agentInstallation());
     SessionDao(h.db)
       ..insert(session(id: 's-1', title: 'Before the rename'))

@@ -34,7 +34,7 @@ void main() {
   for (final count in [10, 100, 500]) {
     test('$count threads on one file cost the same as one', () async {
       final db = _CountingDatabase();
-      final harness = ReviewThreadHarness(
+      final harness = await ReviewThreadHarness.create(
         database: db,
         shas: {'lib/a.dart': 'sha-one'},
       );
@@ -90,7 +90,7 @@ void main() {
     'threads spread over many files cost one process, not one each',
     () async {
       final db = _CountingDatabase();
-      final harness = ReviewThreadHarness(
+      final harness = await ReviewThreadHarness.create(
         database: db,
         shas: {for (var i = 0; i < 20; i++) 'lib/f$i.dart': 'sha-$i'},
       );

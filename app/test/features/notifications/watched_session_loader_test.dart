@@ -10,7 +10,6 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/watched_session_loader.dart';
 import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
@@ -19,6 +18,8 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A clock the test moves forward, for the cold-recheck window.
 class _MovableClock implements Clock {
@@ -39,8 +40,9 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     temp = Directory.systemTemp.createTempSync('watched-sessions');
     sessions = SessionDao(db);
     imported = ImportedSessionDao(db);

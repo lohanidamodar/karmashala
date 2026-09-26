@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -25,6 +24,8 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -36,14 +37,16 @@ import '../terminal/fake_instance.dart';
 /// none, and `F2` stood beside "Rename" as a label only.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
+      repository(id: 'r1', name: 'hub', path: r'C:\hub'),
+    );
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       Session(
@@ -82,6 +85,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

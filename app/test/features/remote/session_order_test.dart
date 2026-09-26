@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -28,9 +27,13 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/sync_bindings.dart';
 import '../terminal/fake_instance.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
+
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
   final now = DateTime.utc(2026, 8, 31, 10);
 
   /// Directories reported as gone, so nothing here touches a filesystem.
@@ -40,13 +43,15 @@ void main() {
   /// reports it — the one reading the walk both orders by and sends.
   final activeAt = <String, DateTime>{};
 
-  setUp(() {
+  setUp(() async {
     missing.clear();
     activeAt.clear();
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         remoteDeliveryStageProvider.overrideWithValue((id) async => null),
         sessionStatusLookupProvider.overrideWithValue((_) => null),
         remoteSessionPresenceProvider.overrideWithValue(
@@ -90,13 +95,13 @@ void main() {
   }
 
   void seedProject(String id, String root) {
-    ProjectDao(
-      db,
-    ).insert(Project(id: id, name: id, root: path(root), createdAt: now));
+    server.projectRows.insert(
+      Project(id: id, name: id, root: path(root), createdAt: now),
+    );
   }
 
   void seedRepository(String id, String projectId, String at) {
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       Repository(
         id: id,
         projectId: projectId,

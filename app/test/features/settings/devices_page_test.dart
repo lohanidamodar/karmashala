@@ -9,11 +9,14 @@ import 'package:karmashala/src/features/settings/presentation/settings_catalog.d
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_store/database.dart';
-import '../../support/stored_preferences.dart';
+
+import '../../support/fake_data_server.dart';
 
 /// Settings → Devices draws the device pane's own slimming controls, writing
 /// the same stored settings, so the two places cannot disagree.
 void main() {
+  late FakeDataServer server;
+
   Future<ProviderContainer> pump(
     WidgetTester tester, {
     bool canRunSimulators = true,
@@ -24,10 +27,13 @@ void main() {
     addTearDown(tester.view.reset);
     final db = AppDatabase.memory();
     addTearDown(db.close);
+    server = FakeDataServer();
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...deviceBindings,
         databaseProvider.overrideWithValue(db),
+        data,
         hostCanRunSimulatorsProvider.overrideWithValue(canRunSimulators),
         devicesProvider.overrideWith(
           (ref) => throw StateError('Settings must not list devices'),
@@ -55,16 +61,12 @@ void main() {
     tester,
   ) async {
     final container = await pump(tester);
-    final db = container.read(databaseProvider);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const Key('android-slimming-enabled')));
     await tester.pumpAndSettle();
     expect(container.read(settingsControllerProvider).androidSlimming, isFalse);
-    expect(
-      SettingsRepository(StoredPreferences(db)).load().androidSlimming,
-      isFalse,
-    );
+    expect(SettingsRepository(server.store).load().androidSlimming, isFalse);
 
     await tester.tap(find.byKey(const Key('slimming-enabled')));
     await tester.pumpAndSettle();

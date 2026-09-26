@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +23,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
 
 /// **What the account quota costs the window's own row — which is now
 /// nothing.**
@@ -54,17 +54,20 @@ void main() {
 
   setUp(() => service = FakeAgentUsageService());
 
-  ProviderContainer barContainer() {
-    final db = seedUsageDatabase();
+  Future<ProviderContainer> barContainer() async {
+    final server = FakeDataServer();
+    final db = seedUsageDatabase(server: server);
     seeded = db;
     addTearDown(db.close);
     // A name long enough to compete for the row's width at 720px, which is
     // where the loss of the middle group is felt.
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       repository(id: 'r2', name: 'karmashala-app-desktop-shell', path: r'C:\s'),
     );
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
+        data,
         // A real floor: this file still has to prove a tick cannot reach the
         // row, and a zero floor would arm nothing to prove it with.
         ...fakeTerminalOverrides(
@@ -121,7 +124,7 @@ void main() {
   testWidgets('the quota is not on this row any more, and neither is its '
       'timer', (tester) async {
     service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
+    final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
 
@@ -137,7 +140,7 @@ void main() {
 
   testWidgets('a quota change cannot reach the row at all', (tester) async {
     service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
+    final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
 
@@ -165,7 +168,7 @@ void main() {
   testWidgets('the row still holds at the minimum window without the chip', (
     tester,
   ) async {
-    final container = barContainer();
+    final container = await barContainer();
     await expectSurvivesWindowMatrix(
       tester,
       build: () => bar(container),
@@ -182,7 +185,7 @@ void main() {
     // The regression the chip used to guard: selection is dropped on purpose
     // whenever a selected session has no live pane. Nothing on this row reads
     // the session any more, so it must simply be untroubled by it.
-    final container = barContainer();
+    final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pumpAndSettle();
 
@@ -197,7 +200,7 @@ void main() {
   testWidgets('the toggle rides the right edge and the state group holds it', (
     tester,
   ) async {
-    final container = barContainer();
+    final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pumpAndSettle();
 
@@ -225,7 +228,7 @@ void main() {
   testWidgets('the state group reaches the right edge of a wide window', (
     tester,
   ) async {
-    final container = barContainer();
+    final container = await barContainer();
     // Wide, because this is invisible at 800: the narrower the row, the less
     // free space there is to be lost, and the bug is *unused free space*. On a
     // 1600px window it came to 500 blank pixels past the panel toggle.

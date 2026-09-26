@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -8,12 +10,12 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -26,12 +28,13 @@ import '../../support/fixtures.dart';
 /// because "the project list changed".
 ///
 /// It does neither, and the reason is where the filter sits. `workspace_id`
-/// arrives on the row `ProjectDao.getAll` already reads, so narrowing is one
+/// arrives on the project row the app already holds, so narrowing is one
 /// pass over a list that is in memory anyway, and the *unfiltered*
 /// `sortedProjectsProvider` — which Quick Open, the phone bindings and the
 /// repositories provider all hang off — is left alone. Switching contexts
-/// therefore *reads* SQLite zero times, at any number of projects. It writes
-/// once: the scope is kept in settings now that the Explorer's chips show it.
+/// therefore touches SQLite zero times, at any number of projects. It writes
+/// one setting, at the server: the scope is kept in settings now that the
+/// Explorer's chips show it.
 ///
 /// Counted, never timed, like every other `*_cost_test.dart` here: wall-clock
 /// over a few milliseconds fails whenever the machine is busy, and statements
@@ -40,6 +43,14 @@ void main() {
   /// 1 is the "did we make the small case worse" control; 31 is the owner's
   /// own workspace.
   const scale = [1, 10, 31];
+
+  // Settings are written at the server, not to SQLite: counted there.
+  late FakeDataServer server;
+  late DataClient data;
+  setUp(() async {
+    server = FakeDataServer();
+    data = await server.connect();
+  });
 
   _CountingDatabase newDatabase() {
     final db = _CountingDatabase();
@@ -51,6 +62,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(data),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
@@ -62,10 +74,10 @@ void main() {
   /// [count] projects, a repository each, spread over four contexts the way the
   /// owner's are — and one of them selected, so the repositories provider is
   /// live and would issue a query the moment anything made it recompute.
-  ({ProviderContainer container, List<String> workspaceIds}) workspaceOf(
+  Future<({ProviderContainer container, List<String> workspaceIds})> seeded(
     _CountingDatabase db,
     int count,
-  ) {
+  ) async {
     final container = mount(db);
     final workspaces = [
       for (final name in const [
@@ -74,12 +86,10 @@ void main() {
         'Appwrite',
         'Game dev',
       ])
-        createContext(container, name).id,
+        (await createContext(container, name)).id,
     ];
-    final projects = ProjectDao(container.read(databaseProvider));
-    final repositories = RepositoryDao(db);
     for (var i = 0; i < count; i++) {
-      projects.insert(
+      server.projectRows.insert(
         Project(
           id: 'p$i',
           name: 'Project $i',
@@ -95,7 +105,7 @@ void main() {
           workspaceId: i.isEven ? workspaces[i % 4] : null,
         ),
       );
-      repositories.insert(
+      server.repositoryRows.insert(
         Repository(
           id: 'r$i',
           projectId: 'p$i',
@@ -111,7 +121,6 @@ void main() {
         ),
       );
     }
-    rereadWorkspace(container);
     container.read(selectedProjectIdProvider.notifier).select('p0');
     // Mount the hot path before measuring, so its first read is not counted as
     // filter cost — and so a later recompute *would* be.
@@ -124,12 +133,13 @@ void main() {
     final measured = <int, _Cost>{};
 
     for (final count in scale) {
-      test('$count projects', () {
+      test('$count projects', () async {
         final db = newDatabase();
         addTearDown(db.close);
-        final (:container, :workspaceIds) = workspaceOf(db, count);
+        final (:container, :workspaceIds) = await seeded(db, count);
         final scopeOf = container.read(workspaceScopeProvider.notifier);
         db.reset();
+        server.requests.clear();
 
         // Four switches: into a context, into another, into unassigned, back
         // to All — the whole cycle a user does in a morning.
@@ -144,8 +154,12 @@ void main() {
           container.read(selectedProjectRepositoriesProvider);
         }
 
+        await pumpEventQueue();
         measured[count] = _Cost(
           statements: db.statements,
+          settingsWrites: server.requests
+              .where((kind) => kind == 'preferences.set')
+              .length,
           reads: db.reads,
           projectsExamined: count * 4,
         );
@@ -164,7 +178,8 @@ void main() {
       });
     }
 
-    test('a switch reads nothing and writes its one setting, at any scale', () {
+    test('a switch touches SQLite not at all and writes its one setting, '
+        'at any scale', () {
       expect(
         measured.keys.toSet(),
         scale.toSet(),
@@ -176,11 +191,15 @@ void main() {
       for (final count in scale) {
         expect(
           measured[count]!.statements,
-          4,
+          0,
           reason:
-              'at $count projects: four switches, four settings writes — '
-              'the list is already in memory, and nothing is asked per '
-              'project',
+              'at $count projects: the list is already in memory, and '
+              'nothing is asked per project',
+        );
+        expect(
+          measured[count]!.settingsWrites,
+          4,
+          reason: 'at $count projects: four switches, four settings writes',
         );
         expect(
           measured[count]!.reads,
@@ -194,28 +213,28 @@ void main() {
   });
 
   group('assigning one project', () {
-    test('costs one write and one list re-read, at any scale', () {
+    test('costs one write and no re-read, at any scale', () async {
       final db = newDatabase();
       addTearDown(db.close);
-      final (:container, :workspaceIds) = workspaceOf(db, 31);
+      final (:container, :workspaceIds) = await seeded(db, 31);
       db.reset();
+      server.requests.clear();
 
-      container
+      await container
           .read(workspacesControllerProvider.notifier)
           .assign('p1', workspaceIds[3]);
 
       expect(
-        db.writes,
-        1,
-        reason: 'one UPDATE for the row that moved, not one per project',
+        server.requests,
+        hasLength(1),
+        reason: 'one write for the row that moved, not one per project',
       );
       expect(
-        db.reads,
-        3,
+        db.statements,
+        0,
         reason:
-            'the server checks the project and the context and reads back '
-            'the one row it wrote; the app re-reads nothing — whatever the '
-            'scale',
+            'the server files the project and answers with the one row it '
+            'wrote; the app re-reads nothing — whatever the scale',
       );
       expect(
         container
@@ -231,11 +250,13 @@ void main() {
 class _Cost {
   const _Cost({
     required this.statements,
+    required this.settingsWrites,
     required this.reads,
     required this.projectsExamined,
   });
 
   final int statements;
+  final int settingsWrites;
   final int reads;
 
   /// Not a cost so much as the shape of the work that *is* done: one pass over
@@ -244,7 +265,8 @@ class _Cost {
 
   @override
   String toString() =>
-      '(statements: $statements, reads: $reads, '
+      '(statements: $statements, settings writes: $settingsWrites, '
+      'reads: $reads, '
       'in-memory passes over: $projectsExamined)';
 }
 

@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -25,10 +24,13 @@ import 'package:flutter/material.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **What a section actually holds, and what it refuses to go and find out.**
@@ -46,13 +48,18 @@ void main() {
     path: r'C:\src\demo\app',
   );
 
+  // The server the last [seed] filled; every container built after it reads it.
+  late FakeDataServer server;
+
   AppDatabase seed({int failed = 1, int running = 1}) {
     final db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    seedDefaultSections(server);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(
-      db,
-    ).insert(project(id: 'p1', name: 'Demo', path: r'C:\src\demo'));
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(
+      project(id: 'p1', name: 'Demo', path: r'C:\src\demo'),
+    );
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < failed; i++) {
       SessionDao(db).insert(
@@ -83,10 +90,11 @@ void main() {
     },
   );
 
-  ProviderContainer mount(AppDatabase db, FakeCommandRunner git) {
+  Future<ProviderContainer> mount(AppDatabase db, FakeCommandRunner git) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),
@@ -114,7 +122,7 @@ void main() {
     test('files a session its own row already condemns', () async {
       final db = seed(failed: 2);
       addTearDown(db.close);
-      final container = mount(db, FakeCommandRunner());
+      final container = await mount(db, FakeCommandRunner());
       await container.pump();
 
       expect(idsIn(container, 'section-ended-in-failure'), ['f0', 'f1']);
@@ -124,7 +132,7 @@ void main() {
     test('files an agent the ambient waiting list says is stuck', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db, FakeCommandRunner());
+      final container = await mount(db, FakeCommandRunner());
       await container.pump();
       expect(idsIn(container, 'section-awaiting-input'), isEmpty);
 
@@ -148,7 +156,7 @@ void main() {
       final db = seed();
       addTearDown(db.close);
       final git = gitOn('release/1.4');
-      final container = mount(db, git);
+      final container = await mount(db, git);
       final sections = container.read(explorerSectionsProvider.notifier);
       final releases = sections.add(
         name: 'Releases',
@@ -201,7 +209,7 @@ void main() {
     test('a pin takes it out of the rule section below', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db, FakeCommandRunner());
+      final container = await mount(db, FakeCommandRunner());
       await container.pump();
       expect(idsIn(container, 'section-ended-in-failure'), ['f0']);
 
@@ -223,7 +231,7 @@ void main() {
     test('dragging a section above another moves the rows with it', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db, gitOn('release/1.4'));
+      final container = await mount(db, gitOn('release/1.4'));
       final controller = container.read(explorerSectionsProvider.notifier);
       final releases = controller.add(
         name: 'Releases',
@@ -262,7 +270,7 @@ void main() {
     test('a hand-filled group beats a rule that is above it', () async {
       final db = seed();
       addTearDown(db.close);
-      final container = mount(db, FakeCommandRunner());
+      final container = await mount(db, FakeCommandRunner());
       final controller = container.read(explorerSectionsProvider.notifier);
       final mine = controller.add(name: 'Mine', rule: const ManualRule());
       controller.addMember(mine.id, 'f0');
@@ -294,6 +302,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -390,6 +399,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -497,4 +507,19 @@ void main() {
       expect(find.textContaining('Delivery strip'), findsOneWidget);
     });
   });
+}
+
+/// The four sections a new workspace starts with — seeded by the server's
+/// own schema, which the fake does not have.
+void seedDefaultSections(FakeDataServer server) {
+  for (final (id, name, kind, position) in const [
+    ('section-pinned', 'Pinned', 'pinned', 0),
+    ('section-checks-failing', 'Checks failing', 'checksFailing', 1),
+    ('section-awaiting-input', 'Awaiting input', 'awaitingInput', 2),
+    ('section-ended-in-failure', 'Ended in failure', 'endedInFailure', 3),
+  ]) {
+    server.sectionRows.put(
+      StoredSection(id: id, name: name, kind: kind, position: position),
+    );
+  }
 }

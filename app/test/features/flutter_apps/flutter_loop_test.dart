@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_app_pro
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -23,6 +22,8 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_vm_service.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 const String _appPubspec = '''
 name: demo
@@ -91,13 +92,16 @@ void main() {
     return const CommandResult(exitCode: 0, stdout: '', stderr: '');
   }
 
-  void build({CommandResult Function(CommandRequest)? responder}) {
+  Future<void> build({
+    CommandResult Function(CommandRequest)? responder,
+  }) async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     runner = FakeCommandRunner(
       environmentId: 'wsl:Ubuntu',
@@ -109,6 +113,7 @@ void main() {
         // factory, its settings and its shell, behind the package's ports.
         ...deviceBindings,
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
         ),
@@ -129,10 +134,10 @@ void main() {
     );
   }
 
-  setUp(() {
+  setUp(() async {
     vmDirectory = Directory.systemTemp.createTempSync('karmashala-loop-test');
     reachable = <String, FakeVmService>{};
-    build();
+    await build();
   });
   tearDown(() {
     container.dispose();
@@ -162,7 +167,7 @@ void main() {
     );
 
     test('the §17 refusal reaches the preflight whole', () async {
-      build(
+      await build(
         responder: (request) => request.arguments.contains('command -v flutter')
             ? const CommandResult(
                 exitCode: 0,
@@ -183,7 +188,7 @@ void main() {
     test(
       'a directory with no Flutter pubspec names what would fix it',
       () async {
-        build(
+        await build(
           responder: (request) => request.executable == 'find'
               ? const CommandResult(exitCode: 0, stdout: '', stderr: '')
               : healthy(request),
@@ -201,7 +206,7 @@ void main() {
     );
 
     test('a package is real Flutter and still refused for run', () async {
-      build(
+      await build(
         responder: (request) => request.executable == 'cat'
             ? const CommandResult(
                 exitCode: 0,
@@ -226,7 +231,7 @@ void main() {
     });
 
     test('no package_config blocks a run and never blocks pub get', () async {
-      build(
+      await build(
         responder: (request) => request.executable == 'test'
             ? const CommandResult(exitCode: 1, stdout: '', stderr: '')
             : healthy(request),
@@ -248,7 +253,7 @@ void main() {
     test(
       'a package check that could not be taken does not block the run',
       () async {
-        build(
+        await build(
           responder: (request) {
             if (request.executable == 'test') {
               throw CommandException('the distribution went away mid-check');

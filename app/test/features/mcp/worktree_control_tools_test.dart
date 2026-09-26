@@ -8,7 +8,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -19,6 +18,8 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 
@@ -99,11 +100,12 @@ branch refs/heads/$worktreeBranch
         createdAt: testTime,
       ),
     );
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r2', name: 'app-feature', path: worktreeRowPath));
+    final fake = FakeDataServer()..mirrorInto(db);
+    fake.projectRows.insert(project());
+    fake.repositoryRows.insert(repository());
+    fake.repositoryRows.insert(
+      repository(id: 'r2', name: 'app-feature', path: worktreeRowPath),
+    );
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       session(
@@ -168,6 +170,7 @@ branch refs/heads/$worktreeBranch
           database: db,
           gitFiles: PlainFolders(plainFolders),
         ),
+        await fake.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -36,6 +37,7 @@ const _registry = AgentRegistry([
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
 
   /// Names currently "installed" on the fake host, mapped to their version.
@@ -81,14 +83,17 @@ void main() {
     },
   );
 
-  setUp(() {
+  setUp(() async {
     installed = {'claude': '2.1.0'};
     reachable = true;
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server = FakeDataServer();
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         agentRegistryProvider.overrideWithValue(_registry),

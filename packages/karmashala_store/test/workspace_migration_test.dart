@@ -1,7 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:test/test.dart';
 
 /// Applies every migration up to and including [upTo], the way `AppDatabase`
 /// does, so a *pre-v31* database can be populated and then migrated.

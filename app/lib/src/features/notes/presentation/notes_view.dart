@@ -8,6 +8,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../settings/presentation/data_connection_notice.dart';
 import '../../todos/presentation/project_menu.dart';
 import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
@@ -62,6 +63,7 @@ class NotesView extends ConsumerWidget {
             ),
           ],
         ),
+        const DataConnectionNotice(padding: DataConnectionNotice.inPanel),
         Expanded(
           child: notes.isEmpty
               ? _EmptyNotes(filtered: !scope.isAll)

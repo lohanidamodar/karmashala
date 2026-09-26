@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/explorer/application/session_diff_stat.d
 import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -23,12 +22,15 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 
@@ -137,7 +139,7 @@ void main() {
 
     for (final count in scale) {
       test('with $count already open costs the same', () async {
-        final workspace = _StartWorkspace(sessions: count);
+        final workspace = await _StartWorkspace.open(sessions: count);
         addTearDown(workspace.dispose);
         await workspace.settle();
 
@@ -259,7 +261,7 @@ void main() {
     late _StartWorkspace workspace;
 
     setUp(() async {
-      workspace = _StartWorkspace(sessions: 10);
+      workspace = await _StartWorkspace.open(sessions: 10);
       await workspace.settle();
     });
     tearDown(() => workspace.dispose());
@@ -361,7 +363,7 @@ void main() {
 
   group('what a start does not wake', () {
     test('another session\'s card', () async {
-      final workspace = _StartWorkspace(sessions: 10);
+      final workspace = await _StartWorkspace.open(sessions: 10);
       addTearDown(workspace.dispose);
       await workspace.settle();
 
@@ -386,7 +388,7 @@ void main() {
     });
 
     test('the permission chip of a session nobody reconfigured', () async {
-      final workspace = _StartWorkspace(sessions: 10);
+      final workspace = await _StartWorkspace.open(sessions: 10);
       addTearDown(workspace.dispose);
       await workspace.settle();
 
@@ -492,14 +494,20 @@ class _StartCost {
 /// the way the widgets that own them subscribe, because the cost this file is
 /// about is the fan-out rather than the row.
 class _StartWorkspace {
-  _StartWorkspace({required this.sessions}) {
+  _StartWorkspace._({
+    required this.sessions,
+    required FakeDataServer server,
+    required Override data,
+  }) {
+    server.mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
 
     container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(
           database: db,
           instanceFactory:
@@ -584,6 +592,17 @@ class _StartWorkspace {
         instance.exitCleanly();
       }
     }
+  }
+
+  /// A workspace whose checkouts live at a [FakeDataServer] its container is
+  /// connected to.
+  static Future<_StartWorkspace> open({required int sessions}) async {
+    final server = FakeDataServer();
+    return _StartWorkspace._(
+      sessions: sessions,
+      server: server,
+      data: await server.override(),
+    );
   }
 
   final int sessions;

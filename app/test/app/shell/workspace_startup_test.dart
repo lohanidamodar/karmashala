@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -28,6 +27,9 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// The whole shell, launched into a **stored split workspace** — which is the
 /// launch most users get, and the one no other test performed end to end.
@@ -39,12 +41,16 @@ import '../../support/fixtures.dart';
 /// swallows in release.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -73,6 +79,7 @@ void main() {
   ProviderContainer shellContainer() {
     final container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         // Everything that would otherwise reach the host or poll a file: a
         // spinner that never stops is a `pumpAndSettle` that never returns.

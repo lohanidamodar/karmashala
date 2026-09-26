@@ -11,12 +11,13 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_outcome_writer.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **A finished session's row said `running`, for ever.**
@@ -213,12 +214,14 @@ void main() {
     late AppDatabase db;
     late SessionDao dao;
     late SessionOutcomeWriter writer;
+    late FakeDataServer server;
 
     setUp(() {
       db = AppDatabase.memory();
+      server = FakeDataServer()..mirrorInto(db);
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       dao = SessionDao(db);
       writer = SessionOutcomeWriter(sessionDao: dao);
@@ -324,10 +327,11 @@ void main() {
       expect(statusOf('s1'), SessionStatus.running);
     });
 
-    test('a hook callback carries the ending all the way to the row', () {
+    test('a hook callback carries the ending all the way to the row', () async {
       live('s1');
       final container = ProviderContainer(
         overrides: [
+          await server.override(),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],
@@ -379,9 +383,10 @@ void main() {
     group('through the hook intake', () {
       late ProviderContainer container;
 
-      setUp(() {
+      setUp(() async {
         container = ProviderContainer(
           overrides: [
+            await server.override(),
             ...fakeTerminalOverrides(database: db),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],

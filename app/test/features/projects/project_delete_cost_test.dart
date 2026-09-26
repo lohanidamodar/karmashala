@@ -15,13 +15,14 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/cli_store_purge.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
 
 /// **What deleting a project costs, counted.**
@@ -51,6 +52,7 @@ void main() {
   const scale = [1, 10, 33];
 
   late Directory tmp;
+  late FakeDataServer server;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_del_'));
   tearDown(() => removeTempDirectory(tmp));
 
@@ -63,8 +65,9 @@ void main() {
   _CountingDatabase seed(int count) {
     final db = _CountingDatabase();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer(clock: () => testTime)..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
 
     final codexIndex = <String>[];
@@ -110,13 +113,14 @@ void main() {
     return db;
   }
 
-  ({ProviderContainer container, CliSessionMutator mutator}) mount(
+  Future<({ProviderContainer container, CliSessionMutator mutator})> mount(
     _CountingDatabase db,
-  ) {
+  ) async {
     final mutator = CliSessionMutator();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(mutator),
       ],
@@ -132,7 +136,7 @@ void main() {
       test('$count sessions', () async {
         final db = seed(count);
         addTearDown(db.close);
-        final (:container, :mutator) = mount(db);
+        final (:container, :mutator) = await mount(db);
 
         var publishes = 0;
         container.listen(sessionsRevisionProvider, (_, _) => publishes++);
@@ -157,7 +161,7 @@ void main() {
         // The work itself still happened: every transcript is gone.
         expect(mutator.transcriptsDeleted, count);
         expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
-        expect(ProjectDao(db).getById('p1'), isNull);
+        expect(server.projectRows.getById('p1'), isNull);
       });
     }
 

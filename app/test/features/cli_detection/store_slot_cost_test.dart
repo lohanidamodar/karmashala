@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/cli_detection/data/conversation_index_da
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +20,8 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import 'package:agent_cli/read.dart';
 
 /// **What a brand-new session sets in motion after it has started.**
@@ -78,11 +79,12 @@ void main() {
   /// A workspace of [named] sessions the user has titled, plus [waiting]
   /// brand-new ones — a row still wearing `ExplorerActions.startSession`'s
   /// "New session", which is exactly what the `+` leaves behind.
-  _Slot slot({required int named, int waiting = 0}) {
+  Future<_Slot> slot({required int named, int waiting = 0}) async {
     final db = _CountingDatabase();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -108,6 +110,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         cliDetectionServiceProvider.overrideWithValue(detection),
         // The stores are read through the scan runner now; inline here, so the
         // pass is counted on this isolate rather than on a worker.
@@ -131,7 +134,7 @@ void main() {
 
   group('the store slot', () {
     test('costs nothing extra while every session has a name', () async {
-      final quiet = slot(named: 20);
+      final quiet = await slot(named: 20);
       await quiet.run();
 
       final measured = await quiet.run();
@@ -154,7 +157,7 @@ void main() {
     test(
       'a brand-new session buys one scan, shared by its passengers',
       () async {
-        final busy = slot(named: 20, waiting: 1);
+        final busy = await slot(named: 20, waiting: 1);
         await busy.run();
 
         final measured = await busy.run();
@@ -186,7 +189,7 @@ void main() {
       final statements = <int, int>{};
       final scans = <int, int>{};
       for (final count in const [1, 10, 100]) {
-        final busy = slot(named: count, waiting: 1);
+        final busy = await slot(named: count, waiting: 1);
         await busy.run();
 
         final measured = await busy.run();
@@ -216,7 +219,7 @@ void main() {
     });
 
     test('the conversation the CLI just named is indexed, that slot', () async {
-      final busy = slot(named: 2, waiting: 1);
+      final busy = await slot(named: 2, waiting: 1);
 
       await busy.run();
 
@@ -233,7 +236,7 @@ void main() {
     });
 
     test('and a slot with nothing to index never reads the index', () async {
-      final busy = slot(named: 2, waiting: 1);
+      final busy = await slot(named: 2, waiting: 1);
       await busy.run();
 
       final measured = await busy.run();
@@ -248,7 +251,7 @@ void main() {
     });
 
     test('a name the CLI wrote lands on the row, once', () async {
-      final busy = slot(named: 2, waiting: 1);
+      final busy = await slot(named: 2, waiting: 1);
 
       await busy.run();
 

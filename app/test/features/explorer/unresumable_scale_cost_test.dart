@@ -14,7 +14,6 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/unresumable_sessions.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -23,9 +22,11 @@ import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
@@ -174,11 +175,12 @@ void main() {
   /// One reading over [rows] dead sessions, returning what it cost.
   Future<_Cost> readingOver(int rows) async {
     final db = _CountingDatabase();
+    final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ExecutionEnvironmentDao(db).upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
     emptyStore('.claude');
     emptyStore('.wsl-claude');
@@ -199,6 +201,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -297,10 +300,11 @@ void main() {
       // 120 rows, none of which ever made a promise: the free half answers on
       // its own and the disk is never opened.
       final db = _CountingDatabase();
+      final server = FakeDataServer()..mirrorInto(db);
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
 
       final locator = _CountingLocator([
@@ -313,6 +317,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
           commandRunnerFactoryProvider.overrideWithValue(

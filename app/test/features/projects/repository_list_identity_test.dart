@@ -8,11 +8,11 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -59,15 +59,18 @@ import '../../support/fixtures.dart';
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(id: 'p1'));
-    RepositoryDao(db).insert(repository(id: 'r1'));
+    server = FakeDataServer();
+    server.projectRows.insert(project(id: 'p1'));
+    server.repositoryRows.insert(repository(id: 'r1'));
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         autoImportRunnerProvider.overrideWithValue(
@@ -95,7 +98,8 @@ void main() {
     var notified = 0;
     container.listen(selectedRepositoryProvider, (_, _) => notified++);
 
-    rereadWorkspace(container);
+    // The same row again: an announcement that changed nothing.
+    server.repositoryRows.update(repository(id: 'r1'));
     await settle();
 
     expect(
@@ -110,8 +114,7 @@ void main() {
     var notified = 0;
     container.listen(selectedRepositoryProvider, (_, _) => notified++);
 
-    RepositoryDao(db).update(repository(id: 'r1', name: 'renamed'));
-    rereadWorkspace(container);
+    server.repositoryRows.update(repository(id: 'r1', name: 'renamed'));
     await settle();
 
     expect(notified, 1, reason: 'the row it points at now holds a new name');
@@ -129,8 +132,7 @@ void main() {
 
     // What `ProjectService.rediscover` does: a repository joins an existing
     // project, and not one project row is touched.
-    RepositoryDao(db).insert(repository(id: 'r2', name: 'second'));
-    rereadWorkspace(container);
+    server.repositoryRows.insert(repository(id: 'r2', name: 'second'));
     await settle();
 
     expect(
@@ -178,7 +180,8 @@ void main() {
     );
     expect((top, bottom), (1, 1), reason: 'each built once to begin with');
 
-    rereadWorkspace(container);
+    // The same row again: an announcement that changed nothing.
+    server.repositoryRows.update(repository(id: 'r1'));
     await tester.pump();
 
     expect(

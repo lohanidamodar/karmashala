@@ -8,7 +8,6 @@ import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
@@ -16,6 +15,8 @@ import 'package:karmashala/src/features/sessions/data/session_repository_dao.dar
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -23,14 +24,16 @@ import '../../support/permission_fixtures.dart';
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late SessionDao sessionDao;
   late SessionEventDao eventDao;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     sessionDao = SessionDao(db);
     eventDao = SessionEventDao(db);
@@ -196,7 +199,7 @@ void main() {
 
   test('start links the primary repository and any additional ones', () async {
     // A second repository in the same project to attach.
-    RepositoryDao(db).insert(repository(id: 'r2', name: 'api'));
+    server.repositoryRows.insert(repository(id: 'r2', name: 'api'));
     final engine = buildEngine();
     final s = await engine.start(
       repository: repository(),

@@ -5,16 +5,18 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
   late ProjectImportService service;
   late ImportedSessionDao importedDao;
+  late FakeDataServer server;
 
   DetectedSession session(String id, {String? entrypoint}) => DetectedSession(
     cli: AgentIds.claudeCode,
@@ -36,12 +38,13 @@ void main() {
     subagentSessions: subagents,
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server = FakeDataServer()..mirrorInto(db);
     importedDao = ImportedSessionDao(db);
     service = ProjectImportService(
-      workspace: workspaceOver(db),
+      workspace: await workspaceOf(server),
       importedSessionDao: importedDao,
       ids: SequentialIdGenerator(),
       clock: FixedClock(testTime),
@@ -60,8 +63,8 @@ void main() {
     expect(summary.projects, 1);
     expect(summary.repositories, 1);
     expect(summary.sessions, 3); // a, b, sub
-    expect(ProjectDao(db).getAll().single.name, 'app');
-    final repo = RepositoryDao(db).getAll().single;
+    expect(server.projectRows.getAll().single.name, 'app');
+    final repo = server.repositoryRows.getAll().single;
     expect(importedDao.getByRepository(repo.id).length, 3);
     expect(importedDao.getAll().length, 3);
   });
@@ -78,10 +81,10 @@ void main() {
       expect(second.projects, 0);
       expect(second.repositories, 0);
       expect(second.sessions, 0);
-      expect(ProjectDao(db).getAll().length, 1);
+      expect(server.projectRows.getAll().length, 1);
       expect(
         importedDao
-            .getByRepository(RepositoryDao(db).getAll().single.id)
+            .getByRepository(server.repositoryRows.getAll().single.id)
             .length,
         1,
       );

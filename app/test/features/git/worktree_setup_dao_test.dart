@@ -3,14 +3,16 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
   late WorktreeSetupDao dao;
+  late FakeDataServer server;
 
   const worktree = EnvironmentPath(
     environmentId: 'windows',
@@ -20,8 +22,9 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     dao = WorktreeSetupDao(db);
   });
   tearDown(() => db.close());
@@ -78,7 +81,7 @@ void main() {
 
     test('retiring the checkout takes its build recipe with it', () {
       dao.save('r1', const WorktreeSetup(command: ['make']), testTime);
-      RepositoryDao(db).delete('r1');
+      server.repositoryRows.delete('r1');
       expect(dao.getAll(), isEmpty);
     });
   });
@@ -168,7 +171,7 @@ void main() {
 
     test('retiring the checkout takes its verdicts with it', () {
       dao.record(report());
-      RepositoryDao(db).delete('r1');
+      server.repositoryRows.delete('r1');
       expect(dao.runsFor('r1'), isEmpty);
     });
   });

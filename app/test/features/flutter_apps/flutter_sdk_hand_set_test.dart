@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 
 /// **A Flutter SDK a person names for one environment.**
@@ -298,11 +299,14 @@ void main() {
 
   group('the setting reaches the reading, and invalidates the old one', () {
     late AppDatabase db;
+    late FakeDataServer server;
     late ProviderContainer container;
     late FakeCommandRunner runner;
 
-    setUp(() {
+    setUp(() async {
       db = AppDatabase.memory();
+      server = FakeDataServer();
+      final data = await server.override();
       runner = FakeCommandRunner(environmentId: 'env')
         ..responder = (request) => request.executable == 'where'
             ? const CommandResult(
@@ -318,6 +322,7 @@ void main() {
       container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           clockProvider.overrideWithValue(FixedClock(_now)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
@@ -376,10 +381,14 @@ void main() {
         container
             .read(settingsControllerProvider.notifier)
             .setFlutterSdkPath('env', r'D:\sdk\flutter\bin\flutter.bat');
-        // A second container over the same database is the launch that would
+        // A second client of the same server is the launch that would
         // have re-run discovery. It reads the same answer back.
+        await pumpEventQueue();
         final reopened = ProviderContainer(
-          overrides: [databaseProvider.overrideWithValue(db)],
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            await server.override(),
+          ],
         );
         addTearDown(reopened.dispose);
         expect(

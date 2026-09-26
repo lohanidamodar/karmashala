@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/explorer/application/checkout_picker.dar
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
@@ -24,7 +23,9 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **What one narrow fact costs the app.**
 ///
@@ -62,11 +63,15 @@ void main() {
   ///
   /// `s0` is the one that ended badly, so exactly one follow-up exists and the
   /// inbox has a label to keep up to date.
+  /// The server each seeded database's workspace lives at.
+  final serverOf = Expando<FakeDataServer>();
+
   _CountingDatabase seed(int count) {
     final db = _CountingDatabase();
+    final server = serverOf[db] = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < count; i++) {
       SessionDao(db).insert(
@@ -80,10 +85,14 @@ void main() {
     return db;
   }
 
-  ProviderContainer mount(_CountingDatabase db, {FakeCommandRunner? git}) {
+  Future<ProviderContainer> mount(
+    _CountingDatabase db, {
+    FakeCommandRunner? git,
+  }) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await serverOf[db]!.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // The status pipeline is not the subject here; the row is.
         agentSessionStatusProvider.overrideWith(
@@ -124,7 +133,7 @@ void main() {
       test('at $count sessions it costs the same handful of reads', () async {
         final db = seed(count);
         addTearDown(db.close);
-        final container = mount(db);
+        final container = await mount(db);
         listenToEverything(container, count);
         await container.pump();
 
@@ -174,7 +183,7 @@ void main() {
 
     setUp(() async {
       db = seed(10);
-      container = mount(db);
+      container = await mount(db);
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
     });
     tearDown(() => db.close());
@@ -231,7 +240,7 @@ void main() {
 
     setUp(() async {
       db = seed(10);
-      container = mount(db);
+      container = await mount(db);
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
       container.listen(attentionInboxProvider, (_, _) {});
     });
@@ -290,7 +299,7 @@ void main() {
     test('a plain bump wakes every narrowed watcher', () async {
       final db = seed(10);
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       listenToEverything(container, 10);
       await container.pump();
 
@@ -318,7 +327,7 @@ void main() {
     test('a per-session watcher wakes on a coarse bump too', () async {
       final db = seed(10);
       addTearDown(db.close);
-      final container = mount(db);
+      final container = await mount(db);
       container.listen(sessionWhereaboutsProvider('s5'), (_, _) {});
       await container.pump();
 
@@ -342,7 +351,7 @@ void main() {
 
     setUp(() async {
       db = seed(10);
-      container = mount(db);
+      container = await mount(db);
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
       container.listen(attentionInboxProvider, (_, _) {});
       container.listen(sessionProjectIdsProvider, (_, _) {});
@@ -384,7 +393,7 @@ void main() {
       final db = seed(10);
       addTearDown(db.close);
       final git = FakeCommandRunner();
-      final container = mount(db, git: git);
+      final container = await mount(db, git: git);
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
       container.listen(selectedCheckoutProvider, (_, _) {});
       container.listen(projectCheckoutsProvider, (_, _) {});

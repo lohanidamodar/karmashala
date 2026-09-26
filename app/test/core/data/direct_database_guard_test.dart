@@ -16,14 +16,10 @@ void main() {
   /// Every file under `lib/` still naming `databaseProvider` or `AppDatabase`,
   /// by the domain that keeps it there.
   const remaining = <String, List<String>>{
-    // The temporary in-process fallback and the bootstrap that opens the
-    // store for everything below. Goes with the last domain.
-    'bootstrap and the data fallback': [
+    // The bootstrap that opens the store for everything below. Goes with the
+    // last domain.
+    'bootstrap': [
       'main.dart',
-      'src/core/data/data_client.dart',
-      'src/core/data/data_providers.dart',
-      'src/core/data/in_process_data_endpoint.dart',
-      'src/core/data/server_data_connection.dart',
       'src/core/database/database_providers.dart',
       'src/core/lifecycle/app_lifecycle.dart',
     ],
@@ -150,11 +146,51 @@ void main() {
     }
   });
 
-  test('only the fallback runs the server\'s data service in the app', () {
-    expect(filesMatching(RegExp(r'\bDataService\b')), [
-      'src/core/data/in_process_data_endpoint.dart',
-    ]);
+  test('the app never runs the server\'s data service', () {
+    expect(
+      filesMatching(
+        RegExp(r'\b(DataService|DataSession)\b|server/lib/src/data|src/data/'),
+      ),
+      isEmpty,
+      reason: 'the app is a client: no server is run inside it',
+    );
+    expect(
+      filesMatching(
+        RegExp(r'\bdatabaseProvider\b|\bAppDatabase\b'),
+      ).where((file) => file.startsWith('src/core/data/')),
+      isEmpty,
+      reason: 'the data client reaches the server, never the store',
+    );
     expect(filesMatching(RegExp(r'\bAppDatabase\.open\(')), ['main.dart']);
+  });
+
+  test('no app test reaches the moved domains in a store', () {
+    // Notes, todos, preferences and the workspace are read and written
+    // through the fake server (test/support/fake_data_server.dart); their
+    // rules are tested in packages/karmashala_notes, karmashala_projects,
+    // karmashala_store and server/test/data. The one exception is the
+    // transitional `workspace_mirror.dart`, which copies the fake's workspace
+    // rows into a test's database for the sessions' foreign keys until
+    // sessions move (1c).
+    final reaching = <String>[];
+    for (final file in Directory(
+      'test',
+    ).listSync(recursive: true).whereType<File>()) {
+      final path = file.path.replaceAll(r'\', '/');
+      if (!path.endsWith('.dart') || path.endsWith('guard_test.dart')) {
+        continue;
+      }
+      if (RegExp(
+        r'\b(DataService|NoteDao|TodoDao|StoredPreferences|WorkspaceDao|'
+        r'ProjectDao|RepositoryDao|SectionDao)\b|'
+        r'karmashala_host/data\.dart|karmashala_notes/store|'
+        r'karmashala_projects/store|\.(readMetadata|writeMetadata)\(|'
+        r'DataClient\.inProcess',
+      ).hasMatch(_code(file.readAsStringSync()))) {
+        reaching.add(path);
+      }
+    }
+    expect(reaching..sort(), ['test/support/workspace_mirror.dart']);
   });
 
   test('the files still touching the database only shrink', () {

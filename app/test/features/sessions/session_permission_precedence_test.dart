@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -17,7 +16,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// An agent with one flag per mode, so a flag on the command line names the
@@ -79,17 +80,23 @@ const _trust = PermissionSelection({'mode': 'trust'});
 /// The real [SettingsController] over the in-memory database, deliberately: the
 /// question these tests ask is what happens **when the global default changes**
 /// and **after a restart**, and a frozen fake can answer neither.
-({ProviderContainer container, AppDatabase db}) harness({AppDatabase? reopen}) {
+/// [server] is where settings and the workspace live; a restart passes the
+/// one the first container used.
+Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+harness({AppDatabase? reopen, FakeDataServer? server}) async {
   final db = reopen ?? AppDatabase.memory();
+  server ??= FakeDataServer();
   if (reopen == null) {
+    server.mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
   }
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      await server.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
@@ -100,7 +107,7 @@ const _trust = PermissionSelection({'mode': 'trust'});
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),
     ],
   );
-  return (container: container, db: db);
+  return (container: container, db: db, server: server);
 }
 
 extension on ProviderContainer {
@@ -165,7 +172,7 @@ void main() {
   // rule every test below states one half of.
 
   test('a session\'s own mode beats the global default at launch', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaults(forNew: _trust);
@@ -188,7 +195,7 @@ void main() {
   });
 
   test('a session\'s own mode beats the global default at resume', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaults(forExisting: _trust);
@@ -210,41 +217,47 @@ void main() {
     expect(SessionDao(h.db).getById('src')!.permissionMode, _careful.canonical);
   });
 
-  test('changing the global default does not move a session that chose', () {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    seedStopped(h.db, mode: _edits);
+  test(
+    'changing the global default does not move a session that chose',
+    () async {
+      final h = await harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedStopped(h.db, mode: _edits);
 
-    h.container.setDefaults(forExisting: _trust);
+      h.container.setDefaults(forExisting: _trust);
 
-    final effective = h.container.launcher.effectivePermissionFor('src')!;
-    expect(effective.selection, _edits);
-    expect(effective.inherited, isFalse);
-  });
+      final effective = h.container.launcher.effectivePermissionFor('src')!;
+      expect(effective.selection, _edits);
+      expect(effective.inherited, isFalse);
+    },
+  );
 
-  test('changing the global default moves a session that never chose', () {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    seedStopped(h.db);
+  test(
+    'changing the global default moves a session that never chose',
+    () async {
+      final h = await harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedStopped(h.db);
 
-    h.container.setDefaults(forExisting: _edits);
-    expect(
-      h.container.launcher.effectivePermissionFor('src')!.selection,
-      _edits,
-    );
+      h.container.setDefaults(forExisting: _edits);
+      expect(
+        h.container.launcher.effectivePermissionFor('src')!.selection,
+        _edits,
+      );
 
-    // Live, not sampled once: a session with no choice of its own follows the
-    // setting wherever it goes.
-    h.container.setDefaults(forExisting: _trust);
-    final effective = h.container.launcher.effectivePermissionFor('src')!;
-    expect(effective.selection, _trust);
-    expect(effective.inherited, isTrue);
-  });
+      // Live, not sampled once: a session with no choice of its own follows the
+      // setting wherever it goes.
+      h.container.setDefaults(forExisting: _trust);
+      final effective = h.container.launcher.effectivePermissionFor('src')!;
+      expect(effective.selection, _trust);
+      expect(effective.inherited, isTrue);
+    },
+  );
 
   test('a launch stamps nothing on a session nobody chose for', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaults(forNew: _edits);
@@ -273,7 +286,7 @@ void main() {
   test(
     'a resumed session that never chose follows the current default',
     () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedStopped(h.db);
@@ -291,7 +304,7 @@ void main() {
   );
 
   test('the choice survives a restart', () async {
-    final first = harness();
+    final first = await harness();
     addTearDown(first.db.close);
     first.container.setDefaults(forExisting: _trust);
     seedStopped(first.db);
@@ -300,7 +313,7 @@ void main() {
 
     // A new container over the same database is what a restart is: settings
     // and sessions are both re-read from disk.
-    final second = harness(reopen: first.db);
+    final second = await harness(reopen: first.db, server: first.server);
     addTearDown(second.container.dispose);
 
     final effective = second.container.launcher.effectivePermissionFor('src')!;
@@ -315,8 +328,8 @@ void main() {
     ]);
   });
 
-  test('a session can be handed back to the default', () {
-    final h = harness();
+  test('a session can be handed back to the default', () async {
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     seedStopped(h.db, mode: _careful);

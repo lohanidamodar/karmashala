@@ -1,8 +1,6 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -23,10 +21,22 @@ Database _migratedTo(int upTo) {
 void main() {
   group('v29', () {
     test('seeds Pinned and three suggestions, all folded shut', () {
-      final db = AppDatabase.memory();
+      final db = _migratedTo(29);
       addTearDown(db.close);
       final sections = [
-        for (final s in SectionDao(db).getAll()) ?ExplorerSection.fromStored(s),
+        for (final r in db.select(
+          'SELECT * FROM explorer_sections ORDER BY position;',
+        ))
+          ?ExplorerSection.fromStored(
+            StoredSection(
+              id: r['id'] as String,
+              name: r['name'] as String,
+              kind: r['kind'] as String,
+              pattern: r['pattern'] as String?,
+              position: r['position'] as int,
+              collapsed: r['collapsed'] == 1,
+            ),
+          ),
       ];
 
       expect(

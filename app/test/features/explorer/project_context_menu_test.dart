@@ -1,4 +1,3 @@
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +18,7 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -42,16 +42,19 @@ import '../../support/window_matrix.dart';
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
 
   EnvironmentPath root(String path) =>
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         // Every session card asks git what its checkout has changed; a widget
         // test must never spawn one.
         commandRunnerFactoryProvider.overrideWithValue(
@@ -68,14 +71,14 @@ void main() {
   });
   tearDown(() => db.close());
 
-  ({String personal, String games}) seed({String? filedUnder}) {
-    final personal = createContext(container, 'Personal').id;
-    final games = createContext(
+  Future<({String personal, String games})> seed({String? filedUnder}) async {
+    final personal = (await createContext(container, 'Personal')).id;
+    final games = (await createContext(
       container,
       'Game dev',
       description: 'Weekend things',
-    ).id;
-    ProjectDao(container.read(databaseProvider)).insert(
+    )).id;
+    server.projectRows.insert(
       Project(
         id: 'p1',
         name: 'Roguelike',
@@ -84,7 +87,6 @@ void main() {
         workspaceId: filedUnder,
       ),
     );
-    rereadWorkspace(container);
     return (personal: personal, games: games);
   }
 
@@ -116,7 +118,7 @@ void main() {
   testWidgets('right-clicking a project files it under a context', (
     tester,
   ) async {
-    final ids = seed();
+    final ids = await seed();
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
@@ -139,7 +141,7 @@ void main() {
   testWidgets('moving between contexts is one gesture, not two', (
     tester,
   ) async {
-    final ids = seed();
+    final ids = await seed();
     await container
         .read(workspacesControllerProvider.notifier)
         .assign('p1', ids.personal);
@@ -160,7 +162,7 @@ void main() {
   testWidgets('"No context" unassigns the project and keeps it', (
     tester,
   ) async {
-    final ids = seed(filedUnder: null);
+    final ids = await seed(filedUnder: null);
     await container
         .read(workspacesControllerProvider.notifier)
         .assign('p1', ids.personal);
@@ -187,7 +189,7 @@ void main() {
   testWidgets('an unassigned project is not offered "No context"', (
     tester,
   ) async {
-    seed();
+    await seed();
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
@@ -202,7 +204,7 @@ void main() {
   });
 
   testWidgets('a new context can be made and filled in one go', (tester) async {
-    ProjectDao(container.read(databaseProvider)).insert(
+    server.projectRows.insert(
       Project(
         id: 'p1',
         name: 'Roguelike',
@@ -210,7 +212,6 @@ void main() {
         createdAt: testTime,
       ),
     );
-    rereadWorkspace(container);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
@@ -237,7 +238,7 @@ void main() {
   testWidgets('the menu with its contexts survives the window matrix', (
     tester,
   ) async {
-    seed();
+    await seed();
     await expectSurvivesWindowMatrix(
       tester,
       // The container outlives the cells; only the tree is pumped afresh.

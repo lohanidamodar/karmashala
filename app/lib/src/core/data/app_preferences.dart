@@ -20,10 +20,7 @@ class AppPreferences implements PreferenceStore {
   Stream<void> get changes => _client.preferences.changes;
 
   @override
-  String? read(String key) {
-    _client.ensurePrimed(DataDomain.preferences);
-    return _client.preferences[key];
-  }
+  String? read(String key) => _client.preferences[key];
 
   @override
   void write(String key, String value) => _logged(key, writeStored(key, value));

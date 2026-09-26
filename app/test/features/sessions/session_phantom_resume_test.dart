@@ -10,7 +10,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -27,7 +26,9 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
@@ -70,11 +71,15 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
+/// The server each seeded database's workspace lives at.
+final _serverOf = Expando<FakeDataServer>();
+
 AppDatabase seededDatabase() {
   final db = AppDatabase.memory();
+  final server = _serverOf[db] = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
   return db;
 }
@@ -99,13 +104,14 @@ void main() {
 
   /// [locatable] false is a store home the locator could not resolve — a WSL
   /// distribution that is not running — which must never read as "absent".
-  ProviderContainer containerOver(
+  Future<ProviderContainer> containerOver(
     AppDatabase db, {
     String idPrefix = 's-',
     bool locatable = true,
-  }) => ProviderContainer(
+  }) async => ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      await _serverOf[db]!.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       commandRunnerFactoryProvider.overrideWithValue(
@@ -154,14 +160,14 @@ void main() {
 
   /// The restart: persist what is on screen, drop the container, build another
   /// over the same database. Panes come back dormant, as they do in the app.
-  ProviderContainer restart(
+  Future<ProviderContainer> restart(
     ProviderContainer first,
     AppDatabase db, {
     bool locatable = true,
-  }) {
+  }) async {
     first.read(terminalSessionsControllerProvider.notifier).persistLayout();
     first.dispose();
-    final next = containerOver(db, idPrefix: 't-', locatable: locatable);
+    final next = await containerOver(db, idPrefix: 't-', locatable: locatable);
     addTearDown(next.dispose);
     return next;
   }
@@ -172,10 +178,10 @@ void main() {
     addTearDown(db.close);
     emptyStore();
 
-    final first = containerOver(db);
+    final first = await containerOver(db);
     final sessionId = await startSession(first);
     final paneId = first.read(sessionDaoProvider).getById(sessionId)!.paneId!;
-    final next = restart(first, db);
+    final next = await restart(first, db);
     expect(
       next.read(terminalSessionsControllerProvider).livenessOf(paneId),
       PaneLiveness.restored,
@@ -215,11 +221,11 @@ void main() {
     final db = seededDatabase();
     addTearDown(db.close);
 
-    final first = containerOver(db);
+    final first = await containerOver(db);
     final sessionId = await startSession(first);
     final paneId = first.read(sessionDaoProvider).getById(sessionId)!.paneId!;
     writeConversation(sessionId);
-    final next = restart(first, db);
+    final next = await restart(first, db);
 
     final result = await next
         .read(explorerActionsProvider)
@@ -248,9 +254,9 @@ void main() {
     addTearDown(db.close);
     emptyStore();
 
-    final first = containerOver(db);
+    final first = await containerOver(db);
     final sessionId = await startSession(first);
-    final next = restart(first, db, locatable: false);
+    final next = await restart(first, db, locatable: false);
 
     final result = await next
         .read(explorerActionsProvider)
@@ -273,12 +279,12 @@ void main() {
       emptyStore();
       writeConversation('observed-elsewhere');
 
-      final first = containerOver(db);
+      final first = await containerOver(db);
       final sessionId = await startSession(first);
       first
           .read(sessionDaoProvider)
           .updateExternalSessionId(sessionId, 'observed-elsewhere');
-      final next = restart(first, db);
+      final next = await restart(first, db);
 
       final result = await next
           .read(explorerActionsProvider)
@@ -299,14 +305,18 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final first = containerOver(db);
+      final first = await containerOver(db);
       final sessionId = await startSession(first);
       final paneId = first.read(sessionDaoProvider).getById(sessionId)!.paneId!;
       if (ownWritten) writeConversation(sessionId);
       first
           .read(sessionDaoProvider)
           .updateExternalSessionId(sessionId, 'ghost');
-      return (restart(first, db, locatable: locatable), sessionId, paneId);
+      return (
+        await restart(first, db, locatable: locatable),
+        sessionId,
+        paneId,
+      );
     }
 
     test(
@@ -382,7 +392,7 @@ void main() {
       addTearDown(db.close);
       emptyStore();
 
-      final container = containerOver(db);
+      final container = await containerOver(db);
       addTearDown(container.dispose);
       final sessionId = await startSession(container);
 

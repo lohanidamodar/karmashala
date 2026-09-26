@@ -15,7 +15,6 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// **Every launch path refuses an unresolvable environment in the same words.**
 ///
@@ -184,10 +184,14 @@ void main() {
   });
 
   group('through providers', () {
-    ProviderContainer container() {
+    late FakeDataServer server;
+    setUp(() => server = FakeDataServer());
+
+    Future<ProviderContainer> container() async {
       final c = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           commandRunnerFactoryProvider.overrideWithValue(factory()),
         ],
       );
@@ -199,7 +203,9 @@ void main() {
       'the git-presence probe answers unknown rather than guessing',
       () async {
         expect(
-          await container().read(checkoutGitPresenceProvider(gone).future),
+          await (await container()).read(
+            checkoutGitPresenceProvider(gone).future,
+          ),
           GitPresence.unknown,
         );
         expect(runner.requests, isEmpty);
@@ -207,11 +213,12 @@ void main() {
     );
 
     test('creating a project on an environment that is gone refuses', () async {
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server
+        ..projectRows.insert(project())
+        ..repositoryRows.insert(repository());
 
       await expectLater(
-        container()
+        (await container())
             .read(projectsControllerProvider.notifier)
             .createProject(
               name: 'Demo',

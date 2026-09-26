@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:test/test.dart';
 
 /// [dateFromIso] runs on every date column of every row of every read, and the
 /// polling loops read the session tables about once a second — profiled at 8%

@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'package:karmashala/src/features/mcp/mcp_session_token_reaper.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -18,6 +17,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A capability token speaks for one session for as long as it is valid, so it
 /// has to stop being valid when that session stops existing.
@@ -34,16 +35,20 @@ void main() {
   late McpCallerRegistry callers;
   late McpSessionTokenReaper reaper;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final fake = FakeDataServer()..mirrorInto(db);
+    fake.projectRows.insert(project());
+    fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     sessions = SessionDao(db);
     container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        await fake.override(),
+      ],
     );
     addTearDown(container.dispose);
     callers = McpCallerRegistry();

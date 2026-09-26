@@ -4,12 +4,12 @@ import 'package:karmashala/src/features/browser/application/browser_consent_prov
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/presentation/permissions_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -20,19 +20,24 @@ import '../../support/fixtures.dart';
 /// becomes available, and the only place a grant can be taken back.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    ProjectDao(db).insert(project(id: 'p2', name: 'Other', path: r'C:\src\o'));
+    server = FakeDataServer(clock: () => testTime)
+      ..projectRows.insert(project())
+      ..projectRows.insert(project(id: 'p2', name: 'Other', path: r'C:\src\o'));
   });
 
   tearDown(() => db.close());
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        await server.override(),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(

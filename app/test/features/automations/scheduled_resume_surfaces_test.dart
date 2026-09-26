@@ -20,8 +20,8 @@ import 'scheduled_resume_harness.dart';
 void main() {
   late ResumeHarness h;
 
-  setUp(() {
-    h = ResumeHarness();
+  setUp(() async {
+    h = await ResumeHarness.create();
     h.addSession(title: 'Port the importer');
   });
   tearDown(() => h.dispose());

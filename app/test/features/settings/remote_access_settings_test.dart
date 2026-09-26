@@ -4,15 +4,14 @@ import 'package:karmashala/src/core/probe/probe_mode.dart';
 import 'package:karmashala/src/core/paths/server_data_directory.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
 import 'package:karmashala_host/server_config.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import '../../support/stored_preferences.dart';
+
+import '../../support/fake_data_server.dart';
 
 void main() {
   group('remote access is the server config, not the app settings', () {
@@ -171,18 +170,16 @@ void main() {
       expect(const Settings(localRelayPort: 9001), isNot(const Settings()));
     });
 
-    test('the controller persists the port', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('the controller persists the port', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
       final controller = container.read(settingsControllerProvider.notifier);
 
       controller.setLocalRelayPort(9001);
 
-      final stored = SettingsRepository(StoredPreferences(db)).load();
+      await pumpEventQueue();
+      final stored = SettingsRepository(server.store).load();
       expect(stored.localRelayPort, 9001);
     });
   });

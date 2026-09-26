@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/automations/presentation/automation_dial
 import 'package:karmashala/src/features/automations/presentation/automation_dry_run_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/persistence.dart';
@@ -18,6 +17,8 @@ import 'package:karmashala_store/database.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Where a person arms an event rule, reads what it will do, and rehearses it.
 void main() {
@@ -45,11 +46,12 @@ void main() {
     ),
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
@@ -57,6 +59,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
       ],
     );

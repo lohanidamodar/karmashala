@@ -21,7 +21,6 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -44,6 +43,9 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import '../../support/workspace_mirror.dart';
 
 /// **What one keystroke into a focused terminal pane costs the app around it.**
 ///
@@ -110,6 +112,8 @@ import '../../support/fixtures.dart';
 /// file that pin both halves: it stops working, and it is still there.
 void main() {
   late CountingDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late FakeCommandRunner git;
   late _Rebuilds rebuilds;
   late _WidgetBuilds widgets;
@@ -141,16 +145,18 @@ void main() {
   /// the PTY. See the guard in [mountAndFocus].
   final typed = <String>[];
 
-  setUp(() {
+  setUp(() async {
     db = CountingDatabase();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.override();
     terminals.clear();
     chatSubscriptions.clear();
     chatStreams.clear();
     statusStreams.clear();
     typed.clear();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     // Two running sessions in one repository — the owner's own workspace —
     // plus a third nothing in this file ever touches, which is what makes a
@@ -175,6 +181,7 @@ void main() {
     container = ProviderContainer(
       observers: [rebuilds],
       overrides: [
+        data,
         ...fakeTerminalOverrides(
           database: db,
           instanceFactory: _countingFactory(terminals),
@@ -716,6 +723,7 @@ void main() {
     ProviderContainer pollingContainer({required bool terminalVisible}) {
       final container = ProviderContainer(
         overrides: [
+          data,
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           chatTranscriptPollIntervalProvider.overrideWithValue(

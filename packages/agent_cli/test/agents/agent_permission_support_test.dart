@@ -301,6 +301,27 @@ void main() {
       }
     });
 
+    test('every value the v35 migration writes is one the descriptor '
+        'actually declares', () {
+      // The migration writes canonical strings by hand (karmashala_store's
+      // permission_selection_migration_test.dart pins which); this is what
+      // stops them drifting from the axes those strings have to resolve
+      // against.
+      for (final (agentId, stored) in [
+        ('claudeCode', 'mode=acceptEdits'),
+        ('codex', 'approval=on-request;sandbox=bypass-all'),
+        ('antigravity', 'mode=accept-edits'),
+      ]) {
+        final support = supportFor(agentId);
+        expect(
+          support.resolveStored(stored).canonical,
+          stored,
+          reason: '$agentId stored $stored, which does not round-trip',
+        );
+        expect(support.unknownAxes(support.resolveStored(stored)), isEmpty);
+      }
+    });
+
     test('Claude Code and Antigravity keep their exact old flags', () {
       // Argument-preserving for two of the three: no migrated session's
       // command line changes by a character.

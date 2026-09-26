@@ -1,4 +1,3 @@
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +18,7 @@ import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialo
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -37,13 +37,16 @@ void main() {
 
   late _CountingDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
 
-  setUp(() {
+  setUp(() async {
     db = _CountingDatabase();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server = FakeDataServer(clock: () => testTime);
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // The Explorer case below mounts session cards, and a widget test must
@@ -61,8 +64,7 @@ void main() {
   tearDown(() => db.close());
 
   /// The owner's own scale: 31 projects and four contexts.
-  void seed() {
-    final dao = ProjectDao(container.read(databaseProvider));
+  Future<void> seed() async {
     final workspaces = [
       for (final name in const [
         'Personal',
@@ -70,10 +72,10 @@ void main() {
         'Appwrite',
         'Game dev',
       ])
-        createContext(container, name).id,
+        (await createContext(container, name)).id,
     ];
     for (var i = 0; i < projectCount; i++) {
-      dao.insert(
+      server.projectRows.insert(
         Project(
           id: 'p$i',
           name: 'Project $i',
@@ -83,7 +85,6 @@ void main() {
         ),
       );
     }
-    rereadWorkspace(container);
   }
 
   Widget dialogApp() => UncontrolledProviderScope(
@@ -116,7 +117,7 @@ void main() {
     tester.view.physicalSize = const Size(720, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    seed();
+    await seed();
     await tester.pumpWidget(dialogApp());
     await tester.pumpAndSettle();
 
@@ -128,6 +129,7 @@ void main() {
     );
 
     db.reset();
+    final asked = server.requests.length;
     await tester.enterText(
       find.widgetWithText(TextField, 'New context'),
       'Client work',
@@ -140,7 +142,8 @@ void main() {
     // ignore: avoid_print
     print(
       'CONTEXT-CREATE projects=$projectCount rows-rebuilt=$rebuilt '
-      'writes=${db.writes} reads=${db.reads}',
+      'writes=${db.writes} reads=${db.reads} '
+      'requests=${server.requests.sublist(asked)}',
     );
 
     expect(
@@ -148,16 +151,16 @@ void main() {
       contains('Client work'),
     );
     expect(
-      db.writes,
-      1,
-      reason: 'one INSERT for the row that was created, and nothing else',
+      server.requests.sublist(asked),
+      hasLength(1),
+      reason: 'one write for the context that was created, and nothing else',
     );
     expect(
-      db.reads,
-      3,
+      db.statements,
+      0,
       reason:
-          'the server reads the context list (names must differ), looks for '
-          'the id and reads back its row — never the project list',
+          'the context is the server\'s to store; the app\'s own database is '
+          'not asked anything, least of all the project list',
     );
     expect(
       rebuilt,
@@ -172,7 +175,7 @@ void main() {
     tester.view.physicalSize = const Size(720, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    seed();
+    await seed();
     await tester.pumpWidget(dialogApp());
     await tester.pumpAndSettle();
 
@@ -207,9 +210,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    final dao = ProjectDao(container.read(databaseProvider));
     for (var i = 0; i < projectCount; i++) {
-      dao.insert(
+      server.projectRows.insert(
         Project(
           id: 'p$i',
           name: 'Project $i',
@@ -221,7 +223,6 @@ void main() {
         ),
       );
     }
-    rereadWorkspace(container);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -237,7 +238,8 @@ void main() {
     /// One whole rebuild of the panel, counted.
     Future<int> rebuildCost() async {
       db.reset();
-      rereadWorkspace(container);
+      // A row announced again, unchanged: the panel rebuilds for it.
+      server.projectRows.update(server.projectRows.getById('p0')!);
       await tester.pumpAndSettle();
       return db.statements;
     }
@@ -252,7 +254,7 @@ void main() {
     );
 
     for (final name in const ['Personal', 'PopupBits', 'Appwrite', 'Games']) {
-      createContext(container, name);
+      await createContext(container, name);
     }
     await tester.pumpAndSettle();
     final withContexts = await rebuildCost();

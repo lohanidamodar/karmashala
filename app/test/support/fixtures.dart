@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
@@ -9,40 +8,33 @@ import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/events.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
+
+import 'fake_data_server.dart';
 
 /// Fixed timestamp used across tests for determinism.
 final testTime = DateTime.utc(2026, 1, 2, 3, 4, 5);
 
-/// The app's copy of the workspace over [db], for a service built outside a
-/// container. The one place a test reaches the workspace through [db].
-WorkspaceData workspaceOver(AppDatabase db) =>
-    WorkspaceData(DataClient.inProcess(db));
+/// The app's copy of the workspace, for a service built outside a
+/// container: a client of [server].
+Future<WorkspaceData> workspaceOf(FakeDataServer server) async =>
+    WorkspaceData(await server.connect());
 
-/// A context made through [container]'s own controller, as its copy now
-/// holds it — for a test that needs it before it can wait.
-Workspace createContext(
+/// A context made through [container]'s own controller, once the server has
+/// answered it.
+Future<Workspace> createContext(
   ProviderContainer container,
   String name, {
   String? description,
-}) {
-  unawaited(
-    container
-        .read(workspacesControllerProvider.notifier)
-        .create(name, description: description),
-  );
+}) async {
+  await container
+      .read(workspacesControllerProvider.notifier)
+      .create(name, description: description);
   return container
       .read(workspacesControllerProvider)
       .singleWhere((w) => w.name == name);
 }
-
-/// After a test wrote the workspace tables itself, [container]'s copy of the
-/// workspace reads them again.
-void rereadWorkspace(ProviderContainer container) =>
-    unawaited(container.read(dataClientProvider).resync(DataDomain.workspace));
 
 ExecutionEnvironment windowsEnv({String id = 'windows'}) =>
     ExecutionEnvironment(

@@ -10,10 +10,10 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 
 /// **What `checkoutLabelsProvider` costs, in processes.**
@@ -122,27 +122,30 @@ class _GatedRunner extends FakeCommandRunner {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late _GatedRunner git;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Demo', path: _hub));
+    server.projectRows.insert(project(id: 'p1', name: 'Demo', path: _hub));
     git = _GatedRunner();
   });
   tearDown(() => db.close());
 
   void insert(List<(String, String)> rows) {
-    final dao = RepositoryDao(db);
+    final dao = server.repositoryRows;
     for (final (id, path) in rows) {
       dao.insert(repository(id: id, name: id, path: path));
     }
   }
 
-  ProviderContainer containerWith(GitFiles files) {
+  Future<ProviderContainer> containerWith(GitFiles files) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),
         ),
@@ -167,7 +170,7 @@ void main() {
     test('N checkouts of one repository cost exactly one '
         '`git worktree list`', () async {
       insert([('app', _app), ('relay', _relay), ('inbox', _inbox)]);
-      final container = containerWith(_FamilyFiles());
+      final container = await containerWith(_FamilyFiles());
 
       final labels = await inFlight(container);
       expect(git.worktreeListDirectories, [
@@ -190,7 +193,7 @@ void main() {
         ('relay', _relay),
         ('inbox', _inbox),
       ]);
-      final container = containerWith(_FamilyFiles());
+      final container = await containerWith(_FamilyFiles());
 
       final labels = await inFlight(container);
       // Four rows, two families, two processes — and both are in flight before
@@ -219,7 +222,7 @@ void main() {
         ('relay', _relay),
         ('inbox', _inbox),
       ]);
-      final container = containerWith(noGitFiles);
+      final container = await containerWith(noGitFiles);
 
       final labels = await inFlight(container);
       // One at a time, exactly as before: the second is not begun until the

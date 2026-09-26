@@ -6,13 +6,14 @@ import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Which project a browser call belongs to — the question the consent gate
 /// cannot skip.
@@ -24,17 +25,22 @@ import '../../support/fixtures.dart';
 /// a pass.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer(clock: () => testTime).mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1'));
     container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        await server.override(),
+      ],
     );
   });
 
@@ -110,14 +116,18 @@ void main() {
     );
   });
 
-  test('the grant outlives the container it was made in', () {
-    // It is written to `app_metadata`, so restarting the app does not quietly
+  test('the grant outlives the container it was made in', () async {
+    // It is kept at the server, so restarting the app does not quietly
     // re-ask — and, just as importantly, does not quietly forget a revocation.
     container
         .read(browserConsentStoreProvider)
         .grant('p1', BrowserCapability.evaluate, grantedBy: 'settings');
+    await pumpEventQueue();
     final second = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        await server.override(),
+      ],
     );
     addTearDown(second.dispose);
     expect(

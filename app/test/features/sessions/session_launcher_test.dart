@@ -7,7 +7,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -22,7 +21,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -52,17 +53,19 @@ const _talkative = AgentDescriptor(
   ),
 );
 
-({ProviderContainer container, AppDatabase db}) harness({
+Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+harness({
   Settings settings = const Settings(),
   AgentRegistry registry = const AgentRegistry([DataOnlyAgentAdapter(_rover)]),
   Set<String> missingDirectories = const {},
-}) {
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db)
     ..upsert(windowsEnv())
     ..upsert(wslEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
 
   // The same process-free terminal the controller's own tests use, so the pane
@@ -70,6 +73,7 @@ const _talkative = AgentDescriptor(
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      await server.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(registry),
@@ -81,7 +85,7 @@ const _talkative = AgentDescriptor(
       ),
     ],
   );
-  return (container: container, db: db);
+  return (container: container, db: db, server: server);
 }
 
 class _StaticSettings extends SettingsController {
@@ -93,8 +97,8 @@ class _StaticSettings extends SettingsController {
 }
 
 void main() {
-  test('a registry-only agent runs in a PTY pane, with a session row', () {
-    final h = harness();
+  test('a registry-only agent runs in a PTY pane, with a session row', () async {
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -136,7 +140,7 @@ void main() {
 
   test('permission mode comes from the purpose, in one place', () async {
     const settings = Settings();
-    final h = harness(
+    final h = await harness(
       settings: settings.withPermissions(
         'roverCli',
         const AgentPermissions(
@@ -181,7 +185,7 @@ void main() {
   });
 
   test('a launch records a mode only when one was chosen', () async {
-    final h = harness(
+    final h = await harness(
       settings: const Settings().withPermissions(
         'roverCli',
         const AgentPermissions(
@@ -227,7 +231,7 @@ void main() {
   });
 
   test('a session keeps its own mode when the global default moves', () async {
-    final h = harness(
+    final h = await harness(
       settings: const Settings().withPermissions(
         'roverCli',
         const AgentPermissions(existingSessions: bypassStored),
@@ -270,7 +274,7 @@ void main() {
   });
 
   test('a row from before v11 falls back to the agent default', () async {
-    final h = harness(
+    final h = await harness(
       settings: const Settings().withPermissions(
         'roverCli',
         const AgentPermissions(existingSessions: acceptEditsStored),
@@ -305,7 +309,7 @@ void main() {
   });
 
   test('a spawned session records its parent and is capped', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
@@ -343,14 +347,14 @@ void main() {
   });
 
   test('a spawned session names its parent in its opening prompt', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
     // The rover agent does not accept a prompt argument, so use a built-in that
     // does — the attribution is what is under test, not the delivery.
-    final claudeHarness = harness(registry: AgentRegistry.builtIn);
+    final claudeHarness = await harness(registry: AgentRegistry.builtIn);
     addTearDown(claudeHarness.db.close);
     addTearDown(claudeHarness.container.dispose);
     AgentInstallationDao(
@@ -389,7 +393,7 @@ void main() {
   });
 
   test('Claude Code is launched with our own id as its session id', () async {
-    final h = harness(registry: AgentRegistry.builtIn);
+    final h = await harness(registry: AgentRegistry.builtIn);
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     AgentInstallationDao(
@@ -417,10 +421,10 @@ void main() {
   });
 
   test('a WSL session is wrapped for wsl.exe', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    RepositoryDao(h.db).insert(
+    h.server.repositoryRows.insert(
       repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/u/app'),
     );
 
@@ -453,7 +457,7 @@ void main() {
   /// submitted it as soon as anything that is not a character came between the
   /// two. So a message now ends its typing before it presses Return.
   test('a sent message ends the typing before it presses Return', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
@@ -483,7 +487,7 @@ void main() {
   });
 
   test('answering a prompt presses the key and nothing else', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
@@ -524,7 +528,7 @@ void main() {
     // caller above reported success anyway: fan-out recorded the candidate as
     // started, and the MCP spawn tool answered "opened a new session" — so a
     // model believed its instruction had landed at an agent that came up bare.
-    final h = harness();
+    final h = await harness();
     addTearDown(h.container.dispose);
     addTearDown(h.db.close);
 
@@ -550,7 +554,7 @@ void main() {
   });
 
   test('an agent that does take one is launched with it', () async {
-    final h = harness(
+    final h = await harness(
       registry: const AgentRegistry([DataOnlyAgentAdapter(_talkative)]),
     );
     addTearDown(h.container.dispose);
@@ -591,7 +595,7 @@ void main() {
     }
 
     test('a launched session records where it was started', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -615,7 +619,7 @@ void main() {
     });
 
     test('a session joining a worktree records the worktree', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       const worktree = EnvironmentPath(
@@ -646,7 +650,7 @@ void main() {
       // The failure this closes: Claude Code and Codex key their conversation
       // stores by working directory, so a resume from the repository root can
       // silently start a *new* conversation wearing this row's title.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adoptedIn(h.db, elsewhere);
@@ -674,7 +678,7 @@ void main() {
     });
 
     test('a resume with nothing recorded still starts at the root', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       SessionDao(h.db).insert(
@@ -708,7 +712,7 @@ void main() {
       // so before the row could answer, every resume from an agent put the
       // session back in the repository root. A row written before v22 records
       // no directory but does record its worktree, which is the same fact.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       const worktree = EnvironmentPath(
@@ -744,7 +748,7 @@ void main() {
 
     test('a stated directory beats the row and the repository', () async {
       // What a handoff and a fork need: continue the work *where it is*.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -771,7 +775,7 @@ void main() {
     });
 
     test('a directory that has gone away falls back and says so', () async {
-      final h = harness(missingDirectories: const {subdirectory});
+      final h = await harness(missingDirectories: const {subdirectory});
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       adoptedIn(h.db, elsewhere);
@@ -815,7 +819,7 @@ void main() {
     // conversation, a dormant pane not reused so one session got two
     // terminals. None threw. The line is asserted rather than merely written
     // so the facts that distinguish those outcomes cannot be dropped later.
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -856,7 +860,7 @@ void main() {
   // --- restarting to apply a permission mode ---------------------------------
 
   test('a restart replaces the agent with one under the new mode', () async {
-    final h = harness(
+    final h = await harness(
       settings: const Settings().withPermissions(
         'roverCli',
         const AgentPermissions(existingSessions: askStored),
@@ -915,7 +919,7 @@ void main() {
   });
 
   test('a restart keeps a session following the default', () async {
-    final h = harness(
+    final h = await harness(
       settings: const Settings().withPermissions(
         'roverCli',
         const AgentPermissions(existingSessions: bypassStored),
@@ -955,7 +959,7 @@ void main() {
   });
 
   test('a restart is refused when the CLI has named no conversation', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
@@ -1009,7 +1013,7 @@ void main() {
     );
 
     test('refuses a pane launch', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -1030,7 +1034,7 @@ void main() {
     });
 
     test('refuses an external-terminal launch, in the same words', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 

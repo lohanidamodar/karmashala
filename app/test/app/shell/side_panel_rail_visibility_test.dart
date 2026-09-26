@@ -16,18 +16,20 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/icons.dart';
 
 import '../../features/terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/stored_preferences.dart';
 
 /// Hiding surfaces from the side panel's rail, the way VS Code's activity bar
 /// does it: a right-click lists every surface with a check, a hidden one stays
 /// reachable everywhere else, and opening it puts its glyph back while open.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     commandKeyIsMeta = false;
+    server = FakeDataServer();
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
   });
@@ -45,9 +47,11 @@ void main() {
     List<String> hidden = const [],
     int attention = 0,
   }) async {
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         attentionCountProvider.overrideWith((ref) => ref.watch(_attention)),
       ],
     );
@@ -78,7 +82,7 @@ void main() {
   );
 
   List<String> stored() =>
-      SettingsRepository(StoredPreferences(db)).load().hiddenSidePanelSurfaces;
+      SettingsRepository(server.store).load().hiddenSidePanelSurfaces;
 
   Finder checkRow(String label) => find.ancestor(
     of: find.text(label),
@@ -131,15 +135,16 @@ void main() {
       );
     });
 
-    test('the hidden set ignores ids this build does not have', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      db.writeMetadata(
+    test('the hidden set ignores ids this build does not have', () async {
+      server.store.write(
         'settings.v1',
         '{"hiddenSidePanelSurfaces":["plan","fromANewerBuild"]}',
       );
       final container = ProviderContainer(
-        overrides: [...fakeTerminalOverrides(database: db)],
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          await server.override(),
+        ],
       );
       addTearDown(container.dispose);
       expect(container.read(hiddenSidePanelSurfacesProvider), {

@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_view_mode.
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -18,10 +17,13 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 
@@ -68,14 +70,18 @@ bool _isSectionSweep(String sql) =>
 
 void main() {
   const scale = [1, 10, 100];
+  // The server the last [seed] filled; every container built after it reads it.
+  late FakeDataServer server;
 
   /// A workspace of [count] sessions on one repository, a third of them failed
   /// so the seeded "Ended in failure" section has something to hold.
   CountingDatabase seed(int count) {
     final db = CountingDatabase();
+    server = FakeDataServer()..mirrorInto(db);
+    seedDefaultSections(server);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(db).insert(
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
       repository(id: 'r1', projectId: 'p1', name: 'hub', path: r'C:\hub'),
     );
     AgentInstallationDao(db).insert(agentInstallation());
@@ -91,10 +97,14 @@ void main() {
     return db;
   }
 
-  ProviderContainer mount(CountingDatabase db, FakeCommandRunner git) {
+  Future<ProviderContainer> mount(
+    CountingDatabase db,
+    FakeCommandRunner git,
+  ) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),
@@ -121,7 +131,7 @@ void main() {
         final db = seed(count);
         addTearDown(db.close);
         final git = FakeCommandRunner();
-        final container = mount(db, git);
+        final container = await mount(db, git);
 
         // Every section open — the most expensive shape this feature has.
         final controller = container.read(explorerSectionsProvider.notifier);
@@ -208,6 +218,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -395,6 +406,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -517,4 +529,19 @@ void main() {
       );
     });
   });
+}
+
+/// The four sections a new workspace starts with — seeded by the server's
+/// own schema, which the fake does not have.
+void seedDefaultSections(FakeDataServer server) {
+  for (final (id, name, kind, position) in const [
+    ('section-pinned', 'Pinned', 'pinned', 0),
+    ('section-checks-failing', 'Checks failing', 'checksFailing', 1),
+    ('section-awaiting-input', 'Awaiting input', 'awaitingInput', 2),
+    ('section-ended-in-failure', 'Ended in failure', 'endedInFailure', 3),
+  ]) {
+    server.sectionRows.put(
+      StoredSection(id: id, name: name, kind: kind, position: position),
+    );
+  }
 }

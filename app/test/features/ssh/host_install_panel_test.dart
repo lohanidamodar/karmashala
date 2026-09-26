@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
@@ -10,9 +12,11 @@ import 'package:karmashala/src/features/ssh/application/host_install_controller.
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/primitives.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -28,11 +32,15 @@ class _Access extends RemoteAccessController {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late FakeHostBox box;
   late List<({String host, String? typed})> terminals;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer(clock: () => testTime);
+    data = await server.connect();
     box = FakeHostBox();
     terminals = [];
   });
@@ -45,6 +53,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),
         hostInstallerFactoryProvider.overrideWithValue(
@@ -258,12 +267,14 @@ void main() {
     box
       ..installed.add(kBoxThisBundle)
       ..runningServe = boxExecutable(kBoxThisBundle);
-    db.writeMetadata(
-      kSshRelaysMetadataKey,
-      '[{"hostId":"h1","hostName":"do-box","port":8787,'
-      '"url":"ws://203.0.113.9:8787/k/0123456789abcdef0123456789abcdef",'
-      '"enabled":true}]',
-    );
+    server.writeAsAnotherClient([
+      const PreferenceChanged(
+        kSshRelaysMetadataKey,
+        '[{"hostId":"h1","hostName":"do-box","port":8787,'
+        '"url":"ws://203.0.113.9:8787/k/0123456789abcdef0123456789abcdef",'
+        '"enabled":true}]',
+      ),
+    ]);
     final container = await pump(tester);
     await press(tester, 'Check');
 

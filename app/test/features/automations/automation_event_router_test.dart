@@ -48,9 +48,9 @@ void main() {
   late StreamController<SessionStatusEntry> changes;
   late _StartingFiring firing;
 
-  setUp(() {
+  setUp(() async {
     changes = StreamController<SessionStatusEntry>.broadcast(sync: true);
-    h = ResumeHarness(
+    h = await ResumeHarness.create(
       extra: [
         sessionStatusChangesProvider.overrideWithValue(changes.stream),
         automationFiringProvider.overrideWith((ref) => firing),

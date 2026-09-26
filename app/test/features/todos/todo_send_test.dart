@@ -10,7 +10,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -20,7 +19,9 @@ import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 
 import '../terminal/fake_instance.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A todo's way back to a session.
 ///
@@ -38,13 +39,16 @@ void main() {
     db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer(clock: () => testTime).mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
 
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );

@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -31,6 +30,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -75,16 +76,18 @@ class _MovableClock implements Clock {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late _MovableClock clock;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     clock = _MovableClock(testTime);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
+      repository(id: 'r1', name: 'hub', path: r'C:\hub'),
+    );
     AgentInstallationDao(db).insert(agentInstallation());
     // The owner's own database, as reported: 7 native, 107 imported.
     for (var i = 0; i < 7; i++) {
@@ -137,6 +140,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

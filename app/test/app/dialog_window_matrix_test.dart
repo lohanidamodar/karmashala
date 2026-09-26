@@ -7,7 +7,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/general_pages.dart';
@@ -28,6 +27,8 @@ import '../support/fake_command_runner.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
 import '../support/window_matrix.dart';
+import '../support/fake_data_server.dart';
+import '../support/workspace_mirror.dart';
 
 /// The six dialogs `minimum_window_matrix_test.dart` did not reach.
 ///
@@ -214,8 +215,11 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    // Sessions are still in the database, and their foreign keys reach the
+    // workspace rows the server holds.
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     // A session row points at an agent installation; without one the insert
     // fails the foreign key rather than the layout.
     AgentInstallationDao(db).insert(agentInstallation());
@@ -226,10 +230,12 @@ void main() {
       );
     }
 
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
         ...noProcessOverrides(),
+        data,
       ],
     );
     addTearDown(container.dispose);
@@ -254,9 +260,11 @@ void main() {
     // the launcher-hotkey section, which is only enabled while the switch is on.
     final db = AppDatabase.memory();
     addTearDown(db.close);
+    final data = await FakeDataServer().override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),

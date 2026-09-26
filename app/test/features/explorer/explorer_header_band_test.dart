@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/explorer/presentation/environment_rows.d
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -30,6 +29,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -39,15 +39,16 @@ import '../terminal/fake_instance.dart';
 /// its header's glyph column and on its chip, and the colour is kept.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   void seed() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     for (final (id, name) in [('w1', 'Client work'), ('w2', 'Game dev')]) {
-      WorkspaceDao(
-        db,
-      ).insert(Workspace(id: id, name: name, createdAt: testTime));
+      server.workspaceRows.insert(
+        Workspace(id: id, name: name, createdAt: testTime),
+      );
     }
-    final projects = ProjectDao(db);
+    final projects = server.projectRows;
     for (var i = 0; i < 6; i++) {
       projects.insert(
         project(
@@ -73,13 +74,15 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer();
     seed();
   });
   tearDown(() => db.close());
 
-  ProviderContainer newContainer() {
+  Future<ProviderContainer> newContainer() async {
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -110,7 +113,7 @@ void main() {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final scope = container ?? newContainer();
+    final scope = container ?? await newContainer();
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: scope,
@@ -330,7 +333,7 @@ void main() {
       await pump(tester);
       expect(find.byType(ContextHueDot), findsNothing);
       expect(
-        WorkspaceDao(db).getById('w2')!.color,
+        server.workspaceRows.getById('w2')!.color,
         isNull,
         reason: 'nothing is stored until something is picked',
       );
@@ -367,7 +370,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ContextColorDialog), findsNothing);
 
-      expect(WorkspaceDao(db).getById('w2')!.color, 'teal');
+      expect(server.workspaceRows.getById('w2')!.color, 'teal');
       expect(
         container
             .read(workspacesControllerProvider)
@@ -454,7 +457,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ContextHueDot), findsNothing);
-      expect(WorkspaceDao(db).getById('w1')!.color, isNull);
+      expect(server.workspaceRows.getById('w1')!.color, isNull);
     });
 
     testWidgets('is offered in Manage contexts, on the row\'s glyph', (
@@ -472,7 +475,7 @@ void main() {
       await tester.tap(find.byTooltip('Violet'));
       await tester.pumpAndSettle();
 
-      expect(WorkspaceDao(db).getById('w2')!.color, 'violet');
+      expect(server.workspaceRows.getById('w2')!.color, 'violet');
       expect(
         find.descendant(
           of: find.byType(WorkspacesDialog),
@@ -486,12 +489,12 @@ void main() {
     testWidgets('a name no build knows is no colour, not a crash', (
       tester,
     ) async {
-      WorkspaceDao(db).updateColor('w1', 'chartreuse');
+      server.workspaceRows.updateColor('w1', 'chartreuse');
       await pump(tester);
       expect(tester.takeException(), isNull);
       expect(find.byType(ContextHueDot), findsNothing);
       expect(
-        WorkspaceDao(db).getById('w1')!.color,
+        server.workspaceRows.getById('w1')!.color,
         'chartreuse',
         reason: 'kept as stored, for the build that named it',
       );

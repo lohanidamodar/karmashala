@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -18,7 +17,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -92,15 +93,18 @@ class _StaticSettings extends SettingsController {
   Settings build() => const Settings();
 }
 
-({ProviderContainer container, AppDatabase db}) harness() {
+Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
+harness() async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: 'exclusive'));
 
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       // Never shell out: an external launch must not open a real terminal.
@@ -112,7 +116,7 @@ class _StaticSettings extends SettingsController {
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );
-  return (container: container, db: db);
+  return (container: container, db: db, server: server);
 }
 
 const _fixedTerminal = SystemTerminal(
@@ -172,7 +176,7 @@ void writeToPane(ProviderContainer container, String paneId, String text) {
 
 void main() {
   test('a live pane of ours is the one thing we can be certain of', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -186,7 +190,7 @@ void main() {
   });
 
   test('a dead pane showing the agent\'s refusal is proof of a holder', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -206,7 +210,7 @@ void main() {
   });
 
   test('a dead pane with ordinary output claims nothing', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -223,7 +227,7 @@ void main() {
   });
 
   test('an external surface is a record, never a claim', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -238,8 +242,8 @@ void main() {
     expect(where.hostedLive, isFalse);
   });
 
-  test('a session we know nothing about says nothing', () {
-    final h = harness();
+  test('a session we know nothing about says nothing', () async {
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -261,12 +265,14 @@ void main() {
       ),
     );
     final db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'exclusive'));
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // Never shell out: an external launch must not open a real terminal.
@@ -298,7 +304,7 @@ void main() {
     // The fallback for a resume the store probe could not predict. The user
     // saw this exact pane and read it as lost work; the row now carries the
     // agent's own answer instead of still saying "running here".
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -332,12 +338,14 @@ void main() {
       ),
     );
     final db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'exclusive'));
     final container = ProviderContainer(
       overrides: [
+        await server.override(),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
@@ -367,7 +375,7 @@ void main() {
     // A pane rebuilt from disk holds the *previous* run's output, so an answer
     // in there is not evidence about this one — and reading it would build the
     // buffer the restore deliberately kept unparsed.
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
@@ -459,7 +467,7 @@ void main() {
       // binary: mode support belongs to the installation, and the app declares
       // the newest set it has read. The user used to see the raw
       // `error: invalid value …` and an agent that would not start.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 

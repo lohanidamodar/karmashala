@@ -3,12 +3,13 @@ import 'package:karmashala/src/features/environments/application/environment_res
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import 'worktree_processes.dart';
 
 const _repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
@@ -352,8 +353,9 @@ void main() {
   group('the agent-timing setting', () {
     test('defaults to starting at once, and a wait survives a save', () {
       final dao = WorktreeSetupDao(db);
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      final server = FakeDataServer()..mirrorInto(db);
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       final now = DateTime.utc(2026, 9, 21);
       dao.save('r1', const WorktreeSetup(command: ['make']), now);
       expect(dao.get('r1').startAgentBeforeSetup, isTrue);

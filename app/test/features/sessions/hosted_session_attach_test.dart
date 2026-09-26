@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +12,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/session_launch_tools.dart';
 import 'package:karmashala/src/features/mcp/session_tools.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
@@ -24,6 +25,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/instances.dart'
     show hostSessionIdFor;
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -46,6 +49,8 @@ Future<void> _settle() async {
 /// a conversation the agent may not have written yet.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late SessionDao dao;
   late FakeHostLifecycle host;
   late ProviderContainer container;
@@ -53,11 +58,13 @@ void main() {
   late ConversationPresence presence;
   late List<String> endedAtHost;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     dao = SessionDao(db);
     // Writes nothing: what the rows say is set by each test, so a write by
@@ -68,6 +75,7 @@ void main() {
     endedAtHost = [];
     container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),

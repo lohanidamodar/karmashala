@@ -4,7 +4,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter/gestures.dart';
@@ -20,11 +19,13 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import 'package:karmashala_notes/store.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
+  late FakeDataServer server;
+
   /// The panel this lives in, at the width it actually gets on a desktop.
   ///
   /// [platform] is what decides the density — a mouse or a thumb — and so
@@ -37,18 +38,23 @@ void main() {
   }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
+    server = FakeDataServer()..mirrorInto(db);
     if (withSession) {
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
     }
+    final data = await server.override();
     // Faked terminals, because a Send with nothing selected resolves through
     // `focusedSessionIdProvider` and so reaches the real controller — whose
     // autosave timer would outlive the tree. Same overrides the Todos row's
     // send test takes, for the same reason.
     final container = ProviderContainer(
-      overrides: fakeTerminalOverrides(database: db),
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        data,
+      ],
     );
     addTearDown(container.dispose);
     if (withSession) {
@@ -177,10 +183,7 @@ void main() {
     // Rendering a 60-line note in a 320px panel must not overflow.
     expect(tester.takeException(), isNull);
     // Clipping is a display choice; the stored note is whole.
-    expect(
-      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
-      long,
-    );
+    expect(server.notes[note.id]!.body, long);
   });
 
   testWidgets('the menu opens a note in its own tab', (tester) async {
@@ -211,7 +214,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(container.read(notesProvider), hasLength(1));
-    expect(NoteDao(container.read(databaseProvider)).list(), hasLength(1));
+    expect(server.notes.values, hasLength(1));
   });
 
   testWidgets('a note is deleted once the delete is confirmed', (tester) async {
@@ -224,7 +227,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(notesProvider), isEmpty);
-    expect(NoteDao(container.read(databaseProvider)).list(), isEmpty);
+    expect(server.notes.values, isEmpty);
     expect(find.textContaining('No notes yet.'), findsOneWidget);
   });
 

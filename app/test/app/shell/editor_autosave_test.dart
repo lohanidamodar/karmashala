@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/editor/data/document_store.dart';
 import 'package:karmashala/src/features/editor/domain/source_document.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
@@ -26,6 +25,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 const _path = r'C:\repo\lib\counter.dart';
 const _initial = 'void main() {}\n';
@@ -79,12 +79,14 @@ class _Store extends DocumentStore {
 void main() {
   late CountingDatabase db;
   late _Store store;
+  late FakeDataServer server;
 
   setUp(() {
+    server = FakeDataServer();
     db = CountingDatabase();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     store = _Store();
   });
@@ -103,9 +105,11 @@ void main() {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         documentStoreProvider.overrideWithValue(store),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

@@ -13,15 +13,18 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/git/presentation/diff_tab_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Reading a change happens in a tab; the sidebar only says what changed.**
 ///
@@ -78,14 +81,18 @@ CommandResult _git(CommandRequest request) {
 }
 
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   late CountingDatabase db;
   late FakeCommandRunner git;
 
-  setUp(() {
+  setUp(() async {
     db = CountingDatabase();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -95,6 +102,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),
         ),

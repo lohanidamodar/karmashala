@@ -28,10 +28,10 @@ import 'package:xterm2/xterm.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
-import '../../support/stored_preferences.dart';
 import 'package:karmashala/src/core/data/metadata_keys.dart';
 
 /// The application lifecycle owner.
@@ -193,7 +193,7 @@ void main() {
       await lifecycle.shutdown();
 
       expect(
-        () => db.readMetadata(MetadataKeys.firstRunAt),
+        () => db.query('SELECT 1;'),
         throwsA(anything),
         reason: 'the handle outlived the shutdown that owns it',
       );
@@ -776,10 +776,12 @@ void main() {
     test(
       'a workspace that has discovered before sweeps for new agents',
       () async {
-        db.writeMetadata(
+        final server = FakeDataServer();
+        server.store.write(
           MetadataKeys.agentsDiscoveredAt,
           '2026-07-28T00:00:00Z',
         );
+        final data = await server.override();
         ExecutionEnvironmentDao(db).upsert(windowsEnv());
         final runner = FakeCommandRunner(
           responder: (req) =>
@@ -788,6 +790,7 @@ void main() {
         final scoped = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            data,
             commandRunnerFactoryProvider.overrideWithValue(
               FakeCommandRunnerFactory(fallback: runner),
             ),
@@ -803,7 +806,7 @@ void main() {
         expect(runner.requests, isNotEmpty);
         expect(
           AgentProbeLog(
-            StoredPreferences(db),
+            server.store,
           ).hasProbed(AgentIds.antigravity, 'windows'),
           isTrue,
         );

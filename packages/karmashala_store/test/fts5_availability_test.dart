@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:test/test.dart';
 
 /// **FTS5 is a compile-time option, so its absence is a runtime failure.**
 ///

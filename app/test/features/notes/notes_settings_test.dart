@@ -1,6 +1,4 @@
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_settings_section.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -11,8 +9,8 @@ import 'package:karmashala/src/features/settings/presentation/settings_screen.da
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import '../../support/stored_preferences.dart';
-import 'package:karmashala_notes/store.dart';
+
+import '../../support/fake_data_server.dart';
 
 void main() {
   group('the setting', () {
@@ -31,12 +29,9 @@ void main() {
       expect(Settings.fromJson(const {}).notesEnabled, isTrue);
     });
 
-    test('the controller persists it', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('the controller persists it at the server', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
 
       container
@@ -44,10 +39,8 @@ void main() {
           .setNotesEnabled(false);
 
       expect(container.read(notesEnabledProvider), isFalse);
-      expect(
-        SettingsRepository(StoredPreferences(db)).load().notesEnabled,
-        isFalse,
-      );
+      await pumpEventQueue();
+      expect(SettingsRepository(server.store).load().notesEnabled, isFalse);
     });
   });
 
@@ -84,12 +77,9 @@ void main() {
       );
     });
 
-    test('hides the feature and keeps the notes', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+    test('hides the feature and keeps the notes', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
       container
           .read(notesProvider.notifier)
@@ -109,7 +99,8 @@ void main() {
         isNot(contains(SidePanelSurface.notes)),
       );
       // …and not destroyed. Turning it back on brings the same list back.
-      expect(NoteDao(container.read(databaseProvider)).list(), hasLength(1));
+      await pumpEventQueue();
+      expect(server.notes, hasLength(1));
       container.read(settingsControllerProvider.notifier).setNotesEnabled(true);
       expect(
         container.read(notesProvider).single.body,
@@ -120,11 +111,8 @@ void main() {
 
   group('Settings → General → Notes', () {
     testWidgets('is reachable and drives the controller', (tester) async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
-      );
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;

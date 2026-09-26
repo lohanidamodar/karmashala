@@ -19,9 +19,9 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -54,20 +54,23 @@ import '../../support/fixtures.dart';
 /// are ratcheted here like the others.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db)
+    server.projectRows
       ..insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'))
       ..insert(project(id: 'p2', name: 'Beta', path: r'C:\src\beta'));
   });
   tearDown(() => db.close());
 
-  ProviderContainer container() {
+  Future<ProviderContainer> container() async {
     final c = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // A project row asks git what its checkout has changed. A widget test
@@ -93,7 +96,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       UncontrolledProviderScope(
-        container: scope ?? container(),
+        container: scope ?? await container(),
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.dark(),
@@ -154,8 +157,8 @@ void main() {
     });
 
     testWidgets('the context chips are one more row, and 27px', (tester) async {
-      final c = container();
-      createContext(c, 'Game dev');
+      final c = await container();
+      await createContext(c, 'Game dev');
       await pumpPanel(
         tester,
         window: const Size(1440, 900),
@@ -304,7 +307,7 @@ void main() {
     testWidgets('every segment wears the mark of what it is, and the one in '
         'scope is the one marked', (tester) async {
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
-      final c = container();
+      final c = await container();
       // Wide enough that `build-box` — nine squares in the test font — fits
       // beside a glyph; narrower, the strip rightly drops the glyphs for
       // whole names (explorer_scope_test pins where).
@@ -348,7 +351,7 @@ void main() {
         ..upsert(sshEnvFixture())
         ..upsert(wslEnv())
         ..upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
-      final c = container();
+      final c = await container();
       await pumpPanel(
         tester,
         window: const Size(1440, 900),
@@ -375,8 +378,8 @@ void main() {
     testWidgets('a context is a label over its projects, with no glyph', (
       tester,
     ) async {
-      final c = container();
-      final games = createContext(c, 'Game dev');
+      final c = await container();
+      final games = await createContext(c, 'Game dev');
       await c
           .read(workspacesControllerProvider.notifier)
           .assign('p1', games.id);

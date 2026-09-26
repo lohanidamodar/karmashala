@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -23,7 +22,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The project header's aggregate, and the card's diff stat under it.
 ///
@@ -42,13 +43,15 @@ import '../../support/fixtures.dart';
 /// cards beneath are drawn.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late FakeCommandRunner git;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     git = FakeCommandRunner(
       responder: (request) {
@@ -106,6 +109,7 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: git),

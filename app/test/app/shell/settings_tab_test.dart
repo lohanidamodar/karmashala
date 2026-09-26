@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_tab_view.dart';
@@ -24,6 +23,8 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// **Settings is a workbench tab, not a route over the window.**
 ///
@@ -41,12 +42,16 @@ import '../../support/fixtures.dart';
 /// the tab on screen**.
 void main() {
   late CountingDatabase db;
+  late FakeDataServer server;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = CountingDatabase();
+    server = FakeDataServer();
+    data = await server.override();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -54,6 +59,7 @@ void main() {
   ProviderContainer shellContainer() {
     final container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db),
         // Nothing here may shell out or read a real Ghostty/Warp directory:
         // the settings pages this opens probe both.

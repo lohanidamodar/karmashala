@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -35,8 +34,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// **A session's own tick repaints that session's row, not the Explorer.**
@@ -64,14 +65,16 @@ class _NoStores implements CliDetectionService {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(
-      db,
-    ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
+      repository(id: 'r1', name: 'hub', path: r'C:\hub'),
+    );
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < 6; i++) {
       SessionDao(db).insert(
@@ -118,6 +121,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

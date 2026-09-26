@@ -9,7 +9,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/mcp/workspace_tools.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -18,7 +17,9 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../fanout/fanout_harness.dart' as fanout;
 
 /// A worktree isolates one repository. A multi-repo session has more than one.
@@ -40,14 +41,16 @@ void main() {
   late AppDatabase db;
   late SessionRepositoriesService service;
   late SessionRepositoryDao links;
+  late FakeDataServer server;
 
   /// A project with three checkouts, which is the shape this is about: an `app`
   /// each session worktrees, and `api` and `docs` that nobody does.
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1'));
-    RepositoryDao(db)
+    server.projectRows.insert(project(id: 'p1'));
+    server.repositoryRows
       ..insert(repository(id: 'r-app', projectId: 'p1', name: 'app'))
       ..insert(
         repository(
@@ -69,7 +72,7 @@ void main() {
     links = SessionRepositoryDao(db);
     service = SessionRepositoriesService(
       sessionDao: SessionDao(db),
-      workspace: workspaceOver(db),
+      workspace: await workspaceOf(server),
       linkDao: links,
     );
   });
@@ -289,7 +292,10 @@ void main() {
 
     test('list_checkouts names the occupants of each checkout', () async {
       final container = ProviderContainer(
-        overrides: [databaseProvider.overrideWithValue(db)],
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          await server.override(),
+        ],
       );
       addTearDown(container.dispose);
 
@@ -345,12 +351,12 @@ void main() {
       // and a fake git, so worktree creation and the session rows are the
       // production code path. A second repository is added to the project it
       // builds — the multi-repo shape this whole file is about.
-      final h = fanout.harness();
+      final h = await fanout.connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      RepositoryDao(
-        h.db,
-      ).insert(repository(id: 'r-api', name: 'api', path: r'C:\src\demo\api'));
+      h.server.repositoryRows.insert(
+        repository(id: 'r-api', name: 'api', path: r'C:\src\demo\api'),
+      );
 
       final launched = await h.container
           .read(fanOutServiceProvider)
@@ -404,7 +410,7 @@ void main() {
       // bind the same port. Derived, so it survives a restart — and a
       // namespace rather than a lock, so this asserts distinctness for the
       // ids actually minted and claims nothing stronger.
-      final h = fanout.harness();
+      final h = await fanout.connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -434,6 +440,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           selectedSessionIdProvider.overrideWith(() => _FixedSelection('s1')),
         ],
       );

@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/handoff_packet_files.dart';
@@ -36,7 +35,9 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/temp_directory.dart';
 
@@ -234,9 +235,13 @@ class _StaticSettings extends SettingsController {
   Settings build() => _settings;
 }
 
-typedef Harness = ({ProviderContainer container, AppDatabase db});
+typedef Harness = ({
+  ProviderContainer container,
+  AppDatabase db,
+  FakeDataServer server,
+});
 
-Harness harness({
+Future<Harness> harness({
   Settings settings = const Settings(),
   String? transcriptPath,
   SessionDelivery? repoState = const SessionDelivery(
@@ -252,11 +257,12 @@ Harness harness({
   String? sourceAnswer,
   SessionWaitState waitState = SessionWaitState.done,
   SessionBlock? blockedOn,
-}) {
+}) async {
   final db = AppDatabase.memory();
+  final server = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(db)
     ..insert(agentInstallation(id: 'a1', agentId: 'forker'))
     ..insert(agentInstallation(id: 'a2', agentId: 'mute'));
@@ -279,6 +285,7 @@ Harness harness({
 
   final container = ProviderContainer(
     overrides: [
+      await server.override(),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
@@ -324,7 +331,7 @@ Harness harness({
       ),
     ],
   );
-  return (container: container, db: db);
+  return (container: container, db: db, server: server);
 }
 
 /// A Claude-shaped transcript on disk, so the real reader parses it.
@@ -370,24 +377,27 @@ void seedSession(
 
 void main() {
   group('targets', () {
-    test('offers every installed agent, marking the one already running it', () {
-      final h = harness();
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      seedSession(h.db);
+    test(
+      'offers every installed agent, marking the one already running it',
+      () async {
+        final h = await harness();
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        seedSession(h.db);
 
-      final targets = h.container
-          .read(sessionHandoffServiceProvider)
-          .targetsFor('src');
-      expect(targets.map((t) => t.agentName), ['Forker CLI', 'Mute CLI']);
-      // The same agent is offered too: "continue this in a fresh session" is a
-      // real answer to a full context window.
-      expect(targets.first.isSameAgent, isTrue);
-      expect(targets.last.isSameAgent, isFalse);
-    });
+        final targets = h.container
+            .read(sessionHandoffServiceProvider)
+            .targetsFor('src');
+        expect(targets.map((t) => t.agentName), ['Forker CLI', 'Mute CLI']);
+        // The same agent is offered too: "continue this in a fresh session" is a
+        // real answer to a full context window.
+        expect(targets.first.isSameAgent, isTrue);
+        expect(targets.last.isSameAgent, isFalse);
+      },
+    );
 
-    test('refuses a target that cannot be handed an opening prompt', () {
-      final h = harness();
+    test('refuses a target that cannot be handed an opening prompt', () async {
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -403,8 +413,8 @@ void main() {
       expect(mute.refusal, contains('knowing nothing'));
     });
 
-    test('carries the session mode, refusing to escalate it', () {
-      final h = harness();
+    test('carries the session mode, refusing to escalate it', () async {
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -419,8 +429,8 @@ void main() {
       expect(mute.permission.enforced, isFalse);
     });
 
-    test('a session that never chose is measured against each target', () {
-      final h = harness(
+    test('a session that never chose is measured against each target', () async {
+      final h = await harness(
         settings: const Settings()
             .withPermissions(
               'forker',
@@ -453,8 +463,8 @@ void main() {
 
     test(
       'a session that no longer exists offers nothing rather than throwing',
-      () {
-        final h = harness();
+      () async {
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         expect(
@@ -471,7 +481,7 @@ void main() {
         ('user', 'Parse the header.'),
         ('agent', 'Done, in lib/a.dart.'),
       ]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -504,7 +514,7 @@ void main() {
     });
 
     test('a transcript that cannot be located is stated, not faked', () async {
-      final h = harness(transcriptPath: null);
+      final h = await harness(transcriptPath: null);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -531,7 +541,7 @@ void main() {
       () async {
         // The other half of the same distinction: no external id means the CLI
         // never opened a conversation, which is genuinely "nothing was said".
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, externalSessionId: null);
@@ -552,7 +562,7 @@ void main() {
     );
 
     test('git refusing to answer is an admission, not a clean tree', () async {
-      final h = harness(repoState: null);
+      final h = await harness(repoState: null);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -592,7 +602,7 @@ void main() {
 
     test('carries what the session decided, ahead of what it said', () async {
       final path = writeTranscript([('user', 'Parse the header.')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -640,7 +650,9 @@ void main() {
     });
 
     test('a session that recorded nothing says "not recorded"', () async {
-      final h = harness(transcriptPath: writeTranscript([('user', 'Hi.')]));
+      final h = await harness(
+        transcriptPath: writeTranscript([('user', 'Hi.')]),
+      );
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -664,7 +676,7 @@ void main() {
       final path = writeTranscript([
         for (var i = 0; i < 80; i++) ('user', 'turn $i ${'.' * 200}'),
       ]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -713,7 +725,7 @@ void main() {
 
     test('starts the target through the launcher and links the two', () async {
       final path = writeTranscript([('user', 'hello')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -744,7 +756,7 @@ void main() {
 
     test('runs under the mode the user picked for the target', () async {
       final path = writeTranscript([('user', 'hello')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -777,7 +789,7 @@ void main() {
       'a handoff of a session that never chose keeps following the default',
       () async {
         final path = writeTranscript([('user', 'hello')]);
-        final h = harness(
+        final h = await harness(
           transcriptPath: path,
           settings: const Settings().withPermissions(
             'forker',
@@ -810,7 +822,7 @@ void main() {
 
     test('a picked mode the target cannot express is not escalated', () async {
       final path = writeTranscript([('user', 'hello')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -840,7 +852,7 @@ void main() {
     });
 
     test('refuses a target that cannot receive the packet', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -868,7 +880,7 @@ void main() {
     test(
       'refuses an empty instruction, saying why it is the user\'s part',
       () async {
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db);
@@ -897,7 +909,7 @@ void main() {
     test(
       'a native fork runs the CLI\'s own fork arguments, not a packet',
       () async {
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db);
@@ -925,7 +937,7 @@ void main() {
     );
 
     test('a fork runs under the mode the user picked for it', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -948,7 +960,7 @@ void main() {
     test(
       'a fork of a session that never chose keeps following the default',
       () async {
-        final h = harness(
+        final h = await harness(
           settings: const Settings().withPermissions(
             'forker',
             const AgentPermissions(newSessions: bypassStored),
@@ -978,7 +990,7 @@ void main() {
     );
 
     test('a fork stamps a mode that had to be reduced to fit the agent', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       // A row naming a mode this build of Forker does not have — what a newer
@@ -1013,7 +1025,7 @@ void main() {
     });
 
     test('a second fork of the same conversation is numbered', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -1030,7 +1042,7 @@ void main() {
       'a conversation with no CLI id degrades to a handoff, and says so',
       () async {
         final path = writeTranscript([('user', 'hello')]);
-        final h = harness(transcriptPath: path);
+        final h = await harness(transcriptPath: path);
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, externalSessionId: null);
@@ -1062,7 +1074,7 @@ void main() {
     test(
       'an agent that declares no fork is refused before anything runs',
       () async {
-        final h = harness();
+        final h = await harness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         seedSession(h.db, installationId: 'a2');
@@ -1087,7 +1099,7 @@ void main() {
   group('lineage', () {
     test('a handoff and a fork show up on the parent, told apart', () async {
       final path = writeTranscript([('user', 'hello')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -1118,7 +1130,7 @@ void main() {
 
     test('the child knows what it came from, and by which route', () async {
       final path = writeTranscript([('user', 'hello')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db);
@@ -1152,7 +1164,7 @@ void main() {
     );
 
     test('a native fork continues in the source session\'s directory', () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
@@ -1176,7 +1188,7 @@ void main() {
 
     test('a handoff continues in the source session\'s directory', () async {
       final path = writeTranscript([('user', 'hello')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
@@ -1199,7 +1211,7 @@ void main() {
     test('a fork into a new worktree goes to the worktree, not here', () async {
       // `intoNewWorktree` is the user asking for a clean checkout. Carrying the
       // source directory across would put the branch back where it came from.
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
@@ -1218,7 +1230,7 @@ void main() {
 
     test('the packet names the directory the work is actually in', () async {
       final path = writeTranscript([('user', 'hello')]);
-      final h = harness(transcriptPath: path);
+      final h = await harness(transcriptPath: path);
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       seedSession(h.db, workingDirectory: elsewhere);
@@ -1243,7 +1255,7 @@ void main() {
     // characters into `[Pasted text #N]` — the difference between the next
     // agent reading the brief and reading a placeholder.
     final path = writeTranscript([('user', 'hello')]);
-    final h = harness(transcriptPath: path);
+    final h = await harness(transcriptPath: path);
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     seedSession(h.db);
@@ -1290,7 +1302,7 @@ void main() {
 
     test('is handed over as a file when the target takes one', () async {
       final dir = tempDirectory();
-      final h = harness(
+      final h = await harness(
         transcriptPath: writeTranscript([('user', 'hello')]),
         packetDirectory: dir,
       );
@@ -1339,7 +1351,7 @@ void main() {
 
     test('stays in the opening prompt for a target that takes none', () async {
       final dir = tempDirectory();
-      final h = harness(
+      final h = await harness(
         transcriptPath: writeTranscript([('user', 'hello')]),
         packetDirectory: dir,
       );
@@ -1366,7 +1378,7 @@ void main() {
 
     test('says in the diagnostics which channel each CLI got', () async {
       final dir = tempDirectory();
-      final h = harness(
+      final h = await harness(
         transcriptPath: writeTranscript([('user', 'hello')]),
         packetDirectory: dir,
       );
@@ -1427,7 +1439,7 @@ void main() {
   group("the source agent's own brief", () {
     test('asks with the compaction prompt and quotes what came back', () async {
       final path = writeTranscript([('user', 'Parse the header.')]);
-      final h = harness(
+      final h = await harness(
         transcriptPath: path,
         sourceAnswer: 'Progress: the header parses. Next: the body.',
       );
@@ -1462,7 +1474,7 @@ void main() {
       final path = writeTranscript([('user', 'Parse the header.')]);
       // No `sourceAnswer`: the request is delivered and the transcript never
       // moves, which is exactly a session that ignored it.
-      final h = harness(
+      final h = await harness(
         transcriptPath: path,
         waitState: SessionWaitState.timeout,
       );
@@ -1498,7 +1510,7 @@ void main() {
 
     test('a source stopped for a person is not sent to at all', () async {
       final path = writeTranscript([('user', 'Parse the header.')]);
-      final h = harness(
+      final h = await harness(
         transcriptPath: path,
         sourceAnswer: 'never reached',
         blockedOn: const SessionBlock(

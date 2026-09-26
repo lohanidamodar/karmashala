@@ -14,7 +14,6 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/activity_by_day_view.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -23,8 +22,10 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import 'explorer_default_view_test.dart' show explorerSemanticsDump;
 
 /// **The by-day lens is a separate view.** It swaps the Explorer's body and
@@ -33,6 +34,7 @@ import 'explorer_default_view_test.dart' show explorerSemanticsDump;
 /// exactly as it was left.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   final now = DateTime.utc(2026, 9, 21, 12);
 
   EnvironmentPath at(String path) =>
@@ -40,6 +42,7 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     AgentInstallationDao(db).insert(agentInstallation());
     // Enough projects that the tree scrolls.
@@ -51,10 +54,10 @@ void main() {
         _ => 'Project $i',
       };
       final path = 'C:\\src\\${name.toLowerCase().replaceAll(' ', '')}';
-      ProjectDao(db).insert(project(id: id, name: name, path: path));
-      RepositoryDao(
-        db,
-      ).insert(repository(id: 'r$i', projectId: id, name: name, path: path));
+      server.projectRows.insert(project(id: id, name: name, path: path));
+      server.repositoryRows.insert(
+        repository(id: 'r$i', projectId: id, name: name, path: path),
+      );
     }
     void insert(String id, String repo, DateTime created, {String? worktree}) =>
         SessionDao(db).insert(
@@ -90,6 +93,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(now)),
         commandRunnerFactoryProvider.overrideWithValue(

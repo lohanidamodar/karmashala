@@ -9,16 +9,19 @@ import 'package:karmashala/src/features/git/application/review_threads.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **What one provider moving costs the file list.**
 ///
@@ -50,6 +53,8 @@ import '../../support/fixtures.dart';
 /// repainted every open diff whenever `git worktree list` answered would undo
 /// what the rest of this file measures.
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   const paths = [
     'lib/main.dart',
     'lib/src/app.dart',
@@ -109,7 +114,7 @@ void main() {
   late List<GitWorktree> worktrees;
   late AppDatabase db;
 
-  setUp(() {
+  setUp(() async {
     changes = files;
     commits = const [head];
     delivery = const SessionDelivery(
@@ -123,8 +128,10 @@ void main() {
     // checkout it offers to return to.
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
   });
   tearDown(() => db.close());
 
@@ -135,6 +142,7 @@ void main() {
         // the terminal controller and leave its autosave timer pending.
         activeDiffFileProvider.overrideWithValue(null),
         databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         selectedRepositoryIdProvider.overrideWith(_FixedRepository.new),
         repositoryChangesProvider.overrideWith((ref) async {
           // Watched, so "reading another worktree" reaches the list the way it

@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -21,10 +20,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
-import 'package:karmashala_notes/store.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 
 /// A clock stuck at [testTime], so a captured note's timestamps are checkable.
 class _FixedClock implements Clock {
@@ -34,6 +33,7 @@ class _FixedClock implements Clock {
 }
 
 void main() {
+  late FakeDataServer server;
   const messages = [
     TranscriptMessage(
       role: 'user',
@@ -52,14 +52,20 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer(
+      clock: () => testTime,
+      repositoryOfSession: {'s1': 'r1'},
+    )..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         // Fakes for everything this view pulls in that would otherwise poll a
         // process or leave a timer running past the widget tree.
         ...fakeTerminalOverrides(database: db),
+        data,
         clockProvider.overrideWithValue(const _FixedClock()),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
@@ -123,8 +129,8 @@ void main() {
     expect(note.sourceMessageOrdinal, 1);
     expect(note.createdAt, testTime);
 
-    // And it is in the database, not only in memory.
-    expect(NoteDao(container.read(databaseProvider)).list().single.id, note.id);
+    // And it is at the server, not only in this copy.
+    expect(server.notes.keys.single, note.id);
 
     // Let the confirmation and the button's "saved" flash expire.
     await tester.pump(const Duration(seconds: 5));

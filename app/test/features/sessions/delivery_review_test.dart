@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -6,7 +8,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -23,6 +24,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -50,12 +53,16 @@ import '../terminal/fake_instance.dart';
 /// strip invented — which is what keeps the permission cap on it.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db)
       // `a1` did the work; `a2` is the only agent that could check it.
       ..insert(agentInstallation())
@@ -116,6 +123,7 @@ void main() {
 
   Widget strip({bool hostedOnTerminal = false}) => ProviderScope(
     overrides: [
+      dataClientProvider.overrideWithValue(data),
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('revsid')),

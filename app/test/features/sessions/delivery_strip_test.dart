@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:async';
 
 import 'package:karmashala_ui/icons.dart';
@@ -9,7 +11,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:karmashala_git/github.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_update_service.dart';
@@ -27,6 +28,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -92,18 +95,22 @@ class _RecordingArchive extends SessionArchiveService {
 void main() {
   late _Recorder recorder;
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
 
   const worktree = EnvironmentPath(
     environmentId: 'windows',
     path: r'C:\src\.karmashala-worktrees\app-s1',
   );
 
-  setUp(() {
+  setUp(() async {
     recorder = _Recorder();
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       Session(
@@ -139,6 +146,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
@@ -182,6 +190,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sessionDeliveryProvider.overrideWith(
@@ -710,6 +719,7 @@ void main() {
   }) {
     final container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionDeliveryProvider.overrideWith((ref, _) async => delivery),

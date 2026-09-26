@@ -18,7 +18,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_tree_provi
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -30,8 +29,10 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 
@@ -58,8 +59,9 @@ void main() {
   late FakeCommandRunner git;
   late _EveryHead files;
 
-  CountingDatabase seed() {
+  CountingDatabase seed(FakeDataServer server) {
     final db = CountingDatabase();
+    server.mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(posixEnv());
     AgentInstallationDao(db).insert(agentInstallation());
     db.execute('BEGIN');
@@ -67,8 +69,10 @@ void main() {
       // Padded: projects list by creation and then id, and these share a time.
       final p = '$i'.padLeft(4, '0');
       final path = '/Users/me/Documents/projects/client-$p/workspace-$p';
-      ProjectDao(db).insert(project(id: 'p$p', name: 'Project $p', path: path));
-      RepositoryDao(db).insert(
+      server.projectRows.insert(
+        project(id: 'p$p', name: 'Project $p', path: path),
+      );
+      server.repositoryRows.insert(
         repository(id: 'r$p', projectId: 'p$p', name: 'repo', path: path),
       );
       // Sessions on the first screenful only: the rest are there to be
@@ -101,7 +105,8 @@ void main() {
     tester.view.physicalSize = const Size(700, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final db = seed();
+    final server = FakeDataServer();
+    final db = seed(server);
     files = _EveryHead();
     addTearDown(db.close);
     git = FakeCommandRunner(
@@ -119,6 +124,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db, gitFiles: files),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

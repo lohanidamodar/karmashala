@@ -10,13 +10,13 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -24,19 +24,22 @@ void main() {
   late AppDatabase db;
   late FakeRepositoryDiscoveryService discovery;
   late ProviderContainer container;
+  late FakeDataServer server;
 
   EnvironmentPath root(String path) =>
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer(clock: () => testTime);
     discovery = FakeRepositoryDiscoveryService(
       result: [DiscoveredRepository(name: 'app', path: root(r'C:\ws\app'))],
     );
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -81,20 +84,23 @@ void main() {
       addTearDown(() => folder.deleteSync(recursive: true));
     });
 
-    void addProject({required String path}) => ProjectDao(db).insert(
-      Project(
-        id: 'legacy',
-        name: 'Plain folder',
-        root: EnvironmentPath(
-          environmentId: localHostEnvironmentId,
-          path: path,
+    Future<void> addProject({required String path}) async {
+      server.projectRows.insert(
+        Project(
+          id: 'legacy',
+          name: 'Plain folder',
+          root: EnvironmentPath(
+            environmentId: localHostEnvironmentId,
+            path: path,
+          ),
+          createdAt: testTime,
         ),
-        createdAt: testTime,
-      ),
-    );
+      );
+      await pumpEventQueue();
+    }
 
     test('records the project\'s own folder when nothing else is', () async {
-      addProject(path: folder.path);
+      await addProject(path: folder.path);
 
       final checkout = await container
           .read(projectsControllerProvider.notifier)
@@ -103,7 +109,10 @@ void main() {
       expect(checkout.path.path, folder.path);
       expect(checkout.projectId, 'legacy');
       // Recorded, not conjured: every other surface reads the same row.
-      expect(RepositoryDao(db).getByProject('legacy').single.id, checkout.id);
+      expect(
+        server.repositoryRows.getByProject('legacy').single.id,
+        checkout.id,
+      );
     });
 
     test('leaves a project that already has a checkout alone', () async {
@@ -111,17 +120,20 @@ void main() {
           .read(projectsControllerProvider.notifier)
           .createByDiscovery(name: 'Workspace', path: r'C:\ws');
 
-      final before = RepositoryDao(db).getByProject(created.project.id);
+      final before = server.repositoryRows.getByProject(created.project.id);
       final checkout = await container
           .read(projectsControllerProvider.notifier)
           .ensureRunLocation(created.project.id);
 
       expect(checkout.id, before.single.id);
-      expect(RepositoryDao(db).getByProject(created.project.id), hasLength(1));
+      expect(
+        server.repositoryRows.getByProject(created.project.id),
+        hasLength(1),
+      );
     });
 
     test('refuses when the folder itself is not there, and names it', () async {
-      addProject(path: r'C:\src\gone');
+      await addProject(path: r'C:\src\gone');
 
       await expectLater(
         container
@@ -135,7 +147,7 @@ void main() {
           ),
         ),
       );
-      expect(RepositoryDao(db).getByProject('legacy'), isEmpty);
+      expect(server.repositoryRows.getByProject('legacy'), isEmpty);
     });
   });
 

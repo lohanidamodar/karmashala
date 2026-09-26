@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'comparison_fixtures.dart';
@@ -20,8 +21,9 @@ Widget givenMinimumWindow(Widget child) => Align(
 );
 
 void main() {
-  ProviderContainer prepared() {
-    final db = seedDatabase();
+  Future<ProviderContainer> prepared() async {
+    final server = FakeDataServer();
+    final db = seedDatabase(server: server);
     AgentInstallationDao(db)
       ..insert(agentInstallation(id: 'a1', agentId: 'claudeCode'))
       ..insert(agentInstallation(id: 'a2', agentId: 'codex'));
@@ -29,6 +31,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
@@ -51,7 +54,7 @@ void main() {
   testWidgets('the fan-out dialog sizes to its box, not the screen', (
     tester,
   ) async {
-    final container = prepared();
+    final container = await prepared();
     await expectSurvivesWindowMatrix(
       tester,
       matrix: const [desktopWindow, desktopLargeText],
@@ -61,7 +64,7 @@ void main() {
   });
 
   testWidgets('and so does its setup form', (tester) async {
-    final container = prepared();
+    final container = await prepared();
     await expectSurvivesWindowMatrix(
       tester,
       matrix: const [desktopWindow, desktopLargeText],

@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/unresumable_sessions.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -28,8 +27,10 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
@@ -119,11 +120,15 @@ void main() {
       ..writeAsStringSync('{"type":"user","cwd":"C:\\\\src\\\\demo\\\\app"}\n');
   }
 
+  // The server the last [seededDatabase] filled.
+  late FakeDataServer server;
+
   AppDatabase seededDatabase({bool withCodex = false}) {
     final db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
     if (withCodex) {
       AgentInstallationDao(
@@ -136,13 +141,13 @@ void main() {
   late _MovableClock clock;
   late _CountingLocator locator;
 
-  ProviderContainer containerOver(
+  Future<ProviderContainer> containerOver(
     AppDatabase db, {
     bool locatable = true,
     List<AgentAdapter> agents = const [
       ClaudeCodeAdapter(descriptor: _claudeish),
     ],
-  }) {
+  }) async {
     clock = _MovableClock(testTime);
     locator = _CountingLocator([
       if (locatable)
@@ -157,6 +162,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(clock),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -227,7 +233,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       final id = seedDeadRow(container);
 
       await container.read(unresumableSessionsProvider.notifier).refresh();
@@ -245,7 +251,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       final id = seedDeadRow(container);
       writeConversation(id);
 
@@ -262,7 +268,7 @@ void main() {
       // The stopped WSL distribution, and the reason `unknown` exists.
       final db = seededDatabase();
       addTearDown(db.close);
-      final container = containerOver(db, locatable: false);
+      final container = await containerOver(db, locatable: false);
       final id = seedDeadRow(container);
 
       await container.read(unresumableSessionsProvider.notifier).refresh();
@@ -282,7 +288,7 @@ void main() {
         final db = seededDatabase();
         addTearDown(db.close);
         Directory(storeHome()).createSync(recursive: true);
-        final container = containerOver(db);
+        final container = await containerOver(db);
         seedDeadRow(container);
 
         await container.read(unresumableSessionsProvider.notifier).refresh();
@@ -300,7 +306,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       await startSession(container);
 
       await container.read(unresumableSessionsProvider.notifier).refresh();
@@ -314,7 +320,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       final id = await startSession(container);
       // Old enough that the grace window has nothing to say about it.
       clock.advance(const Duration(days: 3));
@@ -336,7 +342,7 @@ void main() {
       final db = seededDatabase(withCodex: true);
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(
+      final container = await containerOver(
         db,
         agents: const [
           ClaudeCodeAdapter(descriptor: _claudeish),
@@ -365,7 +371,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       await startSession(container);
 
       await container.read(unresumableSessionsProvider.notifier).refresh();
@@ -384,7 +390,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       for (var i = 0; i < 25; i++) {
         seedDeadRow(container, id: 'dead-$i');
       }
@@ -407,7 +413,7 @@ void main() {
       // row in an environment the sweep never read so it stays `unknown`.
       ExecutionEnvironmentDao(db).upsert(wslEnv());
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       final dead = seedDeadRow(container, id: 'dead-1');
       container
           .read(sessionDaoProvider)
@@ -453,7 +459,7 @@ void main() {
         final db = seededDatabase();
         addTearDown(db.close);
         emptyStore();
-        final container = containerOver(db);
+        final container = await containerOver(db);
         final live = await startSession(container);
         seedDeadRow(container, id: 'dead-1');
 
@@ -475,7 +481,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       seedDeadRow(container, id: 'dead-1');
       final notifier = container.read(unresumableSessionsProvider.notifier);
       await notifier.refresh();
@@ -491,7 +497,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       final id = seedDeadRow(container, title: 'Refactor the parser');
 
       final notifier = container.read(unresumableSessionsProvider.notifier);
@@ -520,7 +526,7 @@ void main() {
         final db = seededDatabase();
         addTearDown(db.close);
         emptyStore();
-        final container = containerOver(db);
+        final container = await containerOver(db);
         final id = seedDeadRow(container);
 
         final notifier = container.read(unresumableSessionsProvider.notifier);
@@ -545,7 +551,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
       final id = seedDeadRow(container);
 
       await expectLater(
@@ -575,7 +581,7 @@ void main() {
         // a conversation they asked to replace.
         final db = seededDatabase();
         addTearDown(db.close);
-        final container = containerOver(db, locatable: false);
+        final container = await containerOver(db, locatable: false);
         final id = seedDeadRow(container);
 
         await expectLater(
@@ -611,7 +617,7 @@ void main() {
         final db = seededDatabase();
         addTearDown(db.close);
         emptyStore();
-        final container = containerOver(db);
+        final container = await containerOver(db);
         final live = await startSession(container);
 
         final launched = await container
@@ -636,7 +642,7 @@ void main() {
       // unreachable store may still hold that conversation.
       final db = seededDatabase();
       addTearDown(db.close);
-      final container = containerOver(db, locatable: false);
+      final container = await containerOver(db, locatable: false);
       final id = seedDeadRow(container);
 
       final notifier = container.read(unresumableSessionsProvider.notifier);
@@ -654,7 +660,7 @@ void main() {
       final db = seededDatabase();
       addTearDown(db.close);
       emptyStore();
-      final container = containerOver(db);
+      final container = await containerOver(db);
 
       final launched = await container
           .read(sessionLauncherProvider)

@@ -1,4 +1,3 @@
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
@@ -10,19 +9,23 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeDataServer server;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server = FakeDataServer(clock: () => testTime);
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
@@ -37,11 +40,10 @@ void main() {
       container.read(workspacesControllerProvider.notifier);
 
   void seedProjects() {
-    final dao = ProjectDao(container.read(databaseProvider));
-    dao.insert(project(id: 'p1', name: 'Karmashala'));
-    dao.insert(project(id: 'p2', name: 'Roguelike'));
-    dao.insert(project(id: 'p3', name: 'Journal'));
-    rereadWorkspace(container);
+    server.projectRows
+      ..insert(project(id: 'p1', name: 'Karmashala'))
+      ..insert(project(id: 'p2', name: 'Roguelike'))
+      ..insert(project(id: 'p3', name: 'Journal'));
   }
 
   group('deleting a context', () {

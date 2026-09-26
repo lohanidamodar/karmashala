@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -20,8 +19,9 @@ import 'package:karmashala_store/database.dart';
 
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
+import '../../../support/fake_data_server.dart';
 import '../../../support/fixtures.dart';
-import '../../../support/stored_preferences.dart';
+import '../../../support/workspace_mirror.dart';
 
 /// Records the start instead of launching an agent: what is under test is that
 /// the command reaches the Explorer's own start, with the right arguments.
@@ -44,12 +44,14 @@ class _RecordingExplorerActions extends ExplorerActions {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Karmashala'));
-    RepositoryDao(db).insert(repository(name: 'app'));
+    server.projectRows.insert(project(name: 'Karmashala'));
+    server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db)
       ..insert(session(id: 's1', title: 'Fix login redirect'))
@@ -60,9 +62,11 @@ void main() {
   late _RecordingExplorerActions explorer;
 
   Future<ProviderContainer> open(WidgetTester tester) async {
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         explorerActionsProvider.overrideWith(_RecordingExplorerActions.new),
       ],
     );
@@ -132,7 +136,7 @@ void main() {
     expect(explorer.starts, [(repositoryId: 'r1', installationId: 'a1')]);
     expect(find.byType(QuickOpen), findsNothing);
     // Fully resolved, so it can be run again from an empty box.
-    expect(TypedCommandHistory(StoredPreferences(db)).list(), [
+    expect(TypedCommandHistory(server.store).list(), [
       'start Karmashala claude',
     ]);
     expect(container.read(selectedProjectIdProvider), 'p1');
@@ -156,7 +160,7 @@ void main() {
 
     expect(explorer.starts, isEmpty);
     expect(find.byType(QuickOpen), findsOneWidget);
-    expect(TypedCommandHistory(StoredPreferences(db)).list(), isEmpty);
+    expect(TypedCommandHistory(server.store).list(), isEmpty);
   });
 
   testWidgets('an uninstalled agent is shown disabled, not hidden, and Tab '
@@ -182,7 +186,7 @@ void main() {
 
     expect(container.read(selectedSessionIdProvider), 's1');
     expect(find.byType(QuickOpen), findsNothing);
-    expect(TypedCommandHistory(StoredPreferences(db)).list(), [
+    expect(TypedCommandHistory(server.store).list(), [
       'resume fix-login-redirect',
     ]);
   });
@@ -190,9 +194,7 @@ void main() {
   testWidgets('an empty box offers history first; Enter runs it again', (
     tester,
   ) async {
-    TypedCommandHistory(
-      StoredPreferences(db),
-    ).record('resume write-the-release-notes');
+    TypedCommandHistory(server.store).record('resume write-the-release-notes');
     final container = await open(tester);
 
     expect(find.text('RECENT COMMANDS'), findsOneWidget);

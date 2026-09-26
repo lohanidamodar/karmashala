@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -28,9 +27,11 @@ import 'package:karmashala/src/features/repositories/application/repository_prov
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// The Explorer drawn as a tree: **Project → Session**, and deliberately
@@ -53,6 +54,7 @@ import '../terminal/fake_instance.dart';
 /// pane is actually dragged between.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late FakeCommandRunner git;
 
   /// The host runner the reveal helper shells out on: its requests are the
@@ -73,9 +75,10 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(db)
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows
       ..insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'))
       ..insert(repository(id: 'r2', name: 'app', path: r'C:\hub\projects\app'))
       ..insert(repository(id: 'r3', name: 'lib', path: r'C:\hub\projects\lib'));
@@ -123,6 +126,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...fakeTerminalOverrides(database: db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -404,7 +408,7 @@ void main() {
       // A path on a remote host has no host spelling at all, so the entry would
       // always fail — it must be absent, not present and inert.
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
-      ProjectDao(db).insert(
+      server.projectRows.insert(
         project(
           id: 'p2',
           name: 'Remote',
@@ -412,7 +416,7 @@ void main() {
           path: '/srv/work',
         ),
       );
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(
           id: 'r4',
           projectId: 'p2',
@@ -582,7 +586,7 @@ void main() {
       // clamps to: the title, which is the only thing identifying the session,
       // and the sub-path of a clone buried five folders down, which is the
       // string a hub project makes long.
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(
           id: 'r4',
           name: 'clone',

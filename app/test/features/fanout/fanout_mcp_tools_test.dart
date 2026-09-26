@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'comparison_fixtures.dart';
 
@@ -26,10 +27,14 @@ void main() {
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_fanout_mcp_');
-    db = seedDatabase();
+    final data = FakeDataServer();
+    db = seedDatabase(server: data);
     addTearDown(db.close);
     container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        await data.override(),
+      ],
     );
     server = LauncherControlServer(container);
     await server.start(

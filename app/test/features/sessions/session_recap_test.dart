@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_view_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -27,7 +26,9 @@ import 'package:karmashala/src/features/sessions/presentation/session_recap_card
 import '../terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
 
 void main() {
@@ -50,7 +51,7 @@ void main() {
         AgentIds.codex,
         AgentIds.antigravity,
       ]) {
-        final h = harness(
+        final h = await harness(
           agentId: agentId,
           transcript: _transcript(agentId: agentId),
         );
@@ -71,7 +72,7 @@ void main() {
 
   group('the command each CLI is asked with', () {
     test('Claude Code: `claude -p <prompt>`, conversation on stdin', () async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         transcript: _transcript(),
       );
@@ -88,7 +89,7 @@ void main() {
     });
 
     test('Codex: `codex exec <prompt>`, conversation on stdin', () async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.codex,
         transcript: _transcript(agentId: AgentIds.codex),
       );
@@ -103,7 +104,7 @@ void main() {
     });
 
     test('Antigravity: `agy --print`, conversation in the prompt', () async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.antigravity,
         transcript: _transcript(agentId: AgentIds.antigravity),
       );
@@ -124,7 +125,7 @@ void main() {
     });
 
     test('the model is asked for, and stored as what was asked', () async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         transcript: _transcript(),
         model: 'haiku',
@@ -149,7 +150,7 @@ void main() {
     test(
       'a conversation too long for the wire says so in its own text',
       () async {
-        final h = harness(
+        final h = await harness(
           agentId: AgentIds.claudeCode,
           transcript: _transcript(padTurns: 60, padBytes: 2000),
         );
@@ -173,7 +174,7 @@ void main() {
 
   group('nothing produces a recap but the action', () {
     test('a launch, an end and a restore spawn nothing', () async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         transcript: _transcript(),
       );
@@ -193,7 +194,7 @@ void main() {
 
       // Restore: a fresh container over the same database, exactly as a
       // relaunch reads it.
-      final again = harness(
+      final again = await harness(
         agentId: AgentIds.claudeCode,
         transcript: _transcript(),
         db: h.db,
@@ -228,7 +229,7 @@ void main() {
 
   group('a session with no readable transcript', () {
     test('refuses in the chat view reading own words', () async {
-      final h = harness(
+      final h = await harness(
         agentId: AgentIds.claudeCode,
         transcript: null,
         chatView: const SessionChatView.read(
@@ -270,7 +271,7 @@ void main() {
         writtenAt: testTime.subtract(const Duration(hours: 3)),
       );
 
-      await tester.pumpWidget(_card(db: db, turnsNow: 4));
+      await tester.pumpWidget(await _card(db: db, turnsNow: 4));
       await tester.pump();
 
       expect(find.text('Recap'), findsOneWidget);
@@ -291,7 +292,7 @@ void main() {
       addTearDown(db.close);
       SessionRecapDaoWriter.seed(db, turnCount: 4, writtenAt: testTime);
 
-      await tester.pumpWidget(_card(db: db, turnsNow: 9));
+      await tester.pumpWidget(await _card(db: db, turnsNow: 9));
       await tester.pump();
 
       expect(
@@ -305,7 +306,7 @@ void main() {
       final db = _seededDb();
       addTearDown(db.close);
 
-      await tester.pumpWidget(_card(db: db, turnsNow: 4));
+      await tester.pumpWidget(await _card(db: db, turnsNow: 4));
       await tester.pump();
 
       expect(find.text('Recap'), findsNothing);
@@ -321,7 +322,7 @@ typedef RecapHarness = ({
   FakeCommandRunner runner,
 });
 
-RecapHarness harness({
+Future<RecapHarness> harness({
   required String agentId,
   required String? transcript,
   String? model,
@@ -331,7 +332,7 @@ RecapHarness harness({
   ),
   AppDatabase? db,
   FakeCommandRunner? runner,
-}) {
+}) async {
   final database = db ?? _seededDb(agentId: agentId);
   final fake =
       runner ??
@@ -346,6 +347,7 @@ RecapHarness harness({
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: database),
+      await _serverOf[database]!.override(),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: fake),
@@ -373,11 +375,15 @@ RecapHarness harness({
   return (container: container, db: database, runner: fake);
 }
 
+/// The server each seeded database's workspace lives at.
+final _serverOf = Expando<FakeDataServer>();
+
 AppDatabase _seededDb({String agentId = AgentIds.claudeCode}) {
   final db = AppDatabase.memory();
+  final server = _serverOf[db] = FakeDataServer()..mirrorInto(db);
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(
     db,
   ).insert(agentInstallation(id: 'a1', agentId: agentId));
@@ -466,18 +472,20 @@ abstract final class SessionRecapDaoWriter {
   }
 }
 
-Widget _card({required AppDatabase db, required int turnsNow}) => ProviderScope(
-  overrides: [
-    ...fakeTerminalOverrides(database: db),
-    clockProvider.overrideWithValue(FixedClock(testTime)),
-    sessionChatTranscriptProvider.overrideWith(
-      (ref, id) => Stream.value([
-        for (var i = 0; i < turnsNow; i++)
-          const TranscriptMessage(role: 'agent', text: 'x'),
-      ]),
-    ),
-  ],
-  child: const MaterialApp(
-    home: Scaffold(body: SessionRecapCard(sessionId: 's1')),
-  ),
-);
+Future<Widget> _card({required AppDatabase db, required int turnsNow}) async =>
+    ProviderScope(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        await _serverOf[db]!.override(),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        sessionChatTranscriptProvider.overrideWith(
+          (ref, id) => Stream.value([
+            for (var i = 0; i < turnsNow; i++)
+              const TranscriptMessage(role: 'agent', text: 'x'),
+          ]),
+        ),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(body: SessionRecapCard(sessionId: 's1')),
+      ),
+    );

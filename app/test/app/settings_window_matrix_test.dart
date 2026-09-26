@@ -4,6 +4,7 @@ import '../support/memory_server_config.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -14,7 +15,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
@@ -53,6 +53,7 @@ import '../support/fakes.dart';
 import '../support/fixtures.dart';
 import '../features/ssh/fake_host_box.dart';
 import '../support/window_matrix.dart';
+import '../support/fake_data_server.dart';
 
 /// The settings surfaces — pages, their cards and the dialogs they open — with
 /// user data of realistic length: host names, distro names, project names and
@@ -91,6 +92,15 @@ const settingsMatrix = [
 ];
 
 void main() {
+  // The workspace and the preferences are the server's; every container here
+  // reads them through a client of this one.
+  late FakeDataServer server;
+  late Override data;
+  setUp(() async {
+    server = FakeDataServer();
+    data = await server.override();
+  });
+
   testWidgets('Environments section with a long SSH host name', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
@@ -117,12 +127,13 @@ void main() {
     ExecutionEnvironmentDao(
       db,
     ).upsert(sshEnvFixture(name: 'build-box-in-the-basement-with-a-long-name'));
-    ProjectDao(
-      db,
-    ).insert(project(environmentId: 'ssh:h1', path: '/home/dlohani/src/demo'));
+    server.projectRows.insert(
+      project(environmentId: 'ssh:h1', path: '/home/dlohani/src/demo'),
+    );
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -163,6 +174,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -214,24 +226,24 @@ void main() {
       ExecutionEnvironmentDao(db)
         ..upsert(windowsEnv())
         ..upsert(wslEnv(id: 'wsl:$longDistro', distro: longDistro));
-      WorkspaceDao(
-        db,
-      ).insert(Workspace(id: 'w1', name: longContext, createdAt: testTime));
-      ProjectDao(db).insert(
+      server.workspaceRows.insert(
+        Workspace(id: 'w1', name: longContext, createdAt: testTime),
+      );
+      server.projectRows.insert(
         project(
           environmentId: 'wsl:$longDistro',
           path: '/home/dlohani/src/demo',
           workspaceId: 'w1',
         ),
       );
-      RepositoryDao(db).insert(
+      server.repositoryRows.insert(
         repository(
           name: longCheckout,
           environmentId: 'wsl:$longDistro',
           path: '/home/dlohani/src/demo/app',
         ),
       );
-      ProjectDao(db).setDefaultRepository('p1', 'r1');
+      server.projectRows.setDefaultRepository('p1', 'r1');
       return db;
     }
 
@@ -239,6 +251,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           ...noProcessOverrides(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -251,7 +264,7 @@ void main() {
     testWidgets('EditProjectDialog', (tester) async {
       final db = seeded();
       final container = containerFor(db);
-      final edited = ProjectDao(db).getById('p1')!;
+      final edited = server.projectRows.getById('p1')!;
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(container, EditProjectDialog(project: edited)),
@@ -343,6 +356,7 @@ void main() {
         overrides: [
           ...noProcessOverrides(),
           databaseProvider.overrideWithValue(routes),
+          data,
           sshCompanionSetupProvider.overrideWith(
             (ref, host) async => _InvitingSetup(host),
           ),
@@ -367,6 +381,7 @@ void main() {
         overrides: [
           ...noProcessOverrides(),
           databaseProvider.overrideWithValue(routes),
+          data,
           sshCompanionSetupProvider.overrideWith(
             (ref, host) async => _InvitingSetup(host),
           ),
@@ -484,6 +499,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         discoveredTerminalThemesProvider.overrideWithValue(const []),
@@ -526,6 +542,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           ...noProcessOverrides(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           discoveredTerminalThemesProvider.overrideWithValue(const []),
@@ -629,6 +646,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         discoveredTerminalThemesProvider.overrideWithValue(const []),

@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -15,12 +17,13 @@ import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.d
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/read.dart' show FileEditKind;
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_changed_files_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -57,6 +60,8 @@ class _FixedLocator implements SessionTranscriptLocator {
 /// git fallback is the checkpoint chain, which is already in the database.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late Directory tmp;
   late _FixedLocator locator;
   late FakeCodexAppServer codex;
@@ -79,6 +84,7 @@ void main() {
   ProviderContainer containerFor() => ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
+      dataClientProvider.overrideWithValue(data),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       agentStoreServersProvider.overrideWith((ref) {
         final pool = poolFor(db);
@@ -133,16 +139,18 @@ void main() {
   Future<SessionChangedFilesReport> read(ProviderContainer container) =>
       container.read(sessionChangedFilesServiceProvider).read('s1');
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     tmp = Directory.systemTemp.createTempSync('karmashala_changed_');
     started = [];
     locator = _FixedLocator(null);
     codex = codexAnswering(<String, Object?>{'data': <Object?>[]});
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ExecutionEnvironmentDao(db).upsert(wslEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
   });
 
   tearDown(() {

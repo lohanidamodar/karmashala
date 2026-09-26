@@ -9,13 +9,14 @@ import 'package:agent_cli/read.dart' show CodexStoreServerClient;
 import 'package:karmashala/src/features/cli_detection/application/agent_store_server_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
@@ -37,8 +38,9 @@ void main() {
     server = FakeCodexAppServer();
     runner = FakeCommandRunner(processFactory: (_) => server);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
   });
   tearDown(() => db.close());
 

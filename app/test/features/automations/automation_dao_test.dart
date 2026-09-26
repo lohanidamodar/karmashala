@@ -6,14 +6,16 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
   late AutomationDao dao;
   late ProjectCheckDao checks;
+  late FakeDataServer server;
 
   Automation nightly({
     String id = 'auto1',
@@ -36,8 +38,9 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     dao = AutomationDao(db);
     checks = ProjectCheckDao(db);
   });
@@ -111,7 +114,7 @@ void main() {
 
     test('a retired checkout takes its automations with it', () {
       dao.insert(nightly());
-      RepositoryDao(db).delete('r1');
+      server.repositoryRows.delete('r1');
       expect(dao.getAll(), isEmpty);
     });
   });

@@ -5,12 +5,14 @@ import 'package:karmashala/src/features/cli_detection/application/launched_sessi
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Learning which Codex conversation a session **we launched** is on.
 ///
@@ -28,6 +30,7 @@ import '../../support/fixtures.dart';
 void main() {
   late AppDatabase db;
   late SessionDao dao;
+  late WorkspaceData workspace;
 
   const conversation = '01a05c73-912d-7bf3-84cc-a1bb591134aa';
   const other = '019a0c34-2cc6-7002-bc5b-3184f3b7332f';
@@ -35,11 +38,13 @@ void main() {
 
   final launchedAt = testTime;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    workspace = await workspaceOf(server);
     AgentInstallationDao(db).insert(agentInstallation(agentId: AgentIds.codex));
     AgentInstallationDao(
       db,
@@ -94,7 +99,7 @@ void main() {
       LaunchedSessionAttributionService(
         sessionDao: dao,
         installationDao: AgentInstallationDao(db),
-        workspace: workspaceOver(db),
+        workspace: workspace,
         environmentDao: ExecutionEnvironmentDao(db),
         agents: AgentRegistry.builtIn,
         scanStores: () async => detected,
@@ -118,7 +123,7 @@ void main() {
     final subject = LaunchedSessionAttributionService(
       sessionDao: dao,
       installationDao: AgentInstallationDao(db),
-      workspace: workspaceOver(db),
+      workspace: workspace,
       environmentDao: ExecutionEnvironmentDao(db),
       agents: AgentRegistry.builtIn,
       scanStores: () async => [codexSession(conversation)],
@@ -257,7 +262,7 @@ void main() {
     final subject = LaunchedSessionAttributionService(
       sessionDao: dao,
       installationDao: AgentInstallationDao(db),
-      workspace: workspaceOver(db),
+      workspace: workspace,
       environmentDao: ExecutionEnvironmentDao(db),
       agents: AgentRegistry.builtIn,
       scanStores: () async => throw const FileSystemException$('unreadable'),

@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_view_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -19,6 +18,8 @@ import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -101,10 +102,11 @@ void main() {
     AgentRegistry? registry,
   }) {
     final db = AppDatabase.memory();
+    final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
     SessionDao(db).insert(
       Session(

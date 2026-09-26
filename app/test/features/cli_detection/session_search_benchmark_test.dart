@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/cli_detection/application/conversation_i
 import 'package:karmashala/src/features/cli_detection/application/session_search.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
@@ -22,6 +21,8 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Times the DAO's writes: `package:sqlite3` is synchronous, so this is the
 /// share of indexing that lands on the isolate that draws.
@@ -240,8 +241,9 @@ void main() {
       final db = AppDatabase.open(dbDir);
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
+      final server = FakeDataServer()..mirrorInto(db);
+      server.projectRows.insert(project());
+      server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       final sessions = SessionDao(db);
       db.transaction(() {

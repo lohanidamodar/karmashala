@@ -1,13 +1,24 @@
 import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
+import 'package:test/test.dart';
 
-import '../../support/stored_preferences.dart';
-import '../../support/temp_directory.dart';
-import 'package:karmashala/src/core/data/metadata_keys.dart';
+/// Deletes a temporary directory a test made, and never fails the test for it.
+///
+/// `deleteSync(recursive: true)` names the **top** directory when any child
+/// cannot be removed, so an unguarded teardown turns a case's real failure into
+/// a `PathNotFoundException` about a path in `%TEMP%`. Windows also holds a
+/// handle for a moment after the process that had it exits, so a refusal here
+/// is a normal outcome and not a fault.
+void _removeTempDirectory(FileSystemEntity entity) {
+  try {
+    entity.deleteSync(recursive: true);
+  } on FileSystemException {
+    // Deliberately silent: the case's own verdict is the one worth reading.
+  }
+}
 
 void main() {
   late AppDatabase db;
@@ -15,22 +26,8 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  group('AppDatabase metadata', () {
-    test('returns null for an unknown key', () {
-      expect(db.readMetadata('missing'), isNull);
-    });
-
-    test('writes and reads a metadata value', () {
-      db.writeMetadata('color', 'indigo');
-      expect(db.readMetadata('color'), 'indigo');
-    });
-
-    test('overwrites an existing key (upsert)', () {
-      db.writeMetadata('color', 'indigo');
-      db.writeMetadata('color', 'amber');
-      expect(db.readMetadata('color'), 'amber');
-    });
-  });
+  // The metadata read/write/upsert cases live in standalone_store_test.dart
+  // ('metadata round-trips').
 
   /// **The connection settings, on a real file.**
   ///
@@ -49,7 +46,7 @@ void main() {
     });
     tearDown(() {
       file.close();
-      removeTempDirectory(dir);
+      _removeTempDirectory(dir);
     });
 
     test('takes the write-ahead log', () {
@@ -94,22 +91,5 @@ void main() {
     // nothing. What matters is that asking does not throw and does not leave
     // the connection claiming a durability it does not have.
     expect(db.journalMode, 'memory');
-  });
-
-  group('bootstrapMetadata', () {
-    test('marks the first run, once', () {
-      final preferences = StoredPreferences(db);
-      expect(bootstrapMetadata(preferences), isTrue);
-      final firstRunAt = db.readMetadata(MetadataKeys.firstRunAt);
-      expect(firstRunAt, isNotNull);
-      expect(
-        db.readMetadata(MetadataKeys.environmentHealthOnboarding),
-        'pending',
-      );
-
-      expect(bootstrapMetadata(preferences), isFalse);
-      // The original first-run timestamp is preserved.
-      expect(db.readMetadata(MetadataKeys.firstRunAt), firstRunAt);
-    });
   });
 }

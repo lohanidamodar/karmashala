@@ -4,6 +4,7 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
@@ -13,7 +14,6 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_app_pro
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/github/presentation/github_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/ports.dart';
@@ -26,6 +26,7 @@ import 'package:karmashala_ui/theme.dart';
 import '../features/browser/fake_browser.dart';
 import '../features/flutter_apps/fake_vm_service.dart';
 import '../support/fake_command_runner.dart';
+import '../support/fake_data_server.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
 import '../support/window_matrix.dart';
@@ -244,15 +245,20 @@ void main() {
     });
 
     testWidgets('TodosView with no todos', (tester) async {
+      final server = FakeDataServer();
+      server.projectRows.insert(project());
+      final data = await server.connect();
       await expectSurvivesWindowMatrix(
         tester,
         build: () {
           final db = AppDatabase.memory();
           addTearDown(db.close);
           ExecutionEnvironmentDao(db).upsert(windowsEnv());
-          ProjectDao(db).insert(project());
           final container = ProviderContainer(
-            overrides: [databaseProvider.overrideWithValue(db)],
+            overrides: [
+              databaseProvider.overrideWithValue(db),
+              dataClientProvider.overrideWithValue(data),
+            ],
           );
           addTearDown(container.dispose);
           return UncontrolledProviderScope(

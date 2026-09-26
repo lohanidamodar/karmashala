@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/settings/presentation/settings_catalog.d
 
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
 
 class _Store extends DocumentStore {
   _Store(this.mode);
@@ -118,16 +119,24 @@ void main() {
     testWidgets('the controller persists it', (tester) async {
       final db = CountingDatabase();
       addTearDown(db.close);
+      final server = FakeDataServer();
       final first = ProviderContainer(
-        overrides: [...fakeTerminalOverrides(database: db)],
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          await server.override(),
+        ],
       );
       first.read(settingsControllerProvider.notifier)
         ..setEditorAutoSave(EditorAutoSave.off)
         ..setEditorAutoSaveDelay(999999);
       first.dispose();
+      await tester.pump();
 
       final second = ProviderContainer(
-        overrides: [...fakeTerminalOverrides(database: db)],
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          await server.override(),
+        ],
       );
       addTearDown(second.dispose);
       final settings = second.read(settingsControllerProvider);

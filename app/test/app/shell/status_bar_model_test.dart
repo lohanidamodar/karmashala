@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
@@ -24,6 +23,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
 
 /// **What a model change costs the window's own row — which is now nothing.**
 ///
@@ -52,16 +52,19 @@ void main() {
 
   setUp(() => service = FakeAgentUsageService());
 
-  ProviderContainer barContainer() {
-    final db = seedUsageDatabase();
+  Future<ProviderContainer> barContainer() async {
+    final server = FakeDataServer();
+    final db = seedUsageDatabase(server: server);
     addTearDown(db.close);
     // A name long enough to compete for the row's width at 720px, which is
     // where a second chip's arrival is felt.
-    RepositoryDao(db).insert(
+    server.repositoryRows.insert(
       repository(id: 'r2', name: 'karmashala-app-desktop-shell', path: r'C:\s'),
     );
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
+        data,
         ...fakeTerminalOverrides(database: db, usageService: service),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
@@ -97,7 +100,7 @@ void main() {
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
+    final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
 
@@ -131,7 +134,7 @@ void main() {
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
+    final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
 
@@ -152,7 +155,7 @@ void main() {
     // The narrowing this row was asked for: the CLI store sweep renames rows on
     // a timer, without the user doing anything at all.
     service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
+    final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
 
@@ -172,7 +175,7 @@ void main() {
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
+    final container = await barContainer();
     container.read(sessionLauncherProvider).setModel('s1', 'sonnet');
     await expectSurvivesWindowMatrix(
       tester,
@@ -192,7 +195,7 @@ void main() {
     // problem; the session bar owns it now, where it is the one label that
     // gives way.
     service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
+    final container = await barContainer();
     container
         .read(sessionLauncherProvider)
         .setModel('s1', 'gemini-3.7-flash-medium');

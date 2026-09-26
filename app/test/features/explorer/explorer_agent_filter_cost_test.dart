@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/application/explorer_agent_filter.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -22,8 +21,10 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 
@@ -55,11 +56,12 @@ void main() {
   const scale = [1, 10, 100];
 
   /// [count] sessions spread evenly across the three agents, on one project.
-  CountingDatabase seed(int count) {
+  CountingDatabase seed(FakeDataServer server, int count) {
     final db = CountingDatabase();
+    server.mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(db).insert(
+    server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
+    server.repositoryRows.insert(
       repository(id: 'r1', projectId: 'p1', name: 'hub', path: r'C:\hub'),
     );
     // Codex first, so the one-session workspace has a row that survives the
@@ -95,11 +97,13 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final db = seed(count);
+    final server = FakeDataServer();
+    final db = seed(server, count);
     addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(

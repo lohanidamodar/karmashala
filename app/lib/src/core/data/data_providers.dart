@@ -2,20 +2,15 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../database/database_providers.dart';
-import '../util/clock_provider.dart';
 import 'app_preferences.dart';
 import 'data_client.dart';
 
 /// This app's client of the server's data. `main` overrides it with the one
-/// it connected to the local server before the first frame. The default is
-/// the **temporary** in-process fallback over [databaseProvider] — what
-/// `flutter test` runs, where no server may be reached.
+/// it connected to this machine's server; a test, with one over its fake
+/// server. Anything else has no server to reach, and says so.
 final dataClientProvider = Provider<DataClient>((ref) {
-  final client = DataClient.inProcess(
-    ref.watch(databaseProvider),
-    reason: 'no server is reached from here (a test)',
-    clock: ref.watch(clockProvider).nowUtc,
+  final client = DataClient.unavailable(
+    'this process was not connected to a Karmashala server',
   );
   ref.onDispose(() => unawaited(client.close()));
   return client;

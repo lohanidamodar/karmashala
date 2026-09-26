@@ -3,69 +3,73 @@ import 'dart:async';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_host/data.dart' show HostDataLink;
 import 'package:karmashala_ssh/host.dart' show HostDeploymentStatus;
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
-    show LocalHostSessionAccess;
+    show LocalHostSessionAccess, LocalHostSupervisor;
 
-import '../../features/settings/data/settings_repository.dart';
-import 'app_preferences.dart';
 import 'data_client.dart';
 
-/// Connects this app's data to this machine's server, before the first frame
-/// — the server is started here when local panes are host-backed, as the
-/// launch would start it anyway, so it is the same one start ([access] is
-/// the one the container is given).
+/// Connects this app's data to this machine's server before the first frame,
+/// starting (or adopting) it through [access] — the one the container is
+/// given, so the supervisor shares the start. Always started, whatever the
+/// terminal settings: notes, todos and settings live at the server.
 ///
-/// Where no server can be reached, the answer is the **temporary**
-/// in-process fallback over [database], said loudly in the log and in
-/// Settings: the app keeps working rather than refusing to open.
+/// A server that does not come up is said, not replaced: the client comes
+/// back unavailable with the reason, keeps redialling, and everything is
+/// read again when the server answers.
 Future<DataClient> connectLocalServerData({
-  required AppDatabase database,
   required LocalHostSessionAccess? access,
   AppLogger? logger,
 }) async {
   final log = logger ?? AppLogger.named('data');
-  String reason;
   if (access == null) {
-    reason = 'no Karmashala server may run here';
-  } else {
-    final starts = _hostBackedLocalPanes(database);
-    try {
-      final reading = starts
-          ? await access.deployment()
-          : await access.observe();
-      if (reading.status == HostDeploymentStatus.ready) {
-        final client = await DataClient.connect(
-          () => HostDataLink.connect(access.socketPath),
-          logger: log,
-        );
-        log.info('Data: through the Karmashala server (${access.socketPath}).');
-        return client;
-      }
-      reason = starts
-          ? 'the Karmashala server is not up (${reading.status.name}: '
-                '${reading.reason})'
-          : 'no Karmashala server is running, and none is started while '
-                'local panes are not host-backed';
-    } on Object catch (error) {
-      reason = 'the Karmashala server did not answer ($error)';
-    }
+    const reason = 'no Karmashala server may run here';
+    log.warning('Data: $reason.');
+    return DataClient.unavailable(reason, logger: log);
   }
-  log.warning(
-    'Data: $reason. TEMPORARY fallback: notes, todos and preferences are '
-    'read and written in this process, straight to the database.',
+  String? notUp;
+  try {
+    final reading = await access.deployment();
+    if (reading.status != HostDeploymentStatus.ready) {
+      notUp = '${reading.status.name}: ${reading.reason}';
+    }
+  } on Object catch (error) {
+    notUp = 'it did not start ($error)';
+  }
+  final client = await DataClient.connect(
+    () => HostDataLink.connect(access.socketPath),
+    unavailableReason: notUp,
+    logger: log,
   );
-  return DataClient.inProcess(database, reason: reason, logger: log);
+  if (client.connection.state == DataLinkState.connected) {
+    log.info('Data: through the Karmashala server (${access.socketPath}).');
+  } else {
+    log.warning(
+      'Data: the Karmashala server is not reachable '
+      '(${client.connection.reason}). Notes, todos and settings wait for it.',
+    );
+  }
+  return client;
 }
 
-/// **Temporary**: the one setting needed before any server is reached —
-/// whether to start one — read through the fallback, since the server that
-/// would answer it may be the one it decides to start.
-bool _hostBackedLocalPanes(AppDatabase database) {
-  final peek = DataClient.inProcess(database, reason: 'reading one setting');
-  try {
-    return SettingsRepository(AppPreferences(peek)).load().hostBackedLocalPanes;
-  } finally {
-    unawaited(peek.close());
-  }
+/// Ties the data link to the supervisor that keeps this machine's server
+/// up: a server it brings back is dialled at once, and a data link that
+/// closes is reported to it as a possible loss (it checks before acting).
+/// Returns what undoes it.
+void Function() superviseDataLink(
+  DataClient client,
+  LocalHostSupervisor supervisor,
+) {
+  final restarted = supervisor.restarted.listen((_) => client.retry());
+  var wasConnected = client.connection.state == DataLinkState.connected;
+  final changes = client.connectionChanges.listen((connection) {
+    final connected = connection.state == DataLinkState.connected;
+    if (wasConnected && !connected) {
+      supervisor.hostLost('the data link to it closed');
+    }
+    wasConnected = connected;
+  });
+  return () {
+    unawaited(restarted.cancel());
+    unawaited(changes.cancel());
+  };
 }

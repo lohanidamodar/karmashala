@@ -12,7 +12,6 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -23,12 +22,16 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/continue_with_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// `Override` is not part of the main barrel in Riverpod 3.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Acting on a follow-up from the attention inbox.
 ///
@@ -132,14 +135,18 @@ class _RecordingService extends SessionHandoffService {
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late Override workspace;
   _RecordingService? service;
 
-  setUp(() {
+  setUp(() async {
     service = null;
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    workspace =
+        await (FakeDataServer().mirrorInto(db)
+              ..projectRows.insert(project())
+              ..repositoryRows.insert(repository()))
+            .override();
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -163,6 +170,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        workspace,
         clockProvider.overrideWithValue(
           FixedClock(testTime.add(const Duration(hours: 2))),
         ),

@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_undo.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_undo_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 /// A run that left more commits than fit on one screen.
@@ -56,6 +58,10 @@ void main() {
   });
 
   testWidgets('a check with a long command scrolls', (tester) async {
+    final server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    final client = await server.connect();
     await expectSurvivesWindowMatrix(
       tester,
       because: 'the dialog echoes every argument it will store',
@@ -63,11 +69,11 @@ void main() {
         final db = AppDatabase.memory();
         addTearDown(db.close);
         ExecutionEnvironmentDao(db).upsert(windowsEnv());
-        ProjectDao(db).insert(project());
-        RepositoryDao(db).insert(repository());
+        server.mirrorInto(db);
         final container = ProviderContainer(
           overrides: [
             ...fakeTerminalOverrides(database: db),
+            dataClientProvider.overrideWithValue(client),
             clockProvider.overrideWithValue(
               FixedClock(DateTime.utc(2026, 9, 9, 9)),
             ),

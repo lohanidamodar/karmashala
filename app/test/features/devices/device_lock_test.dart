@@ -12,7 +12,6 @@ import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -23,6 +22,8 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fakes.dart' show MovableClock;
 
 /// The device lock, driven the way two agents would actually collide with each
@@ -62,8 +63,9 @@ void main() {
     db = AppDatabase.memory();
     clock = MovableClock(testTime);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    final data = FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db)
       ..insert(session(id: 's1', title: 'Fix the login flow'))
@@ -108,6 +110,7 @@ void main() {
         // factory, its settings and its shell, behind the package's ports.
         ...deviceBindings,
         ...fakeTerminalOverrides(database: db),
+        await data.override(),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: adb),
         ),

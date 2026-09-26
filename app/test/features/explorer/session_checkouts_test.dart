@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/explorer/application/session_context.dar
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -23,6 +22,8 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -55,6 +56,7 @@ void main() {
   const otherPath = r'C:\src\other';
 
   late AppDatabase db;
+  late FakeDataServer server;
   late FakeCommandRunner git;
   late ProviderContainer container;
 
@@ -103,7 +105,7 @@ void main() {
   }
 
   void insertAllCheckouts() {
-    RepositoryDao(db)
+    server.repositoryRows
       ..insert(repository(id: 'hub', name: 'demo', path: hubPath))
       ..insert(repository(id: 'app', name: 'app', path: appPath))
       ..insert(repository(id: 'relay', name: 'wt-relay', path: relayPath))
@@ -155,17 +157,19 @@ void main() {
     await container.read(provider.future);
   }
 
-  setUp(() {
+  setUp(() async {
     dirty = <String>{};
     families = <String, List<String>>{};
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project(id: 'p1', name: 'Demo', path: hubPath));
+    server.projectRows.insert(project(id: 'p1', name: 'Demo', path: hubPath));
     AgentInstallationDao(db).insert(agentInstallation());
     git = FakeCommandRunner(responder: respond);
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -293,8 +297,10 @@ void main() {
       // Offering another project's clones would move the Explorer's tree out
       // from under the user — the same confinement the default already has.
       insertAllCheckouts();
-      ProjectDao(db).insert(project(id: 'p2', name: 'Other', path: otherPath));
-      RepositoryDao(db).insert(
+      server.projectRows.insert(
+        project(id: 'p2', name: 'Other', path: otherPath),
+      );
+      server.repositoryRows.insert(
         repository(
           id: 'other',
           projectId: 'p2',
@@ -409,11 +415,11 @@ void main() {
     const scale = 69;
 
     void seedManyCheckouts() {
-      RepositoryDao(
-        db,
-      ).insert(repository(id: 'hub', name: 'demo', path: hubPath));
+      server.repositoryRows.insert(
+        repository(id: 'hub', name: 'demo', path: hubPath),
+      );
       for (var i = 1; i < scale; i++) {
-        RepositoryDao(db).insert(
+        server.repositoryRows.insert(
           repository(
             id: 'wt-$i',
             name: 'wt-$i',

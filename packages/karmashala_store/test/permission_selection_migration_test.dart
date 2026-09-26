@@ -1,7 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/migrations.dart';
-import 'package:agent_cli/descriptors.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:test/test.dart';
 
 /// Applies every migration up to and including [upTo], the way `AppDatabase`
 /// does, so a *pre-v35* database can be populated and then migrated.
@@ -108,28 +107,21 @@ void main() {
   });
 
   test('every rewritten value is one the descriptor actually declares', () {
-    // The migration writes canonical strings by hand; this is what stops them
-    // drifting from the axes those strings have to resolve against.
+    // The migration writes canonical strings by hand. These are the exact
+    // strings the agent descriptors resolve these legacy names to — the other
+    // half of the check, that each one round-trips through its agent's
+    // descriptor with no unknown axis, lives with the descriptors in
+    // agent_cli's agent_permission_support_test.dart ('legacy names written
+    // before v35'), since the store does not depend on agent_cli.
     _seedSession(db, 'c', 'i-claude', 'acceptEdits');
     _seedSession(db, 'x', 'i-codex', 'bypass');
     _seedSession(db, 'a', 'i-agy', 'accept-edits');
     _seedSession(db, 'a2', 'i-agy', 'acceptEdits');
     migrate();
 
-    for (final (id, agentId) in [
-      ('c', 'claudeCode'),
-      ('x', 'codex'),
-      ('a2', 'antigravity'),
-    ]) {
-      final support = AgentRegistry.builtIn.byId(agentId)!.launch.permission;
-      final stored = _modeOf(db, id);
-      expect(
-        support.resolveStored(stored).canonical,
-        stored,
-        reason: '$agentId row $id stored $stored, which does not round-trip',
-      );
-      expect(support.unknownAxes(support.resolveStored(stored)), isEmpty);
-    }
+    expect(_modeOf(db, 'c'), 'mode=acceptEdits');
+    expect(_modeOf(db, 'x'), 'approval=on-request;sandbox=bypass-all');
+    expect(_modeOf(db, 'a2'), 'mode=accept-edits');
   });
 
   test('a value that was never one of the three is left alone', () {

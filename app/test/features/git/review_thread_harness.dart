@@ -1,18 +1,21 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala/src/features/git/application/review_threads.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A repository with a scriptable `git hash-object`, which is the only git call
 /// review threads make.
@@ -24,12 +27,15 @@ import '../../support/fixtures.dart';
 /// worth noticing, since the feature it replaces derived its anchor from the
 /// shape of a rendered diff.
 class ReviewThreadHarness {
-  ReviewThreadHarness({AppDatabase? database, Map<String, String>? shas})
-    : db = database ?? AppDatabase.memory(),
-      shas = shas ?? <String, String>{} {
+  ReviewThreadHarness._(
+    this.server,
+    this.client, {
+    AppDatabase? database,
+    Map<String, String>? shas,
+  }) : db = database ?? AppDatabase.memory(),
+       shas = shas ?? <String, String>{} {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.mirrorInto(db);
 
     runner = FakeCommandRunner(
       responder: (request) {
@@ -65,6 +71,7 @@ class ReviewThreadHarness {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('thread-')),
         changesServiceProvider.overrideWithValue(
@@ -77,7 +84,28 @@ class ReviewThreadHarness {
     );
   }
 
+  /// The project and checkout the threads are on, on a fake server whose
+  /// client the container reads the workspace from.
+  static Future<ReviewThreadHarness> create({
+    AppDatabase? database,
+    Map<String, String>? shas,
+  }) async {
+    final server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    return ReviewThreadHarness._(
+      server,
+      await server.connect(),
+      database: database,
+      shas: shas,
+    );
+  }
+
   final AppDatabase db;
+  final FakeDataServer server;
+
+  /// For a container of the test's own that reads the same workspace.
+  final DataClient client;
 
   /// Path → the hash of its current contents. The working tree, as far as this
   /// feature is concerned.

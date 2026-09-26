@@ -29,7 +29,7 @@ void main() {
   late Harness h;
 
   setUp(
-    () => h = harness(
+    () async => h = await connectedHarness(
       git: (request) {
         final argv = request.arguments.join(' ');
         if (argv.contains('diff') && !argv.contains('--staged')) {

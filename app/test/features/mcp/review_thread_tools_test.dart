@@ -13,8 +13,8 @@ void main() {
   late ReviewThreadHarness harness;
   late ReviewThreadTools tools;
 
-  setUp(() {
-    harness = ReviewThreadHarness(
+  setUp(() async {
+    harness = await ReviewThreadHarness.create(
       shas: {'lib/a.dart': 'sha-one', 'lib/b.dart': 'sha-b'},
     );
     AgentInstallationDao(harness.db).insert(agentInstallation());

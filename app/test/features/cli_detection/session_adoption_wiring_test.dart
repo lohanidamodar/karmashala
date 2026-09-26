@@ -8,7 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -29,6 +28,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Adoption through the real providers, and the point of the exercise: what it
 /// produces is a session row like any other.
@@ -61,17 +62,19 @@ class _StaticSettings extends SettingsController {
 
 typedef Harness = ({ProviderContainer container, AppDatabase db});
 
-Harness harness() {
+Future<Harness> harness() async {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
+  final server = FakeDataServer()..mirrorInto(db);
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
   AgentInstallationDao(
     db,
   ).insert(agentInstallation(agentId: AgentIds.claudeCode));
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      await server.override(),
       // Hermetic: the real probe would read this machine's own agent store.
       conversationPresenceProvider.overrideWithValue(
         ({
@@ -126,7 +129,7 @@ Future<void> runStoreSlot(Harness h) async {
 
 void main() {
   test('a pane running an agent is adopted, and the hook names it', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final paneId = openAgentLookingPane(h);
@@ -157,7 +160,7 @@ void main() {
   });
 
   test('adoption queues the conversation for the search index', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     openAgentLookingPane(h);
@@ -189,7 +192,7 @@ void main() {
   test(
     'an adopted session renames and reattaches like a launched one',
     () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       openAgentLookingPane(h);
@@ -228,7 +231,7 @@ void main() {
   test(
     'an adopted session resumes its own conversation once its pane is gone',
     () async {
-      final h = harness();
+      final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final paneId = openAgentLookingPane(h);
@@ -267,7 +270,7 @@ void main() {
   );
 
   test('a plain pane with nothing agent-like in it is never adopted', () async {
-    final h = harness();
+    final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final terminals = h.container.read(

@@ -10,17 +10,20 @@ import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_browse.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Browsing a worktree, and what it is allowed to touch.**
 ///
@@ -31,6 +34,8 @@ import '../../support/window_matrix.dart';
 /// The explicit verb that *does* move the selection lives in the Repository
 /// pane and goes through `CheckoutPicker`.
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   const environmentId = 'windows';
   const homePath = r'C:\src\demo\app';
   const pathA = r'C:\src\demo\wt\agent-a';
@@ -56,11 +61,13 @@ void main() {
   late List<GitWorktree> worktrees;
   late Map<String, List<FileChange>> changesByPath;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
     worktrees = [
       worktreeAt(homePath, 'main'),
       worktreeAt(pathA, longBranch),
@@ -81,6 +88,7 @@ void main() {
         // the terminal controller and leave its autosave timer pending.
         activeDiffFileProvider.overrideWithValue(null),
         databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),

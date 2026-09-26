@@ -1,3 +1,5 @@
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
@@ -5,7 +7,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -19,6 +20,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -64,6 +67,8 @@ import '../terminal/fake_instance.dart';
 /// here is a row that moves on screen.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient data;
   late ProviderContainer container;
 
   EnvironmentPath worktreeFor(String id) => EnvironmentPath(
@@ -130,11 +135,13 @@ void main() {
     plan: SessionForkPlan.decide(descriptor: null, agentName: 'Test CLI'),
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(db);
+    data = await server.connect();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final id in ['s1', 's2']) {
       SessionDao(db).insert(
@@ -153,6 +160,7 @@ void main() {
     }
     container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(data),
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(

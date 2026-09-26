@@ -8,7 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,7 +17,11 @@ import 'package:sqlite3/sqlite3.dart' show sqlite3;
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 import 'package:agent_cli/read.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 /// The owner's bug, end to end through the real providers.
 ///
@@ -28,19 +31,23 @@ import 'package:agent_cli/read.dart';
 /// exercised: the store format that let detection reach the reader, the reader,
 /// the mapping to a `DetectedSession`, and the sync that writes the row.
 void main() {
+  late FakeDataServer server;
+  late DataClient client;
   late Directory tmp;
   late String storeHome;
   late AppDatabase db;
 
   const conversation = 'df3c0708-1111-4222-8333-444455556666';
 
-  setUp(() {
+  setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_wiring_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    client = await server.connect();
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.antigravity));
@@ -91,6 +98,7 @@ void main() {
   ProviderContainer container() => ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
+      dataClientProvider.overrideWithValue(client),
       cliStoreLocatorProvider.overrideWithValue(
         FixedLocator([
           CliStore(

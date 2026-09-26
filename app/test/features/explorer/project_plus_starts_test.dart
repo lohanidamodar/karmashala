@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:flutter/gestures.dart';
@@ -14,6 +13,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -34,14 +35,16 @@ void main() {
   const plus = 'Start a session here with the default agent';
 
   late AppDatabase db;
+  late FakeDataServer server;
 
   AppDatabase seed({bool withAgent = true}) {
     final database = AppDatabase.memory();
+    server = FakeDataServer()..mirrorInto(database);
     ExecutionEnvironmentDao(database).upsert(windowsEnv());
-    ProjectDao(database).insert(project(name: 'Alpha', path: r'C:\src\alpha'));
-    RepositoryDao(
-      database,
-    ).insert(repository(name: 'alpha-app', path: r'C:\src\alpha\app'));
+    server.projectRows.insert(project(name: 'Alpha', path: r'C:\src\alpha'));
+    server.repositoryRows.insert(
+      repository(name: 'alpha-app', path: r'C:\src\alpha\app'),
+    );
     if (withAgent) AgentInstallationDao(database).insert(agentInstallation());
     return database;
   }
@@ -52,6 +55,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         // A session card asks git what its checkout has changed, and the
         // picker asks it which rows are worktrees. Neither may spawn one.
         commandRunnerFactoryProvider.overrideWithValue(

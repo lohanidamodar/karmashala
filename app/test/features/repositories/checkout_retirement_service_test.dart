@@ -3,11 +3,11 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/repositories/application/checkout_retirement_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// A probe that answers from a table instead of the filesystem, so a test can
 /// state "this one is gone, that one we could not reach" without deleting real
@@ -34,8 +34,7 @@ class StubProbe implements CheckoutPresenceProbe {
 
 void main() {
   late AppDatabase db;
-  late RepositoryDao repositories;
-  late ProjectDao projects;
+  late FakeDataServer server;
 
   final windows = windowsEnv();
   const projectRoot = EnvironmentPath(
@@ -46,16 +45,14 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windows);
-    projects = ProjectDao(db);
-    projects.insert(project());
-    repositories = RepositoryDao(db);
+    server = FakeDataServer()..projectRows.insert(project());
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
 
-  Future<CheckoutRetirementReport> retireWith(StubProbe probe) =>
+  Future<CheckoutRetirementReport> retireWith(StubProbe probe) async =>
       CheckoutRetirementService(
-        workspace: workspaceOver(db),
+        workspace: await workspaceOf(server),
         probe: probe,
       ).retireMissingCheckouts(
         projectId: 'p1',
@@ -68,8 +65,8 @@ void main() {
       StubProbe(answers);
 
   test('retires a checkout whose directory is provably gone', () async {
-    repositories.insert(repository(id: 'r1', name: 'app'));
-    repositories.insert(
+    server.repositoryRows.insert(repository(id: 'r1', name: 'app'));
+    server.repositoryRows.insert(
       repository(id: 'r2', name: 'wt-adopt', path: r'C:\src\demo\wt-adopt'),
     );
 
@@ -81,24 +78,24 @@ void main() {
     expect(report.keptReferenced, isEmpty);
     expect(report.keptUnreachable, isEmpty);
     expect(report.examined, 2);
-    expect(repositories.getById('r2'), isNull);
-    expect(repositories.getById('r1'), isNotNull);
+    expect(server.repositoryRows.getById('r2'), isNull);
+    expect(server.repositoryRows.getById('r1'), isNotNull);
   });
 
   test('keeps a checkout whose directory is still there', () async {
-    repositories.insert(repository(id: 'r1', name: 'app'));
+    server.repositoryRows.insert(repository(id: 'r1', name: 'app'));
 
     final report = await retireWith(probeSaying(const {}));
 
     expect(report.retired, isEmpty);
     expect(report.hasChanges, isFalse);
-    expect(repositories.getById('r1'), isNotNull);
+    expect(server.repositoryRows.getById('r1'), isNotNull);
   });
 
   test('keeps a checkout it could not reach, and says so', () async {
     // A stopped WSL distro, an unmounted drive, an SSH host that is down: none
     // of these are evidence that anything was deleted.
-    repositories.insert(repository(id: 'r1', name: 'app'));
+    server.repositoryRows.insert(repository(id: 'r1', name: 'app'));
 
     final report = await retireWith(
       probeSaying({r'c:/src/demo/app': CheckoutPresence.unknown}),
@@ -106,14 +103,14 @@ void main() {
 
     expect(report.retired, isEmpty);
     expect(report.keptUnreachable.map((r) => r.id), ['r1']);
-    expect(repositories.getById('r1'), isNotNull);
+    expect(server.repositoryRows.getById('r1'), isNotNull);
   });
 
   test('retires nothing when the project root itself is unreachable', () async {
     // Every child of an unreachable root reads as absent. Trusting that would
     // erase a whole project the first time a WSL distro was stopped.
-    repositories.insert(repository(id: 'r1', name: 'app'));
-    repositories.insert(
+    server.repositoryRows.insert(repository(id: 'r1', name: 'app'));
+    server.repositoryRows.insert(
       repository(id: 'r2', name: 'api', path: r'C:\src\demo\api'),
     );
 
@@ -126,13 +123,13 @@ void main() {
     expect(report.rootReachable, isFalse);
     expect(report.retired, isEmpty);
     expect(report.keptUnreachable.map((r) => r.id), ['r1', 'r2']);
-    expect(repositories.getAll().length, 2);
+    expect(server.repositoryRows.getAll().length, 2);
   });
 
   test('retires nothing when the project root is itself gone', () async {
     // The folder was moved or the drive is not mounted. Nothing beneath it can
     // be judged, and a project that has moved is not a project that was deleted.
-    repositories.insert(repository(id: 'r1', name: 'app'));
+    server.repositoryRows.insert(repository(id: 'r1', name: 'app'));
 
     final report = await retireWith(
       StubProbe(const {}, otherwise: CheckoutPresence.absent),
@@ -140,11 +137,11 @@ void main() {
 
     expect(report.rootReachable, isFalse);
     expect(report.retired, isEmpty);
-    expect(repositories.getById('r1'), isNotNull);
+    expect(server.repositoryRows.getById('r1'), isNotNull);
   });
 
   test('leaves a checkout recorded outside the project root alone', () async {
-    repositories.insert(
+    server.repositoryRows.insert(
       repository(id: 'r9', name: 'elsewhere', path: r'C:\other\elsewhere'),
     );
 
@@ -153,7 +150,7 @@ void main() {
 
     expect(report.examined, 0);
     expect(report.retired, isEmpty);
-    expect(repositories.getById('r9'), isNotNull);
+    expect(server.repositoryRows.getById('r9'), isNotNull);
     // Never even asked: a row recorded elsewhere is not this scan's business.
     expect(probe.asked, isEmpty);
   });
@@ -162,7 +159,7 @@ void main() {
     // `/src/demo/app` inside a WSL distro is not `C:\src\demo\app`, however the
     // strings compare.
     ExecutionEnvironmentDao(db).upsert(wslEnv());
-    repositories.insert(
+    server.repositoryRows.insert(
       repository(id: 'r8', environmentId: 'wsl:Ubuntu', path: '/src/demo/app'),
     );
 
@@ -171,12 +168,12 @@ void main() {
     );
 
     expect(report.examined, 0);
-    expect(repositories.getById('r8'), isNotNull);
+    expect(server.repositoryRows.getById('r8'), isNotNull);
   });
 
   test('leaves another project\'s checkouts alone', () async {
-    projects.insert(project(id: 'p2', name: 'Other'));
-    repositories.insert(
+    server.projectRows.insert(project(id: 'p2', name: 'Other'));
+    server.repositoryRows.insert(
       repository(id: 'r7', projectId: 'p2', path: r'C:\src\demo\shared'),
     );
 
@@ -185,6 +182,6 @@ void main() {
     );
 
     expect(report.examined, 0);
-    expect(repositories.getById('r7'), isNotNull);
+    expect(server.repositoryRows.getById('r7'), isNotNull);
   });
 }

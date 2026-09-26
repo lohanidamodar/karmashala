@@ -2,6 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -15,7 +16,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
@@ -26,8 +26,10 @@ import 'package:karmashala_store/database.dart';
 import 'package:logging/logging.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
 
 class _MemoryGitFiles implements GitFiles {
@@ -52,6 +54,7 @@ void main() {
   late AgentHookReports reports;
   late SessionStatusRegistry registry;
   late ProviderContainer container;
+  late FakeDataServer server;
   late List<WatchedSession> watched;
   late int tree;
   String? fixedTree;
@@ -86,8 +89,9 @@ void main() {
     db = AppDatabase.memory();
     clock = MovableClock(testTime);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    server = FakeDataServer()..mirrorInto(db);
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', status: SessionStatus.running));
     tree = 1;
@@ -106,9 +110,11 @@ void main() {
       loadSessions: () => watched,
       clock: clock,
     );
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        data,
         clockProvider.overrideWithValue(clock),
         agentHookReportsProvider.overrideWithValue(reports),
         sessionStatusRegistryProvider.overrideWithValue(registry),
@@ -387,6 +393,7 @@ void main() {
     );
     container.updateOverrides([
       ...fakeTerminalOverrides(database: db),
+      dataClientProvider.overrideWithValue(container.read(dataClientProvider)),
       clockProvider.overrideWithValue(clock),
       agentHookReportsProvider.overrideWithValue(reports),
       sessionStatusRegistryProvider.overrideWithValue(registry),
@@ -448,9 +455,9 @@ void main() {
     'a session on an SSH host is skipped, and the panel can say why',
     () async {
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
-      RepositoryDao(
-        db,
-      ).insert(repository(id: 'r2', environmentId: 'ssh:h1', path: '/srv/app'));
+      server.repositoryRows.insert(
+        repository(id: 'r2', environmentId: 'ssh:h1', path: '/srv/app'),
+      );
       SessionDao(db).insert(
         session(id: 's3', repositoryId: 'r2', status: SessionStatus.running),
       );

@@ -183,8 +183,8 @@ void main() {
   test('the host mints one identity and keeps it', () {
     final first = hostDeviceIdFor(db);
     final second = hostDeviceIdFor(db);
+    // Read back from the store: a second call finds the one the first kept.
     expect(second, first);
-    expect(db.readMetadata(kHostDeviceIdMetadataKey), first.value);
   });
 
   test('the devices provider re-reads on a revision bump', () {

@@ -3,68 +3,35 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/app_preferences.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
-import 'package:karmashala/src/core/data/in_process_data_endpoint.dart';
 import 'package:karmashala/src/features/todos/data/todos_repository.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
-import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_notes/karmashala_notes.dart';
-import 'package:karmashala_store/database.dart';
 
-/// A server link a test can hold answers on, drop, and bring back: the
-/// server's own service behind it, asynchronous like a socket.
-class _Link implements DataEndpoint {
-  _Link(DataService service) : _inner = InProcessDataEndpoint.over(service);
+import '../../support/fake_data_server.dart';
 
-  final InProcessDataEndpoint _inner;
-  final _done = Completer<void>();
-  Completer<void>? hold;
-  final sent = <String>[];
-
-  @override
-  Stream<DataChanges> get changes => _inner.changes;
-
-  @override
-  Future<void> get done => _done.future;
-
-  @override
-  Future<DataReply<R>> send<R>(DataRequest<R> request) async {
-    if (_done.isCompleted) {
-      throw const DataRefused.unavailable('link down');
-    }
-    sent.add(request.kind);
-    final reply = _inner.sendNow(request);
-    await hold?.future;
-    if (_done.isCompleted) throw const DataRefused.unavailable('link down');
-    return reply;
-  }
-
-  void drop() {
-    if (!_done.isCompleted) _done.complete();
-  }
-
-  @override
-  Future<void> close() async {
-    drop();
-    await _inner.close();
-  }
-}
-
+/// The client of the server's data, against the fake server: priming,
+/// revisions, refusals, and a server that is not there or goes away.
 void main() {
-  late AppDatabase db;
-  late DataService service;
+  late FakeDataServer server;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    service = DataService(db);
-  });
-  tearDown(() => db.close());
+  setUp(() => server = FakeDataServer(projects: {}));
+
+  Future<void> until(bool Function() condition) async {
+    for (var i = 0; i < 200 && !condition(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(condition(), isTrue);
+  }
 
   test('connecting primes every copy before it answers', () async {
-    db.writeMetadata('settings.v1', '{}');
-    final seeded = service.open((_) {});
-    seeded.handle(const TodoAdd(id: 't', body: 'one'));
-    final client = await DataClient.connect(() async => _Link(service));
-    addTearDown(client.close);
+    server.preferences['settings.v1'] = '{}';
+    server.todos['t'] = Todo(
+      id: 't',
+      body: 'one',
+      position: 0,
+      createdAt: DateTime.utc(2026),
+    );
+    final client = await server.connect();
 
     expect(client.connection.state, DataLinkState.connected);
     expect(client.todos.isPrimed, isTrue);
@@ -72,23 +39,44 @@ void main() {
     expect(AppPreferences(client).read('settings.v1'), '{}');
   });
 
-  test('no server on the first dial is a refusal the caller sees', () async {
+  test('no server at launch: unavailable and nothing known, then primed '
+      'once it comes up', () async {
+    server.stop();
+    final client = await DataClient.connect(
+      server.dial,
+      unavailableReason: 'failed: no binary',
+    );
+    addTearDown(client.close);
+    expect(client.connection.state, DataLinkState.unavailable);
+    expect(client.connection.reason, 'failed: no binary');
+    expect(client.preferences.isPrimed, isFalse);
+    expect(AppPreferences(client).read('anything'), isNull);
+
+    server
+      ..preferences['k'] = 'v'
+      ..start();
+    await until(() => client.connection.state == DataLinkState.connected);
+    expect(AppPreferences(client).read('k'), 'v');
+  });
+
+  test('a client with no server to reach refuses writes at once', () async {
+    final client = DataClient.unavailable('no server here');
+    addTearDown(client.close);
     await expectLater(
-      DataClient.connect(() async => null),
+      AppPreferences(client).writeStored('k', 'v'),
       throwsA(
         isA<DataRefused>().having(
-          (r) => r.code,
-          'code',
-          DataRefusalCode.unavailable,
+          (r) => r.message,
+          'message',
+          contains('no server here'),
         ),
       ),
     );
+    expect(AppPreferences(client).read('k'), isNull);
   });
 
-  test('a late answer never overwrites a newer change', () {
-    final client = DataClient.inProcess(db);
-    addTearDown(client.close);
-    client.ensurePrimed(DataDomain.preferences);
+  test('a late answer never overwrites a newer change', () async {
+    final client = await server.connect();
     client.preferences.applyAt('k', 'new', 5);
     client.preferences.applyAt('k', 'old', 4);
     expect(client.preferences['k'], 'new');
@@ -98,8 +86,7 @@ void main() {
   });
 
   test('a refused write is undone by reading the domain again', () async {
-    final client = DataClient.inProcess(db);
-    addTearDown(client.close);
+    final client = await server.connect();
     final todos = TodosRepository(client);
     final draft = Todo(
       id: 't',
@@ -108,8 +95,10 @@ void main() {
       position: 0,
       createdAt: DateTime.utc(2026),
     );
+    final write = todos.add(draft);
+    expect(todos.list(), [draft], reason: 'the copy has it at once');
     await expectLater(
-      todos.add(draft),
+      write,
       throwsA(
         isA<DataRefused>().having(
           (r) => r.code,
@@ -118,53 +107,83 @@ void main() {
         ),
       ),
     );
+    await pumpEventQueue();
     expect(todos.list(), isEmpty);
   });
 
-  test(
-    'writes wait for a server that went away, then the copy is re-read',
-    () async {
-      final links = <_Link>[];
-      final client = await DataClient.connect(() async {
-        final link = _Link(service);
-        links.add(link);
-        return link;
-      });
-      addTearDown(client.close);
-      final prefs = AppPreferences(client);
+  test('another client\'s write arrives as a change', () async {
+    final client = await server.connect();
+    server.writeAsAnotherClient([const PreferenceChanged('theme', 'dark')]);
+    expect(AppPreferences(client).read('theme'), 'dark');
+  });
 
-      links.single.drop();
-      await pumpEventQueue();
-      expect(client.connection.state, DataLinkState.reconnecting);
+  test('writes wait for a server that went away, go before the snapshot, '
+      'and the copy is read again', () async {
+    final client = await server.connect();
+    final prefs = AppPreferences(client);
 
-      final waiting = prefs.writeStored('a', '1');
-      // Another client writes while this one is away.
-      service.open((_) {}).handle(const PreferenceSet('b', '2'));
+    server.stop();
+    await pumpEventQueue();
+    expect(client.connection.state, DataLinkState.connecting);
 
-      await waiting.timeout(const Duration(seconds: 5));
-      await pumpEventQueue();
-      expect(client.connection.state, DataLinkState.connected);
-      expect(links, hasLength(2));
-      expect(
-        links.last.sent.indexOf('preferences.set'),
-        lessThan(links.last.sent.lastIndexOf('preferences.get')),
-        reason: 'the waiting write goes before the snapshot that includes it',
-      );
-      expect(prefs.read('a'), '1');
-      expect(prefs.read('b'), '2');
-    },
-  );
+    final waiting = prefs.writeStored('a', '1');
+    // Another client wrote while this one was away.
+    server.preferences['b'] = '2';
+    server.requests.clear();
+    server.start();
+
+    await waiting.timeout(const Duration(seconds: 5));
+    await until(() => client.connection.state == DataLinkState.connected);
+    expect(
+      server.requests.indexOf('preferences.set'),
+      lessThan(server.requests.indexOf('preferences.get')),
+      reason: 'the waiting write goes before the snapshot that includes it',
+    );
+    expect(prefs.read('a'), '1');
+    expect(prefs.read('b'), '2');
+  });
+
+  test('a write held past the wait is refused, saying why', () async {
+    final client = await server.connect(
+      wait: const Duration(milliseconds: 100),
+    );
+    server.stop();
+    await pumpEventQueue();
+    await expectLater(
+      AppPreferences(client).writeStored('a', '1'),
+      throwsA(
+        isA<DataRefused>()
+            .having((r) => r.code, 'code', DataRefusalCode.unavailable)
+            .having((r) => r.message, 'message', contains('not running')),
+      ),
+    );
+    expect(server.preferences, isNot(contains('a')));
+  });
+
+  test('Retry dials at once rather than at the next backoff step', () async {
+    server.stop();
+    final client = await DataClient.connect(server.dial);
+    addTearDown(client.close);
+    expect(client.connection.state, DataLinkState.unavailable);
+    server.start();
+    client.retry();
+    await pumpEventQueue();
+    expect(
+      client.connection.state,
+      DataLinkState.connected,
+      reason: 'the first backoff step is 250 ms; this did not wait for it',
+    );
+  });
 
   test('closing waits for a write still in flight', () async {
-    final link = _Link(service);
-    final client = await DataClient.connect(() async => link);
-    link.hold = Completer<void>();
+    final client = await server.connect();
+    server.hold = Completer<void>();
     final write = AppPreferences(client).writeStored('quit', 'yes');
     final closing = client.close();
     await pumpEventQueue();
-    link.hold!.complete();
+    server.hold!.complete();
     await closing;
     await expectLater(write, completes, reason: 'answered, not cut off');
-    expect(db.readMetadata('quit'), 'yes');
+    expect(server.preferences['quit'], 'yes');
   });
 }
