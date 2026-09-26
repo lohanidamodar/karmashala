@@ -414,13 +414,19 @@ class SessionStatusRegistry {
   }
 
   /// The session host said something new about the agent in the workspace
-  /// row [openId]: folded in now, out of turn. A row not tracked yet asks for
-  /// a cycle, rationed like a hook's.
+  /// row [openId]: folded in now, out of turn. A row not watched yet — the
+  /// host's snapshot on a link that just came up, with the row's pane not
+  /// back — joins the watch set now, from memory: the host's word needs no
+  /// disk, and must not wait for a cycle that may be deep in a store scan.
   void hostStatusMoved(String openId) {
     if (_disposed) return;
-    final tracked = _byOpenId[openId];
+    var tracked = _byOpenId[openId];
     if (tracked == null) {
-      _requestEarlyCycle();
+      _observeWatched(clock.nowUtc());
+      tracked = _byOpenId[openId];
+      if (tracked == null) return;
+      if (!_changes.isClosed) _changes.add(null);
+      if (!_hookChanges.isClosed) _hookChanges.add(tracked.entry());
       return;
     }
     final before = tracked.report;
@@ -445,10 +451,17 @@ class SessionStatusRegistry {
   }
 
   /// Recomputes every watched session's status and publishes. Re-entrant callers
-  /// join the pass already running rather than racing a half-updated snapshot.
+  /// join the pass already running rather than racing a half-updated snapshot —
+  /// but only for its disk work: what is in memory (who is watched, their
+  /// hooks, screens and the host's word) is read again now and published, so
+  /// none of it waits behind a slow store scan or sync.
   Future<SessionStatusCycle> cycle() {
     final running = _inFlight;
-    if (running != null) return running;
+    if (running != null) {
+      _observeWatched(clock.nowUtc());
+      if (!_changes.isClosed) _changes.add(null);
+      return running;
+    }
     final started = _cycle();
     _inFlight = started;
     return started.whenComplete(() => _inFlight = null);
@@ -457,25 +470,7 @@ class SessionStatusRegistry {
   Future<SessionStatusCycle> _cycle() async {
     cycles++;
     final now = clock.nowUtc();
-    final sessions = loadSessions();
-
-    // Every session, from memory. No cap: a hook is a lookup, a grid a buffer.
-    final seen = <AgentSessionKey>{};
-    for (final session in sessions) {
-      seen.add(session.key);
-      final tracked = _tracked.putIfAbsent(
-        session.key,
-        () => _Tracked(session, now, _statusMoved),
-      );
-      tracked.session = session;
-      tracked.statePath = session.stateFilePath ?? tracked.statePath;
-      _observe(tracked, now);
-    }
-    // Only membership prunes. A session the rotation skipped keeps everything.
-    _tracked.removeWhere((key, _) => !seen.contains(key));
-    _byOpenId
-      ..clear()
-      ..addEntries(_tracked.values.map((t) => MapEntry(t.session.openId, t)));
+    final sessions = _observeWatched(now);
 
     final scans = await _resolvePaths(now);
     // A shutdown can land inside that scan; nothing below may touch the app.
@@ -503,6 +498,30 @@ class SessionStatusRegistry {
     if (!_changes.isClosed) _changes.add(null);
     await _runCycleWork(now);
     return _last;
+  }
+
+  /// Loads the watch set and folds in every source already in memory — no
+  /// disk. Returns the sessions loaded, in the loader's order.
+  List<WatchedSession> _observeWatched(DateTime now) {
+    final sessions = loadSessions();
+    // Every session, from memory. No cap: a hook is a lookup, a grid a buffer.
+    final seen = <AgentSessionKey>{};
+    for (final session in sessions) {
+      seen.add(session.key);
+      final tracked = _tracked.putIfAbsent(
+        session.key,
+        () => _Tracked(session, now, _statusMoved),
+      );
+      tracked.session = session;
+      tracked.statePath = session.stateFilePath ?? tracked.statePath;
+      _observe(tracked, now);
+    }
+    // Only membership prunes. A session the rotation skipped keeps everything.
+    _tracked.removeWhere((key, _) => !seen.contains(key));
+    _byOpenId
+      ..clear()
+      ..addEntries(_tracked.values.map((t) => MapEntry(t.session.openId, t)));
+    return sessions;
   }
 
   /// Counts what this cycle reached; logs only on an edge — at 1.2s a line per

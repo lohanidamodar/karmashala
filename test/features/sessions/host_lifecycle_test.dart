@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/agents/application/agent_hook_intake.dar
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -20,6 +21,9 @@ import 'package:karmashala/src/features/sessions/application/host_lifecycle/rela
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
+import 'package:karmashala/src/features/sessions/application/session_wait.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -681,6 +685,100 @@ void main() {
       final report = registry.reportForOpenId('s1')!;
       expect(report.status, AgentActivityStatus.idle);
       expect(report.source, AgentStatusSource.hook);
+    });
+
+    // Found live: the app reopened on an agent that had answered and stopped
+    // while it was closed, and `session_wait` read `unknown` with no evidence
+    // although the host's snapshot said idle. The row joins the watch set
+    // only once the host says it runs it, which lands while the registry's
+    // first cycle is still on its disk work (store scans, adoption, the CLI
+    // store sync); the host's word needs none of that and waited behind it.
+    test('a reopened app renders the host\'s snapshot at once, while the '
+        'registry\'s first cycle is still on its disk work', () async {
+      // The app launches Claude Code with the row id as its session id.
+      dao.insert(session(id: 's1', status: SessionStatus.running));
+      dao.updateExternalSessionId('s1', 's1');
+      host
+        ..snapshot = [hostFacts('s1', HostSessionState.running)]
+        ..statusSnapshot = [
+          HostedAgentStatus(
+            sessionId: 's1',
+            report: AgentStatusReport(
+              agentId: AgentIds.claudeCode,
+              sessionId: 's1',
+              status: AgentActivityStatus.idle,
+              source: AgentStatusSource.hook,
+              observedAt: _at(-30),
+              detail: 'Stop',
+            ),
+          ),
+        ]
+        // The host keeps the latest hook per pane: the Stop.
+        ..hookSnapshot = [
+          RelayedAgentHook(
+            agentId: AgentIds.claudeCode,
+            event: 'Stop',
+            body: jsonEncode({
+              'session_id': 's1',
+              'hook_event_name': 'Stop',
+              'stop_hook_active': false,
+            }),
+            receivedAt: _at(-30),
+            paneSessionId: 's1',
+          ),
+        ];
+      // A launch's first cycle: its store sync is slow, and still running.
+      final storeSync = Completer<void>();
+      addTearDown(storeSync.complete);
+      final app = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          hostLifecycleSourceProvider.overrideWithValue(host),
+          cliStoreSyncRunnerProvider.overrideWithValue(() => storeSync.future),
+        ],
+      );
+      addTearDown(app.dispose);
+
+      // The registry starts cycling before the host link is up and before
+      // the session's pane has reattached: nothing says the row runs yet.
+      host.listening = false;
+      app.listen(hostLifecycleSubscriberProvider, (_, _) {});
+      final registry = app.read(sessionStatusRegistryProvider)..start();
+      await _settle();
+      expect(registry.reportForOpenId('s1'), isNull);
+
+      // The link comes up with the host's snapshot; the pane reattaches.
+      host.listening = true;
+      app.read(hostLifecycleSubscriberProvider)!.nudge();
+      await _settle();
+      expect(app.read(hostLifecycleSubscriberProvider)!.isWatching, isTrue);
+      app
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+      dao.updatePaneId(
+        's1',
+        app
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .last
+            .layout
+            .panes
+            .first,
+      );
+
+      final outcome = await app
+          .read(sessionWaitProvider)
+          .wait('s1', bound: const Duration(seconds: 2));
+      expect(
+        outcome.state,
+        SessionWaitState.idle,
+        reason:
+            '${outcome.agentStatus.name}/${outcome.source.name}, '
+            '${outcome.evidenceAge?.inSeconds}s old',
+      );
+      expect(outcome.agentStatus, AgentActivityStatus.idle);
+      expect(outcome.source, AgentStatusSource.hook);
     });
 
     test('a link lost leaves none of it standing', () async {

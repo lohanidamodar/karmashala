@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:karmashala_core/logging.dart';
@@ -710,6 +711,39 @@ void main() {
       expect(report?.status, AgentActivityStatus.working);
       expect(report?.source, AgentStatusSource.terminalGrid);
       expect(source.calls, 0);
+    });
+
+    // A cycle can sit in its disk work for seconds — a launch's first store
+    // scan and sync. A session that joins the watch set meanwhile, and what
+    // memory already says about it, must not wait for that to finish.
+    test('a cycle still on its disk work does not hold back what memory '
+        'says', () async {
+      final passenger = Completer<void>();
+      addTearDown(passenger.complete);
+      final registry = build(
+        readTail: (_) => const ['  esc to interrupt  '],
+        onCycle: (_) => passenger.future,
+      );
+      unawaited(registry.cycle());
+      await pumpEventQueue();
+
+      watched.add(
+        const WatchedSession(
+          key: AgentSessionKey(AgentIds.claudeCode, 'row-late'),
+          label: 'Late',
+          openId: 'row-late',
+          imported: false,
+        ),
+      );
+      final heard = registry
+          .reportsFor('row-late')
+          .firstWhere((r) => r.status == AgentActivityStatus.working);
+      // The timer's next tick joins the pass still running.
+      unawaited(registry.cycle());
+
+      final report = await heard.timeout(const Duration(seconds: 1));
+      expect(report.source, AgentStatusSource.terminalGrid);
+      expect(registry.cycles, 1, reason: 'no second disk pass was started');
     });
 
     test('a screen showing an approval outranks the transcript', () async {
