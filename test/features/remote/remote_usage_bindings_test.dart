@@ -7,6 +7,8 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_history.dart';
 import 'package:karmashala/src/features/remote/application/remote_usage_bindings.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart'
+    show kRemoteUsageSamples, thinUsageSamples;
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 

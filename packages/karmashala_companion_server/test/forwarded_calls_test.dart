@@ -82,7 +82,7 @@ void main() {
     ],
     listProjects: () => const [],
     startSession: (request) async => RemoteSessionStarted(
-      sessionId: 'new',
+      sessionId: request.worktree ? 'new-in-worktree' : 'new',
       title: request.title ?? '',
       permissionMode: request.permissionMode,
     ),
@@ -163,6 +163,16 @@ void main() {
     );
     expect(started.title, 'New work');
     expect(started.permissionMode, 'plan');
+    expect(started.sessionId, 'new');
+    final inWorktree = await forwarded.startSession(
+      const RemoteSessionStartRequest(
+        repositoryId: 'r1',
+        installationId: 'a1',
+        permissionMode: 'plan',
+        worktree: true,
+      ),
+    );
+    expect(inWorktree.sessionId, 'new-in-worktree', reason: 'carried over');
     expect((await forwarded.listWorkspace()).single.name, 'Shop');
   });
 

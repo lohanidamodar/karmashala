@@ -41,13 +41,16 @@ class DaemonCheckoutFacts implements CheckoutFacts {
   /// spawn a process directly.
   bool isHostLocal(EnvironmentPath? path) {
     if (path == null) return false;
-    final kind = rows.environment(path.environmentId)?.kind;
-    return switch (kind) {
-      EnvironmentKind.localPosix => !_windows,
-      EnvironmentKind.windowsNative => _windows,
-      _ => false,
-    };
+    final environment = rows.environment(path.environmentId);
+    return environment != null && isHere(environment);
   }
+
+  /// Whether [environment] is this machine's own.
+  bool isHere(ExecutionEnvironment environment) => switch (environment.kind) {
+    EnvironmentKind.localPosix => !_windows,
+    EnvironmentKind.windowsNative => _windows,
+    _ => false,
+  };
 
   /// The environment [path] names, in words, for a refusal.
   String describeEnvironment(EnvironmentPath path) =>

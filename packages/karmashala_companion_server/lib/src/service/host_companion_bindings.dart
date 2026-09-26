@@ -4,8 +4,11 @@ import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 
 import '../protocol/forwarded_bindings.dart';
+import '../store/companion_attachment_store.dart';
 import 'companion_app_link.dart';
 import 'companion_prompts.dart';
+import 'hosted_session_control.dart';
+import 'hosted_workspace.dart';
 import 'sessions_at_rest.dart';
 
 /// The companion bindings the session host serves a phone with — one binding
@@ -23,16 +26,24 @@ import 'sessions_at_rest.dart';
 ///   screen by the agent's own rules and typed into the PTY it holds
 ///   ([hosted], for the sessions [holds] names), whether or not the app is
 ///   open. A session the host does not hold is the app's, or refused.
-/// - **The app's, or refused**: everything else that needs the desktop —
-///   starting and resuming through the launcher, the composer's attachments,
-///   workspaces, usage and a session's model or mode. With no app connected
-///   the phone is told "the Karmashala app is not running".
+/// - **The app's while it is connected, the host's while it is not** — for a
+///   phone driving a machine with no desktop: the workspace and adding a
+///   project ([workspace]), starting and resuming sessions and a session's
+///   model or mode ([control]), usage ([usage]) and attachments
+///   ([attachments]). The app's answers are the launcher's, its composer's and
+///   its Settings', so it keeps them while it is there. A host composed
+///   without one of these refuses it with no app: "the Karmashala app is not
+///   running".
 RemoteHostBindings hostCompanionBindings({
   required String hostName,
   required CompanionAppLink app,
   required SessionsAtRest atRest,
   CompanionPrompts? hosted,
   bool Function(String sessionId)? holds,
+  HostedWorkspace? workspace,
+  HostedSessionControl? control,
+  Future<RemoteUsageSnapshot> Function()? usage,
+  CompanionAttachmentStore? attachments,
   required Future<RemoteNotesSnapshot> Function() notes,
   required Future<void> Function(
     String deviceId,
@@ -48,6 +59,28 @@ RemoteHostBindings hostCompanionBindings({
   Future<T> appOnly<T>(Future<T> Function() call) {
     if (!app.connected) return Future.error(companionAppNotRunning);
     return call();
+  }
+
+  /// Forwarded while the app is connected, else the host's own answer from
+  /// [here] — or [companionAppNotRunning] when the host was composed without
+  /// one ([here] is null).
+  Future<T> appOrHost<T, S extends Object>(
+    S? here,
+    Future<T> Function(S here) host,
+    Future<T> Function() forward,
+  ) {
+    if (app.connected) return forward();
+    if (here == null) return Future.error(companionAppNotRunning);
+    return Future.sync(() => host(here));
+  }
+
+  /// A store refusal, in words the wire can carry.
+  Future<T> staged<T>(Future<T> Function() write) async {
+    try {
+      return await write();
+    } on AttachmentUploadException catch (failure) {
+      throw RemoteApiRefusal(ErrorCode.badRequest, failure.message);
+    }
   }
 
   /// The host's own answer for a session it holds, else the app's.
@@ -102,37 +135,74 @@ RemoteHostBindings hostCompanionBindings({
       (prompts) => prompts.answerMenu(request),
       () => forwarded.answerMenu(request),
     ),
-    usage: () => appOnly(forwarded.usage),
+    usage: () => app.connected
+        ? forwarded.usage()
+        : usage == null
+        ? Future.error(companionAppNotRunning)
+        : usage(),
     notes: notes,
     registerPush: registerPush,
-    listWorkspace: () => appOnly(forwarded.listWorkspace),
-    listProjects: () => appOnly(forwarded.listProjects),
-    startSession: (request) => appOnly(() => forwarded.startSession(request)),
-    addProject: (name, path) => appOnly(() => forwarded.addProject(name, path)),
-    resumeSession: (sessionId) =>
-        appOnly(() => forwarded.resumeSession(sessionId)),
-    beginAttachment: (deviceId, request) =>
-        appOnly(() => forwarded.beginAttachment(deviceId, request)),
-    writeAttachmentChunk: (deviceId, uploadId, seq, data) => appOnly(
-      () => forwarded.writeAttachmentChunk(deviceId, uploadId, seq, data),
+    listWorkspace: () => appOrHost(
+      workspace,
+      (here) async => here.listWorkspace(),
+      forwarded.listWorkspace,
     ),
-    // Told, not awaited: it runs as a phone's link is torn down, which must not
-    // wait on the app. Nothing to drop when the app that staged the bytes is
-    // gone: its own store sweeps on its next start.
-    discardAttachment: (deviceId) async {
-      if (!app.connected) return;
-      unawaited(
-        forwarded.discardAttachment(deviceId).then((_) {}, onError: (_) {}),
-      );
-    },
-    sessionOptions: (sessionId) =>
-        appOnly(() => forwarded.sessionOptions(sessionId)),
-    configureSession: (sessionId, {model, permission}) => appOnly(
+    listProjects: () => appOrHost(
+      workspace,
+      (here) async => here.listProjects(),
+      forwarded.listProjects,
+    ),
+    addProject: (name, path) => appOrHost(
+      workspace,
+      (here) => here.addProject(name, path),
+      () => forwarded.addProject(name, path),
+    ),
+    startSession: (request) => appOrHost(
+      control,
+      (here) => here.start(request),
+      () => forwarded.startSession(request),
+    ),
+    resumeSession: (sessionId) => appOrHost(
+      control,
+      (here) => here.resume(sessionId),
+      () => forwarded.resumeSession(sessionId),
+    ),
+    sessionOptions: (sessionId) => appOrHost(
+      control,
+      (here) => here.options(sessionId),
+      () => forwarded.sessionOptions(sessionId),
+    ),
+    configureSession: (sessionId, {model, permission}) => appOrHost(
+      control,
+      (here) => here.configure(sessionId, model: model, permission: permission),
       () => forwarded.configureSession(
         sessionId,
         model: model,
         permission: permission,
       ),
     ),
+    // An upload is staged by whoever will commit it: the app's composer while
+    // it is connected, the host's own store while it is not. A prompt that
+    // names it goes the same way ([sendPrompt] above).
+    beginAttachment: (deviceId, request) => appOrHost(
+      attachments,
+      (store) => staged(() => store.begin(deviceId, request)),
+      () => forwarded.beginAttachment(deviceId, request),
+    ),
+    writeAttachmentChunk: (deviceId, uploadId, seq, data) => appOrHost(
+      attachments,
+      (store) => staged(() => store.write(deviceId, uploadId, seq, data)),
+      () => forwarded.writeAttachmentChunk(deviceId, uploadId, seq, data),
+    ),
+    // Told, not awaited: it runs as a phone's link is torn down, which must not
+    // wait on the app. Both stores are asked: the bytes are in whichever was
+    // serving when they were sent, and dropping nothing is harmless.
+    discardAttachment: (deviceId) async {
+      await attachments?.discard(deviceId);
+      if (!app.connected) return;
+      unawaited(
+        forwarded.discardAttachment(deviceId).then((_) {}, onError: (_) {}),
+      );
+    },
   );
 }

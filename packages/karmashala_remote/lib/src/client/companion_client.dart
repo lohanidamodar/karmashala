@@ -683,6 +683,7 @@ class CompanionClient {
     required String permissionMode,
     String? title,
     String? message,
+    bool worktree = false,
   }) async {
     final payload = await _request(FrameType.sessionStart, {
       'requestId': requestId,
@@ -691,6 +692,7 @@ class CompanionClient {
       'permissionMode': permissionMode,
       'title': ?title,
       'message': ?message,
+      if (worktree) 'worktree': true,
     });
     return RemoteSessionStarted.fromJson(payload);
   }

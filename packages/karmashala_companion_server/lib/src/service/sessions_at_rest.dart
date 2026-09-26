@@ -4,6 +4,8 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
+import '../domain/attachment_rules.dart';
+import '../store/companion_attachment_store.dart';
 import '../store/workspace_names.dart';
 import 'companion_prompts.dart';
 import 'companion_screens.dart';
@@ -15,9 +17,10 @@ import 'screen_transcripts.dart';
 /// screens.
 ///
 /// **Only what the host can see for itself.** Attention and what the agent is
-/// doing from the agent status it keeps for the sessions it holds; no
-/// delivery stage, no attachments, no agent record: a phone is told less,
-/// never something the host would be guessing.
+/// doing from the agent status it keeps for the sessions it holds; a file a
+/// phone sends, kept here and handed to the agent by path; no delivery stage,
+/// no agent record: a phone is told less, never something the host would be
+/// guessing.
 class SessionsAtRest {
   SessionsAtRest({
     required this.sessions,
@@ -25,10 +28,19 @@ class SessionsAtRest {
     required this.screens,
     required this.hostName,
     this.agentStatusOf,
+    this.attachments,
+    this.attachmentSupportOf,
     ScreenTranscripts? transcripts,
     DateTime Function()? clock,
   }) : transcripts = transcripts ?? ScreenTranscripts(clock: clock),
        _now = clock ?? DateTime.now;
+
+  /// Where a file a phone sends is kept on this machine; null refuses one.
+  final CompanionAttachmentStore? attachments;
+
+  /// What a file sent to a row's session may be — its agent's declared
+  /// support, and whether a path here is one it can open. Null: none may.
+  final RemoteAttachmentSupport Function(Session row)? attachmentSupportOf;
 
   final SessionDao sessions;
   final WorkspaceNames names;
@@ -93,20 +105,37 @@ class SessionsAtRest {
     return (revision: offset == null ? null : 'output:$offset', activity: null);
   }
 
-  /// Types [text] into the session's PTY. A prompt with an attachment is the
-  /// composer's to offer, and the composer is the app's.
+  /// Types [text] into the session's PTY. A prompt naming an [attachment] the
+  /// phone sent commits that file to [attachments] first and hands the agent
+  /// its path in the desktop composer's words — **sent**, not offered: with no
+  /// desktop there is no message box for a person to read it in first, and the
+  /// phone that sent the file is the person.
   Future<RemotePromptDelivery> sendPrompt(
     String sessionId,
     String text, {
     RemoteAttachmentRef? attachment,
   }) async {
-    if (attachment != null) {
+    if (attachment == null) {
+      await screens.type(_hostIdOf(sessionId), text);
+      return RemotePromptDelivery.sent;
+    }
+    final store = attachments;
+    if (store == null) {
       throw const RemoteApiRefusal(
         ErrorCode.badRequest,
-        'a file is offered through the desktop app, which is not running',
+        'this machine keeps no files sent from a phone',
       );
     }
-    await screens.type(_hostIdOf(sessionId), text);
+    final String path;
+    try {
+      path = (await store.commit(
+        attachment.deviceId,
+        attachment.uploadId,
+      )).path;
+    } on AttachmentUploadException catch (failure) {
+      throw RemoteApiRefusal(ErrorCode.badRequest, failure.message);
+    }
+    await screens.type(_hostIdOf(sessionId), attachmentPromptBody(text, path));
     return RemotePromptDelivery.sent;
   }
 
@@ -140,6 +169,11 @@ class SessionsAtRest {
       projectName: place?.projectName,
       projectPath: place?.projectPath,
       worktree: row.worktree?.path,
+      attachments:
+          attachmentSupportOf?.call(row) ??
+          const RemoteAttachmentSupport.refused(
+            'This machine keeps no files sent from a phone.',
+          ),
     );
   }
 

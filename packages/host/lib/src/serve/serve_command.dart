@@ -208,6 +208,7 @@ Future<int> runServe(
           database: database,
           registry: registry,
           hostName: settings.name,
+          dataDirectory: dataDirectory,
           lanPort: settings.companionPort,
           lanAddress: settings.bind,
           ownConfig: settings.ownCompanion,
@@ -248,6 +249,14 @@ Future<int> runServe(
     database,
     settings.mcpPort,
     errSink,
+  );
+  // A phone starts and resumes sessions here with no app, once a launched
+  // agent can be handed its tools.
+  companion?.serveSessions(
+    mcp: SessionMcpAccessPoint(
+      mcp: mcp,
+      configDirectory: p.join(dataDirectory, 'mcp'),
+    ),
   );
   final automations = await _startAutomations(
     database: database,

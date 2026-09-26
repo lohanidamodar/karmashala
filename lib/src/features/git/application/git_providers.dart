@@ -5,14 +5,13 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
-import 'worktree_creation_tracker.dart';
-import 'worktree_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'worktree_setup_providers.dart';
-import 'worktree_setup_service.dart';
 
 /// The `agentId` a setup pane is opened under: `openAgentTab` is the only route
 /// with the §17 wrapping, and an `agent:` pane is one a restore never re-runs.
@@ -21,7 +20,10 @@ const String kWorktreeSetupAgentId = 'karmashala:worktree-setup';
 final worktreeServiceProvider = Provider<WorktreeService>(
   (ref) => WorktreeService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    environmentOf: worktreeEnvironmentOf(
+      ref.watch(executionEnvironmentDaoProvider),
+      runners: ref.watch(commandRunnerFactoryProvider),
+    ),
     setup: ref.watch(worktreeSetupServiceProvider),
     creations: ref.watch(worktreeCreationsProvider),
     // A worktree that has just appeared or vanished is the one change Quick

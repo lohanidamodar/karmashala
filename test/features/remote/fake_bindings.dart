@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
-import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 
 /// In-memory bindings: sessions, transcripts and recorded actions, with no
 /// providers, processes or terminals anywhere near them.

@@ -8,7 +8,7 @@ import '../../../features/explorer/application/checkout_default.dart';
 import '../../../features/explorer/application/checkout_picker.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/git/application/changes_providers.dart';
-import '../../../features/git/application/worktree_creation_tracker.dart';
+import 'package:karmashala_git/worktrees.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/repositories/application/repository_providers.dart';

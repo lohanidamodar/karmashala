@@ -9,3 +9,4 @@ export 'git.dart';
 export 'github.dart';
 export 'pull_request_context.dart';
 export 'repositories.dart';
+export 'worktrees.dart';

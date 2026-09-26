@@ -53,7 +53,7 @@ import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_providers.dart';
-import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';

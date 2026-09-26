@@ -25,6 +25,12 @@ dependencies:
     path: ../karmashala_agent_status
   # The device key a runtime seals with.
   cryptography: ^2.9.0
+  # `Repository` and the discovery that finds the checkouts under a project a
+  # phone adds on a machine with no desktop app.
+  karmashala_git:
+    path: ../karmashala_git
+  # Where a phone's project folder is checked and a checkout named.
+  path: ^1.9.1
   # The companion wire, the host session api and the transports.
   karmashala_remote:
     path: ../karmashala_remote

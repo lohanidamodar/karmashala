@@ -194,19 +194,9 @@ void main() {
       expect(notes.todos.single.body, seededTodo);
     });
 
-    test('what only the app can do says the app is not running', () async {
+    test('an agent the store does not hold is refused by name', () async {
       final client = await dial(phone);
 
-      await expectLater(
-        client.listWorkspace(),
-        throwsA(
-          isA<RemoteApiException>().having(
-            (e) => e.message,
-            'message',
-            kCompanionAppNotRunning,
-          ),
-        ),
-      );
       await expectLater(
         client.startSession(
           requestId: 'live-start',
@@ -218,7 +208,7 @@ void main() {
           isA<RemoteApiException>().having(
             (e) => e.message,
             'message',
-            kCompanionAppNotRunning,
+            'that agent is no longer installed on this machine',
           ),
         ),
       );
@@ -359,6 +349,111 @@ void main() {
         reason: agentObserver.tail(400),
       );
     });
+  });
+
+  // A phone driving the machine on its own, as on a server with no desktop:
+  // it lists what is here, adds a folder as a project, starts an agent in it
+  // (a stand-in script under Claude Code's adapter), sees it running, lets it
+  // end, and resumes it — no app link anywhere.
+  group('a phone driving the machine alone', () {
+    test(
+      'lists, adds a project, starts, sees it run, and resumes it',
+      () async {
+        final client = await dial(phone);
+
+        final places = await client.listProjects();
+        expect(places.map((p) => p.name), contains('Shop'));
+
+        final folder = Directory('${home.path}/new-project');
+        Directory('${folder.path}/.git').createSync(recursive: true);
+        final added = await client.addProject(
+          requestId: 'live-add',
+          name: 'New project',
+          path: folder.path,
+        );
+        expect(added.name, 'New project');
+        final checkout = added.checkouts.single;
+        final agent = checkout.agents.singleWhere(
+          (a) => a.installationId == fakeAgentInstallationId,
+        );
+        final workspace = await client.listWorkspace();
+        expect(
+          workspace.map((p) => p.projectId),
+          contains(added.projectId),
+          reason: 'the store the next list reads',
+        );
+
+        final started = await client.startSession(
+          requestId: 'live-start-2',
+          repositoryId: checkout.repositoryId,
+          installationId: agent.installationId,
+          permissionMode: agent.defaultMode,
+          title: 'Started from the phone',
+        );
+        final sessionId = started.sessionId;
+        final running = await readUntil(
+          client.listSessions,
+          (sessions) => sessions.any(
+            (s) => s.sessionId == sessionId && s.status == 'running',
+          ),
+        );
+        final row = running.singleWhere((s) => s.sessionId == sessionId);
+        expect(row.title, 'Started from the phone');
+        expect(row.projectName, 'New project');
+        final first = await readUntil(
+          () => client.transcript(sessionId),
+          (page) => page.messages.any((m) => m.text.contains('FAKE-AGENT')),
+        );
+        expect(
+          first.messages.last.text,
+          contains('--session-id\n$sessionId'),
+          reason: 'launched by the adapter\'s own command line',
+        );
+
+        // The agent ends on its own: one line typed from the phone.
+        await client.sendPrompt(sessionId, 'goodbye');
+        final ended = await readUntil(
+          client.listSessions,
+          (sessions) => sessions.any(
+            (s) => s.sessionId == sessionId && s.status == 'completed',
+          ),
+        );
+        expect(
+          ended.singleWhere((s) => s.sessionId == sessionId).status,
+          'completed',
+        );
+
+        // Claude Code's store holds the conversation the row named at launch.
+        final bucket = Directory('${home.path}/.claude/projects/live')
+          ..createSync(recursive: true);
+        File('${bucket.path}/$sessionId.jsonl').writeAsStringSync('{}\n');
+        final resumed = await client.resumeSession(
+          requestId: 'live-resume',
+          sessionId: sessionId,
+        );
+        expect(resumed.sessionId, sessionId, reason: 'the same row, continued');
+        await readUntil(
+          client.listSessions,
+          (sessions) => sessions.any(
+            (s) => s.sessionId == sessionId && s.status == 'running',
+          ),
+        );
+        final again = await readUntil(
+          () => client.transcript(sessionId),
+          (page) =>
+              page.messages.any((m) => m.text.contains('--resume\n$sessionId')),
+        );
+        expect(
+          again.messages.last.text,
+          allOf(
+            contains('--resume\n$sessionId'),
+            isNot(contains('--session-id')),
+          ),
+          reason: 'the adapter\'s resume, in a new hosted PTY',
+        );
+        expect(host.output, isNot(contains('Unhandled exception')));
+      },
+    );
   });
 
   group('with the app back', () {

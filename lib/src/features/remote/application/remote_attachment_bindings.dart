@@ -15,7 +15,7 @@ import '../../notes/application/composer_draft.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../data/companion_attachment_store.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_providers.dart';
@@ -27,17 +27,10 @@ RemoteAttachmentSupport remoteAttachmentSupportFor(
   String? agentId,
   String? environmentId,
 ) {
-  final descriptor = agentId == null
-      ? null
-      : AgentRegistry.builtIn.byId(agentId);
-  final support = descriptor?.attachments;
-  if (support == null || !support.isSupported) {
-    return RemoteAttachmentSupport.refused(
-      support?.refusal.isNotEmpty ?? false
-          ? support!.refusal
-          : 'This agent is not known to open a file named in a prompt.',
-    );
-  }
+  final support = agentAttachmentSupport(
+    agentId == null ? null : AgentRegistry.builtIn.byId(agentId),
+  );
+  if (support.refusal != null) return support;
   final environment = environmentId == null
       ? null
       : ref.read(executionEnvironmentDaoProvider).getById(environmentId);
@@ -55,15 +48,7 @@ RemoteAttachmentSupport remoteAttachmentSupportFor(
       'not a file it can open.',
     );
   }
-  return RemoteAttachmentSupport(
-    mediaTypes: [
-      for (final type in support.mediaTypes)
-        // Only what this desktop can also *write*: a type the agent would read
-        // but the store has no extension for is a path nobody can open.
-        if (kAttachmentExtensions.containsKey(type)) type,
-    ],
-    maxBytes: kMaxAttachmentBytes,
-  );
+  return support;
 }
 
 /// The path an agent in [environmentId] would use for a file this host wrote.
@@ -130,9 +115,7 @@ Future<void> offerRemoteAttachment(
   }
   // The desktop composer's own wording for the same act, so an agent cannot
   // tell which door the file came through — see `message_composer.dart`.
-  final body = text.isEmpty
-      ? 'Attached image(s):\n$visible'
-      : '$text\n\nAttached image(s):\n$visible';
+  final body = attachmentPromptBody(text, visible);
   ref.read(composerDraftProvider.notifier).queue(sessionId, body);
   ref.read(selectedSessionIdProvider.notifier).select(sessionId);
   final paneId = session?.paneId;

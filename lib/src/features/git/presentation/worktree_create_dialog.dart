@@ -7,7 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/process.dart';
 import '../application/changes_providers.dart';
 import '../application/git_providers.dart';
-import '../application/worktree_creation_tracker.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'worktree_creation_view.dart';
 
 /// What the dialog was asked for.

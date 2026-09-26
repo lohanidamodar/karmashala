@@ -35,6 +35,10 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   String? _installationId;
   String? _mode;
 
+  /// Start in a worktree of its own, on a new branch, rather than the
+  /// checkout itself.
+  bool _worktree = false;
+
   /// The idempotency key for the request as it stands: kept across retries, so
   /// Start after "the desktop did not answer" costs one session; re-minted the
   /// moment any field changes, because that is a different intention.
@@ -251,6 +255,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
             permissionMode: mode.mode,
             title: _title.text.trim().isEmpty ? null : _title.text.trim(),
             message: _message.text.trim().isEmpty ? null : _message.text.trim(),
+            worktree: _worktree,
           );
       if (!mounted) return;
       final hostAfter = ref.read(companionGatewayProvider).pairing?.hostId;
@@ -437,6 +442,21 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
             detail: mode?.summary,
             alert: mode?.dangerous ?? false,
             onTap: () => _pickMode(agent),
+          ),
+          SwitchListTile(
+            secondary: const Icon(AppIcons.gitBranch),
+            title: const Text('Own worktree'),
+            subtitle: const Text(
+              'A new branch in a worktree of its own, so this session\'s '
+              'changes stay apart from the checkout.',
+            ),
+            value: _worktree,
+            onChanged: _starting
+                ? null
+                : (value) => setState(() {
+                    _worktree = value;
+                    _formChanged();
+                  }),
           ),
           _StartFormFields(
             agent: agent,

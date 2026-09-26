@@ -1,10 +1,11 @@
 name: karmashala_git
 description: >-
-  Reading and driving git: the porcelain and diff parsers, worktrees and their
-  setup plans, the on-disk `.git` reader, review threads, GitHub's pull-request
-  and branch-protection models, and the repository identities they hang off.
-  Pure Dart, so it runs under `dart test` without a `flutter_tester` or a
-  `sqlite3.dll`.
+  Reading and driving git: the porcelain and diff parsers, worktrees — their
+  staged creation, setup plans and verdicts — the on-disk `.git` reader,
+  repository discovery, review threads, GitHub's pull-request and
+  branch-protection models, and the repository identities they hang off. Pure
+  Dart, so it runs under `dart test` without a `flutter_tester`, and in the
+  session host.
 version: 0.1.0
 publish_to: none
 
@@ -25,6 +26,13 @@ dependencies:
   # `ListEquality` for `BranchProtection`'s required-checks list, which used
   # `listEquals` from `package:flutter/foundation.dart` in the app.
   collection: ^1.19.1
+  # The clock a worktree setup's verdict is stamped with.
+  karmashala_core:
+    path: ../karmashala_core
+  # The `worktree_setup` tables `WorktreeSetupDao` reads and writes, so the
+  # app and a session host that makes a worktree keep the same verdicts.
+  karmashala_store:
+    path: ../karmashala_store
   # `@immutable`, the other half of that same foundation import.
   meta: ^1.16.0
   # Joining and normalising the paths the `.git` readers walk.

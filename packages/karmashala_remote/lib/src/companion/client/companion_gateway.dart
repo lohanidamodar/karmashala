@@ -840,6 +840,7 @@ abstract interface class CompanionGateway {
     required String permissionMode,
     String? title,
     String? message,
+    bool worktree = false,
   });
 
   Future<RemoteSessionStarted> resumeSession({

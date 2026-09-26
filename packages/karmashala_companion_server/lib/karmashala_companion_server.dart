@@ -4,6 +4,8 @@
 /// app runs the same server itself.
 library;
 
+export 'src/domain/agent_options.dart';
+export 'src/domain/attachment_rules.dart';
 export 'src/domain/companion_config.dart';
 export 'src/protocol/companion_call_dispatcher.dart';
 export 'src/protocol/companion_method.dart';
@@ -12,10 +14,15 @@ export 'src/service/companion_app_link.dart';
 export 'src/service/companion_prompts.dart';
 export 'src/service/companion_screens.dart';
 export 'src/service/host_companion_bindings.dart';
+export 'src/service/hosted_session_control.dart';
+export 'src/service/hosted_workspace.dart';
 export 'src/service/notes_snapshot.dart';
 export 'src/service/remote_host_service.dart';
 export 'src/service/screen_transcripts.dart';
 export 'src/service/sessions_at_rest.dart';
+export 'src/service/usage_snapshot.dart';
+export 'src/store/companion_attachment_store.dart';
 export 'src/store/companion_config_store.dart';
 export 'src/store/host_identity.dart';
 export 'src/store/workspace_names.dart';
+export 'src/store/workspace_rows.dart';

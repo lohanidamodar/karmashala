@@ -1,7 +1,7 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/git/data/worktree_setup_dao.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';

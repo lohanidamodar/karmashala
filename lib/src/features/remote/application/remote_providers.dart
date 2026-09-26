@@ -2,10 +2,8 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_companion_server/karmashala_companion_server.dart'
-    show hostDeviceIdFor;
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import '../../../core/database/database_providers.dart';
-import '../data/companion_attachment_store.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 

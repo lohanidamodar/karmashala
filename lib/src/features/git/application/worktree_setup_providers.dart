@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../terminal/application/pane_exit_signal.dart';
-import '../data/worktree_setup_dao.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import 'git_providers.dart';
 

@@ -15,6 +15,7 @@ export 'src/service/approval_answerer.dart';
 export 'src/service/hosted_status_keeper.dart';
 export 'src/service/key_pacer.dart';
 export 'src/service/menu_answerer.dart';
+export 'src/service/permission_cycle.dart';
 export 'src/service/prompt_answering.dart';
 export 'src/service/prompt_answers.dart';
 export 'src/service/prompt_terminals.dart';

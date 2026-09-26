@@ -5,7 +5,6 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/projects/application/project_service.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

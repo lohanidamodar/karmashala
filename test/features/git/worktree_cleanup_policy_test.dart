@@ -1,8 +1,9 @@
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_policy.dart';
-import 'package:karmashala/src/features/git/application/worktree_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
@@ -251,7 +252,9 @@ void main() {
     final runner = FakeCommandRunner();
     final service = WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: ExecutionEnvironmentDao(db)..upsert(windowsEnv()),
+      environmentOf: worktreeEnvironmentOf(
+        ExecutionEnvironmentDao(db)..upsert(windowsEnv()),
+      ),
     );
     await service.removeIfClean(
       const EnvironmentPath(environmentId: 'windows', path: r'C:\src\app'),

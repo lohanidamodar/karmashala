@@ -1,11 +1,12 @@
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/git/application/worktree_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
@@ -109,7 +110,7 @@ void main() {
       sessionRepositoryDao: SessionRepositoryDao(db),
       worktreeService: WorktreeService(
         runnerFactory: FakeCommandRunnerFactory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
       ),
       resolveProtocol: (agentId) {
         resolved.add(agentId);

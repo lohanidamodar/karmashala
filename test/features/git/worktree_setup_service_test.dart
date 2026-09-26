@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/git/application/worktree_setup_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

@@ -160,6 +160,7 @@ class ForwardedBindings {
       'permissionMode': request.permissionMode,
       'title': ?request.title,
       'message': ?request.message,
+      if (request.worktree) 'worktree': true,
     }),
   );
 

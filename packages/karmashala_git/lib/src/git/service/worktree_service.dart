@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:agent_cli/process.dart';
-import '../../environments/application/environment_resolver.dart';
-import '../../environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
 import 'worktree_creation_tracker.dart';
 import 'worktree_setup_service.dart';
@@ -18,13 +16,19 @@ typedef WorktreeCreated = ({
   WorktreeCreationTracker tracker,
 });
 
+/// Where a repository's git commands run. Throws [GitException] in the words
+/// of whoever resolves it — the app's resolver, or a session host that runs
+/// only on its own machine — when that cannot be said.
+typedef WorktreeEnvironmentOf =
+    ExecutionEnvironment Function(EnvironmentPath repo);
+
 /// High-level worktree lifecycle, resolving the correct runner for each
 /// repository's environment. Where a session's per-session worktree choice
 /// (ADR 0004) is realised; git remains the source of truth.
 class WorktreeService {
   WorktreeService({
     required this.runnerFactory,
-    required this.environmentDao,
+    required this.environmentOf,
     this.onCheckoutMoved,
     this.setup,
     this.creations,
@@ -33,7 +37,9 @@ class WorktreeService {
   });
 
   final CommandRunnerFactory runnerFactory;
-  final ExecutionEnvironmentDao environmentDao;
+
+  /// See [WorktreeEnvironmentOf].
+  final WorktreeEnvironmentOf environmentOf;
 
   /// See [CheckoutMoved]. Null in a test that is only asserting git arguments.
   final CheckoutMoved? onCheckoutMoved;
@@ -52,17 +58,8 @@ class WorktreeService {
   /// How long a removal waits for the repository's teardown command.
   final Duration teardownBound;
 
-  /// Where [repo]'s git runs, or the resolver's own refusal as a
-  /// [GitException], in its words so this cannot drift from the launch paths.
-  ExecutionEnvironment _environmentOf(EnvironmentPath repo) {
-    final resolved = ExecutionEnvironmentResolver(
-      environments: environmentDao,
-      runners: runnerFactory,
-    ).resolveFor(repo);
-    final env = resolved.environment;
-    if (env == null) throw GitException(resolved.reason);
-    return env;
-  }
+  ExecutionEnvironment _environmentOf(EnvironmentPath repo) =>
+      environmentOf(repo);
 
   GitService _gitFor(EnvironmentPath repo) =>
       GitService(runnerFactory.forEnvironment(_environmentOf(repo)));

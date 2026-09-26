@@ -96,7 +96,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'Demo');
     await _tapAdd(tester);
     expect(
-      find.text('Enter the project path on your desktop.'),
+      find.text('Enter the folder\'s path on that machine.'),
       findsOneWidget,
     );
     expect(gateway.calls, isEmpty);

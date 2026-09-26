@@ -1,23 +1,39 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
+import 'package:agent_cli/descriptors.dart'
+    show AgentActivityStatus, AgentRegistry;
+import 'package:agent_cli/discovery.dart' show SystemClock;
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/read.dart'
+    show CliStoreLocator, ConversationPresence, ConversationStoreIndex;
+import 'package:agent_cli/usage.dart' show AgentUsageService, UsageSample;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
+import 'package:karmashala_automations/persistence.dart' show CheckoutRows;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/push.dart';
 import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_session/session.dart' show Session;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
+import 'package:path/path.dart' as p;
 
+import '../automations/daemon_checkout_facts.dart';
+import '../automations/hosted_agent_launcher.dart';
+import '../automations/session_mcp_access.dart';
 import '../domain/session_registry.dart';
+import '../domain/uuid.dart';
 import '../protocol/messages.dart';
 import '../status/daemon_prompt_answers.dart';
 import 'companion_app_relay.dart';
 import 'companion_handler.dart';
+import 'daemon_session_control.dart';
+import 'daemon_worktrees.dart';
 import 'registry_screens.dart';
 
 /// The phone companion, served by the daemon: the one companion server on a
@@ -34,6 +50,7 @@ class DaemonCompanion implements CompanionHandler {
     required this.database,
     required this.registry,
     required this.hostName,
+    this.dataDirectory,
     this.lanPort = kHostCompanionPort,
     this.lanAddress = '0.0.0.0',
     this.ownConfig,
@@ -44,13 +61,36 @@ class DaemonCompanion implements CompanionHandler {
     this.prompts,
     this.onLog,
     DateTime Function()? clock,
+    String Function()? newId,
+    bool? windows,
+    AgentUsageService? usageService,
+    Map<String, String>? hostEnvironment,
   }) : _relayFactory = relayFactory,
        _pushPost = pushPost,
        _now = clock ?? DateTime.now,
+       _newId = newId ?? newUuid,
        _devices = PairedDeviceDao(database),
        _configs = CompanionConfigStore(database),
        _sessions = SessionDao(database),
-       screens = screens ?? RegistryScreens(registry);
+       _rows = CheckoutRows(database),
+       _hostEnvironment = hostEnvironment ?? Platform.environment,
+       screens = screens ?? RegistryScreens(registry) {
+    _facts = DaemonCheckoutFacts(_rows, windows: windows);
+    _stores = CliStoreLocator(
+      runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
+        _rows.environment(id) ?? localHostEnvironment(_now()),
+      ),
+      installations: WorkspaceRows(database).installations(),
+      environment: _hostEnvironment,
+    );
+    _usage =
+        usageService ??
+        AgentUsageService(storeLocator: _stores, clock: const SystemClock());
+    final directory = dataDirectory;
+    attachments = directory == null
+        ? null
+        : CompanionAttachmentStore(Directory(p.join(directory, 'attachments')));
+  }
 
   final AppDatabase database;
   final SessionRegistry registry;
@@ -79,12 +119,30 @@ class DaemonCompanion implements CompanionHandler {
   /// Lifecycle only — never a code, a key or a payload.
   final void Function(String message)? onLog;
 
+  /// The app's data directory — the store's — under which a file a phone
+  /// sends is kept (`attachments/`). Null keeps none.
+  final String? dataDirectory;
+
   final RelayTransportFactory? _relayFactory;
   final PushPost? _pushPost;
   final DateTime Function() _now;
+  final String Function() _newId;
   final PairedDeviceDao _devices;
   final CompanionConfigStore _configs;
   final SessionDao _sessions;
+  final CheckoutRows _rows;
+  final Map<String, String> _hostEnvironment;
+  late final DaemonCheckoutFacts _facts;
+  late final CliStoreLocator _stores;
+  late final AgentUsageService _usage;
+
+  /// Where a file a phone sends is kept while no app is connected.
+  late final CompanionAttachmentStore? attachments;
+
+  /// Starting, resuming and reconfiguring sessions for a phone with no app,
+  /// once [serveSessions] has what a launch needs.
+  DaemonSessionControl? _control;
+  late final _ControlSlot _controlSlot = _ControlSlot(() => _control);
 
   /// The desktop app companion calls are forwarded to, while one is connected.
   final CompanionAppRelay app = CompanionAppRelay();
@@ -94,12 +152,23 @@ class DaemonCompanion implements CompanionHandler {
     app: app,
     hosted: prompts == null ? null : CompanionPrompts(prompts!.answers),
     holds: prompts?.holds,
+    workspace: HostedWorkspace(
+      rows: WorkspaceRows(database),
+      isHere: _facts.isHere,
+      now: _now,
+      newId: _newId,
+    ),
+    control: _controlSlot,
+    usage: _usageSnapshot,
+    attachments: attachments,
     atRest: SessionsAtRest(
       sessions: _sessions,
       names: WorkspaceNames(database),
       screens: screens,
       hostName: hostName,
       agentStatusOf: (sessionId) => prompts?.statusOf(sessionId),
+      attachments: attachments,
+      attachmentSupportOf: attachments == null ? null : _attachmentSupport,
       clock: _now,
     ),
     notes: () async => notesSnapshot(
@@ -138,6 +207,144 @@ class DaemonCompanion implements CompanionHandler {
 
   int paired() => _devices.getActive().length;
 
+  /// From now on a phone can start and resume sessions on this machine, and
+  /// change the model or mode one runs under, with no app connected: each
+  /// agent launched as the host's own session, reaching Karmashala's tools
+  /// through [mcp]. Called once the MCP endpoint is up; until then those
+  /// calls say the app is not running.
+  void serveSessions({required SessionMcpAccessPoint mcp}) {
+    final facts = _facts;
+    _control = DaemonSessionControl(
+      rows: _rows,
+      facts: facts,
+      sessions: _sessions,
+      registry: registry,
+      screens: screens,
+      presenceOf: _presenceOf,
+      statusOf: prompts?.statusOf,
+      press: prompts?.press,
+      screenOf: prompts?.screen,
+      launcher: HostedAgentLauncher(
+        registry: registry,
+        sessions: _sessions,
+        mcp: mcp,
+        now: () => _now().toUtc(),
+        newId: _newId,
+        hostEnvironment: _hostEnvironment,
+        worktrees: daemonWorktrees(
+          database: database,
+          registry: registry,
+          facts: facts,
+          newId: _newId,
+        ),
+      ),
+    );
+  }
+
+  /// Every agent account's usage on this machine, through each adapter's
+  /// usage capability — the snapshot the app builds, from this host's reads.
+  Future<RemoteUsageSnapshot> _usageSnapshot() {
+    final workspace = WorkspaceRows(database);
+    final environments = workspace.environments();
+    final here = {
+      for (final environment in environments)
+        if (_facts.isHere(environment)) environment.id,
+    };
+    return companionUsageSnapshot(
+      // Only what this host can read: its own machine's agents.
+      installations: [
+        for (final installation in workspace.installations())
+          if (here.contains(installation.environmentId)) installation,
+      ],
+      registry: AgentRegistry.builtIn,
+      service: _usage,
+      environments: environments,
+      history: _usageSamples,
+      environmentName: (id) {
+        for (final environment in environments) {
+          if (environment.id == id) {
+            return environmentLabel(environment) ?? environment.name;
+          }
+        }
+        return id;
+      },
+      now: _now().toUtc(),
+    );
+  }
+
+  /// The readings the app recorded for [accountKey] since [since], oldest
+  /// first. Read only: the history is the app's to keep and prune.
+  List<UsageSample> _usageSamples(String accountKey, DateTime since) {
+    try {
+      return [
+        for (final row in database.query(
+          'SELECT * FROM usage_samples WHERE account_key = ? '
+          'AND recorded_at >= ? ORDER BY recorded_at ASC;',
+          [accountKey, isoFromDate(since)],
+        ))
+          UsageSample(
+            accountKey: row['account_key']! as String,
+            windowLabel: row['window_label']! as String,
+            percent: (row['percent']! as num).toDouble(),
+            recordedAt: dateFromIso(row['recorded_at']),
+          ),
+      ];
+    } on Object {
+      return const [];
+    }
+  }
+
+  /// What a file sent to [row]'s session may be: its agent's declared support,
+  /// on this machine only — a path written here is nothing to an agent
+  /// elsewhere.
+  RemoteAttachmentSupport _attachmentSupport(Session row) {
+    final installation = _rows.installation(row.agentInstallationId);
+    final support = agentAttachmentSupport(
+      installation == null
+          ? null
+          : AgentRegistry.builtIn.byId(installation.agentId),
+    );
+    if (support.refusal != null || installation == null) return support;
+    if (!_facts.isHostLocal(installation.executable)) {
+      return RemoteAttachmentSupport.refused(
+        '${_facts.describeEnvironment(installation.executable)} runs '
+        'elsewhere — a file written here is not a file it can open.',
+      );
+    }
+    return support;
+  }
+
+  /// Whether [agentId]'s own store on this machine holds [conversationId],
+  /// through its adapter's store capability.
+  Future<ConversationPresence> _presenceOf(
+    String agentId,
+    String conversationId,
+  ) async {
+    final store = AgentRegistry.builtIn.adapterFor(agentId)?.store;
+    if (store == null) return ConversationPresence.unknown;
+    final here = [
+      for (final environment in WorkspaceRows(database).environments())
+        if (_facts.isHere(environment)) environment,
+    ];
+    try {
+      var answer = ConversationPresence.unknown;
+      for (final located in await _stores.locate(here)) {
+        final home = located.homeFor(agentId);
+        if (home == null) continue;
+        final found = await const ConversationStoreIndex().presenceOf(
+          storeHome: home,
+          store: store,
+          conversationId: conversationId,
+        );
+        if (found == ConversationPresence.present) return found;
+        if (found == ConversationPresence.absent) answer = found;
+      }
+      return answer;
+    } on Object {
+      return ConversationPresence.unknown;
+    }
+  }
+
   /// Serves by the config the store kept, or a box's defaults when no app has
   /// ever sent one, following [sessionEvents] — the host's lifecycle feed —
   /// and [statusChanges], what the agents it holds are doing. Throws when the
@@ -147,6 +354,8 @@ class DaemonCompanion implements CompanionHandler {
     Stream<HostedAgentStatus>? statusChanges,
   }) async {
     app.onChanged = (_) => _sessionsMoved();
+    // The one moment provably no upload is in flight.
+    await attachments?.sweep();
     _events = sessionEvents.listen(_onLifecycle);
     _statuses = statusChanges?.listen(_onStatus);
     await _serialised(() => _apply(ownConfig ?? _configs.read() ?? _config));
@@ -427,4 +636,40 @@ class DaemonCompanion implements CompanionHandler {
       _ => null,
     };
   }
+}
+
+/// The sessions a phone starts, resumes and reconfigures, held for the
+/// bindings before [DaemonCompanion.serveSessions] has what a launch needs:
+/// until then each call says the app is not running, as with no host control.
+class _ControlSlot implements HostedSessionControl {
+  _ControlSlot(this._control);
+
+  final DaemonSessionControl? Function() _control;
+
+  HostedSessionControl get _here {
+    final control = _control();
+    if (control == null) throw companionAppNotRunning;
+    return control;
+  }
+
+  @override
+  Future<RemoteSessionStarted> start(RemoteSessionStartRequest request) =>
+      Future.sync(() => _here.start(request));
+
+  @override
+  Future<RemoteSessionStarted> resume(String sessionId) =>
+      Future.sync(() => _here.resume(sessionId));
+
+  @override
+  Future<RemoteSessionOptions> options(String sessionId) =>
+      Future.sync(() => _here.options(sessionId));
+
+  @override
+  Future<RemoteConfigureOutcome> configure(
+    String sessionId, {
+    ({String? id})? model,
+    ({String? id})? permission,
+  }) => Future.sync(
+    () => _here.configure(sessionId, model: model, permission: permission),
+  );
 }

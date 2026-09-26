@@ -5,7 +5,6 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../explorer/application/checkout.dart';
-import '../../repositories/data/repository_discovery_service.dart';
 import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_git/git.dart'
     show kGitChildEnvironment, kGitRemovedEnvironment;

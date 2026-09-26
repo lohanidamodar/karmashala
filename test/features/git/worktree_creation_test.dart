@@ -1,9 +1,8 @@
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/git/application/worktree_creation_tracker.dart';
-import 'package:karmashala/src/features/git/application/worktree_service.dart';
-import 'package:karmashala/src/features/git/data/worktree_setup_dao.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/git.dart';
@@ -55,7 +54,7 @@ void main() {
     );
     service = WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: envDao,
+      environmentOf: worktreeEnvironmentOf(envDao),
     );
     tracker = WorktreeCreationTracker(repo: _repo);
   });

@@ -354,10 +354,15 @@ class RemoteSessionStartRequest {
     required this.permissionMode,
     this.title,
     this.message,
+    this.worktree = false,
   });
 
   final String repositoryId;
   final String installationId;
+
+  /// Start it in a worktree of its own, on a new branch, rather than in the
+  /// checkout itself — the desktop dialog's "Own worktree".
+  final bool worktree;
 
   /// The mode the **user** picked. Not optional: starting an agent in bypass is
   /// not a choice anything but a person may make.

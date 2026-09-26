@@ -11,7 +11,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../settings/presentation/path_field_row.dart';
 import '../../explorer/application/checkout_picker.dart';
-import '../../repositories/data/repository_discovery_service.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../application/project_service.dart';
 import '../application/projects_controller.dart';

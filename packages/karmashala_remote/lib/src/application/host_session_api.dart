@@ -512,6 +512,7 @@ class HostSessionApi {
             permissionMode: _requireString(envelope, 'permissionMode'),
             title: _optionalString(envelope, 'title'),
             message: _optionalString(envelope, 'message'),
+            worktree: envelope.payload['worktree'] == true,
           );
           final replayed = _starts.holds(key);
           final started = await _starts.once(

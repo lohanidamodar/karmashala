@@ -38,6 +38,8 @@ export 'src/serve/session_store.dart';
 export 'src/automations/automation_app_relay.dart';
 export 'src/automations/automation_handler.dart';
 export 'src/automations/daemon_automations.dart';
+export 'src/automations/hosted_agent_launcher.dart'
+    show kSessionIdEnvironmentVariable;
 export 'src/automations/hosted_check_runner.dart' show kCheckSessionPrefix;
 export 'src/automations/session_mcp_access.dart';
 export 'src/companion/companion_app_relay.dart';

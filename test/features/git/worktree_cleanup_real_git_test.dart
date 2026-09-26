@@ -1,12 +1,13 @@
 import 'dart:io';
 
+import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_policy.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
-import 'package:karmashala/src/features/git/application/worktree_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/session.dart';
@@ -88,7 +89,7 @@ void main() {
     envId = ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
     worktrees = WorktreeService(
       runnerFactory: const CommandRunnerFactory(),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
     );
     sessions = [];
     live = {};

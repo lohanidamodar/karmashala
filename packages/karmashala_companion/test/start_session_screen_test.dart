@@ -47,6 +47,7 @@ class _PendingStartGateway extends FakeCompanionGateway {
     required String permissionMode,
     String? title,
     String? message,
+    bool worktree = false,
   }) {
     calls++;
     return completer.future;
@@ -555,12 +556,34 @@ void main() {
       expect(sent.installationId, 'i1');
       expect(sent.permissionMode, 'bypass');
       expect(sent.title, 'From the phone');
+      expect(sent.worktree, isFalse, reason: 'the checkout itself, unasked');
       expect(find.byType(SessionViewScreen), findsOneWidget);
       expect(
         find.byType(StartSessionScreen),
         findsNothing,
         reason: 'the form is replaced, so it cannot be started twice',
       );
+    });
+
+    testWidgets('asks for a worktree of its own when switched on', (
+      tester,
+    ) async {
+      final gateway = paired();
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Own worktree'));
+      await tester.tap(find.text('Own worktree'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Start session'));
+      await tester.tap(find.text('Start session'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.startedSessions.single.worktree, isTrue);
     });
 
     testWidgets('a refusal is shown in the desktop own words', (tester) async {

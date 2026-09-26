@@ -5,7 +5,7 @@ import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
 import 'package:agent_cli/process.dart';
-import '../../git/application/worktree_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';

@@ -1,4 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart'
+    show safePermissionChoices;
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:riverpod/riverpod.dart';
@@ -35,7 +37,7 @@ Future<RemoteSessionOptions> remoteSessionOptions(
     modelDefaultLabel: model?.defaultModelId == null
         ? null
         : models.modelFor(model!.defaultModelId)?.label ?? model.defaultModelId,
-    permissions: modes == null ? const [] : _safeSelections(modes),
+    permissions: modes == null ? const [] : safePermissionChoices(modes),
     permissionId: permission == null || permission.inherited
         ? null
         : permission.selection.canonical,
@@ -104,28 +106,4 @@ String _nativeSession(Ref ref, String sessionId) {
     );
   }
   return native.id;
-}
-
-/// Every selection the phone may choose: each combination of the axes, as
-/// the agent itself resolves it, less the dangerous ones.
-List<RemoteChoice> _safeSelections(AgentPermissionSupport modes) {
-  if (!modes.isKnown) return const [];
-  var combos = <Map<String, String>>[{}];
-  for (final axis in modes.axes) {
-    combos = [
-      for (final partial in combos)
-        for (final value in axis.values) {...partial, axis.id: value.id},
-    ];
-  }
-  final seen = <String>{};
-  return [
-    for (final combo in combos)
-      if (modes.normalise(PermissionSelection(combo)) case final selection
-          when !modes.isDangerous(selection) && seen.add(selection.canonical))
-        RemoteChoice(
-          id: selection.canonical,
-          label: describeSelection(modes, selection),
-          summary: describeSelectionDetail(modes, selection) ?? '',
-        ),
-  ];
 }

@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/projects/application/project_service.dar
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 import 'package:karmashala_git/repositories.dart';
 
 import '../../support/fakes.dart';

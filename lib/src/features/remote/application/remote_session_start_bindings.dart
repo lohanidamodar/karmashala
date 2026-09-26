@@ -12,58 +12,25 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart'
+    show permissionChoice, remoteAgentOptionFor;
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 
 /// One installed agent as a real choice for the phone. A mode the descriptor
 /// cannot express arrives `selectable: false` with the agent's own explanation.
-RemoteAgentOption remoteAgentOption(Ref ref, AgentInstallation installation) {
-  final descriptor = ref.read(agentRegistryProvider).byId(installation.agentId);
-  final name = descriptor?.displayName ?? installation.agentId;
-  return RemoteAgentOption(
-    installationId: installation.id,
-    agentId: installation.agentId,
-    name: name,
-    version: installation.version,
-    // The desktop's own setting for a NEW session with this agent. The phone
-    // preselects it; nothing on the phone invents a default of its own.
-    defaultMode: ref
-        .read(sessionLauncherProvider)
-        .permissionFor(installation.agentId, SessionPurpose.newSession)
-        .canonical,
-    acceptsOpeningMessage: descriptor?.launch.acceptsPromptArgument ?? false,
-    // The agent's real selections, flattened: the wire carries an opaque mode
-    // id with the host's words beside it, so an older phone shows them all.
-    permissionModes: () {
-      final support = descriptor?.launch.permission;
-      if (support == null || !support.isKnown) {
-        return [
-          RemotePermissionOption(
-            mode: '',
-            label: 'Not established',
-            summary: unknownAgentReason(name),
-            selectable: false,
-          ),
-        ];
-      }
-      return [
-        for (final selection in support.selections())
-          RemotePermissionOption(
-            mode: selection.canonical,
-            // Minted here, so the phone shows the same pairing the desktop does
-            // without knowing the rungs exist.
-            label: describeSelectionFamiliar(support, selection),
-            summary:
-                describeSelectionDetail(support, selection) ??
-                describeSelectionFamiliar(support, selection),
-            selectable: true,
-            dangerous: support.isDangerous(selection),
-          ),
-      ];
-    }(),
-  );
-}
+RemoteAgentOption remoteAgentOption(Ref ref, AgentInstallation installation) =>
+    remoteAgentOptionFor(
+      installation,
+      ref.read(agentRegistryProvider).byId(installation.agentId),
+      // The desktop's own setting for a NEW session with this agent. The phone
+      // preselects it; nothing on the phone invents a default of its own.
+      defaultMode: ref
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.newSession)
+          .canonical,
+    );
 
 /// Starts a session the phone asked for, through [SessionLauncher.launch]
 /// alone. Every failure leaves as a [RemoteApiRefusal] in the desktop's words.
@@ -102,20 +69,14 @@ Future<RemoteSessionStarted> startRemoteSession(
 
   // Enforced, not merely offered: `workspace.list` already told the phone which
   // modes exist. Not `carryPermission` — nothing is being carried here.
-  final support = descriptor?.launch.permission;
-  if (support == null || !support.isKnown) {
-    throw RemoteApiRefusal(ErrorCode.badRequest, unknownAgentReason(agentName));
-  }
-  final mode = support
-      .selections()
-      .where((s) => s.canonical == request.permissionMode)
-      .firstOrNull;
+  final choice = permissionChoice(
+    descriptor,
+    agentName,
+    request.permissionMode,
+  );
+  final mode = choice.selection;
   if (mode == null) {
-    throw RemoteApiRefusal(
-      ErrorCode.badRequest,
-      '$agentName has no permission mode called '
-      '"${request.permissionMode}"',
-    );
+    throw RemoteApiRefusal(ErrorCode.badRequest, choice.refusal!);
   }
 
   try {
@@ -131,6 +92,7 @@ Future<RemoteSessionStarted> startRemoteSession(
             purpose: SessionPurpose.newSession,
             firstMessage: request.message,
             permissionOverride: mode,
+            useWorktree: request.worktree,
           ),
         );
     return RemoteSessionStarted(

@@ -57,8 +57,9 @@ class _Upload {
 class CompanionAttachmentStore {
   CompanionAttachmentStore(this.root, {this.keep = kCompanionAttachmentKeep});
 
-  /// `<temp>/karmashala/attachments` in production — the directory the desktop
-  /// composer already uses.
+  /// The app's: `<temp>/karmashala/attachments`, the directory the desktop
+  /// composer already uses. The session host's, while no app is connected:
+  /// `<data dir>/attachments`.
   final Directory root;
 
   /// How many committed attachments survive a [commit].

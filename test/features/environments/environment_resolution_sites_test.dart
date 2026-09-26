@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
-import 'package:karmashala/src/features/git/application/worktree_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala_git/github.dart';
@@ -18,6 +18,7 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -73,7 +74,7 @@ void main() {
     test('WorktreeService.list refuses, and spawns nothing', () async {
       final service = WorktreeService(
         runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
       );
 
       // Synchronous: the refusal happens before any future is made.
@@ -84,7 +85,7 @@ void main() {
     test('WorktreeService.createForSession refuses before git runs', () async {
       final service = WorktreeService(
         runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
       );
 
       await expectLater(

@@ -146,6 +146,7 @@ class CompanionCallDispatcher {
             permissionMode: text('permissionMode'),
             title: title is String ? title : null,
             message: message is String ? message : null,
+            worktree: arguments['worktree'] == true,
           ),
         )).toJson();
       case CompanionMethod.addProject:

@@ -28,13 +28,7 @@ void main() {
   };
 
   /// Files allowed to keep a branch, each with the reason it stays.
-  const allowed = <String, String>{
-    // Serves `usage.get` to the phone companion. The companion code is being
-    // moved into the daemon by a parallel refactor; its allowlist of agents
-    // becomes `adapter.usage != null` there.
-    'lib/src/features/remote/application/remote_usage_bindings.dart':
-        'companion — owned by the parallel companion refactor',
-  };
+  const allowed = <String, String>{};
 
   List<Directory> roots() {
     final lib = Directory('lib');

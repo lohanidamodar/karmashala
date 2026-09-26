@@ -10,7 +10,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/checkout.dart';
 import '../../sessions/application/session_actions.dart';
-import '../data/companion_attachment_store.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_approval_bindings.dart';

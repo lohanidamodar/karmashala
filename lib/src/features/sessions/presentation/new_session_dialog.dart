@@ -13,7 +13,7 @@ import 'package:karmashala_git/git.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
-import '../../git/application/worktree_creation_tracker.dart';
+import 'package:karmashala_git/worktrees.dart';
 import '../../git/presentation/worktree_creation_view.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';

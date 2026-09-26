@@ -4,7 +4,7 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../application/worktree_creation_tracker.dart';
+import 'package:karmashala_git/worktrees.dart';
 
 /// A creation in flight, redrawn on every stage change the tracker publishes.
 class WorktreeCreationLiveView extends StatelessWidget {

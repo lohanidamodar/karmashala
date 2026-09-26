@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -7,8 +8,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
-import 'package:karmashala/src/features/git/application/worktree_service.dart';
-import 'package:karmashala/src/features/git/application/worktree_setup_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,7 +35,7 @@ void main() {
     );
     service = WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: envDao,
+      environmentOf: worktreeEnvironmentOf(envDao),
     );
   });
   tearDown(() => db.close());
@@ -115,7 +115,7 @@ void main() {
       );
       return WorktreeService(
         runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-        environmentDao: envDao,
+        environmentOf: worktreeEnvironmentOf(envDao),
         setup: setup,
         teardownBound: const Duration(milliseconds: 20),
       );
@@ -151,7 +151,7 @@ void main() {
       moved = [];
       service = WorktreeService(
         runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-        environmentDao: envDao,
+        environmentOf: worktreeEnvironmentOf(envDao),
         onCheckoutMoved: moved.add,
       );
     });
@@ -245,7 +245,7 @@ void main() {
 
     WorktreeService withSetup() => WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: envDao,
+      environmentOf: worktreeEnvironmentOf(envDao),
       onCheckoutMoved: (path) => order.add('moved ${path.path}'),
       setup: _RecordingSetup(
         runnerFactory: FakeCommandRunnerFactory(fallback: runner),

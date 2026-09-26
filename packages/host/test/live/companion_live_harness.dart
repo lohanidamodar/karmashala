@@ -26,9 +26,18 @@ const String seededTodo = 'Ship the fix';
 /// agent's status off the screen the test's fake agent draws.
 const String seededAgentSessionId = 'live-agent';
 
-/// Seeds `<dataDir>/karmashala.sqlite` the way the app would have left it — a
-/// project, a repository, one session row not yet started, a note and a todo —
-/// and closes it again before the host opens the same file.
+/// The installation a phone starts sessions with: Claude Code's adapter over a
+/// stand-in script ([fakeAgentPath]) that says what it was started with, reads
+/// one line, says it back and exits 0.
+const String fakeAgentInstallationId = 'a3';
+
+/// Where [seedStore] writes the stand-in agent, under the test's home.
+String fakeAgentPath(Directory dataDir) => '${dataDir.parent.path}/fake-agent';
+
+/// Seeds `<dataDir>/karmashala.sqlite` the way the app and agent discovery
+/// would have left it — this machine's environment, a project, a repository,
+/// session rows not yet started, agent installations (one a stand-in script),
+/// a note and a todo — and closes it again before the host opens the file.
 void seedStore(Directory dataDir) {
   dataDir.createSync(recursive: true);
   final database = AppDatabase.open(dataDir);
@@ -57,11 +66,41 @@ void seedStore(Directory dataDir) {
         createdAt: t0,
       ),
     );
+    // This machine, as agent discovery records it.
+    database.execute(
+      'INSERT INTO execution_environments (id, kind, name, created_at) '
+      'VALUES (?, ?, ?, ?);',
+      ['local', 'localPosix', 'This machine', t0.toIso8601String()],
+    );
     database.execute(
       'INSERT INTO agent_installations (id, agent_kind, environment_id, '
       'executable_path, created_at, executable_by_user) '
       'VALUES (?, ?, ?, ?, ?, ?);',
       ['a2', 'claudeCode', 'local', '/usr/bin/claude', t0.toIso8601String(), 1],
+    );
+    final agent = File(fakeAgentPath(dataDir))
+      ..writeAsStringSync(
+        '#!/bin/sh\n'
+        // One argument a line, so a long path wrapping cannot split one.
+        'echo FAKE-AGENT\n'
+        'for arg in "\$@"; do echo "\$arg"; done\n'
+        'read -r line\n'
+        'echo "FAKE-GOT<\$line>"\n'
+        'exit 0\n',
+      );
+    Process.runSync('chmod', ['+x', agent.path]);
+    database.execute(
+      'INSERT INTO agent_installations (id, agent_kind, environment_id, '
+      'executable_path, created_at, executable_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?);',
+      [
+        fakeAgentInstallationId,
+        'claudeCode',
+        'local',
+        agent.path,
+        t0.add(const Duration(seconds: 1)).toIso8601String(),
+        1,
+      ],
     );
     SessionDao(database).insert(
       Session(

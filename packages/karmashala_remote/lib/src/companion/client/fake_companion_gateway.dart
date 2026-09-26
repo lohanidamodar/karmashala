@@ -662,6 +662,7 @@ class FakeCompanionGateway implements CompanionGateway {
           String permissionMode,
           String? title,
           String? message,
+          bool worktree,
         })
       >[];
 
@@ -697,6 +698,7 @@ class FakeCompanionGateway implements CompanionGateway {
     required String permissionMode,
     String? title,
     String? message,
+    bool worktree = false,
   }) async {
     _requireLink();
     startedSessions.add((
@@ -706,6 +708,7 @@ class FakeCompanionGateway implements CompanionGateway {
       permissionMode: permissionMode,
       title: title,
       message: message,
+      worktree: worktree,
     ));
     final failure = startFailure;
     if (failure != null) throw failure;

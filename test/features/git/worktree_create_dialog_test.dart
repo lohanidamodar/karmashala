@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -6,7 +7,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
-import 'package:karmashala/src/features/git/application/worktree_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_create_dialog.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -36,7 +37,7 @@ void main() {
     );
     service = WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: envDao,
+      environmentOf: worktreeEnvironmentOf(envDao),
     );
   });
   tearDown(() => db.close());

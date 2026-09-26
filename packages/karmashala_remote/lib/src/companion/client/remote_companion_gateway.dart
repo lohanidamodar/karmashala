@@ -786,6 +786,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     required String permissionMode,
     String? title,
     String? message,
+    bool worktree = false,
   }) async {
     await _ready;
     final client = _requireClient();
@@ -797,6 +798,7 @@ class RemoteCompanionGateway implements CompanionGateway {
         permissionMode: permissionMode,
         title: title,
         message: message,
+        worktree: worktree,
       ),
     );
     _ensureCurrentClient(client);

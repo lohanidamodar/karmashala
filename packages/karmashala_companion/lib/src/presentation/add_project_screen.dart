@@ -13,7 +13,8 @@ import 'companion_states.dart';
 import 'link_banner.dart';
 import 'project_sessions_screen.dart';
 
-/// Adds an already-existing project on the desktop. The path is intentionally
+/// Adds an already-existing folder on the paired machine — a desktop, or a
+/// server with no desktop at all — as a project. The path is intentionally
 /// typed or pasted: a phone cannot open a native picker on its paired host.
 class AddProjectScreen extends ConsumerStatefulWidget {
   const AddProjectScreen({super.key});
@@ -69,7 +70,7 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
       return;
     }
     if (path.isEmpty) {
-      setState(() => _error = 'Enter the project path on your desktop.');
+      setState(() => _error = 'Enter the folder\'s path on that machine.');
       return;
     }
     setState(() {
@@ -143,7 +144,9 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
     ),
     children: [
       Text(
-        'Add a project that already exists on your desktop.',
+        'Add a folder that already exists on the machine this phone is '
+        'connected to — your desktop, or a server. Any git repositories '
+        'inside it become its checkouts.',
         style: Theme.of(context).textTheme.bodyLarge,
       ),
       const SizedBox(height: Insets.lg),
@@ -164,9 +167,9 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
         maxLines: 2,
         keyboardType: TextInputType.url,
         decoration: const InputDecoration(
-          labelText: 'Desktop path',
+          labelText: 'Folder path',
           border: OutlineInputBorder(),
-          hintText: r'C:\Users\you\projects\app',
+          hintText: '/home/you/projects/app',
           prefixIcon: Icon(AppIcons.folderOpen),
         ),
       ),

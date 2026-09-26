@@ -12,7 +12,7 @@
 library;
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
+import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 AgentDescriptor _descriptor(String id) => AgentRegistry.builtIn.byId(id)!;

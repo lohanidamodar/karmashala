@@ -12,7 +12,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../settings/presentation/path_field_row.dart';
-import '../../repositories/data/repository_discovery_service.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspace_suggestion.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/domain/workspace.dart';

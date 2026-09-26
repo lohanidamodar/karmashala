@@ -40,13 +40,17 @@ class DaemonAgents {
   bool mcpNeedsConfigFile(String agentId) =>
       descriptorOf(agentId)?.launch.mcp.needsConfigFile ?? false;
 
-  /// The command line for a new session [sessionId] of [agentId], told
-  /// [prompt], pointed at Karmashala's tools by [mcpUrl] or [mcpConfigPath].
-  List<String> newSessionArguments({
+  /// The command line for session [sessionId] of [agentId]: a new
+  /// conversation told [prompt], or — with [resumeConversationId] — that
+  /// conversation continued; on [modelId] when one was chosen, pointed at
+  /// Karmashala's tools by [mcpUrl] or [mcpConfigPath].
+  List<String> sessionArguments({
     required String agentId,
     required String sessionId,
     required String? permissionMode,
-    required String prompt,
+    String? prompt,
+    String? modelId,
+    String? resumeConversationId,
     String? mcpUrl,
     String? mcpConfigPath,
   }) {
@@ -56,12 +60,28 @@ class DaemonAgents {
     return agentPaneArguments(
       descriptor,
       permissionOf(agentId, permissionMode),
+      modelId: modelId,
       sessionId: assignsOwnId ? sessionId : null,
+      resumeSessionId: resumeConversationId,
       prompt: prompt,
       mcpUrl: mcpUrl,
       mcpConfigPath: mcpConfigPath,
     );
   }
+
+  /// What [agentId] is called where a person reads it.
+  String nameOf(String agentId) =>
+      descriptorOf(agentId)?.displayName ?? agentId;
+
+  /// Whether [agentId] can be told to continue a conversation by id in a
+  /// terminal — the resume capability a phone's Resume needs.
+  bool resumesById(String agentId) =>
+      descriptorOf(agentId)?.launch.interactiveResume.isSupported ?? false;
+
+  /// Whether [agentId] permits a second process on a conversation one is
+  /// already writing to. Unknown is no.
+  bool allowsConcurrentResume(String agentId) =>
+      descriptorOf(agentId)?.launch.allowsConcurrentResume ?? false;
 
   /// Whether a new session of [agentId] is started under the id Karmashala
   /// gives it, so the row can name its conversation from the start.

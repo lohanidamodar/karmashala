@@ -22,10 +22,6 @@ enum LivePermissionOutcome {
   nextLaunch,
 }
 
-/// The longest the agent is given to redraw its mode after one step. A bound,
-/// not a sleep: the screen is read again as soon as it shows a different mode.
-const Duration kPermissionCycleSettle = Duration(seconds: 2);
-
 /// Moves a running session's permission mode without relaunching it, where the
 /// agent's descriptor says how, and says what actually happened.
 extension SessionLivePermission on SessionLauncher {
@@ -68,49 +64,29 @@ extension SessionLivePermission on SessionLauncher {
     return LivePermissionOutcome.nextLaunch;
   }
 
-  /// Steps the cycle until the screen shows [target], reading it back after
-  /// every step. Coming round to where it started means the mode is not on
-  /// offer, and the session is left in the mode it was found in.
+  /// Steps the cycle in this session's pane until its screen shows [target]
+  /// ([cyclePermissionTo], the session host's own way too).
   Future<LivePermissionOutcome> _cycleTo(
     String sessionId,
     AgentPermissionLiveCycle live,
     String target,
     Duration settle,
   ) async {
-    String? now() {
-      final terminal = _liveTerminalFor(sessionId);
-      return terminal == null ? null : live.read(terminalTailLines(terminal));
-    }
-
-    /// The mode once the screen shows one other than [before], or [before]
-    /// again when [settle] passes without a redraw.
-    Future<String?> changedFrom(String before) async {
-      const poll = Duration(milliseconds: 40);
-      // Counted in waits taken rather than read off a stopwatch, so a test's
-      // fake clock bounds it exactly as the real one does.
-      for (var waited = Duration.zero; ; waited += poll) {
-        final seen = now();
-        if (seen == null || seen != before || waited >= settle) return seen;
-        await Future<void>.delayed(poll);
-      }
-    }
-
-    final start = now();
-    if (start == null) return LivePermissionOutcome.nextLaunch;
-    if (start == target) return LivePermissionOutcome.switched;
-    var at = start;
-    for (var step = 0; step <= live.order.length; step++) {
-      if (!pressKeys(sessionId, live.key)) {
-        return LivePermissionOutcome.nextLaunch;
-      }
-      final seen = await changedFrom(at);
-      if (seen == null) return LivePermissionOutcome.nextLaunch;
-      // An unchanged screen is a step not yet drawn, not a lap completed.
-      if (seen == at) return LivePermissionOutcome.noAnswer;
-      if (seen == target) return LivePermissionOutcome.switched;
-      if (seen == start) return LivePermissionOutcome.notOffered;
-      at = seen;
-    }
-    return LivePermissionOutcome.notOffered;
+    final outcome = await cyclePermissionTo(
+      live,
+      target,
+      read: () {
+        final terminal = _liveTerminalFor(sessionId);
+        return terminal == null ? null : live.read(terminalTailLines(terminal));
+      },
+      press: () => pressKeys(sessionId, live.key),
+      settle: settle,
+    );
+    return switch (outcome) {
+      PermissionCycleOutcome.switched => LivePermissionOutcome.switched,
+      PermissionCycleOutcome.notOffered => LivePermissionOutcome.notOffered,
+      PermissionCycleOutcome.noAnswer => LivePermissionOutcome.noAnswer,
+      PermissionCycleOutcome.unreachable => LivePermissionOutcome.nextLaunch,
+    };
   }
 }

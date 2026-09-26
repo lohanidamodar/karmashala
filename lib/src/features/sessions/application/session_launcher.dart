@@ -34,6 +34,8 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_agent_reporting/status.dart'
     show TerminalGridStatusSource;
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show PermissionCycleOutcome, cyclePermissionTo, kPermissionCycleSettle;
 import '../data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
@@ -58,6 +60,10 @@ export 'session_launch_exceptions.dart';
 // descriptor and a set of choices, reached through the launcher.
 export 'package:karmashala_session/launch.dart'
     show agentMcpArguments, agentPaneArguments;
+
+// The one bound on a permission cycle's redraw, the host's and the app's.
+export 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show kPermissionCycleSettle;
 
 // The launcher's body, one `part` per concern — start, resume_guards, policy,
 // surfaces, input — because privacy in Dart is per library.

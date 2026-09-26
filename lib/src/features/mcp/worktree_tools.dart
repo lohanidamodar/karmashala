@@ -6,7 +6,7 @@ import '../explorer/application/checkout.dart';
 import '../explorer/application/checkout_picker.dart';
 import '../git/application/changes_providers.dart';
 import '../git/application/git_providers.dart';
-import '../git/application/worktree_setup_service.dart';
+import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
