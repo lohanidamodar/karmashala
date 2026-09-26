@@ -67,11 +67,11 @@ void main() {
   });
 
   group('the one bottom sheet', () {
-    List<CompanionConnection> desktops(int count) => [
+    List<CompanionConnection> machines(int count) => [
       for (var i = 0; i < count; i++)
         CompanionConnection(
           hostId: fakeHostId(i + 1),
-          name: 'Desktop number $i',
+          name: 'Machine number $i',
           active: i == 0,
         ),
     ];
@@ -79,7 +79,7 @@ void main() {
     testWidgets('names itself, and reaches its last row at 200% text', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(connections: desktops(6));
+      final gateway = FakeCompanionGateway.paired(connections: machines(6));
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -87,19 +87,19 @@ void main() {
         textScale: 2.0,
       );
 
-      await tester.tap(find.text('Desktop number 0'));
+      await tester.tap(find.text('Machine number 0'));
       await tester.pumpAndSettle();
-      // Six desktops of two-line names at 200% is far taller than the half
+      // Six machines of two-line names at 200% is far taller than the half
       // viewport Material gives an un-scroll-controlled sheet.
       expect(tester.takeException(), isNull);
-      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('MACHINES'), findsOneWidget);
 
       await tester.dragUntilVisible(
-        find.text('Add a desktop'),
+        find.text('Add a machine'),
         find.byType(SingleChildScrollView).last,
         const Offset(0, -120),
       );
-      await tester.tap(find.text('Add a desktop'));
+      await tester.tap(find.text('Add a machine'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
@@ -107,10 +107,10 @@ void main() {
     testWidgets('stays as short as its contents when there are only two', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(connections: desktops(2));
+      final gateway = FakeCompanionGateway.paired(connections: machines(2));
       await pumpPhone(tester, gateway: gateway, home: const HostSwitcherBar());
 
-      await tester.tap(find.text('Desktop number 0'));
+      await tester.tap(find.text('Machine number 0'));
       await tester.pumpAndSettle();
 
       final sheet = tester.getSize(find.byType(BottomSheet));

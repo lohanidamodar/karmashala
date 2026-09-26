@@ -5,9 +5,9 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_environments.dart';
 import 'companion_chrome.dart';
 
-/// The machines behind one desktop, as rows to pick from.
+/// The machines behind one paired machine, as rows to pick from.
 ///
-/// Drawn only when there are two or more: a phone whose desktop runs one
+/// Drawn only when there are two or more: a phone whose host runs one
 /// machine is not asked to choose between it and nothing.
 class EnvironmentIndex extends StatelessWidget {
   const EnvironmentIndex({
@@ -102,7 +102,7 @@ String describeEnvironmentHolding(CompanionEnvironment environment) =>
     ? '1 project'
     : '${environment.projects} projects';
 
-/// A machine's glyph from the kind the desktop named, and a neutral one when
+/// A machine's glyph from the kind the host named, and a neutral one when
 /// it named none — never a kind guessed from a label.
 IconData environmentGlyphFor(String? kind) => switch (kind) {
   'ssh' => AppIcons.globe,

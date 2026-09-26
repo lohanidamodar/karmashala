@@ -11,11 +11,11 @@ import 'companion_route.dart';
 import 'connections_section.dart' show connectionRouteLabel;
 import 'pairing/pairing_screen.dart';
 
-/// The strip above the session list that names the desktop being shown and
+/// The strip above the session list that names the machine being shown and
 /// switches to another in one tap.
 ///
-/// **Drawn at one desktop too.** Hiding it there is what made a second desktop
-/// undiscoverable: this is where "Add a desktop" lives. It says nothing about
+/// **Drawn at one machine too.** Hiding it there is what made a second machine
+/// undiscoverable: this is where "Add a machine" lives. It says nothing about
 /// the link — [LinkBanner] owns that, and says *why* as well.
 class HostSwitcherBar extends ConsumerWidget {
   const HostSwitcherBar({super.key});
@@ -38,10 +38,10 @@ class HostSwitcherBar extends ConsumerWidget {
     List<CompanionConnection> connections,
   ) async {
     // Scroll-controlled: a bare Column in Material's half-height sheet
-    // overflowed at four desktops, or at two with 200% text.
+    // overflowed at four machines, or at two with 200% text.
     final picked = await companionSheet<String>(
       context,
-      title: 'DESKTOPS',
+      title: 'MACHINES',
       children: [
         for (final connection in connections)
           ListTile(
@@ -60,7 +60,7 @@ class HostSwitcherBar extends ConsumerWidget {
         const Divider(height: 1),
         ListTile(
           leading: const Icon(AppIcons.plus),
-          title: const Text('Add a desktop'),
+          title: const Text('Add a machine'),
           onTap: () => Navigator.of(context).pop(''),
         ),
       ],
@@ -111,8 +111,8 @@ class HostSwitcherBar extends ConsumerWidget {
               ),
         title: Text(
           switching != null
-              ? 'Switching desktop…'
-              : active?.name ?? 'No desktop',
+              ? 'Switching machine…'
+              : active?.name ?? 'No machine',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: density.title(theme),

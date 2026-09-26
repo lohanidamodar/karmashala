@@ -30,7 +30,7 @@ extension _GatewayConnections on RemoteCompanionGateway {
     for (final record in _all.records)
       CompanionConnection(
         hostId: record.hostId.value,
-        name: record.hostName.isEmpty ? 'Desktop' : record.hostName,
+        name: record.hostName.isEmpty ? 'Machine' : record.hostName,
         active: record.hostId.value == _all.activeHostId?.value,
         lastConnectedAt: record.lastConnectedAt,
         route: record.route,

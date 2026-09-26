@@ -8,7 +8,7 @@ import '../application/companion_providers.dart';
 import 'companion_chrome.dart';
 import 'companion_states.dart';
 
-/// What the Route line says. For the active desktop on Automatic it also names
+/// What the Route line says. For the active machine on Automatic it also names
 /// the route in use, since that is what a person wants to know before pinning.
 String connectionRouteLine(
   CompanionConnection connection, {
@@ -32,9 +32,9 @@ String connectionRouteLine(
 bool _offers(CompanionConnection connection, CompanionRoutePin pin) =>
     connection.relays.any((url) => url.toString() == pin.relay.toString());
 
-/// The Route line under a desktop, and the picker behind it. Nothing for a
-/// machine paired directly: its route was chosen on the desktop when it was
-/// paired, and the row already says which.
+/// The Route line under a machine the phone finds by itself, and the picker
+/// behind it. Nothing for a machine paired directly: its route was chosen when
+/// it was paired, and the row already says which.
 class ConnectionRouteLine extends ConsumerWidget {
   const ConnectionRouteLine({required this.connection, super.key});
 

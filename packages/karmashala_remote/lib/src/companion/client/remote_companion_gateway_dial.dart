@@ -6,13 +6,13 @@ part of 'remote_companion_gateway.dart';
 // the next is tried.
 
 /// Why a directly-paired box is not connected, and the one remedy there is:
-/// the route is chosen on the desktop, so that is where it is changed.
+/// the route is chosen when it is paired, so that is where it is changed.
 String _directUnreachableTrouble(String? endpoint) =>
     '${endpoint ?? 'This machine'} did not answer. If it is no longer '
-    "reachable from here, pair it again from the desktop and choose 'Hosted "
-    "relay'.";
+    'reachable from here, pair it again with its route set to '
+    "'Hosted relay'.";
 
-/// Why a pinned desktop is not connected. The remedy is the one the banner's
+/// Why a pinned machine is not connected. The remedy is the one the banner's
 /// Use Auto gives: a pin is "only", so the phone will not go around it alone.
 String _pinnedUnreachableTrouble(String name, CompanionRoutePin pin) =>
     '$name is pinned to ${describeRoutePin(pin)}, and it is not answering '
@@ -90,7 +90,7 @@ extension _GatewayDial on RemoteCompanionGateway {
   void _notePinnedTrouble(CompanionRoutePin pin) {
     final name = _record?.hostName ?? '';
     _noteTrouble(
-      _pinnedUnreachableTrouble(name.isEmpty ? 'Your desktop' : name, pin),
+      _pinnedUnreachableTrouble(name.isEmpty ? 'The machine' : name, pin),
     );
   }
 

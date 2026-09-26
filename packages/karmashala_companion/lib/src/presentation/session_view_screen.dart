@@ -113,12 +113,13 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
           requestId: requestId,
         );
     if (delivery == RemotePromptDelivery.offered && mounted) {
-      // The file lands in the desktop's message box, so this must not read as
-      // though the agent already had it.
+      // Only the desktop app offers a file rather than typing it: the file
+      // lands in its message box, so this must not read as though the agent
+      // already had it.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Waiting in the desktop\'s message box — send it from there.',
+            "Waiting in the desktop app's message box — send it from there.",
           ),
         ),
       );

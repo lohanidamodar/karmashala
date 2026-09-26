@@ -15,7 +15,7 @@ void main() {
       gateway: FakeCompanionGateway(),
       home: const PairingScreen(),
     );
-    expect(find.text('Pair with your desktop'), findsOneWidget);
+    expect(find.text('Pair with a machine'), findsOneWidget);
     expect(find.text('Scan the QR code'), findsOneWidget);
 
     await tester.tap(find.text('Paste the code instead'));
@@ -114,7 +114,7 @@ void main() {
       textScale: 2.0,
     );
 
-    expect(find.text('Pair with your desktop'), findsOneWidget);
+    expect(find.text('Pair with a machine'), findsOneWidget);
     expect(find.text('Scan the QR code'), findsOneWidget);
     expect(find.text('Paste the code instead'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -143,7 +143,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Add a desktop'), findsOneWidget);
+    expect(find.text('Add a machine'), findsOneWidget);
     expect(find.byType(BackButton), findsOneWidget);
   });
 

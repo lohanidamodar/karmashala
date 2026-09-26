@@ -15,22 +15,22 @@ const String _kUnreachable =
 /// says why, because "busy" is a claim one unanswered request cannot support,
 /// and is flatly wrong after a revoke ([_kRevoked]).
 const String _kUnanswered =
-    'The desktop did not answer in time. The request was sent, so it may still '
+    'The machine did not answer in time. The request was sent, so it may still '
     'be working on it.';
 
 /// The host revoked this pairing and said so on the way out.
 const String _kRevoked =
-    'This pairing was revoked on the desktop. Pair again to reconnect.';
+    'This pairing was revoked on the machine. Pair again to reconnect.';
 
 /// How many of those the link is given before the phone stops calling it
-/// connected. ONE is a busy desktop and must cost nothing: the host serialises
+/// connected. ONE is a busy machine and must cost nothing: the host serialises
 /// every frame for one device on a single chain, so a slow binding call holds
 /// up what is behind it and a re-dial reaches the same chain. TWO in a row,
 /// with nothing answered between, is a link that brings nothing back.
 const int _kUnansweredBeforeDoubt = 2;
 
 const String _kHostSilentTrouble =
-    'Your desktop is keeping this connection open but not answering it. '
+    'The machine is keeping this connection open but not answering it. '
     'What you can see here is what it last sent.';
 
 extension _GatewayRefusals on RemoteCompanionGateway {
@@ -118,22 +118,22 @@ extension _GatewayRefusals on RemoteCompanionGateway {
   /// The protocol-error → user-sentence table.
   String _sentenceFor(RemoteApiException error) => switch (error.code!) {
     ErrorCode.notPermitted =>
-      'The desktop did not grant this phone permission to do that. '
+      'The machine did not grant this phone permission to do that. '
           'Re-pair with more access to use it.',
     ErrorCode.unsupportedVersion =>
-      'This app and the desktop speak different protocol versions. '
+      'This app and the machine speak different protocol versions. '
           'Update whichever is older and pair again.',
-    ErrorCode.notFound => 'The desktop no longer has that session.',
-    ErrorCode.badRequest => 'The desktop refused: ${error.message}.',
+    ErrorCode.notFound => 'The machine no longer has that session.',
+    ErrorCode.badRequest => 'The machine refused: ${error.message}.',
     ErrorCode.unknownType =>
-      'The desktop did not understand the request — one of the two apps '
-          'is out of date.',
+      'The machine did not understand the request — this app or Karmashala '
+          'there is out of date.',
     ErrorCode.internal =>
-      'Something went wrong on the desktop while handling that request.',
+      'Something went wrong on the machine while handling that request.',
     ErrorCode.streamStalled =>
-      'The desktop paused its updates while this phone caught up.',
+      'The machine paused its updates while this phone caught up.',
     ErrorCode.outOfOrder =>
-      'That arrived out of order, so the desktop did not act on it. '
+      'That arrived out of order, so the machine did not act on it. '
           'Try again.',
   };
 

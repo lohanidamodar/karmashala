@@ -83,7 +83,7 @@ class StateLog {
 /// know that, and the next test's scout — joined to the same group on the same
 /// port — hears a host that no longer exists. Dialling that corpse costs the
 /// full `attemptTimeout * 4` the pairing race allows a LAN candidate, which is
-/// how "Could not find your desktop" reached a run whose desktop was right
+/// how "Could not find the machine" reached a run whose desktop was right
 /// there, and how a stranger-cooldown assertion saw a second dial it had not
 /// asked for. Both are timing, so both come and go under `--concurrency=4`.
 ///

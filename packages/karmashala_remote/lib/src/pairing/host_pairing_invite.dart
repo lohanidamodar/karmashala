@@ -36,12 +36,12 @@ enum HostRoute {
 }
 
 /// An invite that is past its `exp`. Separate from a malformed one: the remedy
-/// is "New code" on the desktop, not "that is not a Karmashala code".
+/// is a new code from the machine, not "that is not a Karmashala code".
 class HostInviteExpiredException implements Exception {
   const HostInviteExpiredException();
 
   String get message =>
-      'That code has expired. Choose "New code" on the desktop and scan again.';
+      'That code has expired. Get a new code from the machine and scan again.';
 
   @override
   String toString() => message;

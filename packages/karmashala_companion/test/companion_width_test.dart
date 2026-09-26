@@ -90,7 +90,7 @@ void main() {
   final studio = fakeHostId(1);
   final laptop = fakeHostId(2);
 
-  List<CompanionConnection> twoDesktops() => [
+  List<CompanionConnection> twoMachines() => [
     CompanionConnection(hostId: studio, name: 'Studio', active: true),
     CompanionConnection(hostId: laptop, name: 'Laptop', active: false),
   ];
@@ -114,7 +114,7 @@ void main() {
     testWidgets('keeps a phone measure on a tablet', (tester) async {
       await pumpTablet(
         tester,
-        gateway: FakeCompanionGateway.paired(connections: twoDesktops()),
+        gateway: FakeCompanionGateway.paired(connections: twoMachines()),
         home: const CompanionSettingsScreen(),
       );
 
@@ -125,7 +125,7 @@ void main() {
     testWidgets('fills a phone', (tester) async {
       await pumpPhone(
         tester,
-        gateway: FakeCompanionGateway.paired(connections: twoDesktops()),
+        gateway: FakeCompanionGateway.paired(connections: twoMachines()),
         home: const CompanionSettingsScreen(),
       );
 
@@ -262,7 +262,7 @@ void main() {
         'below it', (tester) async {
       await pumpTablet(
         tester,
-        gateway: FakeCompanionGateway.paired(connections: twoDesktops()),
+        gateway: FakeCompanionGateway.paired(connections: twoMachines()),
         home: const HostSwitcherBar(),
       );
 

@@ -107,7 +107,7 @@ void main() {
 
       expect(find.text('Code accepted'), findsOneWidget);
       expect(find.text('Proving keys'), findsOneWidget);
-      expect(find.textContaining('Looking for your desktop'), findsOneWidget);
+      expect(find.textContaining('Looking for the machine'), findsOneWidget);
 
       await tester.pump(const Duration(milliseconds: 250));
       expect(

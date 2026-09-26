@@ -107,7 +107,7 @@ const double companionBadgeHairline = 1;
 
 /// A titled bottom sheet that can always be read to the end: scroll-controlled
 /// and capped against the viewport, because Material's default half-height is
-/// shorter than a list of desktops at 200% text.
+/// shorter than a list of machines at 200% text.
 Future<T?> companionSheet<T>(
   BuildContext context, {
   required String title,
@@ -148,7 +148,7 @@ Future<T?> companionSheet<T>(
   ),
 );
 
-/// The line that names a group of settings — "DESKTOPS", "DIAGNOSTICS". Says
+/// The line that names a group of settings — "MACHINES", "DIAGNOSTICS". Says
 /// `header: true`, so a screen reader can jump between sections.
 class CompanionSectionHeader extends StatelessWidget {
   const CompanionSectionHeader(this.label, {this.gap = Insets.sm, super.key});

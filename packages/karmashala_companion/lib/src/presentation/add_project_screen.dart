@@ -150,8 +150,8 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
     children: [
       Text(
         'Add a folder that already exists on the machine this phone is '
-        'connected to — your desktop, or a server. Any git repositories '
-        'inside it become its checkouts.',
+        'connected to — a computer running the desktop app, or a server. '
+        'Any git repositories inside it become its checkouts.',
         style: Theme.of(context).textTheme.bodyLarge,
       ),
       const SizedBox(height: Insets.lg),

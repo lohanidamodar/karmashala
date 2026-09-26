@@ -26,11 +26,11 @@ class LinkBanner extends ConsumerWidget {
     // Watched, not read: the reason arrives with no link-state change behind
     // it, so a `ref.read` would wait for somebody else's rebuild.
     final trouble = ref.watch(companionLinkTroubleProvider).asData?.value;
-    // A machine paired by address is not "your desktop", and what to check
-    // about it is different.
+    // A machine paired by address is not found on this network or its relays,
+    // and what to check about it is different.
     final pairing = ref.watch(companionPairingProvider).asData?.value;
-    final machine = pairing?.route != null;
-    // The active desktop, when the person pinned its route.
+    final byAddress = pairing?.route != null;
+    // The active machine, when the person pinned its route.
     final pinned = ref
         .watch(companionConnectionsProvider)
         .asData
@@ -46,7 +46,7 @@ class LinkBanner extends ConsumerWidget {
     // What the phone is doing and, once it knows, why it is still doing it —
     // "Connecting…" alone leaves nothing to act on.
     final headline = connecting
-        ? machine
+        ? byAddress
               ? 'Connecting to ${pairing?.hostName ?? 'the machine'}…'
               : 'Connecting to ${companionMachineNameOf(pairing)}…'
         : 'Host unreachable';
@@ -54,7 +54,7 @@ class LinkBanner extends ConsumerWidget {
         trouble ??
         (connecting
             ? null
-            : machine
+            : byAddress
             ? 'Check that the machine is running and can be reached from here.'
             : 'Check that Karmashala is running on '
                   '${companionMachineNameOf(pairing)}.');
@@ -106,9 +106,9 @@ class LinkBanner extends ConsumerWidget {
                     if (detail != null)
                       Text(
                         detail,
-                        // A machine's trouble ends in its remedy — pair again
+                        // A by-address machine's trouble ends in its remedy — pair again
                         // by the other route — which two lines would cut off.
-                        maxLines: machine ? _machineDetailLines : _maxLines,
+                        maxLines: byAddress ? _byAddressDetailLines : _maxLines,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -164,5 +164,5 @@ class LinkBanner extends ConsumerWidget {
   static const _sideBySideWidth = 280.0;
 
   static const _maxLines = 2;
-  static const _machineDetailLines = 4;
+  static const _byAddressDetailLines = 4;
 }

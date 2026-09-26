@@ -618,7 +618,7 @@ enum CompanionApprovalOutcome {
     CompanionApprovalOutcome.approved => 'Approved.',
     CompanionApprovalOutcome.denied => 'Declined.',
     CompanionApprovalOutcome.elsewhere =>
-      'That request was already answered on the desktop.',
+      'That request was already answered elsewhere.',
     CompanionApprovalOutcome.answered => 'Answered.',
   };
 }

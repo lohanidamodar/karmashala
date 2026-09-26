@@ -1,4 +1,4 @@
-/// Pairing a phone to a desktop: the choice, the QR scanner, the typed short
+/// Pairing a phone with a machine: the choice, the QR scanner, the typed short
 /// code, and the progress the handshake is watched through.
 library;
 

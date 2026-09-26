@@ -25,7 +25,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
       await store.write(RemoteCompanionGateway.kDeviceIdStoreKey, id.value);
     } on Object catch (error) {
       // Pairing still works; it is only the stability that is at risk, and
-      // saying so beats a silent duplicate on the desktop next time.
+      // saying so beats a silent duplicate on the machine next time.
       onLog?.call('could not persist this phone\'s device id: $error');
     }
     return id;
@@ -33,9 +33,8 @@ extension _GatewayPairing on RemoteCompanionGateway {
 
   PairingException _refusedPairingInput() {
     const refusal = PairingException(
-      'That is not a Karmashala pairing code. Scan the QR from the '
-      "desktop's Remote access settings, type the code shown under it, or "
-      'paste its full pairing payload here.',
+      "That is not a Karmashala pairing code. Scan the machine's pairing QR, "
+      'type the code shown under it, or paste its full pairing payload here.',
     );
     _emitPairing(CompanionPairingStage.failed, message: refusal.message);
     return refusal;
@@ -79,12 +78,12 @@ extension _GatewayPairing on RemoteCompanionGateway {
         return all;
       });
     } on Object catch (error) {
-      // The desktop confirmed and the pairing client wrote its record; what
+      // The machine confirmed and the pairing client wrote its record; what
       // failed is making it the active one. Escaping from here would be an
       // unhandled async error with the progress stream still saying "proving".
       onLog?.call('adopting the new pairing failed: $error');
       const failure = PairingException(
-        'Your desktop confirmed the pairing, but this phone could not save '
+        'The machine confirmed the pairing, but this phone could not save '
         'it to its secure storage. Try again.',
       );
       _emitPairing(CompanionPairingStage.failed, message: failure.message);
@@ -140,7 +139,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
     } on Object catch (error) {
       onLog?.call('pairing failed: $error');
       const failure = PairingException(
-        'Pairing failed before the desktop could confirm it. Check the '
+        'Pairing failed before the machine could confirm it. Check the '
         'connection and scan a fresh code.',
       );
       _emitPairing(CompanionPairingStage.failed, message: failure.message);
@@ -214,12 +213,12 @@ extension _GatewayPairing on RemoteCompanionGateway {
         onLog?.call('relay pairing leg failed: $error');
         if (isSharp(error)) sharp ??= error;
         relayNote = everConnected
-            ? 'the relay was reached but the desktop never answered there'
+            ? 'the relay was reached but the machine never answered there'
             : 'no relay was reachable';
       } on Object catch (error) {
         onLog?.call('relay pairing leg failed: $error');
         relayNote = everConnected
-            ? 'the relay was reached but the desktop never answered there'
+            ? 'the relay was reached but the machine never answered there'
             : 'no relay was reachable';
       } finally {
         await states.cancel();
@@ -299,7 +298,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
           onLog?.call('lan pairing attempt failed: $error');
           if (isSharp(error)) sharp ??= error;
           // Deliberately no scout cooldown: the user's Retry should be free
-          // to dial the same desktop again right away.
+          // to dial the same machine again right away.
         } on Object catch (error) {
           onLog?.call('lan pairing attempt failed: $error');
         } finally {
@@ -308,8 +307,8 @@ extension _GatewayPairing on RemoteCompanionGateway {
       }
       if (!outcome.isCompleted) {
         lanNote = sawBeacon
-            ? 'a desktop was seen on this network but did not accept the code'
-            : 'no desktop was found on this network';
+            ? 'a machine was seen on this network but did not accept the code'
+            : 'no machine was found on this network';
       }
     }
 
@@ -322,7 +321,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
           return;
         }
         // An aimed attempt gets its own sentence. Telling somebody who typed an
-        // address that no desktop was found on their network would be answering
+        // address that no machine was found on their network would be answering
         // a question they did not ask.
         if (directNote != null) {
           outcome.completeError(
@@ -339,18 +338,18 @@ extension _GatewayPairing on RemoteCompanionGateway {
           outcome.completeError(
             PairingException(
               'Could not pair — ${relayNote ?? 'the relay was not tried'}. '
-              'Make sure the code is still on the desktop screen and that the '
-              'machine is running, then retry.',
+              'Make sure the code is still showing and that the machine is '
+              'running, then retry.',
             ),
           );
           return;
         }
         outcome.completeError(
           PairingException(
-            'Could not find your desktop — '
+            'Could not find the machine — '
             '${relayNote ?? 'the relay was not tried'}, and '
             '${lanNote ?? 'this network was not searched'}. Make sure the '
-            'pairing code is still on the desktop screen, then retry.',
+            'pairing code is still showing on it, then retry.',
           ),
         );
       }),

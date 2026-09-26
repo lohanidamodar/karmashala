@@ -14,7 +14,7 @@ import 'companion_states.dart';
 import 'connection_route.dart';
 import 'pairing/pairing_screen.dart';
 
-/// The saved desktops on the settings screen. The frame draws in every state
+/// The saved machines on the settings screen. The frame draws in every state
 /// and only the list slot answers, so a read that never returns still pairs.
 class ConnectionsSection extends ConsumerWidget {
   const ConnectionsSection({super.key});
@@ -32,7 +32,7 @@ class ConnectionsSection extends ConsumerWidget {
       children: [
         CompanionSectionHeader(
           // The plural until the count is known.
-          (saved?.length ?? 2) > 1 ? 'DESKTOPS' : 'PAIRED DESKTOP',
+          (saved?.length ?? 2) > 1 ? 'MACHINES' : 'PAIRED MACHINE',
         ),
         companionAsync(
           connections,
@@ -58,7 +58,7 @@ class ConnectionsSection extends ConsumerWidget {
                     companionRoute<void>(context, (_) => const PairingScreen()),
                   ),
             icon: const Icon(AppIcons.plus),
-            label: const Text('Add a desktop'),
+            label: const Text('Add a machine'),
           ),
         ),
       ],
@@ -66,7 +66,7 @@ class ConnectionsSection extends ConsumerWidget {
   }
 }
 
-/// The list slot once the phone knows what it has: the saved desktops, or the
+/// The list slot once the phone knows what it has: the saved machines, or the
 /// sentence saying there are none.
 class _Saved extends StatelessWidget {
   const _Saved({required this.list, required this.switching});
@@ -83,7 +83,7 @@ class _Saved extends StatelessWidget {
     final density = UiDensity.of(context);
     if (list.isEmpty) {
       return Text(
-        'No desktops saved on this phone yet.',
+        'No machines saved on this phone yet.',
         style: density.muted(theme),
       );
     }
@@ -112,7 +112,13 @@ class _Saved extends StatelessWidget {
   }
 }
 
-/// One saved desktop: name, state, and a whole-row tap that switches to it when
+/// Forgetting keeps the key valid on the machine; revoking it is done there.
+const String _revokeThere =
+    "To also revoke this phone's key, revoke it on that machine: in the "
+    "desktop app's Remote access settings, or with karmashala_host revoke on "
+    'a server.';
+
+/// One saved machine: name, state, and a whole-row tap that switches to it when
 /// it is not already active.
 class _ConnectionRow extends ConsumerWidget {
   const _ConnectionRow({
@@ -133,12 +139,9 @@ class _ConnectionRow extends ConsumerWidget {
         content: Text(
           connection.active
               ? 'This phone forgets ${connection.name} and switches to '
-                    'another saved desktop, if it has one. To also revoke '
-                    "this phone's key, use that desktop's Remote access "
-                    'settings.'
-              : 'This phone forgets ${connection.name}. The desktop you are '
-                    "using now is not affected. To also revoke this phone's "
-                    "key, use that desktop's Remote access settings.",
+                    'another saved machine, if it has one. $_revokeThere'
+              : 'This phone forgets ${connection.name}. The machine you are '
+                    'using now is not affected. $_revokeThere',
         ),
         actions: [
           TextButton(
@@ -231,8 +234,8 @@ class _ConnectionRow extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
                 style: density.muted(theme),
               ),
-            // A desktop's route is the person's to choose; its own tap target,
-            // so choosing one never switches desktops by accident.
+            // A found machine's route is the person's to choose; its own tap
+            // target, so choosing one never switches machines by accident.
             ConnectionRouteLine(connection: connection),
           ],
         ),
@@ -249,8 +252,8 @@ class _ConnectionRow extends ConsumerWidget {
   }
 }
 
-/// How a machine paired by address is reached, or null for a desktop — which
-/// the phone finds by itself, over whichever path answers.
+/// How a machine paired by address is reached, or null for one the phone
+/// finds by itself, over whichever path answers.
 String? connectionRouteLabel(CompanionConnection connection) =>
     switch (connection.route) {
       null => null,

@@ -157,7 +157,7 @@ void main() {
   /// proving a beacon arrived puts a candidate in `scout.candidates` before
   /// the clock starts, so the LAN leg dials on its very first pass instead of
   /// spending the budget discovering it has nothing to dial yet. Running out
-  /// of that budget is `PairingException: Could not find your desktop` on a
+  /// of that budget is `PairingException: Could not find the machine` on a
   /// run whose desktop was right there.
   Future<LanPathScout> listeningScout() async {
     final scout = makeScout();
@@ -270,7 +270,7 @@ void main() {
           'message',
           allOf(
             contains('no relay was reachable'),
-            contains('no desktop was found on this network'),
+            contains('no machine was found on this network'),
           ),
         ),
       ),

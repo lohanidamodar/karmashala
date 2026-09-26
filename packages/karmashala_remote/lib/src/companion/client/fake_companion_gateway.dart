@@ -96,7 +96,7 @@ class FakeCompanionGateway implements CompanionGateway {
                : [
                    CompanionConnection(
                      hostId: pairing.hostId?.value ?? _kFakeHostId,
-                     name: pairing.hostName ?? 'Desktop',
+                     name: pairing.hostName ?? 'Machine',
                      active: true,
                      route: pairing.route,
                      directEndpoint: pairing.directEndpoint,
@@ -165,7 +165,7 @@ class FakeCompanionGateway implements CompanionGateway {
   final Duration switchDelay;
 
   /// A host id whose [switchTo] leaves the phone on it but disconnected —
-  /// the scripted version of "the desktop you chose is not answering".
+  /// the scripted version of "the machine you chose is not answering".
   final String? failSwitchTo;
 
   final CapabilitySet _grantOnPair;
@@ -301,8 +301,8 @@ class FakeCompanionGateway implements CompanionGateway {
         (decoded['secret'] as String).isEmpty) {
       throw _refuse(
         const PairingException(
-          'That is not a Karmashala pairing code. Show the QR code from the '
-          "desktop's Remote access settings and scan it again.",
+          'That is not a Karmashala pairing code. Show the pairing QR code on '
+          'the machine and scan it again.',
         ),
       );
     }
@@ -327,8 +327,8 @@ class FakeCompanionGateway implements CompanionGateway {
     } on ProtocolException {
       throw _refuse(
         const PairingException(
-          'That is not a Karmashala pairing code. Show the QR code from the '
-          "desktop's Remote access settings and scan it again.",
+          'That is not a Karmashala pairing code. Show the pairing QR code on '
+          'the machine and scan it again.',
         ),
       );
     }
@@ -349,7 +349,7 @@ class FakeCompanionGateway implements CompanionGateway {
       throw _refuse(
         const PairingException(
           'The host did not recognise that code. Codes expire after five '
-          'minutes — show a fresh one on the desktop and try again.',
+          'minutes — show a fresh one on the machine and try again.',
         ),
       );
     }
@@ -428,7 +428,7 @@ class FakeCompanionGateway implements CompanionGateway {
     HostRoute? route,
     String? directEndpoint,
   }) {
-    // Pairing ADDS a desktop and switches to it; only re-pairing the same
+    // Pairing ADDS a machine and switches to it; only re-pairing the same
     // host replaces its record.
     final hostId = fakeHostId(_connections.value.length);
     final paired = CompanionPairing(
@@ -473,7 +473,7 @@ class FakeCompanionGateway implements CompanionGateway {
         .firstOrNull;
     if (target == null) {
       throw const GatewayException(
-        'That desktop is no longer saved on this phone.',
+        'That machine is no longer saved on this phone.',
       );
     }
     if (target.active) return;
@@ -499,7 +499,7 @@ class FakeCompanionGateway implements CompanionGateway {
       hostId: _deviceId(hostId),
     );
     if (failSwitchTo == hostId) {
-      // Landed on the chosen desktop, but it is not answering — the banner
+      // Landed on the chosen machine, but it is not answering — the banner
       // says so, exactly as it would after a relaunch.
       _link.value = CompanionLinkState.disconnected;
       _linkPath.value = null;
@@ -539,13 +539,13 @@ class FakeCompanionGateway implements CompanionGateway {
         .firstOrNull;
     if (target == null) {
       throw const GatewayException(
-        'That desktop is no longer saved on this phone.',
+        'That machine is no longer saved on this phone.',
       );
     }
     if (target.route != null) {
       throw const GatewayException(
         'A machine paired directly keeps the route it was paired over. To '
-        'change it, pair it again from the desktop.',
+        'change it, pair it again.',
       );
     }
     routePinRequests.add((hostId, pin));

@@ -211,11 +211,12 @@ extension _GatewaySessions on RemoteCompanionGateway {
   void _ensureCurrentClient(CompanionClient client) {
     if (identical(_client, client)) return;
     // A make-before-break promotion swaps the link under a request in flight
-    // without changing the desktop, and the answer that just came back is
+    // without changing the machine, and the answer that just came back is
     // still this host's. Only a different host is news the caller needs.
     if (_client?.pairing.hostId == client.pairing.hostId) return;
     throw const GatewayException(
-      'The desktop changed while this request was in flight. Nothing was applied to the new desktop.',
+      'The active machine changed while this request was in flight. Nothing '
+      'was applied to the new one.',
     );
   }
 }

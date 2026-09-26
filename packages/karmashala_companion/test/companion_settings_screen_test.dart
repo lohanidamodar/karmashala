@@ -150,7 +150,7 @@ void main() {
     // Every section still names itself; a heading that vanished at large text
     // would take the structure of the screen with it.
     for (final heading in const [
-      'PAIRED DESKTOP',
+      'PAIRED MACHINE',
       'THIS CONNECTION',
       'PAIRING RELAY',
       'DIAGNOSTICS',

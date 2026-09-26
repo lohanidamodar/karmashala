@@ -1,5 +1,5 @@
 /// The Connections surfaces at phone size: the settings list of saved
-/// desktops (empty / one / many), the tap that switches, the per-host forget,
+/// machines (empty / one / many), the tap that switches, the per-host forget,
 /// and the switcher strip above the session list.
 library;
 
@@ -59,7 +59,7 @@ void main() {
   final studio = fakeHostId(1);
   final laptop = fakeHostId(2);
 
-  List<CompanionConnection> twoDesktops({String active = 'studio'}) => [
+  List<CompanionConnection> twoMachines({String active = 'studio'}) => [
     CompanionConnection(
       hostId: studio,
       name: 'Studio',
@@ -76,7 +76,7 @@ void main() {
   ];
 
   group('the connections section', () {
-    testWidgets('one desktop reads as the paired desktop, with no switching '
+    testWidgets('one machine reads as the paired machine, with no switching '
         'chrome it does not need', (tester) async {
       final gateway = FakeCompanionGateway.paired(
         connections: [
@@ -89,23 +89,23 @@ void main() {
         home: const ConnectionsSection(),
       );
 
-      expect(find.text('PAIRED DESKTOP'), findsOneWidget);
+      expect(find.text('PAIRED MACHINE'), findsOneWidget);
       expect(find.text('Studio'), findsOneWidget);
       expect(find.text('Active'), findsOneWidget);
-      expect(find.text('Add a desktop'), findsOneWidget);
+      expect(find.text('Add a machine'), findsOneWidget);
     });
 
-    testWidgets('many desktops list with their active badge and last use', (
+    testWidgets('many machines list with their active badge and last use', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(
         tester,
         gateway: gateway,
         home: const ConnectionsSection(),
       );
 
-      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('MACHINES'), findsOneWidget);
       expect(find.text('Studio'), findsOneWidget);
       expect(find.text('Laptop'), findsOneWidget);
       // Exactly one active badge, and the other says when it was last used.
@@ -122,13 +122,13 @@ void main() {
         home: const ConnectionsSection(),
       );
 
-      expect(find.textContaining('No desktops saved'), findsOneWidget);
-      expect(find.text('Add a desktop'), findsOneWidget);
+      expect(find.textContaining('No machines saved'), findsOneWidget);
+      expect(find.text('Add a machine'), findsOneWidget);
     });
 
-    testWidgets('tapping an inactive desktop switches to it', (tester) async {
+    testWidgets('tapping an inactive machine switches to it', (tester) async {
       final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
+        connections: twoMachines(),
         sessionsByHost: {
           laptop: [summary('s-laptop', title: 'Laptop work')],
         },
@@ -146,8 +146,8 @@ void main() {
       expect(gateway.connections.singleWhere((c) => c.active).name, 'Laptop');
     });
 
-    testWidgets('the active desktop is not a switch target', (tester) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+    testWidgets('the active machine is not a switch target', (tester) async {
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -164,7 +164,7 @@ void main() {
       tester,
     ) async {
       final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
+        connections: twoMachines(),
         switchDelay: const Duration(milliseconds: 300),
       );
       await pumpPhone(
@@ -188,10 +188,10 @@ void main() {
       expect(find.text('Connecting…'), findsNothing);
     });
 
-    testWidgets('forgetting one desktop asks first, then removes only it', (
+    testWidgets('forgetting one machine asks first, then removes only it', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -208,10 +208,10 @@ void main() {
       expect([for (final c in gateway.connections) c.name], ['Studio']);
     });
 
-    testWidgets('cancelling the forget dialog keeps the desktop', (
+    testWidgets('cancelling the forget dialog keeps the machine', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -226,15 +226,15 @@ void main() {
       expect(gateway.connections, hasLength(2));
     });
 
-    testWidgets('"Add a desktop" opens the pairing flow', (tester) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+    testWidgets('"Add a machine" opens the pairing flow', (tester) async {
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(
         tester,
         gateway: gateway,
         home: const ConnectionsSection(),
       );
 
-      await tester.tap(find.text('Add a desktop'));
+      await tester.tap(find.text('Add a machine'));
       await tester.pumpAndSettle();
 
       expect(find.byType(PairingScreen), findsOneWidget);
@@ -242,11 +242,11 @@ void main() {
   });
 
   group('the switcher strip above the sessions', () {
-    testWidgets('one desktop is still named, and still offers another', (
+    testWidgets('one machine is still named, and still offers another', (
       tester,
     ) async {
-      // It used to hide itself below two desktops, which is precisely what
-      // made a second one undiscoverable: this strip is where "Add a desktop"
+      // It used to hide itself below two machines, which is precisely what
+      // made a second one undiscoverable: this strip is where "Add a machine"
       // lives.
       final gateway = FakeCompanionGateway.paired(
         connections: [
@@ -264,22 +264,22 @@ void main() {
 
       await tester.tap(find.text('Studio'));
       await tester.pumpAndSettle();
-      expect(find.text('Add a desktop'), findsOneWidget);
+      expect(find.text('Add a machine'), findsOneWidget);
     });
 
-    testWidgets('two desktops name the active one and how many are saved', (
+    testWidgets('two machines name the active one and how many are saved', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(tester, gateway: gateway, home: const HostSwitcherBar());
 
       expect(find.text('Studio'), findsOneWidget);
       expect(find.text('2 saved'), findsOneWidget);
     });
 
-    testWidgets('the sheet switches desktops in one tap', (tester) async {
+    testWidgets('the sheet switches machines in one tap', (tester) async {
       final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
+        connections: twoMachines(),
         sessionsByHost: {
           laptop: [summary('s-laptop', title: 'Laptop work')],
         },
@@ -295,15 +295,15 @@ void main() {
       expect(gateway.switchRequests, [laptop]);
     });
 
-    testWidgets('the sheet also offers the way to a new desktop', (
+    testWidgets('the sheet also offers the way to a new machine', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(tester, gateway: gateway, home: const HostSwitcherBar());
 
       await tester.tap(find.text('Studio'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add a desktop'));
+      await tester.tap(find.text('Add a machine'));
       await tester.pumpAndSettle();
 
       expect(find.byType(PairingScreen), findsOneWidget);
@@ -312,10 +312,10 @@ void main() {
 
   group('in the shell', () {
     testWidgets('the strip rides above the Sessions tab, and the session '
-        'list swaps with the desktop', (tester) async {
+        'list swaps with the machine', (tester) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [summary('s-studio', title: 'Studio work')],
-        connections: twoDesktops(),
+        connections: twoMachines(),
         sessionsByHost: {
           laptop: [summary('s-laptop', title: 'Laptop work')],
         },
@@ -334,23 +334,23 @@ void main() {
       expect(
         find.text('Studio work'),
         findsNothing,
-        reason: "the old desktop's sessions do not linger after a switch",
+        reason: "the old machine's sessions do not linger after a switch",
       );
     });
 
-    testWidgets('the settings tab lists the desktops', (tester) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+    testWidgets('the settings tab lists the machines', (tester) async {
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
 
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
 
-      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('MACHINES'), findsOneWidget);
       expect(find.text('Laptop'), findsOneWidget);
       expect(find.text('THIS CONNECTION'), findsOneWidget);
     });
 
-    testWidgets('a single-desktop phone is told which desktop it is on', (
+    testWidgets('a single-machine phone is told which machine it is on', (
       tester,
     ) async {
       final gateway = FakeCompanionGateway.paired(
@@ -368,12 +368,12 @@ void main() {
     });
   });
 
-  group('a switch that cannot reach its desktop', () {
-    testWidgets('lands on the chosen desktop and says the host is '
+  group('a switch that cannot reach its machine', () {
+    testWidgets('lands on the chosen machine and says the host is '
         'unreachable — never silently back on the old one', (tester) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [summary('s-studio', title: 'Studio work')],
-        connections: twoDesktops(),
+        connections: twoMachines(),
         failSwitchTo: laptop,
       );
       await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
@@ -386,7 +386,7 @@ void main() {
       expect(
         gateway.connections.singleWhere((c) => c.active).name,
         'Laptop',
-        reason: 'the phone is on the desktop the user chose',
+        reason: 'the phone is on the machine the user chose',
       );
       expect(find.textContaining('Host unreachable'), findsOneWidget);
       expect(find.text('Studio work'), findsNothing);
@@ -398,7 +398,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         companionGatewayProvider.overrideWithValue(
-          _WedgedGateway(connections: twoDesktops()),
+          _WedgedGateway(connections: twoMachines()),
         ),
       ],
     );
@@ -430,16 +430,16 @@ void main() {
       );
 
       expect(
-        find.textContaining('No desktops saved'),
+        find.textContaining('No machines saved'),
         findsNothing,
         reason: 'an unanswered read is not the same fact as an empty phone',
       );
       expect(
-        find.text('Add a desktop'),
+        find.text('Add a machine'),
         findsOneWidget,
         reason: 'the section used to collapse, taking its one verb with it',
       );
-      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('MACHINES'), findsOneWidget);
     });
 
     testWidgets('and says it the moment an empty list arrives', (tester) async {
@@ -449,17 +449,17 @@ void main() {
         gateway: gateway,
         home: const ConnectionsSection(),
       );
-      expect(find.textContaining('No desktops saved'), findsNothing);
+      expect(find.textContaining('No machines saved'), findsNothing);
 
       gateway.deliver(const []);
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('No desktops saved'),
+        find.textContaining('No machines saved'),
         findsOneWidget,
         reason: 'loading and empty are two states, and this is the second',
       );
-      expect(find.text('Add a desktop'), findsOneWidget);
+      expect(find.text('Add a machine'), findsOneWidget);
     });
 
     testWidgets('a list that arrives fills the same slot', (tester) async {
@@ -470,12 +470,12 @@ void main() {
         home: const ConnectionsSection(),
       );
 
-      gateway.deliver(twoDesktops());
+      gateway.deliver(twoMachines());
       await tester.pumpAndSettle();
 
       expect(find.text('Studio'), findsOneWidget);
       expect(find.text('Laptop'), findsOneWidget);
-      expect(find.textContaining('No desktops saved'), findsNothing);
+      expect(find.textContaining('No machines saved'), findsNothing);
     });
 
     testWidgets('a read that fails says so rather than vanishing', (
@@ -492,15 +492,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('The keystore is locked.'), findsOneWidget);
-      expect(find.textContaining('No desktops saved'), findsNothing);
-      expect(find.text('Add a desktop'), findsOneWidget);
+      expect(find.textContaining('No machines saved'), findsNothing);
+      expect(find.text('Add a machine'), findsOneWidget);
     });
   });
 
   group('at 200% text', () {
     testWidgets('the connections section lists, badges and forgets without '
         'overflowing', (tester) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -508,15 +508,15 @@ void main() {
         textScale: 2.0,
       );
 
-      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('MACHINES'), findsOneWidget);
       expect(find.text('Active'), findsOneWidget);
-      expect(find.text('Add a desktop'), findsOneWidget);
+      expect(find.text('Add a machine'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('the switcher strip keeps its name, count and caret on one '
         'row', (tester) async {
-      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      final gateway = FakeCompanionGateway.paired(connections: twoMachines());
       await pumpPhone(
         tester,
         gateway: gateway,

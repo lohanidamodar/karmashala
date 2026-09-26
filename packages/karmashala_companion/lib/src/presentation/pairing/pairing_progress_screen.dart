@@ -13,17 +13,18 @@ import '../companion_chrome.dart';
 import '../companion_states.dart';
 
 /// Staged progress for one pairing attempt — code accepted, looking for the
-/// desktop, proving keys, paired — with a Retry that re-runs the same attempt.
+/// machine, proving keys, paired — with a Retry that re-runs the same attempt.
 class PairingProgressScreen extends ConsumerStatefulWidget {
   const PairingProgressScreen({
     required this.attempt,
-    this.peerIsMachine = false,
+    this.aimed = false,
     super.key,
   });
 
-  /// Whether the peer is a machine with an address rather than a desktop this
-  /// phone goes looking for. Words only: the attempt is [attempt]'s business.
-  final bool peerIsMachine;
+  /// Whether the attempt goes to the one place a host invite or a typed address
+  /// names, rather than looking for the machine on this network and its
+  /// relays. Words only: the attempt is [attempt]'s business.
+  final bool aimed;
 
   /// One pairing attempt against the gateway, re-run by Retry.
   final Future<CompanionPairing> Function(CompanionGateway gateway) attempt;
@@ -200,16 +201,13 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
       const _Step(CompanionPairingStage.codeAccepted, 'Code accepted', null),
       _Step(
         CompanionPairingStage.searching,
-        widget.peerIsMachine
-            ? 'Reaching the machine'
-            : 'Looking for your desktop',
+        widget.aimed ? 'Reaching the machine' : 'Looking for the machine',
         _detail,
       ),
       const _Step(CompanionPairingStage.proving, 'Proving keys', null),
       _Step(
         CompanionPairingStage.paired,
-        'Paired with '
-        '${_hostName ?? (widget.peerIsMachine ? 'the machine' : 'your desktop')}',
+        'Paired with ${_hostName ?? 'the machine'}',
         grants == null ? null : 'This phone may: $grants',
       ),
     ];

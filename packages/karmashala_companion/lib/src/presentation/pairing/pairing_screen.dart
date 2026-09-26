@@ -16,23 +16,23 @@ class PairingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Also pushed from Settings' "Add a desktop", where it needs the way back a
-    // root does not have.
+    // Also pushed from "Add a machine" — Settings and the host switcher — where
+    // it needs the way back a root does not have.
     final pushed = Navigator.of(context).canPop();
     return Scaffold(
       appBar: pushed
-          ? companionAppBar(context, title: const Text('Add a desktop'))
+          ? companionAppBar(context, title: const Text('Add a machine'))
           : null,
       body: SafeArea(
         child: CompanionNotice(
           icon: AppIcons.deviceMobile,
-          title: 'Pair with your desktop',
+          title: 'Pair with a machine',
           body:
-              'This phone is a remote for the sessions a machine holds. On a '
-              'desktop, open Settings → Remote access and choose "Pair a '
-              'device" — scan its QR code, or paste its pairing code here. A '
-              'server with an address of its own is added the third way, or '
-              'by scanning the QR code in its "Pair a phone" dialog.',
+              'This phone is a remote for the sessions a machine holds: a '
+              'computer running the desktop app, or a Karmashala server. In '
+              'the desktop app choose Settings → Remote access → "Pair a '
+              'device"; on a server run karmashala_host pair. Then scan its '
+              'QR code, or paste its code.',
           actionLabel: 'Scan the QR code',
           onAction: () => Navigator.of(
             context,

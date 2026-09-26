@@ -430,7 +430,7 @@ final _log = Logger('companion.picker');
 /// The phone's own picker. The desktop's `pickOneFile` first quiets terminals
 /// and PTYs, which a phone does not have; this is the call and a log line.
 Future<XFile?> _pickAttachment(List<XTypeGroup> accepted) async {
-  _log.info('opening the file picker for a file to send to the desktop');
+  _log.info('opening the file picker for a file to send to the machine');
   try {
     return await openFile(acceptedTypeGroups: accepted);
   } on Object catch (error, stack) {

@@ -123,7 +123,7 @@ void main() {
     expect(find.byType(CompanionRowDivider), findsOneWidget);
   });
 
-  testWidgets('the desktop strip and the saved desktops use it too', (
+  testWidgets('the machine strip and the saved machines use it too', (
     tester,
   ) async {
     await pumpPhone(

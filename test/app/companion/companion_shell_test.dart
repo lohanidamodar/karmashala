@@ -74,7 +74,7 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('PAIRED DESKTOP'), findsOneWidget);
+    expect(find.text('PAIRED MACHINE'), findsOneWidget);
   });
 
   testWidgets('a lost link is a banner, and Retry asks for a reconnect', (
@@ -113,12 +113,12 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Connecting to Desktop'), findsOneWidget);
 
-    gateway.linkTrouble = 'Your desktop is not answering on this relay.';
+    gateway.linkTrouble = 'The machine is not answering on this relay.';
     await tester.pump();
 
     expect(find.textContaining('Connecting to Desktop'), findsOneWidget);
     expect(
-      find.text('Your desktop is not answering on this relay.'),
+      find.text('The machine is not answering on this relay.'),
       findsOneWidget,
       reason: 'the gateway knows why; the banner must say it',
     );

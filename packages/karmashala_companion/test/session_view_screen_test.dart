@@ -546,7 +546,7 @@ void main() {
       // Not a silent disappearance: a card that just vanishes reads as a
       // request that was dropped.
       expect(
-        find.text('That request was already answered on the desktop.'),
+        find.text('That request was already answered elsewhere.'),
         findsOneWidget,
       );
     });
@@ -608,7 +608,7 @@ void main() {
 
       expect(find.text('Claude Code is waiting for you'), findsNothing);
       expect(
-        find.text('That request was already answered on the desktop.'),
+        find.text('That request was already answered elsewhere.'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);

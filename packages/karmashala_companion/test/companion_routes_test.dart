@@ -113,12 +113,12 @@ void main() {
     Navigator.of(tester.element(find.byType(CompanionLogScreen))).pop();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Add a desktop'));
+    await tester.tap(find.text('Add a machine'));
     await tester.pumpAndSettle();
     arrivedByCompanionRoute(tester, PairingScreen);
   });
 
-  testWidgets('the desktop strip opens a new pairing', (tester) async {
+  testWidgets('the machine strip opens a new pairing', (tester) async {
     await pumpPhone(
       tester,
       gateway: FakeCompanionGateway.paired(),
@@ -126,7 +126,7 @@ void main() {
     );
     await tester.tap(find.byType(HostSwitcherBar));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add a desktop'));
+    await tester.tap(find.text('Add a machine'));
     await tester.pumpAndSettle();
     arrivedByCompanionRoute(tester, PairingScreen);
   });

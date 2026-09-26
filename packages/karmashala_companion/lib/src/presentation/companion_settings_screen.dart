@@ -88,13 +88,13 @@ class CompanionSettingsScreen extends ConsumerWidget {
       // stretches these cards edge to edge (CLAUDE.md §6).
       padding: companionListInsets(context, EdgeInsets.all(density.padX)),
       children: [
-        // The saved desktops first: every other row here is about which one
+        // The saved machines first: every other row here is about which one
         // this phone is on.
         const ConnectionsSection(),
         const SizedBox(height: Insets.lg),
         const CompanionSectionHeader('THIS CONNECTION'),
         _ThisConnectionCard(
-          hostName: pairing.hostName ?? 'Desktop',
+          hostName: pairing.hostName ?? 'Machine',
           hostId: pairing.hostId?.value,
           linkIcon: linkIcon,
           linkLabel: linkLabel,
@@ -110,8 +110,8 @@ class CompanionSettingsScreen extends ConsumerWidget {
         const _DiagnosticsRow(),
         const SizedBox(height: Insets.lg),
         Text(
-          'Karmashala companion — a remote view of the sessions your '
-          'desktop holds. The desktop is the source of truth; revoking this '
+          'Karmashala companion — a remote view of the sessions a paired '
+          'machine holds. The machine is the source of truth; revoking this '
           'phone there cuts it off immediately.',
           style: density.muted(theme),
         ),
@@ -120,7 +120,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
   }
 }
 
-/// The desktop this phone is on: its name, the link and its age, its id, what
+/// The machine this phone is on: its name, the link and its age, its id, what
 /// it granted, and — only while unreachable — a way to try again.
 class _ThisConnectionCard extends StatelessWidget {
   const _ThisConnectionCard({
@@ -323,7 +323,7 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
 
 /// The way into the phone's own log, on this screen because it is wanted
 /// exactly when the link is not working. Says the build version too: a phone
-/// can be several releases behind the desktop it is talking to.
+/// can be several releases behind the machine it is talking to.
 class _DiagnosticsRow extends StatelessWidget {
   const _DiagnosticsRow();
 

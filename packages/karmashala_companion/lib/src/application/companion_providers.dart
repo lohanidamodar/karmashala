@@ -31,7 +31,7 @@ final companionUsageProvider = FutureProvider.autoDispose<RemoteUsageSnapshot>(
   (ref) => ref.watch(companionGatewayProvider).usage(),
 );
 
-/// The desktop's notes and todo list, asked when the Notes tab opens.
+/// The machine's notes and todo list, asked when the Notes tab opens.
 final companionNotesProvider = FutureProvider.autoDispose<RemoteNotesSnapshot>(
   (ref) => ref.watch(companionGatewayProvider).notes(),
 );
@@ -57,7 +57,7 @@ final companionLinkTroubleProvider = StreamProvider<String?>(
   (ref) => ref.watch(companionGatewayProvider).linkTroubleStates,
 );
 
-/// Every desktop this phone has paired with, one of them active.
+/// Every machine this phone has paired with, one of them active.
 final companionConnectionsProvider = StreamProvider<List<CompanionConnection>>(
   (ref) => ref.watch(companionGatewayProvider).connectionsStates,
 );
@@ -214,7 +214,7 @@ final companionSessionProvider = Provider.autoDispose
       return null;
     });
 
-/// What could be started on the active desktop. A pull, not a subscription:
+/// What could be started on the active machine. A pull, not a subscription:
 /// projects change when the user changes them, so `ref.invalidate` is the retry.
 final companionActiveHostKeyProvider = Provider<String?>((ref) {
   // Watch both streams so link/host changes invalidate the pull; the gateway's
@@ -237,7 +237,7 @@ final companionWorkspaceProvider =
       return ref.watch(companionGatewayProvider).listWorkspace();
     });
 
-/// Projects on the active desktop, including those with no sessions. A pull
+/// Projects on the active machine, including those with no sessions. A pull
 /// separate from the session stream, so a transcript event cannot trigger
 /// another project scan.
 final companionProjectsProvider =

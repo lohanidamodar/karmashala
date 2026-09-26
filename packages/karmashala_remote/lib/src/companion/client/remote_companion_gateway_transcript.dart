@@ -43,7 +43,7 @@ extension _GatewayTranscript on RemoteCompanionGateway {
           role: kCompanionNoticeRole,
           text:
               '${page.omitted} earlier messages are not loaded — this is '
-              'the top of what the phone has. The desktop holds the whole '
+              'the top of what the phone has. The machine holds the whole '
               'conversation.',
         ),
       // Which nothing this is, in the phone's words, from the host's fact.
@@ -70,9 +70,9 @@ extension _GatewayTranscript on RemoteCompanionGateway {
           // phone cannot act on: it has no terminal to look at.
           text:
               'This agent keeps no transcript this app can read, so there is '
-              'no chat view for it — on the desktop or here. Its terminal is '
-              'the session, and the desktop is where that lives. Messages you '
-              'send from here still reach it.',
+              'no chat view for it — here or in the desktop app. Its terminal '
+              'on the machine is the session. Messages you send from here '
+              'still reach it.',
         ),
         // The same refusal about a conversation rather than an agent, so it
         // does not say "this agent" about a store whose other sessions read
@@ -82,9 +82,8 @@ extension _GatewayTranscript on RemoteCompanionGateway {
           text:
               'This session\'s store kept the conversation and no transcript '
               'this app can read beside it, so there is no chat view for it — '
-              'on the desktop or here. Its terminal is the session, and the '
-              'desktop is where that lives. Messages you send from here still '
-              'reach it.',
+              'here or in the desktop app. Its terminal on the machine is the '
+              'session. Messages you send from here still reach it.',
         ),
         null => null,
       };

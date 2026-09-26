@@ -156,7 +156,7 @@ void main() {
           role: kCompanionNoticeRole,
           text:
               '2,400 earlier messages are not loaded — this is the top of '
-              'what the phone has. The desktop holds the whole conversation.',
+              'what the phone has. The machine holds the whole conversation.',
         ),
         CompanionChatMessage(role: 'user', text: 'hello'),
         CompanionChatMessage(role: 'agent', text: 'hi'),
@@ -300,7 +300,7 @@ void main() {
       role: kCompanionAbsenceRole,
       text:
           'This agent keeps no transcript this app can read, so there is no '
-          'chat view for it — on the desktop or here.',
+          'chat view for it — here or in the desktop app.',
     );
 
     FakeCompanionGateway gateway({
@@ -350,7 +350,7 @@ void main() {
               text:
                   'This session\'s store kept the conversation and no '
                   'transcript this app can read beside it, so there is no '
-                  'chat view for it — on the desktop or here.',
+                  'chat view for it — here or in the desktop app.',
             ),
           ],
         ),

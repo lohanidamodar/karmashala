@@ -589,7 +589,7 @@ void main() {
     testWidgets('a refusal is shown in the desktop own words', (tester) async {
       final gateway = paired()
         ..startFailure = const GatewayException(
-          'The desktop refused: that folder is gone.',
+          'The machine refused: that folder is gone.',
         );
       await pumpPhone(
         tester,
@@ -602,7 +602,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('The desktop refused: that folder is gone.'),
+        find.text('The machine refused: that folder is gone.'),
         findsOneWidget,
       );
       expect(find.byType(SessionViewScreen), findsNothing);
@@ -612,7 +612,7 @@ void main() {
       tester,
     ) async {
       final gateway = paired()
-        ..startFailure = const GatewayException('The desktop did not answer.');
+        ..startFailure = const GatewayException('The machine did not answer.');
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -636,7 +636,7 @@ void main() {
 
     testWidgets('changing the request mints a new key', (tester) async {
       final gateway = paired()
-        ..startFailure = const GatewayException('The desktop did not answer.');
+        ..startFailure = const GatewayException('The machine did not answer.');
       await pumpPhone(
         tester,
         gateway: gateway,

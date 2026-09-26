@@ -113,7 +113,7 @@ class CompanionPairingClient {
       return pairing;
     } on TimeoutException {
       throw const CompanionPairingException(
-        'the desktop did not answer — is the QR code still on screen?',
+        'the machine did not answer — is the QR code still on screen?',
       );
     } finally {
       await frames.cancel();
@@ -165,7 +165,7 @@ class CompanionPairingClient {
       final hostIdText = confirm['hostId'];
       if (hostIdText is! String) {
         throw const CompanionPairingException(
-          'this desktop is too old for typed pairing codes — scan its QR '
+          'this machine is too old for typed pairing codes — scan its QR '
           'code instead',
         );
       }
@@ -174,7 +174,7 @@ class CompanionPairingClient {
         hostId = DeviceId.parse(hostIdText);
       } on ProtocolException {
         throw const CompanionPairingException(
-          'the desktop sent a malformed pairing confirmation',
+          'the machine sent a malformed pairing confirmation',
         );
       }
       final capabilities = CapabilitySet.fromJson(confirm['capabilities'] ?? 0);
@@ -210,7 +210,7 @@ class CompanionPairingClient {
       return pairing;
     } on TimeoutException {
       throw const CompanionPairingException(
-        'the desktop did not answer — is the pairing code still on screen, '
+        'the machine did not answer — is the pairing code still on screen, '
         'and typed exactly?',
       );
     } finally {

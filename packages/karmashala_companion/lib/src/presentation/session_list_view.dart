@@ -1,4 +1,4 @@
-/// What the Projects tab draws once the desktop has sent something, decided
+/// What the Projects tab draws once the host has sent something, decided
 /// without a widget in sight.
 library;
 
@@ -61,7 +61,7 @@ final class NoMatch extends SessionListView {
 /// The view for [sessions] and [projects] (null while the workspace has not
 /// arrived), scoped to [chosenEnvironment] and filtered by [rawQuery].
 ///
-/// A [chosenEnvironment] naming no machine here is a desktop since switched
+/// A [chosenEnvironment] naming no machine here is a machine since switched
 /// away from, and reads as "all of them" rather than as an empty list.
 SessionListView sessionListViewOf({
   required List<CompanionSessionSummary> sessions,

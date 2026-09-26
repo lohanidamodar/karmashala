@@ -9,14 +9,14 @@ part of 'remote_companion_gateway.dart';
 /// phone. Never "check your connection": the network is demonstrably fine,
 /// since the relay answered.
 const String _kHostAbsentTrouble =
-    'Your desktop is not answering on this relay — check that Karmashala '
-    'is running, and that it is set to the same relay.';
+    'The machine is not answering on this relay — check that Karmashala '
+    'is running there, and that it is set to the same relay.';
 
 /// And what "the meeting place itself would not answer" reads like. Never
-/// about the desktop: nothing here has learned anything about it yet.
+/// about the machine: nothing here has learned anything about it yet.
 const String _kRelayUnreachableTrouble =
-    'This phone could not reach the relay your desktop uses. On mobile data '
-    'that usually means the desktop is only reachable on its own network.';
+    'This phone could not reach the relay the machine uses. On mobile data '
+    'that usually means the machine is only reachable on its own network.';
 
 extension _GatewayLiveness on RemoteCompanionGateway {
   void _bindTransport(RemoteTransport? transport) {

@@ -21,7 +21,8 @@ import 'pairing_progress_screen.dart';
 import 'pairing_scanner.dart';
 import 'short_code_screen.dart';
 
-/// Scans a pairing QR — a desktop's, or the one a desktop shows for a machine.
+/// Scans a pairing QR — the desktop app's own, the one it shows for a server,
+/// or the one a server's `karmashala_host pair` prints.
 /// The camera is a [PairingScanner], so a widget test needs no camera or
 /// platform channel.
 class ScanQrScreen extends ConsumerStatefulWidget {
@@ -127,7 +128,7 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
         companionRoute<void>(
           context,
           (_) => PairingProgressScreen(
-            peerIsMachine: isInvite,
+            aimed: isInvite,
             attempt: (gateway) => gateway.pairWithQr(payload),
           ),
         ),
@@ -255,9 +256,10 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
                       Padding(
                         padding: const EdgeInsets.all(Insets.lg),
                         child: Text(
-                          "Point the camera at the QR code in the desktop's "
-                          "Remote access settings, or in a machine's "
-                          '"Pair a phone" dialog.',
+                          'Point the camera at the QR code a machine shows '
+                          "for pairing: the desktop app's Remote access "
+                          'settings or "Pair a phone" dialog, or '
+                          'karmashala_host pair on a server.',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,

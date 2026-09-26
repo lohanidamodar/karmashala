@@ -88,7 +88,7 @@ class CompanionAttachmentStore {
     final extension = kAttachmentExtensions[request.mediaType];
     if (extension == null) {
       throw AttachmentUploadException(
-        'this desktop cannot write a ${request.mediaType} attachment',
+        'this machine cannot write a ${request.mediaType} attachment',
       );
     }
     await discard(deviceId);

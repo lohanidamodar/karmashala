@@ -531,7 +531,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     final target = _all.byHost(hostId);
     if (target == null) {
       throw const GatewayException(
-        'That desktop is no longer saved on this phone.',
+        'That machine is no longer saved on this phone.',
       );
     }
     try {
@@ -546,7 +546,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // give up; an escaping `TimeoutException` makes the tap look inert.
       onLog?.call('switchTo failed: $error');
       throw const GatewayException(
-        "This phone could not record which desktop to use, so it stayed on "
+        'This phone could not record which machine to use, so it stayed on '
         'the one it was on. Try again.',
       );
     }
@@ -560,13 +560,13 @@ class RemoteCompanionGateway implements CompanionGateway {
     final target = _all.byHost(hostId);
     if (target == null) {
       throw const GatewayException(
-        'That desktop is no longer saved on this phone.',
+        'That machine is no longer saved on this phone.',
       );
     }
     if (target.route != null) {
       throw const GatewayException(
         'A machine paired directly keeps the route it was paired over. To '
-        'change it, pair it again from the desktop.',
+        'change it, pair it again.',
       );
     }
     if (target.pin == pin) return;
@@ -617,7 +617,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     } on Object catch (error) {
       onLog?.call('removeConnection failed: $error');
       throw const GatewayException(
-        "That desktop could not be removed from this phone's secure storage. "
+        "That machine could not be removed from this phone's secure storage. "
         'Try again.',
       );
     }

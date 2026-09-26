@@ -233,7 +233,7 @@ void main() {
       final code = await box.openWindow();
       final (message, stages) = await refused(invite(code, expiresAt: now));
       expect(message, contains('expired'));
-      expect(message, contains('New code'));
+      expect(message, contains('new code'));
       expect(stages, [CompanionPairingStage.failed]);
     });
 

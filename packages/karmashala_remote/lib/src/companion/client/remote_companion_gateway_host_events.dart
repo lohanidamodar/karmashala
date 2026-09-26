@@ -83,7 +83,7 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
       }
       onLog?.call(
         grantMoved
-            ? 'this phone\'s permissions were changed on the desktop'
+            ? 'this phone\'s permissions were changed on the machine'
             : 'saved relay candidates refreshed from host.status',
       );
     } on Object catch (error) {

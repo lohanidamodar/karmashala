@@ -68,7 +68,7 @@ void main() {
     );
   });
 
-  testWidgets('the active desktop badge keeps a hairline of ground', (
+  testWidgets('the active machine badge keeps a hairline of ground', (
     tester,
   ) async {
     await pumpPhone(

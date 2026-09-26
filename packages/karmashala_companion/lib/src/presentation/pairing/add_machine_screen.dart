@@ -12,7 +12,7 @@ import '../companion_states.dart';
 import 'pairing_progress_screen.dart';
 
 /// Pairing with a machine that has an address of its own — a session host on a
-/// server, rather than a desktop this phone has to be found by.
+/// server, rather than one this phone finds on its network or relay.
 ///
 /// Two fields because a box needs two facts and neither can be guessed: the
 /// address, which the person already knows because they typed it to reach the
@@ -71,7 +71,7 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
       companionRoute<void>(
         context,
         (_) => PairingProgressScreen(
-          peerIsMachine: true,
+          aimed: true,
           attempt: (gateway) => gateway.pairWithCode(code, at: endpoint),
         ),
       ),
@@ -82,7 +82,11 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: companionAppBar(context, title: const Text('Add a machine')),
+      // Not "Add a machine": that is the chooser this screen is one way out of.
+      appBar: companionAppBar(
+        context,
+        title: const Text('Add a machine by address'),
+      ),
       body: SafeArea(
         child: ListView(
           padding: companionListInsets(
@@ -91,11 +95,11 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
           ),
           children: [
             Text(
-              'A server running the Karmashala session host answers on its own '
-              'address. On that machine, or from the desktop that set it up, '
-              'open a pairing window and type what it shows here. The '
-              'desktop\'s "Pair a phone" dialog also shows a QR code — '
-              'scanning it fills all of this in.',
+              'A Karmashala server answers on its own address. Run '
+              'karmashala_host pair on it — or, for a server the desktop app '
+              'set up, open its "Pair a phone" dialog — and type what it shows '
+              'here. Both also show a QR code; scanning it fills all of this '
+              'in.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: Insets.lg),

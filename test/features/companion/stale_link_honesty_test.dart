@@ -363,7 +363,7 @@ void main() {
   );
 
   test(
-    'a request the desktop did not answer says so, not "unreachable"',
+    'a request the machine did not answer says so, not "unreachable"',
     timeout: const Timeout(Duration(minutes: 3)),
     () async {
       await startService();

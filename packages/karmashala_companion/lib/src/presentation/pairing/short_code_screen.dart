@@ -9,7 +9,7 @@ import '../companion_chrome.dart';
 import '../companion_route.dart';
 import 'pairing_progress_screen.dart';
 
-/// The QR fallback: type the code shown under the desktop's QR, or paste the
+/// The QR fallback: type the code shown under the machine's QR, or paste the
 /// full pairing payload — both are sniffed apart by the gateway.
 class ShortCodeScreen extends ConsumerStatefulWidget {
   const ShortCodeScreen({super.key});
@@ -82,7 +82,7 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                "Type the code shown under the desktop's QR "
+                "Type the code shown under the machine's QR "
                 '(like K7QM-3X2W-…), or paste its full pairing payload. '
                 'Codes expire after five minutes.',
                 // Body, not caption: a paragraph someone reads before typing.

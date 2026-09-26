@@ -75,7 +75,9 @@ void main() {
   final clock = [companionClockProvider.overrideWithValue(_FixedClock(_now))];
 
   testWidgets('scanning a machine\'s QR pairs it, in words about a machine, '
-      'and it joins the host switcher beside the desktop', (tester) async {
+      'and it joins the host switcher beside the first machine', (
+    tester,
+  ) async {
     final gateway = FakeCompanionGateway.paired(now: () => _now);
     final scanner = _FakeScanner();
     await pumpPhone(
@@ -92,7 +94,7 @@ void main() {
     expect(find.text('Reaching the machine'), findsOneWidget);
     expect(find.text('at 203.0.113.9:47820'), findsOneWidget);
     expect(find.text('Paired with do-box'), findsOneWidget);
-    expect(find.textContaining('your desktop'), findsNothing);
+    expect(find.textContaining('desktop'), findsNothing);
     expect(gateway.pairing?.route, HostRoute.direct);
     expect(
       scanner.pausedReadings.last,
@@ -322,29 +324,29 @@ void main() {
       ],
     );
 
-    testWidgets('says which route reaches it; a desktop says nothing', (
-      tester,
-    ) async {
-      for (final scale in const [1.0, 1.3]) {
-        await pumpPhone(
-          tester,
-          gateway: machines(),
-          overrides: clock,
-          textScale: scale,
-          home: const SingleChildScrollView(child: ConnectionsSection()),
-        );
-        expect(find.text('Direct · 203.0.113.9:47820'), findsOneWidget);
-        expect(find.text('Hosted relay'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      }
-    });
+    testWidgets(
+      'says which route reaches it; a machine found by itself says nothing',
+      (tester) async {
+        for (final scale in const [1.0, 1.3]) {
+          await pumpPhone(
+            tester,
+            gateway: machines(),
+            overrides: clock,
+            textScale: scale,
+            home: const SingleChildScrollView(child: ConnectionsSection()),
+          );
+          expect(find.text('Direct · 203.0.113.9:47820'), findsOneWidget);
+          expect(find.text('Hosted relay'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
 
     testWidgets('an unreachable direct machine says what to do, under its own '
         'name', (tester) async {
       const trouble =
           "203.0.113.9:47820 did not answer. If it is no longer reachable "
-          "from here, pair it again from the desktop and choose 'Hosted "
-          "relay'.";
+          "from here, pair it again with its route set to 'Hosted relay'.";
       final gateway = FakeCompanionGateway.paired(
         hostName: 'do-box',
         route: HostRoute.direct,

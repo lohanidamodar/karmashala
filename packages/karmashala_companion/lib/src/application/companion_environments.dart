@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_remote/remote.dart';
 
-/// One machine behind the active desktop, as the phone lists it.
+/// One machine behind the active machine, as the phone lists it.
 class CompanionEnvironment {
   const CompanionEnvironment({
     required this.key,
@@ -13,14 +13,14 @@ class CompanionEnvironment {
     required this.sessions,
   });
 
-  /// What groups the rows: the desktop's own environment id when it sent one,
+  /// What groups the rows: the host's own environment id when it sent one,
   /// otherwise the name it badged them with. **Never derived from both** — a
-  /// key that changed shape between desktops would split one machine in two.
+  /// key that changed shape between machines would split one machine in two.
   final String key;
 
   final String label;
 
-  /// `wsl`, `ssh`, `windowsNative`, `localPosix` — or null from a desktop that
+  /// `wsl`, `ssh`, `windowsNative`, `localPosix` — or null from a host that
   /// does not send it, where the glyph stays neutral rather than guessed.
   final String? kind;
 
@@ -28,14 +28,14 @@ class CompanionEnvironment {
   final int sessions;
 }
 
-/// The machines the phone can see behind one desktop, local first.
+/// The machines the phone can see behind one paired machine, local first.
 ///
-/// Counted from the **workspace** where the desktop sent one, so a machine
+/// Counted from the **workspace** where the host sent one, so a machine
 /// holding projects nobody has started a session on is still a machine you can
 /// go to. Sessions add their own counts, and may name a machine the workspace
-/// did not — an older desktop, or a project since removed.
+/// did not — an older host, or a project since removed.
 ///
-/// **Empty means the desktop has said nothing yet**, not that it runs nothing —
+/// **Empty means the host has said nothing yet**, not that it runs nothing —
 /// the caller shows the snapshot's age rather than an empty list (§19). A
 /// single machine is still returned; deciding to skip the step is the screen's,
 /// and it needs the one row's name to say where it landed.
@@ -47,7 +47,7 @@ List<CompanionEnvironment> companionEnvironments(
 
   for (final project in projects) {
     final key = project.environmentId ?? project.environmentBadge;
-    // A project the desktop placed nowhere belongs to no machine we can name.
+    // A project the host placed nowhere belongs to no machine we can name.
     if (key == null || key.isEmpty) continue;
     byKey
         .putIfAbsent(
@@ -63,7 +63,7 @@ List<CompanionEnvironment> companionEnvironments(
 
   for (final session in sessions) {
     final key = session.environmentId ?? session.environmentBadge;
-    // A session the desktop said nothing about belongs to no machine we can
+    // A session the host said nothing about belongs to no machine we can
     // name. Counting it under "this one" would be a guess.
     if (key == null || key.isEmpty) continue;
     final tally = byKey.putIfAbsent(
@@ -112,7 +112,7 @@ List<CompanionSessionSummary> sessionsOnEnvironment(
 /// The projects on one machine, by the same key [companionEnvironments] groups
 /// on — the sibling of [sessionsOnEnvironment], and needed for the same reason:
 /// the machine step is decorative if the list behind it still names every
-/// project the desktop holds.
+/// project the host holds.
 List<RemoteWorkspaceProject> projectsOnEnvironment(
   List<RemoteWorkspaceProject> projects,
   String key,
@@ -121,7 +121,7 @@ List<RemoteWorkspaceProject> projectsOnEnvironment(
     if ((project.environmentId ?? project.environmentBadge) == key) project,
 ];
 
-/// Local, then WSL, then SSH, then a machine whose kind the desktop did not
+/// Local, then WSL, then SSH, then a machine whose kind the host did not
 /// say — the order the desktop's own Explorer uses.
 int _rank(String? kind) => switch (kind) {
   'windowsNative' || 'localPosix' => 0,
@@ -142,9 +142,9 @@ class _Tally {
 /// null for "all of them".
 ///
 /// In memory: it is where you are looking, not where you live, and a key from
-/// a desktop you have since switched away from names nothing. The screen
+/// a machine you have since switched away from names nothing. The screen
 /// treats a key it cannot find as "all of them" rather than showing an empty
-/// list, so switching desktops needs no listener here.
+/// list, so switching machines needs no listener here.
 class CompanionEnvironmentChoice extends Notifier<String?> {
   @override
   String? build() => null;
