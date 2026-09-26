@@ -12,11 +12,6 @@ class MetadataKeys {
   /// triggers a one-time probe on startup.
   static const agentsDiscoveredAt = 'agents_discovered_at';
   static const environmentHealthOnboarding = 'environment_health_onboarding';
-
-  /// Set once the conversation index has caught up with what the workspace
-  /// already had, which makes the backfill a one-off rather than a sweep.
-  static const conversationIndexBackfilledAt =
-      'conversation_index_backfilled_at';
 }
 
 /// Stamps the first run, once. Answers whether this is it.

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
@@ -56,19 +56,23 @@ bool isDisposed(ProviderContainer container) {
 
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late TerminalLayoutStore layout;
   late ProviderContainer container;
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('karmashala_lifecycle_');
-    db = AppDatabase.memory();
+    layout = TerminalLayoutStore.memory();
     container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [terminalLayoutStoreProvider.overrideWithValue(layout)],
     );
   });
 
   tearDown(() {
-    db.close();
+    try {
+      layout.close();
+    } on Object {
+      // The shutdown under test closed it already.
+    }
     // **One call, not exists-then-delete.** The guard was a TOCTOU: a case
     // that had already failed may have taken its directory with it between
     // the two lines, and the `PathNotFoundException` that followed buried the
@@ -184,15 +188,17 @@ void main() {
   group('the database it closes', () {
     test('a graceful quit closes the handle, not just the process', () async {
       // `exit(0)` releases the file and gives SQLite no chance to checkpoint,
-      // so all 20 of the soak's cycles left `karmashala.sqlite-wal` and `-shm`
-      // for the next launch to recover from. A `close()` writes them back and
-      // removes them.
+      // so all 20 of the soak's cycles left a `-wal` and `-shm` for the next
+      // launch to recover from. A `close()` writes them back and removes
+      // them. The app's one database is its own terminal layout, open once
+      // the terminals have read it.
+      container.read(terminalLayoutStoreProvider);
       final lifecycle = AppLifecycle(container);
 
       await lifecycle.shutdown();
 
       expect(
-        () => db.query('SELECT 1;'),
+        () => layout.query('SELECT 1;'),
         throwsA(anything),
         reason: 'the handle outlived the shutdown that owns it',
       );
@@ -350,7 +356,6 @@ void main() {
       final built = <_ReapingInstance>[];
       final container = ProviderContainer(
         overrides: fakeTerminalOverrides(
-          database: db,
           instanceFactory:
               ({
                 required String id,
@@ -486,10 +491,7 @@ void main() {
           interfaces: () async => [],
         );
         final container = ProviderContainer(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            localRelayServiceProvider.overrideWithValue(relay),
-          ],
+          overrides: [localRelayServiceProvider.overrideWithValue(relay)],
         );
         final lifecycle = AppLifecycle(container);
         await container.read(localRelayServiceProvider).ensureRunning(0);
@@ -788,7 +790,6 @@ void main() {
         );
         final scoped = ProviderContainer(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             data,
             commandRunnerFactoryProvider.overrideWithValue(
               FakeCommandRunnerFactory(fallback: runner),
@@ -821,7 +822,6 @@ void main() {
         final runner = FakeCommandRunner();
         final scoped = ProviderContainer(
           overrides: [
-            databaseProvider.overrideWithValue(db),
             data,
             commandRunnerFactoryProvider.overrideWithValue(
               FakeCommandRunnerFactory(fallback: runner),
@@ -851,7 +851,6 @@ void main() {
       final sweeps = <int>[];
       final scoped = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           agentHookInstallationServiceProvider.overrideWith(
             (ref) => _RecordingHookService(ref, sweeps),
           ),
@@ -890,7 +889,6 @@ void main() {
       final sweeps = <int>[];
       final scoped = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           agentHookInstallationServiceProvider.overrideWith(
             (ref) => _RecordingHookService(ref, sweeps),
           ),
@@ -914,7 +912,6 @@ void main() {
       final starting = Completer<HostDeployment?>();
       final scoped = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           agentHookInstallationServiceProvider.overrideWith(
             (ref) => _RecordingHookService(ref, sweeps),
           ),
@@ -941,7 +938,6 @@ void main() {
       final sweeps = <int>[];
       final scoped = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           agentHookInstallationServiceProvider.overrideWith(
             (ref) => _RecordingHookService(ref, sweeps),
           ),

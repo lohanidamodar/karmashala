@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_host/karmashala_host.dart';
@@ -100,10 +101,49 @@ void main() {
     },
   );
 
+  test('a conversation search round-trips; a catch-up is answered when done, '
+      'by its id, with requests sent after it in flight', () async {
+    final service = server.data!;
+    service.conversations.dao.replaceTurns(
+      sessionId: 'c1',
+      cli: 'claudeCode',
+      filePath: '/nowhere/c1.jsonl',
+      turns: const [
+        ConversationTurn(ordinal: 0, role: 'user', text: 'the rate limiter'),
+      ],
+      indexedAt: DateTime.utc(2026, 9, 27),
+    );
+    const at = '2026-09-27T00:00:00.000Z';
+    for (final sql in [
+      'INSERT INTO execution_environments (id, kind, name, created_at) '
+          "VALUES ('e', 'localPosix', 'Here', '$at');",
+      'INSERT INTO projects (id, name, root_environment_id, root_path, '
+          "created_at) VALUES ('p', 'P', 'e', '/p', '$at');",
+      'INSERT INTO repositories (id, project_id, name, environment_id, path, '
+          "created_at) VALUES ('r', 'p', 'r', 'e', '/p', '$at');",
+      'INSERT INTO imported_sessions (id, repository_id, source, external_id, '
+          'environment_id, preview, file_path, store_home, is_subagent, '
+          "created_at) VALUES ('i1', 'r', 'claudeCode', 'c1', 'e', 'hi', "
+          "'/nowhere/c1.jsonl', '/h', 0, '$at');",
+    ]) {
+      db.execute(sql);
+    }
+    final link = (await HostDataLink.connect(listener.path))!;
+    final catchUp = link.send(const ConversationsCatchUp());
+    final page = await link.send(const ConversationsSearch('rate limiter'));
+    expect(page.value.hits.single.sessionId, 'c1');
+    expect(page.value.hits.single.excerpt, contains('rate limiter'));
+    // Nothing started reading transcripts here: nothing changed.
+    expect((await catchUp.timeout(const Duration(seconds: 5))).value, 0);
+    final status = await link.send(const ConversationsStatus());
+    expect(status.value.turns, 1);
+    await link.close();
+  });
+
   test('the frames keep their numbers', () {
     expect(MessageType.dataRequest.code, 0x32);
     expect(MessageType.dataAnswer.code, 0x33);
     expect(MessageType.dataChanges.code, 0x34);
-    expect(kProtocolVersion, 15);
+    expect(kProtocolVersion, 16);
   });
 }

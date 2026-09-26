@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
@@ -35,12 +35,13 @@ void main() {
     } catch (_) {}
   });
 
-  AppDatabase openDb() =>
-      AppDatabase(sqlite3.open(p.join(work.path, 'db.sqlite')));
+  /// The app's own store — the terminal layout, client-local — on disk.
+  TerminalLayoutStore openDb() =>
+      TerminalLayoutStore(sqlite3.open(p.join(work.path, 'layout.sqlite')));
 
-  ProviderContainer containerOver(AppDatabase db) => ProviderContainer(
+  ProviderContainer containerOver(TerminalLayoutStore db) => ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(db),
+      terminalLayoutStoreProvider.overrideWithValue(db),
       // A real periodic timer outlives the test and trips the pending-timer
       // check; saving is driven explicitly here.
       scrollbackAutosaveFactoryProvider.overrideWithValue(

@@ -9,6 +9,7 @@ import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart'
     show Checkpoint, checkpointFromJson, checkpointToJson;
 import 'package:karmashala_comparisons/comparisons.dart';
+import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_git/git.dart'
@@ -49,6 +50,7 @@ part 'requests/checkpoints_requests.dart';
 part 'requests/worktrees_requests.dart';
 part 'requests/snippets_requests.dart';
 part 'requests/pairings_requests.dart';
+part 'requests/conversations_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -252,6 +254,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _worktreesRequestFromJson(kind, args) ??
     _snippetsRequestFromJson(kind, args) ??
     _pairingsRequestFromJson(kind, args) ??
+    _conversationsRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.

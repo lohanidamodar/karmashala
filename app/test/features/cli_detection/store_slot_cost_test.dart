@@ -1,24 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:agent_cli/read.dart';
 
 /// **What a brand-new session sets in motion after it has started.**
@@ -35,8 +31,8 @@ import 'package:agent_cli/read.dart';
 /// "what does the click sign the app up for". Counted in the two units that
 /// decide it:
 ///
-/// * **database statements**, because `package:sqlite3` is synchronous and a
-///   statement is main-isolate time inside a frame; and
+/// * **requests to the server**, because each is a round trip the slot waits
+///   on (the app opens no database of its own); and
 /// * **store bytes**, because the scan is the disk work — measured on the
 ///   owner's machine at 2.4 GB across 540 files per pass before
 ///   `claude_store_scan_cost_test.dart`'s incremental read.
@@ -77,8 +73,29 @@ void main() {
   /// brand-new ones — a row still wearing `ExplorerActions.startSession`'s
   /// "New session", which is exactly what the `+` leaves behind.
   Future<_Slot> slot({required int named, int waiting = 0}) async {
-    final db = _CountingDatabase();
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
+    void insertSession({
+      required String id,
+      required String title,
+      required String conversation,
+      bool titleByUser = false,
+    }) => server.sessionRows.insert(
+      Session(
+        id: id,
+        repositoryId: 'r1',
+        agentInstallationId: 'a1',
+        title: title,
+        useWorktree: false,
+        workingDirectory: const EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\src\demo\app',
+        ),
+        status: SessionStatus.running,
+        createdAt: testTime,
+        externalSessionId: conversation,
+        titleByUser: titleByUser,
+      ),
+    );
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
@@ -86,7 +103,7 @@ void main() {
       agentInstallation(agentId: AgentIds.claudeCode),
     );
     for (var i = 0; i < named; i++) {
-      db.insertSession(
+      insertSession(
         id: 's$i',
         title: 'What I called it $i',
         conversation: _conversationId(i % conversations),
@@ -94,7 +111,7 @@ void main() {
       );
     }
     for (var i = 0; i < waiting; i++) {
-      db.insertSession(
+      insertSession(
         id: 'new$i',
         // The launcher mints our own id and hands it to `--session-id`, so a
         // brand-new Claude row already knows its conversation. What it does
@@ -106,7 +123,6 @@ void main() {
     final detection = _CountingDetection();
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         await server.override(),
         cliDetectionServiceProvider.overrideWithValue(detection),
         // The stores are read through the scan runner now; inline here, so the
@@ -125,8 +141,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    addTearDown(db.close);
-    return _Slot(container, db, detection);
+    return _Slot(container, server, detection);
   }
 
   group('the store slot', () {
@@ -138,7 +153,7 @@ void main() {
 
       // ignore: avoid_print
       print(
-        'STORE-SLOT waiting=0 statements=${measured.statements.length} '
+        'STORE-SLOT waiting=0 requests=${measured.requests.length} '
         'scans=${measured.scans} bytes=${measured.bytes}',
       );
       expect(
@@ -161,7 +176,7 @@ void main() {
 
         // ignore: avoid_print
         print(
-          'STORE-SLOT waiting=1 statements=${measured.statements.length} '
+          'STORE-SLOT waiting=1 requests=${measured.requests.length} '
           'scans=${measured.scans} bytes=${measured.bytes}',
         );
         expect(
@@ -183,19 +198,19 @@ void main() {
     );
 
     test('and the scan it buys does not grow with the workspace', () async {
-      final statements = <int, int>{};
+      final requests = <int, int>{};
       final scans = <int, int>{};
       for (final count in const [1, 10, 100]) {
         final busy = await slot(named: count, waiting: 1);
         await busy.run();
 
         final measured = await busy.run();
-        statements[count] = measured.statements.length;
+        requests[count] = measured.requests.length;
         scans[count] = measured.scans;
         // ignore: avoid_print
         print(
           'STORE-SLOT sessions=$count waiting=1 '
-          'statements=${measured.statements.length} '
+          'requests=${measured.requests.length} '
           'scans=${measured.scans} '
           'bytes=${measured.bytes}',
         );
@@ -207,43 +222,11 @@ void main() {
         reason: 'one store scan per slot, whatever is open: $scans',
       );
       expect(
-        statements.values.toSet(),
+        requests.values.toSet(),
         hasLength(1),
         reason:
-            'a slot reads the session table a fixed number of times; nothing '
-            'on it may ask a question per row: $statements',
-      );
-    });
-
-    test('the conversation the CLI just named is indexed, that slot', () async {
-      final busy = await slot(named: 2, waiting: 1);
-
-      await busy.run();
-
-      // The rename is the app's existing evidence that the CLI wrote to that
-      // conversation's store, and it is one of the two triggers the index is
-      // built on. The turns land on the same slot, off the scan the rename
-      // already paid for.
-      final dao = ConversationIndexDao(busy.db);
-      expect(
-        dao.search('padding').map((hit) => hit.sessionId),
-        contains(_conversationId(2)),
-      );
-      expect(dao.stateFor(_conversationId(2))!.turns, greaterThan(0));
-    });
-
-    test('and a slot with nothing to index never reads the index', () async {
-      final busy = await slot(named: 2, waiting: 1);
-      await busy.run();
-
-      final measured = await busy.run();
-
-      // The second slot: the rename already happened, so nothing is queued and
-      // `drain` returns before it touches the database or the disk.
-      expect(
-        measured.statements.where((sql) => sql.contains('conversation_')),
-        isEmpty,
-        reason: 'an idle indexer must cost no statement: ${measured.writes}',
+            'a slot asks the server a fixed number of questions; nothing on '
+            'it may ask one per row: $requests',
       );
     });
 
@@ -253,7 +236,7 @@ void main() {
       await busy.run();
 
       expect(
-        mirroredServer(busy.db).sessionRows.getById('new0')!.title,
+        busy.server.sessionRows.getById('new0')!.title,
         'Conversation 2',
         reason: 'the whole point of the slot: the CLI names the session',
       );
@@ -299,24 +282,25 @@ String _line(Map<String, Object?> json) => '${jsonEncode(json)}\n';
 
 /// One store slot, and what running it cost.
 class _Slot {
-  _Slot(this.container, this.db, this.detection);
+  _Slot(this.container, this.server, this.detection);
 
   final ProviderContainer container;
-  final _CountingDatabase db;
+  final FakeDataServer server;
   final _CountingDetection detection;
 
   /// Runs one slot — the single line `SessionStatusRegistry.onCycle` runs when
   /// it is allowed to touch the disk — and reports what it cost.
   Future<_SlotCost> run() async {
-    db.reset();
+    await container.read(dataClientProvider).settled();
+    final asked = server.requests.length;
     detection.scans = 0;
     final before = detection.claudeReader.bytesRead;
 
     await container.read(cliStoreSyncRunnerProvider)();
+    await container.read(dataClientProvider).settled();
 
     return _SlotCost(
-      statements: List.of(db.statements),
-      writes: db.writes,
+      requests: server.requests.sublist(asked),
       scans: detection.scans,
       bytes: detection.claudeReader.bytesRead - before,
     );
@@ -325,15 +309,19 @@ class _Slot {
 
 class _SlotCost {
   const _SlotCost({
-    required this.statements,
-    required this.writes,
+    required this.requests,
     required this.scans,
     required this.bytes,
   });
 
-  /// Every statement the slot ran, in order.
-  final List<String> statements;
-  final List<String> writes;
+  /// Every request the slot sent the server, by kind, in order.
+  final List<String> requests;
+
+  /// The ones that write.
+  List<String> get writes => [
+    for (final kind in requests)
+      if (!kind.endsWith('.list') && kind != 'data.subscribe') kind,
+  ];
 
   /// Passes over the CLI stores. Two services want one on the slot a session
   /// learns its name, and `cliStoreScanPassProvider` is why that is one read.
@@ -357,61 +345,5 @@ class _CountingDetection extends CliDetectionService {
   List<StoreScanJob> jobsFor(List<CliStore> stores) {
     scans++;
     return super.jobsFor(stores);
-  }
-}
-
-/// An [AppDatabase] that records every statement, so a slot can be priced in
-/// main-isolate time.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  final List<String> statements = [];
-
-  void reset() => statements.clear();
-
-  int get count => statements.length;
-
-  List<String> get writes => statements
-      .where((sql) => !sql.trimLeft().toUpperCase().startsWith('SELECT'))
-      .toList();
-
-  void insertSession({
-    required String id,
-    required String title,
-    required String conversation,
-    bool titleByUser = false,
-  }) {
-    mirroredServer(this).sessionRows.insert(
-      Session(
-        id: id,
-        repositoryId: 'r1',
-        agentInstallationId: 'a1',
-        title: title,
-        useWorktree: false,
-        workingDirectory: const EnvironmentPath(
-          environmentId: 'windows',
-          path: r'C:\src\demo\app',
-        ),
-        status: SessionStatus.running,
-        createdAt: testTime,
-        externalSessionId: conversation,
-        titleByUser: titleByUser,
-      ),
-    );
-  }
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    statements.add(sql);
-    return super.query(sql, params);
-  }
-
-  @override
-  void execute(String sql, [List<Object?> params = const []]) {
-    statements.add(sql);
-    super.execute(sql, params);
   }
 }

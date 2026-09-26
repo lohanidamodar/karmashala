@@ -17,7 +17,6 @@ import '../../support/test_machine.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import '../../support/conversation_index_database.dart';
 
 /// The owner's bug, end to end through the real providers.
 ///
@@ -92,7 +91,6 @@ void main() {
 
   ProviderContainer container() => ProviderContainer(
     overrides: [
-      conversationIndexDatabase(),
       dataClientProvider.overrideWithValue(client),
       cliStoreLocatorProvider.overrideWithValue(
         FixedLocator([
@@ -111,6 +109,8 @@ void main() {
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     expect(db.server.sessionRows.getById('s1')!.title, 'test me now');
   });
@@ -145,6 +145,8 @@ void main() {
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     final row = db.server.sessionRows.getById('s2')!;
     expect(row.externalSessionId, conversation);
@@ -161,6 +163,8 @@ void main() {
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     expect(db.server.sessionRows.getById('s1')!.title, 'New session');
   });

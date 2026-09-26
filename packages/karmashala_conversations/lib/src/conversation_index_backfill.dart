@@ -1,38 +1,33 @@
-import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show PreferenceStore;
-import '../../../core/data/metadata_keys.dart';
 import 'package:karmashala_core/util.dart';
-import '../data/conversation_index_dao.dart';
+
+import 'conversation_index_dao.dart';
 import 'conversation_indexer.dart';
 
 /// Catches the index up with the conversations already in the workspace — a
-/// one-off, recorded among the preferences, never re-run and never scheduled.
+/// one-off, stamped in the store (`conversation_index_backfilled_at`), never
+/// re-run and never scheduled.
 class ConversationIndexBackfill {
   ConversationIndexBackfill({
-    required this.preferences,
     required this.dao,
     required this.indexer,
     required this.clock,
     required this.locateTranscripts,
   });
 
-  final PreferenceStore preferences;
   final ConversationIndexDao dao;
   final ConversationIndexer indexer;
   final Clock clock;
 
-  /// `'<agentId>/<conversationId>' → path`, one store walk.
-  /// `SessionTranscriptLocator.index` in production.
+  /// `'<agentId>/<conversationId>' → path`, one walk of every store.
   final Future<Map<String, String>> Function() locateTranscripts;
 
   /// Store walks this backfill made. Zero or one, and the cost claim.
   int walks = 0;
 
-  /// Whether the catch-up has already happened on this database.
-  bool get isDone =>
-      preferences.read(MetadataKeys.conversationIndexBackfilledAt) != null;
+  /// Whether the catch-up has already happened on this store.
+  bool get isDone => dao.backfilledAt != null;
 
-  /// Runs the catch-up, at most once per database. Returns conversations
+  /// Runs the catch-up, at most once per store. Returns conversations
   /// indexed.
   Future<int> runOnce() async {
     if (isDone) return 0;
@@ -75,16 +70,13 @@ class ConversationIndexBackfill {
       )) {
         indexed++;
       }
-      // The writes are synchronous on the drawing isolate, so a conversation's
-      // inserts are one frame. Hand a frame back between conversations.
+      // The writes are synchronous on the server's one isolate, so a
+      // conversation's inserts hold it. Hand the event loop back between them.
       await Future<void>.delayed(Duration.zero);
     }
     // Written whatever happened: one unreadable transcript is not a reason to
-    // walk every store again next launch. A real trigger will queue it.
-    preferences.write(
-      MetadataKeys.conversationIndexBackfilledAt,
-      clock.nowUtc().toIso8601String(),
-    );
+    // walk every store again next start. A real trigger will queue it.
+    dao.markBackfilled(clock.nowUtc());
     return indexed;
   }
 }

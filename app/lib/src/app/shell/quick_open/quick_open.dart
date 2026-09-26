@@ -5,12 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_git/git.dart';
 
-import '../../../features/cli_detection/application/cli_detection_providers.dart';
-import '../../../features/cli_detection/data/conversation_index_dao.dart';
+import '../../../features/cli_detection/data/conversation_search.dart';
 import '../../../features/git/application/changes_providers.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'conversation_hits.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
 import 'quick_open_list.dart';
@@ -91,6 +91,9 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   List<QuickOpenItem> _conversationItems = const [];
   String _conversationQuery = '';
 
+  /// The server's answers to this palette's conversation searches.
+  late final ConversationHits _hits;
+
   List<QuickOpenSection> _sections = const [];
   List<QuickOpenResult> _flat = const [];
   int _selected = 0;
@@ -122,6 +125,10 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     super.initState();
     _controller = TextEditingController(text: widget.initialQuery);
     _history = _readHistory();
+    _hits = ConversationHits(
+      ref.read(conversationSearchProvider),
+      onAnswer: _onConversationAnswer,
+    );
     _index = ref.read(repoFileIndexProvider);
     // The index refreshes itself behind the dialog — a watcher fires, an agent
     // turn ends — so the open palette has to be told, not just asked once.
@@ -147,20 +154,33 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     });
   }
 
-  /// Reads what the running sessions appended since their last index, then
-  /// searches again if that found anything — so today's turns are findable.
+  /// Asks the server to read what the running sessions appended since their
+  /// last reading, then searches again if that found anything — so today's
+  /// turns are findable.
   void _catchUpConversations() {
-    ref.read(sessionSearchServiceProvider).catchUp().then((changed) {
-      if (!mounted || changed == 0) return;
-      setState(() {
-        _searchConversations(force: true);
-        _rerank();
-      });
+    ref.read(conversationSearchProvider).catchUp().then(
+      (changed) {
+        if (!mounted || changed == 0) return;
+        _hits.forget();
+        _onConversationAnswer();
+      },
+      // No server to ask: the search answers from what it has.
+      onError: (Object _) {},
+    );
+  }
+
+  /// The server answered a conversation search: draw it.
+  void _onConversationAnswer() {
+    if (!mounted) return;
+    setState(() {
+      _searchConversations(force: true);
+      _rerank();
     });
   }
 
   @override
   void dispose() {
+    _hits.close();
     _indexChanges?.cancel();
     final walking = _walking;
     if (walking != null) _index.cancel(walking);
@@ -203,7 +223,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 
   /// Runs the conversation search for the query as typed: a ranked page from
-  /// the index, and no debounce — lagging the list would read as a bug.
+  /// the server's index, and no debounce — lagging the list would read as a
+  /// bug. Until the server answers, the last answer stays on screen.
   void _searchConversations({bool force = false}) {
     final query = _query;
     final only = query.only;
@@ -216,11 +237,10 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       _conversationItems = const [];
       return;
     }
-    final List<ConversationHit> hits = ref
-        .read(sessionSearchServiceProvider)
-        .search(text, limit: kQuickOpenConversationLimit)
-        .hits;
-    _conversationItems = _sources().conversations(hits, text);
+    final hits = _hits.hitsFor(text, kQuickOpenConversationLimit);
+    if (hits != null) {
+      _conversationItems = _sources().conversations(hits, text);
+    }
   }
 
   void _rerank() {
@@ -261,6 +281,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   CommandCatalog _catalogNow() => _catalog ??= readCommandCatalog(
     ProviderScope.containerOf(context, listen: false),
     notGitProjectIds: _notGit,
+    conversationHits: (query) =>
+        _hits.hitsFor(query, kCommandSuggestionLimit) ?? const [],
   );
 
   /// The rows a typed verb, or an empty box with history, puts above the

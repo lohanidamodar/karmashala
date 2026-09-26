@@ -10,12 +10,10 @@ import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
 import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
-import 'package:karmashala_store/database.dart';
 import 'src/core/data/app_preferences.dart';
 import 'src/core/data/data_providers.dart';
 import 'src/core/data/metadata_keys.dart';
 import 'src/core/data/server_data_connection.dart';
-import 'src/core/database/database_providers.dart';
 import 'src/core/lifecycle/app_binding.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
 import 'src/core/lifecycle/uncaught_errors.dart';
@@ -99,7 +97,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   logger.info('Starting ${buildIdentity()}');
   // Read once and handed to the container below, so every side-effect site
   // asks one provider. A probe without its own data folder is refused here,
-  // before the log file or the database is opened.
+  // before the log file is opened.
   final probe = ProbeMode.current;
   if (probe.enabled) {
     logger.info(
@@ -112,11 +110,9 @@ Future<void> _bootstrap(AppLogger logger) async {
   // Opening the file needs `path_provider`, hundreds of milliseconds in, so it
   // backfills the buffer. Awaited: the directory below asks the same question.
   await attachDefaultLogFile(Diagnostics.instance);
-  // The server's database, in the server's data folder (`~/.karmashala`, or a
-  // probe's own), still opened here for the domains that do not yet go
-  // through the server's data API (docs/daemon-architecture.md, slice 1).
-  final database = AppDatabase.open(await serverDataDirectory());
-  // The terminal layout is this window's own, beside the app, never the server's.
+  // The app opens no database: everything but the terminal layout is the
+  // server's (docs/daemon-architecture.md, slice 1). The layout is this
+  // window's own, beside the app.
   final layoutStore = TerminalLayoutStore.open(await appSupportDirectory());
 
   // Notes, todos and preferences live at this machine's server, started (or
@@ -170,7 +166,6 @@ Future<void> _bootstrap(AppLogger logger) async {
 
   final container = ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(database),
       terminalLayoutStoreProvider.overrideWithValue(layoutStore),
       dataClientProvider.overrideWithValue(data),
       localHostSessionAccessProvider.overrideWithValue(hostAccess),
@@ -318,12 +313,6 @@ Future<void> _bootstrap(AppLogger logger) async {
   // And what those executables *are*, when the last reading has aged out. Only
   // rows older than `kVersionReadingFreshFor`, so a fresh workspace spawns none.
   unawaited(lifecycle.refreshAgentVersions(afterFirstFrame: afterFirstFrame));
-
-  // The one catch-up the conversation index will ever have — the history that
-  // was on disk before either of its triggers could fire. Once per database.
-  unawaited(
-    lifecycle.backfillConversationIndex(afterFirstFrame: afterFirstFrame),
-  );
 }
 
 /// Runs the one-time startup agent discovery. On success it stamps

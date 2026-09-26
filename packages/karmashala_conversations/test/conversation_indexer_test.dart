@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:agent_cli/read.dart';
-import 'package:agent_cli/process.dart';
+import 'package:karmashala_conversations/store.dart';
+import 'package:karmashala_core/util.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
+import 'package:test/test.dart';
+
+import 'support/seed.dart';
 
 /// A clock that only moves when a test moves it.
 class _FixedClock implements Clock {
@@ -216,15 +215,15 @@ void main() {
   });
 
   group('cost', () {
-    test('an idle indexer does nothing, and asks for no scan', () async {
+    test('an idle indexer does nothing, and asks for no store', () async {
       var scans = 0;
       expect(indexer.hasWork, isFalse);
       db.reset();
 
       expect(
-        await indexer.drain(() async {
+        await indexer.drain((cli, id) async {
           scans++;
-          return const [];
+          return null;
         }),
         0,
       );
@@ -294,57 +293,122 @@ void main() {
       expect(indexer.hasWork, isTrue);
 
       var scans = 0;
-      await indexer.drain(() async {
+      await indexer.drain((cli, id) async {
         scans++;
-        return const [];
+        return null;
       });
 
-      expect(scans, 0, reason: 'a want with its own path needs no scan');
+      expect(scans, 0, reason: 'a want with its own path needs no store');
       expect(dao.search('queued'), hasLength(1));
       expect(indexer.hasWork, isFalse, reason: 'and the queue is empty after');
     });
 
-    test('a pathless want resolves from the scan already paid for', () async {
+    test('a want with an agent and no path asks its store once', () async {
       final path = claudeTranscript('c1.jsonl', [
         _line({
           'type': 'user',
           'message': {'role': 'user', 'content': 'adopted just now'},
         }),
       ]);
-      indexer.want('c1');
+      indexer.want('c1', cli: AgentIds.claudeCode);
 
-      var scans = 0;
-      await indexer.drain(() async {
-        scans++;
-        return [
-          DetectedSession(
-            cli: AgentIds.claudeCode,
-            sessionId: 'c1',
-            cwd: const EnvironmentPath(environmentId: 'windows', path: r'C:\r'),
-            filePath: path,
-            storeHome: dir.path,
-          ),
-        ];
+      final asked = <String>[];
+      await indexer.drain((cli, id) async {
+        asked.add('$cli/$id');
+        return path;
       });
 
-      expect(scans, 1);
+      expect(asked, ['${AgentIds.claudeCode}/c1']);
       expect(dao.search('adopted'), hasLength(1));
     });
 
-    test('a want the store cannot name is dropped, not retried', () async {
-      indexer.want('gone');
+    test('a bare want takes its agent from the session row', () async {
+      Seed(db)
+        ..workspace()
+        ..session('s1', externalSessionId: 'c1');
+      final path = claudeTranscript('c1.jsonl', [
+        _line({
+          'type': 'user',
+          'message': {'role': 'user', 'content': 'launched here'},
+        }),
+      ]);
+      indexer.want('c1');
+
+      final asked = <String>[];
+      await indexer.drain((cli, id) async {
+        asked.add('$cli/$id');
+        return path;
+      });
+
+      expect(asked, ['${AgentIds.claudeCode}/c1']);
+      expect(dao.search('launched'), hasLength(1));
+    });
+
+    test('a path the imported history recorded needs no store', () async {
+      final path = claudeTranscript('c1.jsonl', [
+        _line({
+          'type': 'user',
+          'message': {'role': 'user', 'content': 'imported earlier'},
+        }),
+      ]);
+      Seed(db)
+        ..workspace()
+        ..importedSession('c1', path);
+      indexer.want('c1');
 
       var scans = 0;
-      Future<List<DetectedSession>> scan() async {
+      await indexer.drain((cli, id) async {
         scans++;
-        return const [];
+        return null;
+      });
+
+      expect(scans, 0, reason: 'the record already says where it is');
+      expect(dao.search('imported'), hasLength(1));
+    });
+
+    test('a want nothing names an agent for is dropped unasked', () async {
+      indexer.want('stranger');
+
+      var scans = 0;
+      await indexer.drain((cli, id) async {
+        scans++;
+        return null;
+      });
+
+      expect(scans, 0);
+      expect(indexer.hasWork, isFalse);
+    });
+
+    test('a want the store cannot name is dropped, not retried', () async {
+      indexer.want('gone', cli: AgentIds.claudeCode);
+
+      var scans = 0;
+      Future<String?> locate(String cli, String id) async {
+        scans++;
+        return null;
       }
 
-      await indexer.drain(scan);
-      await indexer.drain(scan);
+      await indexer.drain(locate);
+      await indexer.drain(locate);
 
-      // One scan, not two: keeping the want would make every later slot walk
+      // One look, not two: keeping the want would make every later drain walk
       // the stores for a conversation they may never name.
+      expect(scans, 1);
+      expect(indexer.hasWork, isFalse);
+    });
+
+    test('a store that cannot be read drops the want too', () async {
+      indexer.want('gone', cli: AgentIds.claudeCode);
+
+      var scans = 0;
+      Future<String?> locate(String cli, String id) async {
+        scans++;
+        throw const FileSystemException('unreachable share');
+      }
+
+      expect(await indexer.drain(locate), 0);
+      await indexer.drain(locate);
+
       expect(scans, 1);
       expect(indexer.hasWork, isFalse);
     });

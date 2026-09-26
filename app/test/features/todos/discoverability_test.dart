@@ -14,7 +14,6 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:agent_cli/process.dart';
-import '../../support/conversation_index_database.dart';
 import '../../support/test_machine.dart';
 
 /// **Can somebody who has never read the code find where to write one?**
@@ -52,10 +51,7 @@ void main() {
               ..environmentRows.upsert(localHostEnvironment(testTime)))
             .override();
     final container = ProviderContainer(
-      overrides: [
-        conversationIndexDatabase(),
-        ...fakeTerminalOverrides(data: data, machine: db),
-      ],
+      overrides: [...fakeTerminalOverrides(data: data, machine: db)],
     );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);

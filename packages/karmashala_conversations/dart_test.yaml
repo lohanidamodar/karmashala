@@ -1,0 +1,6 @@
+# Tags declared so `dart test` does not warn about them; declaring one changes
+# no default behaviour.
+tags:
+  # A cost or soak measurement rather than a behaviour: the session search
+  # benchmark. A full run keeps it; `--exclude-tags=cost` skips it.
+  cost:

@@ -17,7 +17,6 @@ import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
-import '../../../support/conversation_index_database.dart';
 
 /// The dialog's side of the file index: that it draws what is cached, notices
 /// the index refreshing behind it, and lets go of a walk it no longer wants.
@@ -67,7 +66,6 @@ void main() {
   ProviderContainer containerWith(RepoFileIndex index) => ProviderContainer(
     overrides: [
       data,
-      conversationIndexDatabase(),
       ...fakeTerminalOverrides(machine: db),
       quickOpenFileRootProvider.overrideWithValue(root.path),
       repoFileIndexProvider.overrideWithValue(index),
@@ -257,7 +255,6 @@ void main() {
         ProviderContainer(
           overrides: [
             data,
-            conversationIndexDatabase(),
             ...fakeTerminalOverrides(machine: db),
             quickOpenFileRootProvider.overrideWith((ref) => selected),
             repoFileIndexProvider.overrideWithValue(index),

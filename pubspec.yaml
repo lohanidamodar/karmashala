@@ -40,6 +40,7 @@ workspace:
   - packages/karmashala_browser
   - packages/karmashala_checkpoints
   - packages/karmashala_comparisons
+  - packages/karmashala_conversations
   - packages/karmashala_companion
   - packages/karmashala_companion_server
   - packages/karmashala_core

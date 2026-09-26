@@ -25,7 +25,6 @@ import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
-import '../../support/conversation_index_database.dart';
 
 /// The owner's bug, end to end, on a real `.codex` store.
 ///
@@ -112,7 +111,6 @@ void main() {
 
   ProviderContainer container() => ProviderContainer(
     overrides: [
-      conversationIndexDatabase(),
       ...fakeTerminalOverrides(machine: db),
       dataClientProvider.overrideWithValue(client),
       clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -178,6 +176,8 @@ void main() {
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     final row = db.server.sessionRows.getById('s1')!;
     expect(row.externalSessionId, conversation);
@@ -202,6 +202,8 @@ void main() {
     expect(controller.titleForTab(opened.tabId), 'New session');
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     expect(controller.titleForTab(opened.tabId), threadName);
   });
@@ -218,6 +220,8 @@ void main() {
     expect(db.server.importedRows.getAll(), hasLength(1));
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     expect(db.server.importedRows.getAll(), isEmpty);
   });
@@ -241,6 +245,8 @@ void main() {
       ref.read(sessionsDataProvider).insert(launchedRow(paneId: opened.paneId));
 
       await ref.read(cliStoreSyncRunnerProvider)();
+      // The rename lands in the copy at once and at the server after.
+      await ref.read(dataClientProvider).settled();
 
       // What the inbox is offered: one watched session, and it is the row with
       // the pane — not the read-only history the notification used to open.
@@ -278,6 +284,8 @@ void main() {
       ref.read(selectedImportedSessionIdProvider.notifier).select('i1');
 
       await ref.read(cliStoreSyncRunnerProvider)();
+      // The rename lands in the copy at once and at the server after.
+      await ref.read(dataClientProvider).settled();
 
       expect(ref.read(selectedImportedSessionIdProvider), isNull);
       expect(ref.read(selectedSessionIdProvider), 's1');
@@ -307,6 +315,8 @@ void main() {
     ref.read(selectedImportedSessionIdProvider.notifier).select('i2');
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     expect(ref.read(selectedImportedSessionIdProvider), 'i2');
     expect(ref.read(selectedSessionIdProvider), isNull);
@@ -322,6 +332,8 @@ void main() {
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     final row = db.server.sessionRows.getById('s1')!;
     expect(row.externalSessionId, conversation);
@@ -335,6 +347,8 @@ void main() {
     addTearDown(ref.dispose);
 
     await ref.read(cliStoreSyncRunnerProvider)();
+    // The rename lands in the copy at once and at the server after.
+    await ref.read(dataClientProvider).settled();
 
     expect(db.server.sessionRows.getById('s1')!.externalSessionId, isNull);
   });

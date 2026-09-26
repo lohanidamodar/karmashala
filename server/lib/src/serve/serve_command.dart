@@ -23,6 +23,7 @@ import '../mcp/mcp_tool_relay.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
+import '../data/conversations_handler.dart';
 import '../data/data_service.dart';
 import '../server/server_config.dart';
 import '../server/server_config_service.dart';
@@ -360,6 +361,20 @@ Future<int> runServe(
     }),
   );
 
+  // The conversation index: every conversation a written row names is read
+  // from its agent's store, and once per store, what the workspace already
+  // had — not in the first moments either.
+  data.conversations.start(TranscriptStores.over(database));
+  unawaited(
+    Future<void>.delayed(agentScanDelay).then((_) async {
+      if (stopping.isCompleted) return;
+      final indexed = await data.conversations.backfill();
+      if (indexed > 0) {
+        sink.writeln('conversation index: $indexed conversation(s) read');
+      }
+    }),
+  );
+
   // Asked by platform: SIGINT is the only signal Windows has, and watching
   // SIGTERM there throws errno 50 from `onListen`'s own microtask, where no
   // try/catch around `listen` can see it.
@@ -427,6 +442,7 @@ Future<int> runServe(
   await automations?.close();
   await recording.close();
   await registry.shutdown();
+  data.conversations.close();
   database.close();
   lock.release();
   // Bounded: a reader that is there but not reading must not hold the exit.

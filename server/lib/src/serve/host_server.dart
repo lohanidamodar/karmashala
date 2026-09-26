@@ -392,7 +392,9 @@ class _ClientSession {
   }
 
   /// Answered in order, at once: the store is synchronous, and a client's
-  /// writes must land in the order it sent them.
+  /// writes must land in the order it sent them. The one exception reads the
+  /// disk and writes nothing a client copies (`conversations.catchUp`): it is
+  /// answered when done, by its id.
   void _onDataRequest(DataRequestMessage message) {
     final service = _server.data;
     if (service == null) {
@@ -409,7 +411,12 @@ class _ClientSession {
     final session = _data ??= service.open(
       (changes) => _send(DataChangesMessage(DataEnvelope.changes(changes))),
     );
-    _send(DataAnswerMessage(session.handleJson(message.envelope)));
+    final answer = session.handleJson(message.envelope);
+    if (answer is Future<Map<String, Object?>>) {
+      unawaited(answer.then((later) => _send(DataAnswerMessage(later))));
+    } else {
+      _send(DataAnswerMessage(answer));
+    }
   }
 
   /// Not awaited: a test suite takes minutes, and this client's other frames

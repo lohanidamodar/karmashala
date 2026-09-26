@@ -12,6 +12,7 @@ abstract final class PreferenceKeys {
     'schema_version',
     'remote.host_device_id',
     'conversation_index_generation',
+    'conversation_index_backfilled_at',
   };
 
   /// Domains whose keys their own store writes (worktree setup) — not a

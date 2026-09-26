@@ -198,14 +198,17 @@ void main() {
 
   test('the envelope path answers a refusal under the request id', () {
     final session = service.open((_) {});
-    final answer = session.handleJson({
-      'id': 7,
-      'kind': 'todos.edit',
-      'arguments': {'id': 'ghost', 'body': 'x'},
-    });
+    final answer =
+        session.handleJson({
+              'id': 7,
+              'kind': 'todos.edit',
+              'arguments': {'id': 'ghost', 'body': 'x'},
+            })
+            as Map<String, Object?>;
     expect(answer['id'], 7);
     expect((answer['refusal']! as Map)['code'], 'notFound');
-    final unknown = session.handleJson({'id': 8, 'kind': 'nope'});
+    final unknown =
+        session.handleJson({'id': 8, 'kind': 'nope'}) as Map<String, Object?>;
     expect((unknown['refusal']! as Map)['code'], 'invalid');
   });
 

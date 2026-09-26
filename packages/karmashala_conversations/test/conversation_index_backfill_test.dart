@@ -1,21 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/conversation_index_backfill.dart';
-import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:agent_cli/read.dart';
-import 'package:agent_cli/process.dart';
-import 'package:karmashala_session/session.dart';
+import 'package:karmashala_conversations/store.dart';
+import 'package:karmashala_core/util.dart';
+import 'package:karmashala_store/database.dart';
+import 'package:test/test.dart';
 
-import '../../support/fake_data_server.dart';
-import '../../support/fixtures.dart';
-import '../../support/workspace_mirror.dart';
-import 'package:karmashala/src/core/data/metadata_keys.dart';
+import 'support/seed.dart';
 
 class _FixedClock implements Clock {
   const _FixedClock();
@@ -29,23 +21,16 @@ String _line(Map<String, Object?> json) => '${jsonEncode(json)}\n';
 void main() {
   late Directory dir;
   late AppDatabase db;
-  late FakeDataServer server;
+  late Seed seed;
   late ConversationIndexDao dao;
   late ConversationIndexer indexer;
 
   setUp(() {
-    server = FakeDataServer();
     dir = Directory.systemTemp.createTempSync('conversation_backfill_');
     db = AppDatabase.memory();
     dao = ConversationIndexDao(db);
     indexer = ConversationIndexer(dao: dao, clock: const _FixedClock());
-    server.environmentRows.upsert(windowsEnv());
-    server.mirrorInto(db);
-    server.projectRows.insert(project());
-    server.repositoryRows.insert(repository());
-    server.installationRows.insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    seed = Seed(db)..workspace();
   });
   tearDown(() {
     db.close();
@@ -67,47 +52,16 @@ void main() {
     return path;
   }
 
-  void importedRow(String externalId, String filePath) {
-    mirroredServer(db).importedRows.insertIfAbsent(
-      ImportedSession(
-        id: 'i-$externalId',
-        repositoryId: 'r1',
-        cli: AgentIds.claudeCode,
-        externalId: externalId,
-        environmentId: 'windows',
-        filePath: filePath,
-        storeHome: dir.path,
-        isSubagent: false,
-        preview: 'preview',
-        createdAt: testTime,
-      ),
-    );
-  }
+  void importedRow(String externalId, String filePath) =>
+      seed.importedSession(externalId, filePath, storeHome: dir.path);
 
-  void nativeRow(String id, String externalId) {
-    mirroredServer(db).sessionRows.insert(
-      Session(
-        id: id,
-        repositoryId: 'r1',
-        agentInstallationId: 'a1',
-        title: 'Named by the user',
-        useWorktree: false,
-        workingDirectory: const EnvironmentPath(
-          environmentId: 'windows',
-          path: r'C:\src\demo\app',
-        ),
-        status: SessionStatus.running,
-        createdAt: testTime,
-        externalSessionId: externalId,
-      ),
-    );
-  }
+  void nativeRow(String id, String externalId) =>
+      seed.session(id, externalSessionId: externalId);
 
   ConversationIndexBackfill backfill({
     Future<Map<String, String>> Function()? locate,
     List<String>? walkLog,
   }) => ConversationIndexBackfill(
-    preferences: server.store,
     dao: dao,
     indexer: indexer,
     clock: const _FixedClock(),
@@ -179,10 +133,8 @@ void main() {
 
     expect(walks, 0);
     expect(indexer.parses, 1, reason: 'one parse across both runs');
-    expect(
-      server.store.read(MetadataKeys.conversationIndexBackfilledAt),
-      isNotNull,
-    );
+    expect(db.readMetadata(kConversationIndexBackfilledAtKey), isNotNull);
+    expect(dao.backfilledAt, DateTime.utc(2026, 9, 8, 12));
   });
 
   test('a transcript that is gone does not stop the ones present', () async {

@@ -13,7 +13,6 @@ import '../../support/fake_data_server.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/test_machine.dart';
-import '../../support/conversation_index_database.dart';
 
 /// What the snippets button costs the terminal's typing path, in counts.
 ///
@@ -52,7 +51,6 @@ void main() {
     final db = TestMachine();
     container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db, data: await server.override()),
       ],
     );

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/ingest.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
@@ -39,16 +39,16 @@ void main() {
   /// a save is a realistic save) without 100 panes needing a workstation.
   const linesPerPane = 600;
 
-  /// A container of fake (process-free) panes over a real in-memory database,
+  /// A container of fake (process-free) panes over a real in-memory layout store,
   /// so the save path is the production one.
   ({
     ProviderContainer container,
     TerminalSessionsController controller,
-    AppDatabase database,
+    TerminalLayoutStore database,
   })
   openPanes(int count) {
-    final database = AppDatabase.memory();
-    final container = fakeTerminalContainer(database: database);
+    final database = TerminalLayoutStore.memory();
+    final container = fakeTerminalContainer(layoutStore: database);
     final controller = container.read(
       terminalSessionsControllerProvider.notifier,
     );
@@ -389,8 +389,8 @@ void main() {
         '${corpusText(PerfCorpus.plainLog, columns: 80, rows: 24)}\r\n';
 
     Future<void> measure(int n, {required bool report}) async {
-      final database = AppDatabase.memory();
-      final container = fakeTerminalContainer(database: database);
+      final database = TerminalLayoutStore.memory();
+      final container = fakeTerminalContainer(layoutStore: database);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
       );

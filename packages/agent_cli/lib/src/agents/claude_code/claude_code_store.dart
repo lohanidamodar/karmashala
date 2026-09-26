@@ -48,21 +48,25 @@ class ClaudeCodeStore implements AgentStore {
   /// The set form of [presenceOf]. Same paths, same lossy-encoding caveat:
   /// every project bucket is listed.
   @override
-  Future<Set<String>?> conversationIds(String storeHome) async {
+  Future<Set<String>?> conversationIds(String storeHome) async =>
+      (await transcripts(storeHome))?.keys.toSet();
+
+  @override
+  Future<Map<String, String>?> transcripts(String storeHome) async {
     final projects = Directory(p.join(storeHome, 'projects'));
     if (!await projects.exists()) return null;
-    final ids = <String>{};
+    final found = <String, String>{};
     await for (final entity in projects.list()) {
       if (entity is! Directory) continue;
       await for (final file in entity.list()) {
         if (file is! File) continue;
         final name = p.basename(file.path);
         if (name.endsWith('.jsonl')) {
-          ids.add(name.substring(0, name.length - '.jsonl'.length));
+          found[name.substring(0, name.length - '.jsonl'.length)] = file.path;
         }
       }
     }
-    return ids;
+    return found;
   }
 
   @override

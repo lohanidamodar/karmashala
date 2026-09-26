@@ -10,7 +10,6 @@ import '../../features/agents/application/host_hook_endpoint.dart';
 import '../../features/mcp/control_server_restart.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
-import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/mcp/host_agent_tools.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
@@ -26,11 +25,9 @@ import '../../features/terminal/application/terminal_layout_providers.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../data/data_providers.dart';
 import '../data/metadata_keys.dart';
-import '../database/database_providers.dart';
 import '../logging/memory_census_source.dart';
 import '../probe/probe_mode.dart';
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_store/database.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
 /// regardless. The sum of the per-step caps: one hang cannot starve the rest.
@@ -428,36 +425,6 @@ class AppLifecycle {
     }
   }
 
-  /// The one conversation-index catch-up this database will ever have. Behind
-  /// [importCliSessions]: both walk the CLI stores, and racing pays each twice.
-  Future<void> backfillConversationIndex({
-    Future<void> Function()? afterFirstFrame,
-  }) => _conversationBackfill ??= _backfillConversationIndex(afterFirstFrame);
-
-  Future<void>? _conversationBackfill;
-
-  Future<void> _backfillConversationIndex(Future<void> Function()? gate) async {
-    await importCliSessions(afterFirstFrame: gate);
-    try {
-      final backfill = _container.read(conversationIndexBackfillProvider);
-      if (backfill.isDone) return;
-      final indexed = await backfill.runOnce();
-      _logger.info(
-        'Conversation index: $indexed conversations caught up '
-        'in ${backfill.walks} store walk(s).',
-      );
-    } on Object catch (error, stack) {
-      // The transcripts are somebody else's files and may be absent, locked or
-      // on an unreachable share. Search answers with fewer conversations; the
-      // workspace is unaffected.
-      _logger.warning(
-        'Could not back-fill the conversation index.',
-        error,
-        stack,
-      );
-    }
-  }
-
   /// Takes ownership of components built elsewhere, so there is still exactly
   /// one object that will shut them down.
   void adopt({
@@ -568,7 +535,6 @@ class AppLifecycle {
     // 6. The container. `dispose()` is synchronous and runs unconditionally; what
     //    it *starts* is not, so those begin here, where the wait is budgeted.
     final pending = _startContainerTeardowns();
-    final database = _databaseOrNull();
     final layoutStore = _container.exists(terminalLayoutStoreProvider)
         ? _container.read(terminalLayoutStoreProvider)
         : null;
@@ -584,21 +550,15 @@ class AppLifecycle {
       cap: _kContainerStepBudget,
     );
 
-    // 7. The database handle, last. Not a `_step`: `close()` is one synchronous
-    //    call, and `exit(0)` leaves a `-wal`/`-shm` for the next launch to recover.
+    // 7. The layout store, the app's only database, last. Not a `_step`:
+    //    `close()` is one synchronous call, and `exit(0)` leaves a
+    //    `-wal`/`-shm` for the next launch to recover.
     try {
       layoutStore?.close();
     } on Object catch (error) {
       _logger.warning(
         'lifecycle: closing the layout store failed reason=$error',
       );
-    }
-    try {
-      database?.close();
-    } on Object catch (error) {
-      // A handle already closed, or one a teardown is still inside. The next
-      // launch recovers from the journal exactly as it did before.
-      _logger.warning('lifecycle: closing the database failed reason=$error');
     }
 
     watch.stop();
@@ -615,17 +575,6 @@ class AppLifecycle {
     } on Object {
       // A sink that cannot be written must not hold the app open. Nothing is
       // logged about it: there is nowhere left for that line to go.
-    }
-  }
-
-  /// The database this container was given, or null when it has none. Read
-  /// *before* `dispose()`, which leaves the container unreadable.
-  AppDatabase? _databaseOrNull() {
-    try {
-      return _container.read(databaseProvider);
-    } on Object {
-      // Companion mode and a few tools build a container with no database.
-      return null;
     }
   }
 

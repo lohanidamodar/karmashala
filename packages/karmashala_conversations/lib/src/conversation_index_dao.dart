@@ -3,29 +3,7 @@ import 'dart:typed_data';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/read.dart';
 
-/// One visible turn, on its way into the index.
-class ConversationTurn {
-  const ConversationTurn({
-    required this.ordinal,
-    required this.role,
-    required this.text,
-    this.at,
-  });
-
-  /// The turn's position in the transcript as parsed, tool rows included. A
-  /// hint, never a key: format drift shifts every ordinal after it.
-  final int ordinal;
-
-  /// `user` or `agent`. A `tool` row never reaches here — see
-  /// `ConversationIndexer`.
-  final String role;
-
-  final String text;
-
-  /// When the CLI wrote it, off the line's own timestamp. Null when the line
-  /// carried none, and for rows indexed before v56.
-  final DateTime? at;
-}
+import 'conversation_values.dart';
 
 /// What the index knows about one conversation, and when it knew it.
 class ConversationIndexState {
@@ -69,91 +47,6 @@ class ConversationIndexState {
       this.size == size;
 }
 
-/// One matching turn, with the conversation it was said in.
-class ConversationHit {
-  const ConversationHit({
-    required this.sessionId,
-    required this.cli,
-    required this.ordinal,
-    required this.role,
-    required this.excerpt,
-    this.indexedAt,
-    this.at,
-    this.matches = 1,
-    this.tier,
-  });
-
-  final String sessionId;
-  final String cli;
-  final int ordinal;
-  final String role;
-
-  /// The matched text, cut down to the words around the match by FTS5 itself.
-  final String excerpt;
-
-  /// When this conversation was last read off disk — the age of the reading,
-  /// which the surface showing a hit has to be able to say (CLAUDE.md §19).
-  final DateTime? indexedAt;
-
-  /// When the matching turn was said, where the transcript recorded it.
-  final DateTime? at;
-
-  /// Turns in this conversation that matched, the one shown included.
-  final int matches;
-
-  /// How strictly it matched. Null from [ConversationIndexDao.search], which
-  /// runs one expression.
-  final ConversationMatchTier? tier;
-}
-
-/// What a search may be narrowed to. Every field is optional and they AND.
-/// Structured on purpose: parsing `repo:` or `before:` out of typed text is
-/// the command palette's job, not the index's.
-class SessionSearchFilter {
-  const SessionSearchFilter({
-    this.conversationId,
-    this.cli,
-    this.projectId,
-    this.repositoryId,
-    this.after,
-    this.before,
-  });
-
-  /// One conversation — the CLI's own id — rather than all of them.
-  final String? conversationId;
-
-  /// One agent, by id (`claudeCode`, `codex`, …).
-  final String? cli;
-
-  /// Conversations a session or imported record files under this project or
-  /// repository.
-  final String? projectId;
-  final String? repositoryId;
-
-  /// Turns said at or after [after] and before [before]. A turn with no
-  /// recorded time never passes a date bound: unknown is not in range.
-  final DateTime? after;
-  final DateTime? before;
-
-  bool get isEmpty =>
-      conversationId == null &&
-      cli == null &&
-      projectId == null &&
-      repositoryId == null &&
-      after == null &&
-      before == null;
-
-  /// A stable spelling, for telling one search's cursor from another's.
-  String get fingerprint => [
-    conversationId,
-    cli,
-    projectId,
-    repositoryId,
-    after == null ? null : isoFromDate(after!),
-    before == null ? null : isoFromDate(before!),
-  ].map((v) => v ?? '').join('|');
-}
-
 /// One conversation's place in a ranked search, before its excerpt is cut.
 typedef RankedConversation = ({
   String sessionId,
@@ -175,10 +68,6 @@ const int kConversationSearchLimit = 50;
 /// per match, so a word said in every turn would otherwise cost a scan of the
 /// whole index on every keystroke; past this a query ranks its newest matches.
 const int kConversationRankCandidates = 2000;
-
-/// The `app_metadata` key counting writes to the index. A cursor carries the
-/// value it was cut at, so a write in between rejects the page it would tear.
-const String kConversationIndexGenerationKey = 'conversation_index_generation';
 
 /// Data-access for the conversation index. Keyed by the CLI's own conversation
 /// id, not our row id: a conversation moves between tables, the index must not.
@@ -681,6 +570,76 @@ class ConversationIndexDao {
       ))
         (sessionId: row['session_id'] as String, cli: row['cli'] as String),
     ];
+  }
+
+  /// What is known about [conversationId] before it is read: the agent that
+  /// writes it and, when the imported history recorded one, its transcript.
+  /// The index's own watermark first, then the imported record, then the
+  /// session row's installation.
+  ({String? cli, String? filePath}) knownOf(String conversationId) {
+    statements++;
+    final rows = _db.query(
+      'SELECT cli, file_path FROM conversation_index_state '
+      'WHERE session_id = ? '
+      'UNION ALL SELECT source, file_path FROM imported_sessions '
+      'WHERE external_id = ? '
+      'UNION ALL SELECT a.agent_kind, NULL FROM sessions s '
+      'JOIN agent_installations a ON a.id = s.agent_installation_id '
+      'WHERE s.external_session_id = ? LIMIT 1;',
+      [conversationId, conversationId, conversationId],
+    );
+    if (rows.isEmpty) return (cli: null, filePath: null);
+    return (
+      cli: rows.first['cli'] as String?,
+      filePath: rows.first['file_path'] as String?,
+    );
+  }
+
+  /// [sessionId]'s indexed turns in the order said, from ordinal [from],
+  /// at most [limit] of them.
+  List<ConversationTurn> turnsOf(
+    String sessionId, {
+    int from = 0,
+    int limit = 200,
+  }) {
+    statements++;
+    return [
+      for (final row in _db.query(
+        'SELECT ordinal, role, text, at FROM conversation_turns '
+        'WHERE session_id = ? AND ordinal >= ? ORDER BY id LIMIT ?;',
+        [sessionId, from, limit],
+      ))
+        ConversationTurn(
+          ordinal: row['ordinal'] as int,
+          role: row['role'] as String,
+          text: row['text'] as String,
+          at: row['at'] == null ? null : dateFromIso(row['at']),
+        ),
+    ];
+  }
+
+  /// Conversations read at least once, and the turns held.
+  ({int conversations, int turns}) counts() {
+    statements++;
+    final row = _db
+        .query(
+          'SELECT (SELECT COUNT(*) FROM conversation_index_state) AS c, '
+          '(SELECT COUNT(*) FROM conversation_turns) AS t;',
+        )
+        .first;
+    return (conversations: row['c'] as int, turns: row['t'] as int);
+  }
+
+  /// When the one-off backfill finished, or null before it has.
+  DateTime? get backfilledAt {
+    statements++;
+    final value = _db.readMetadata(kConversationIndexBackfilledAtKey);
+    return value == null ? null : DateTime.tryParse(value)?.toUtc();
+  }
+
+  void markBackfilled(DateTime at) {
+    statements++;
+    _db.writeMetadata(kConversationIndexBackfilledAtKey, isoFromDate(at));
   }
 
   ConversationIndexState _stateFromRow(Map<String, Object?> row) {

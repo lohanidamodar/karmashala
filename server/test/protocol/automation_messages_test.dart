@@ -10,7 +10,7 @@ void main() {
   test('protocol 5 carries automations (7: agent status and answers; 8: '
       'server administration; 9: a start may ask a worktree; 10: the app\'s '
       'attach and the server config)', () {
-    expect(kProtocolVersion, 15);
+    expect(kProtocolVersion, 16);
   });
 
   test('a notice says which kind', () {

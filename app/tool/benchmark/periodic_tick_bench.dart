@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala/src/features/agents/data/agents_data.dart';
@@ -67,14 +66,12 @@ void main() {
   const warmCount = 4;
 
   late Directory temp;
-  late AppDatabase db;
   late FakeDataServer server;
   late SessionsData sessions;
   late ImportedSessionsData imported;
   late AgentInstallationsData installations;
 
   setUp(() async {
-    db = AppDatabase.memory();
     // The workspace and the sessions are the server's: seeded at a fake one,
     // read through the app's copy, as the loader reads them.
     server = FakeDataServer();
@@ -88,7 +85,6 @@ void main() {
     installations = AgentInstallationsData(client);
     temp = Directory.systemTemp.createTempSync('periodic-tick');
     addTearDown(() {
-      db.close();
       try {
         temp.deleteSync(recursive: true);
       } catch (_) {}

@@ -18,7 +18,6 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/test_machine.dart';
-import '../../support/conversation_index_database.dart';
 
 /// Hiding surfaces from the side panel's rail, the way VS Code's activity bar
 /// does it: a right-click lists every surface with a check, a hidden one stays
@@ -51,7 +50,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db),
         data,
         attentionCountProvider.overrideWith((ref) => ref.watch(_attention)),
@@ -144,7 +142,6 @@ void main() {
       );
       final container = ProviderContainer(
         overrides: [
-          conversationIndexDatabase(),
           ...fakeTerminalOverrides(machine: db),
           await server.override(),
         ],

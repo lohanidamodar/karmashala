@@ -1,10 +1,8 @@
 import 'dart:convert';
 
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:agent_cli/usage.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:karmashala_core/paths.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -292,7 +290,7 @@ void giveShellHistory(TerminalInstance instance) {
   }
 }
 
-/// One layout store per [machine] (a test's database, say), so a second
+/// One layout store per [machine] (any object a test keys it by), so a second
 /// container over it — a restart — restores what the first saved.
 TerminalLayoutStore layoutStoreOf(Object machine) =>
     _layoutStores[machine] ??= TerminalLayoutStore.memory();
@@ -304,14 +302,12 @@ final _layoutStores = Expando<TerminalLayoutStore>();
 /// [data] is the fake server's client override (`await server.override()`),
 /// where the test reads anything the server keeps.
 ProviderContainer fakeTerminalContainer({
-  AppDatabase? database,
   Object? machine,
   TerminalLayoutStore? layoutStore,
   Override? data,
   bool restoreLivePanes = true,
 }) => ProviderContainer(
   overrides: fakeTerminalOverrides(
-    database: database,
     machine: machine,
     layoutStore: layoutStore,
     data: data,
@@ -326,7 +322,6 @@ ProviderContainer fakeTerminalContainer({
 /// type its public library does not export, so it cannot be written down here.
 // ignore: strict_top_level_inference
 fakeTerminalOverrides({
-  AppDatabase? database,
   Object? machine,
   TerminalLayoutStore? layoutStore,
   Override? data,
@@ -364,11 +359,10 @@ fakeTerminalOverrides({
     // [NoGitFiles] for why real file I/O in a fake-async test is not a
     // tidiness question.
     gitFilesProvider.overrideWithValue(gitFiles ?? noGitFiles),
-    if (database != null) databaseProvider.overrideWithValue(database),
     // A second container over the same machine (a restart) finds the layout
     // the first saved.
     if (layoutStore ??
-            switch (machine ?? database) {
+            switch (machine) {
               final Object key => layoutStoreOf(key),
               null => null,
             }

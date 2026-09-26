@@ -1,13 +1,14 @@
 import '../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/read.dart'
     show conversationQueryTokens, kConversationQueryMinimum;
+import 'package:karmashala_conversations/karmashala_conversations.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefusalCode, DataRefused;
 import 'package:riverpod/riverpod.dart';
 
 import '../automations/application/scheduled_resume_providers.dart';
 import '../agents/application/agent_providers.dart';
-import '../cli_detection/application/cli_detection_providers.dart';
-import '../cli_detection/application/session_search.dart';
-import '../cli_detection/data/conversation_index_dao.dart';
+import '../cli_detection/data/conversation_search.dart';
 import '../projects/application/projects_controller.dart';
 import '../sessions/application/session_providers.dart';
 import 'agent_lookup.dart';
@@ -40,8 +41,8 @@ class InventoryTools {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// Full-text search over what was said in every conversation, through the
-  /// same service quick open uses. Catches the running sessions up first.
+  /// Full-text search over what was said in every conversation, asked of the
+  /// server as quick open asks it. Catches the running sessions up first.
   Future<Map<String, dynamic>> _searchSessions(
     Map<String, dynamic> args,
   ) async {
@@ -73,25 +74,35 @@ class InventoryTools {
       }
     }
     final limit = ((args['limit'] as num?)?.round() ?? 10).clamp(1, 50);
-    final search = _container.read(sessionSearchServiceProvider);
-    await search.catchUp();
+    final filter = SessionSearchFilter(
+      conversationId: conversationId,
+      cli: cli,
+      projectId: args['projectId'] as String?,
+      repositoryId: args['repositoryId'] as String?,
+      after: _instant(args['after'], 'after'),
+      before: _instant(args['before'], 'before'),
+    );
+    final search = _container.read(conversationSearchProvider);
+    try {
+      await search.catchUp();
+    } on DataRefused {
+      // Searched as indexed: a catch-up is a nicety, the index is the answer.
+    }
     final SessionSearchPage page;
     try {
-      page = search.search(
+      page = await search.search(
         query,
         limit: limit,
         cursor: args['cursor'] as String?,
-        filter: SessionSearchFilter(
-          conversationId: conversationId,
-          cli: cli,
-          projectId: args['projectId'] as String?,
-          repositoryId: args['repositoryId'] as String?,
-          after: _instant(args['after'], 'after'),
-          before: _instant(args['before'], 'before'),
-        ),
+        filter: filter,
       );
-    } on StaleSearchCursor catch (stale) {
-      throw StateError(stale.toString());
+    } on DataRefused catch (refused) {
+      // A stale or foreign cursor is the caller's to fix; anything else is
+      // the server's.
+      if (refused.code == DataRefusalCode.invalid) {
+        throw StateError(refused.message);
+      }
+      rethrow;
     }
     final registry = _container.read(agentRegistryProvider);
     final results = <Map<String, dynamic>>[];

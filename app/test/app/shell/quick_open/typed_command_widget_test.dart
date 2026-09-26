@@ -17,7 +17,6 @@ import '../../../support/fakes.dart';
 import '../../../support/fake_data_server.dart';
 import '../../../support/fixtures.dart';
 import '../../../support/test_machine.dart';
-import '../../../support/conversation_index_database.dart';
 
 /// Records the start instead of launching an agent: what is under test is that
 /// the command reaches the Explorer's own start, with the right arguments.
@@ -62,7 +61,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db),
         data,
         explorerActionsProvider.overrideWith(_RecordingExplorerActions.new),

@@ -3,30 +3,9 @@ import 'dart:convert';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_core/util.dart';
 
-import '../data/conversation_index_dao.dart';
+import 'conversation_index_dao.dart';
+import 'conversation_values.dart';
 import 'conversation_indexer.dart';
-
-/// One page of a session search: a conversation per hit, best first.
-class SessionSearchPage {
-  const SessionSearchPage({
-    required this.hits,
-    required this.generation,
-    this.nextCursor,
-  });
-
-  static const SessionSearchPage empty = SessionSearchPage(
-    hits: [],
-    generation: 0,
-  );
-
-  final List<ConversationHit> hits;
-
-  /// Pass back to read the page after this one. Null on the last page.
-  final String? nextCursor;
-
-  /// The index generation this page was cut at.
-  final int generation;
-}
 
 /// A cursor cut before the index changed. Serving it would skip or repeat
 /// conversations, so the search has to be asked again from the top.

@@ -24,7 +24,6 @@ import '../support/window_matrix.dart';
 import '../support/fake_data_server.dart';
 import '../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
-import '../support/conversation_index_database.dart';
 
 /// The six dialogs `minimum_window_matrix_test.dart` did not reach.
 ///
@@ -114,9 +113,7 @@ void main() {
     });
 
     testWidgets('ForgetHostKeyDialog', (tester) async {
-      final container = ProviderContainer(
-        overrides: [conversationIndexDatabase(), ...noProcessOverrides()],
-      );
+      final container = ProviderContainer(overrides: [...noProcessOverrides()]);
       addTearDown(container.dispose);
 
       await expectSurvivesWindowMatrix(
@@ -225,7 +222,6 @@ void main() {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db),
         ...noProcessOverrides(),
         data,
@@ -254,7 +250,6 @@ void main() {
     final data = await FakeDataServer().override();
     final container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),

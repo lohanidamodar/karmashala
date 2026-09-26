@@ -26,7 +26,6 @@ import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
-import '../../../support/conversation_index_database.dart';
 
 void main() {
   late TestMachine db;
@@ -90,7 +89,6 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(now)),
         sessionStatusLookupProvider.overrideWithValue((id) => reports[id]),

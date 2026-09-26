@@ -1,13 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
+import 'package:karmashala_conversations/store.dart';
+import 'package:karmashala_core/util.dart';
+import 'package:karmashala_store/database.dart';
+import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' hide Session;
 

@@ -14,7 +14,6 @@ import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/test_machine.dart';
-import '../../support/conversation_index_database.dart';
 
 /// The palette's "New command snippet…" writes the snippet the user wrote.
 ///
@@ -54,7 +53,6 @@ void main() {
   ) async {
     final container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db, data: data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],

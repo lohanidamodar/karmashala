@@ -38,6 +38,11 @@ abstract interface class AgentStore {
   /// Null is load-bearing: an empty set says "no conversations at all".
   Future<Set<String>?> conversationIds(String storeHome);
 
+  /// Every conversation the store holds, by id, with the file its transcript
+  /// is in — one walk of names, no transcript opened. Null when the store
+  /// told us nothing, as for [conversationIds].
+  Future<Map<String, String>?> transcripts(String storeHome);
+
   /// Where a conversation's record may be when a scan did not place it (a
   /// conversation its store files under no directory), in the order to try.
   /// Empty for a store whose scan finds everything.

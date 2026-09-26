@@ -3,18 +3,12 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
-import 'package:karmashala/src/features/cli_detection/application/session_search.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:karmashala_session/session.dart';
+import 'package:karmashala_conversations/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
+import 'package:test/test.dart';
 
-import '../../support/fakes.dart';
-import '../../support/fixtures.dart';
-import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import 'support/seed.dart';
 
 class _CountingDatabase extends AppDatabase {
   _CountingDatabase() : super(sqlite3.openInMemory());
@@ -39,6 +33,7 @@ void main() {
   late ConversationIndexDao dao;
   late MovableClock clock;
   late SessionSearchService search;
+  late Seed seed;
   var sessionCount = 0;
 
   setUp(() {
@@ -46,16 +41,10 @@ void main() {
     dao = ConversationIndexDao(db);
     clock = MovableClock(DateTime.utc(2026, 9, 21, 12));
     search = SessionSearchService(dao: dao, clock: clock);
-    final server = FakeDataServer()..mirrorInto(db);
-    server.environmentRows.upsert(windowsEnv());
-    server.projectRows.insert(project());
-    server.projectRows.insert(project(id: 'p2', name: 'Other', path: r'C:\o'));
-    server.repositoryRows.insert(repository());
-    server.repositoryRows.insert(
+    seed = Seed(db)..workspace();
+    seed.projects.insert(project(id: 'p2', name: 'Other', path: r'C:\o'));
+    seed.repositories.insert(
       repository(id: 'r2', projectId: 'p2', path: r'C:\o\x'),
-    );
-    server.installationRows.insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
     );
     sessionCount = 0;
   });
@@ -72,17 +61,11 @@ void main() {
     bool withSession = true,
   }) {
     if (withSession) {
-      mirroredServer(db).sessionRows.insert(
-        Session(
-          id: 's${sessionCount++}',
-          repositoryId: repositoryId,
-          agentInstallationId: 'a1',
-          title: 'Session $id',
-          useWorktree: false,
-          status: SessionStatus.running,
-          createdAt: testTime,
-          externalSessionId: id,
-        ),
+      seed.session(
+        's${sessionCount++}',
+        repositoryId: repositoryId,
+        title: 'Session $id',
+        externalSessionId: id,
       );
     }
     dao.replaceTurns(
@@ -319,20 +302,7 @@ void main() {
     });
 
     test('read-only history is a result', () {
-      mirroredServer(db).importedRows.insertIfAbsent(
-        ImportedSession(
-          id: 'i1',
-          repositoryId: 'r1',
-          cli: AgentIds.claudeCode,
-          externalId: 'hist',
-          environmentId: 'windows',
-          filePath: r'C:\store\hist.jsonl',
-          storeHome: r'C:\store',
-          isSubagent: false,
-          preview: 'preview',
-          createdAt: testTime,
-        ),
-      );
+      seed.importedSession('hist', r'C:\store\hist.jsonl');
       conversation('hist', ['imported decision'], withSession: false);
 
       expect(ids(search.search('decision')), ['hist']);
@@ -420,18 +390,7 @@ void main() {
       () async {
         final path = '${dir.path}/live.jsonl';
         File(path).writeAsStringSync(line('the morning plan'));
-        mirroredServer(db).sessionRows.insert(
-          Session(
-            id: 'live',
-            repositoryId: 'r1',
-            agentInstallationId: 'a1',
-            title: 'Live',
-            useWorktree: false,
-            status: SessionStatus.running,
-            createdAt: testTime,
-            externalSessionId: 'conv-live',
-          ),
-        );
+        seed.session('live', title: 'Live', externalSessionId: 'conv-live');
         await indexer.indexConversation(
           conversationId: 'conv-live',
           cli: AgentIds.claudeCode,
@@ -453,18 +412,7 @@ void main() {
     test('at most once an interval, and nothing polls', () async {
       final path = '${dir.path}/live.jsonl';
       File(path).writeAsStringSync(line('one'));
-      mirroredServer(db).sessionRows.insert(
-        Session(
-          id: 'live',
-          repositoryId: 'r1',
-          agentInstallationId: 'a1',
-          title: 'Live',
-          useWorktree: false,
-          status: SessionStatus.running,
-          createdAt: testTime,
-          externalSessionId: 'conv-live',
-        ),
-      );
+      seed.session('live', title: 'Live', externalSessionId: 'conv-live');
       await indexer.indexConversation(
         conversationId: 'conv-live',
         cli: AgentIds.claudeCode,

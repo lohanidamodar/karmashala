@@ -1,71 +1,41 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
 import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import '../../../support/workspace_mirror.dart';
-
-/// An [AppDatabase] that records every statement, so a keystroke can be priced.
-class _CountingDatabase extends AppDatabase {
-  _CountingDatabase() : super(sqlite3.openInMemory());
-
-  final List<String> statements = [];
-
-  int get searches =>
-      statements.where((sql) => sql.contains('conversation_turns_fts')).length;
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    statements.add(sql);
-    return super.query(sql, params);
-  }
-
-  @override
-  void execute(String sql, [List<Object?> params = const []]) {
-    statements.add(sql);
-    super.execute(sql, params);
-  }
-}
 
 /// **Search across every conversation, through the palette.**
 ///
 /// The requirement these hold is not "an FTS5 query returns rows" — that is the
-/// DAO's own file — but that the palette lists a conversation for something
+/// server's (`packages/karmashala_conversations`, `server/test/data`), asked
+/// here of the fake server — but that the palette lists a conversation for something
 /// *said* in it, opens it, and **never filters a result on whether anything on
 /// disk still resolves**. That last one is the stated requirement and §20's
 /// rule: a stored path is state, whether it resolves is a measurement.
 void main() {
-  late _CountingDatabase db;
   late FakeDataServer server;
   late Override data;
-  late ConversationIndexDao index;
 
   final indexedAt = DateTime.now().toUtc().subtract(const Duration(hours: 2));
 
   setUp(() async {
-    db = _CountingDatabase();
-    server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer();
     data = await server.override();
-    index = ConversationIndexDao(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
@@ -75,14 +45,13 @@ void main() {
       agentInstallation(agentId: AgentIds.claudeCode),
     );
   });
-  tearDown(() => db.close());
 
   void nativeSession({
     String id = 's1',
     String title = 'The worktree loop',
     String conversation = 'conv-1',
     EnvironmentPath? worktree,
-  }) => mirroredServer(db).sessionRows.insert(
+  }) => server.sessionRows.insert(
     Session(
       id: id,
       repositoryId: 'r1',
@@ -100,7 +69,7 @@ void main() {
     String id = 'i1',
     String conversation = 'conv-2',
     String title = 'Old history',
-  }) => mirroredServer(db).importedRows.insertIfAbsent(
+  }) => server.importedRows.insertIfAbsent(
     ImportedSession(
       id: id,
       repositoryId: 'r1',
@@ -116,21 +85,12 @@ void main() {
     ),
   );
 
-  void said(String conversation, String text, {int ordinal = 0}) =>
-      index.replaceTurns(
-        sessionId: conversation,
-        cli: AgentIds.claudeCode,
-        filePath: r'C:\store\$conversation.jsonl',
-        turns: [ConversationTurn(ordinal: ordinal, role: 'user', text: text)],
-        indexedAt: indexedAt,
-      );
+  void said(String conversation, String text) =>
+      server.conversations.say(conversation, text, indexedAt: indexedAt);
 
   Future<ProviderContainer> open(WidgetTester tester) async {
     final container = ProviderContainer(
-      overrides: [
-        data,
-        ...fakeTerminalOverrides(database: db),
-      ],
+      overrides: [data, ...fakeTerminalOverrides()],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -257,18 +217,19 @@ void main() {
   ) async {
     nativeSession(id: 's1', title: 'Aardvark ramble', conversation: 'conv-1');
     nativeSession(id: 's2', title: 'Zebra retries', conversation: 'conv-2');
+    // The fake server ranks in the order said: conv-2 is its best answer.
+    said('conv-2', 'webhook webhook: the webhook retries');
     said(
       'conv-1',
       'a long ramble that touches the webhook once among many other words '
           'about deployment, caching and the release train',
     );
-    said('conv-2', 'webhook webhook: the webhook retries');
     await open(tester);
 
     await type(tester, '?webhook');
 
     // The titles run the other way alphabetically, and the palette breaks a
-    // tie on the title — so only the search's rank can put this one first.
+    // tie on the title — so only the server's rank can put this one first.
     final strong = tester.getTopLeft(find.text('Zebra retries')).dy;
     final weak = tester.getTopLeft(find.text('Aardvark ramble')).dy;
     expect(strong, lessThan(weak));
@@ -293,27 +254,69 @@ void main() {
     nativeSession();
     said('conv-1', 'the caching decision');
     await open(tester);
-    db.statements.clear();
+    final searches = server.conversations.searches;
+    searches.clear();
 
     // A single character is not a search: it prefix-matches most of the store.
     await type(tester, 'c');
-    expect(db.searches, 0);
+    expect(searches, isEmpty);
 
-    // One full-text statement: the ranking. The excerpt is cut from the turn
-    // by its key, and a single word the index holds needs no looser tier.
+    // One request for the query as typed.
     await type(tester, 'caching');
-    final perSearch = db.searches;
-    expect(perSearch, 1);
+    expect(searches.map((s) => s.query), ['caching']);
 
     // Adding the group's own sigil narrows the *list*; the query behind it has
     // not changed, so nothing is asked again.
     await type(tester, '?caching');
-    expect(db.searches, perSearch);
+    expect(searches, hasLength(1));
 
     // And a sigil for another group means this group is not being asked at
     // all.
     await type(tester, '>caching');
-    expect(db.searches, perSearch);
+    expect(searches, hasLength(1));
     expect(find.text('CONVERSATIONS'), findsNothing);
+  });
+
+  testWidgets('opening asks the server to catch up, and searches again when '
+      'that found something', (tester) async {
+    nativeSession();
+    server.conversations
+      ..catchUpChanges = 1
+      ..onCatchUp = () => said('conv-1', 'written while the palette opened');
+    // Held, so the query is typed before the catch-up answers.
+    final hold = server.hold = Completer<void>();
+    final container = ProviderContainer(
+      overrides: [data, ...fakeTerminalOverrides()],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => QuickOpen.show(context),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'palette opened');
+    await tester.pump();
+    expect(find.text('CONVERSATIONS'), findsNothing);
+
+    server.hold = null;
+    hold.complete();
+    await tester.pumpAndSettle();
+
+    expect(server.conversations.catchUps, 1);
+    expect(find.text('CONVERSATIONS'), findsOneWidget);
+    expect(find.text('The worktree loop'), findsOneWidget);
   });
 }

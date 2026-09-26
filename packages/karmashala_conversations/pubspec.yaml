@@ -1,0 +1,44 @@
+name: karmashala_conversations
+description: >-
+  The conversation index: what was said in every agent conversation, searched
+  by full text. The values a client is answered with and their JSON
+  (`karmashala_conversations.dart`), and the server's index over its store —
+  the DAO, the indexer that reads transcripts through the agent adapters, the
+  search and the one-off backfill (`store.dart`, the server's alone).
+version: 0.1.0
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # Transcript reading, the query cascade and the store layouts, all behind
+  # the agent adapters.
+  agent_cli:
+    path: ../agent_cli
+  karmashala_core:
+    path: ../karmashala_core
+  # The `conversation_turns` tables (store.dart only).
+  karmashala_store:
+    path: ../karmashala_store
+
+dev_dependencies:
+  # Seeding the rows the index joins: sessions, imported history, checkouts
+  # and installations.
+  karmashala_environments:
+    path: ../karmashala_environments
+  karmashala_git:
+    path: ../karmashala_git
+  karmashala_projects:
+    path: ../karmashala_projects
+  karmashala_session:
+    path: ../karmashala_session
+  karmashala_session_engine:
+    path: ../karmashala_session_engine
+  lints: ^6.1.0
+  path: ^1.9.1
+  # Counting the statements a search issues.
+  sqlite3: ^3.3.3
+  test: ^1.31.1

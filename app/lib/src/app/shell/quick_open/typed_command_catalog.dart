@@ -2,6 +2,7 @@ import '../../../features/workspaces/data/workspace_data.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
+import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_session/launch.dart';
@@ -11,7 +12,6 @@ import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../features/agents/application/agent_providers.dart';
-import '../../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../../features/environments/application/environment_providers.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
@@ -29,6 +29,7 @@ import 'typed_command.dart';
 CommandCatalog readCommandCatalog(
   ProviderContainer container, {
   Set<String> notGitProjectIds = const {},
+  List<ConversationHit> Function(String query)? conversationHits,
 }) {
   final read = container.read;
   final now = read(clockProvider).nowUtc();
@@ -249,20 +250,18 @@ CommandCatalog readCommandCatalog(
             title: oldest.session.label,
             detail: oldest.detail,
           ),
-    searchConversations: (query) => _searchConversations(container, query),
+    searchConversations: conversationHits == null
+        ? null
+        : (query) => _saidIn(container, conversationHits(query)),
   );
 }
 
 /// What was *said*, through the one conversation search quick open already
 /// runs, mapped to the session each hit opens.
-List<ConversationMatch> _searchConversations(
+List<ConversationMatch> _saidIn(
   ProviderContainer container,
-  String query,
+  List<ConversationHit> hits,
 ) {
-  final hits = container
-      .read(sessionSearchServiceProvider)
-      .search(query, limit: kCommandSuggestionLimit)
-      .hits;
   final sessionDao = container.read(sessionsDataProvider);
   final importedDao = container.read(importedSessionsProvider);
   return [

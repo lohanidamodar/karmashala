@@ -1,7 +1,5 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/data/data_providers.dart';
-import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
@@ -11,7 +9,6 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:karmashala_git/repositories.dart';
-import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -20,14 +17,10 @@ import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../data/cli_session_mutator.dart';
 import 'agent_store_server_providers.dart';
-import '../data/conversation_index_dao.dart';
 import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
 import 'directory_conversation_attribution_service.dart';
 import 'cli_detection_service.dart';
-import 'conversation_index_backfill.dart';
-import 'conversation_indexer.dart';
-import 'session_search.dart';
 import 'detected_project_merger.dart';
 import 'launched_session_attribution_service.dart';
 import 'project_import_service.dart';
@@ -37,40 +30,6 @@ import 'session_title_sync_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
   (ref) => CliDetectionService(registry: ref.watch(agentRegistryProvider)),
-);
-
-final conversationIndexDaoProvider = Provider<ConversationIndexDao>(
-  (ref) => ConversationIndexDao(ref.watch(databaseProvider)),
-);
-
-/// Keeps the conversation index in step with the transcripts on disk. Nothing
-/// starts it: it is queued by adoption and rename, drained on the store slot.
-final conversationIndexerProvider = Provider<ConversationIndexer>(
-  (ref) => ConversationIndexer(
-    dao: ref.watch(conversationIndexDaoProvider),
-    clock: ref.watch(clockProvider),
-  ),
-);
-
-/// Full-text search over every conversation — the service quick open and the
-/// `session_search` tool both call, and the one a command panel should too.
-final sessionSearchServiceProvider = Provider<SessionSearchService>(
-  (ref) => SessionSearchService(
-    dao: ref.watch(conversationIndexDaoProvider),
-    clock: ref.watch(clockProvider),
-    indexer: ref.watch(conversationIndexerProvider),
-  ),
-);
-
-/// The one-off catch-up over the conversations the workspace already had.
-final conversationIndexBackfillProvider = Provider<ConversationIndexBackfill>(
-  (ref) => ConversationIndexBackfill(
-    preferences: ref.watch(appPreferencesProvider),
-    dao: ref.watch(conversationIndexDaoProvider),
-    indexer: ref.watch(conversationIndexerProvider),
-    clock: ref.watch(clockProvider),
-    locateTranscripts: () => ref.read(sessionTranscriptLocatorProvider).index(),
-  ),
 );
 
 final projectImportServiceProvider = Provider<ProjectImportService>(
@@ -130,17 +89,11 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
       return terminalTailLines(instance.terminal, lines: lines);
     },
     scanStores: () => scanCliStores(ref),
-    onAdopted: (session) {
-      ref
-          .read(sessionsRevisionProvider.notifier)
-          .changed(SessionChange.created(session.id));
-      // A conversation entering the workspace is one of the two moments the
-      // index is built on; queuing costs a map entry.
-      final conversation = session.externalSessionId;
-      if (conversation != null) {
-        ref.read(conversationIndexerProvider).want(conversation);
-      }
-    },
+    // A conversation entering the workspace is one of the moments the
+    // server's conversation index reads it: the row itself is the trigger.
+    onAdopted: (session) => ref
+        .read(sessionsRevisionProvider.notifier)
+        .changed(SessionChange.created(session.id)),
   );
 });
 
@@ -207,18 +160,11 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((
       ref
           .read(sessionsRevisionProvider.notifier)
           .changed(SessionChange.renamed(sessionId));
+      // The rename reaches the server as the row, which is the conversation
+      // index's evidence that the transcript moved.
       ref
           .read(terminalSessionsControllerProvider.notifier)
           .notifyTitleChanged();
-      // The other moment the index is built on: a CLI writing a name is the
-      // app's evidence that the transcript moved. One row read, on a rename.
-      final conversation = ref
-          .read(sessionsDataProvider)
-          .getById(sessionId)
-          ?.externalSessionId;
-      if (conversation != null) {
-        ref.read(conversationIndexerProvider).want(conversation);
-      }
     },
   );
 });
@@ -278,9 +224,6 @@ final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
     try {
       await ref.read(launchedSessionAttributionServiceProvider).attribute();
       await ref.read(sessionTitleSyncServiceProvider).sync();
-      // Only for what the two above queued; `drain` returns before touching
-      // anything when nothing is wanted, and reads the pass when it is.
-      await ref.read(conversationIndexerProvider).drain(pass.read);
     } finally {
       // Whatever happened, the next slot must see the disk as it is then.
       pass.end();

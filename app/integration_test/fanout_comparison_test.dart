@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -10,8 +8,6 @@ import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
-import 'package:karmashala_environments/store.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
@@ -23,12 +19,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
-/// A fan-out comparison end to end, against **real agent CLIs, real Git
-/// worktrees and a real SQLite file** — then a restart, a merge and a discard,
-/// with the record read back each time.
+import '../test/support/fake_data_server.dart';
+
+/// A fan-out comparison end to end, against **real agent CLIs and real Git
+/// worktrees** — then a restart, a merge and a discard, with the record read
+/// back each time. The record is the server's: here a [FakeDataServer], which
+/// outlives each container as the server outlives the app, so a "restart" is
+/// a new container over a new client of the same server.
 ///
 /// The unit suite proves the bookkeeping. What it cannot prove is that the
 /// worktrees git actually made are the ones the record names, that the merge
@@ -101,12 +101,9 @@ void main() {
     return result;
   }
 
-  AppDatabase openDb() =>
-      AppDatabase(sqlite3.open(p.join(work.path, 'db.sqlite')));
-
-  ProviderContainer containerOver(AppDatabase db) => ProviderContainer(
+  ProviderContainer containerOver(Override data) => ProviderContainer(
     overrides: [
-      databaseProvider.overrideWithValue(db),
+      data,
       // A real periodic timer outlives the test and trips the pending-timer
       // check.
       scrollbackAutosaveFactoryProvider.overrideWithValue(
@@ -176,13 +173,13 @@ void main() {
     git(repoPath, ['add', '-A']);
     git(repoPath, ['commit', '-qm', 'initial']);
 
-    final db = openDb();
+    final server = FakeDataServer();
     final now = DateTime.now().toUtc();
     final repoLocation = EnvironmentPath(
       environmentId: 'windows',
       path: repoPath,
     );
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'windows',
         kind: EnvironmentKind.windowsNative,
@@ -190,7 +187,7 @@ void main() {
         createdAt: now,
       ),
     );
-    ProjectDao(db).insert(
+    server.projectRows.insert(
       Project(
         id: 'p1',
         name: 'fanout-e2e',
@@ -205,7 +202,7 @@ void main() {
       path: repoLocation,
       createdAt: now,
     );
-    RepositoryDao(db).insert(repository);
+    server.repositoryRows.insert(repository);
 
     final claudeInstall = AgentInstallation(
       id: 'i-claude',
@@ -219,11 +216,11 @@ void main() {
       executable: EnvironmentPath(environmentId: 'windows', path: codex),
       createdAt: now,
     );
-    AgentInstallationDao(db)
+    server.installationRows
       ..insert(claudeInstall)
       ..insert(codexInstall);
 
-    var container = containerOver(db);
+    var container = containerOver(await server.override());
 
     // --- Launch: two real CLIs, two real worktrees --------------------------
     final launched = await container
@@ -351,13 +348,8 @@ void main() {
 
     // --- Restart ------------------------------------------------------------
     container.dispose();
-    db.close();
-    final reopened = openDb();
-    container = containerOver(reopened);
-    addTearDown(() {
-      container.dispose();
-      reopened.close();
-    });
+    container = containerOver(await server.override());
+    addTearDown(() => container.dispose());
 
     stored = container.read(comparisonsProvider).single;
     expect(stored.id, comparisonId);
@@ -502,13 +494,8 @@ void main() {
 
     // --- And it still reads, after another restart --------------------------
     container.dispose();
-    reopened.close();
-    final again = openDb();
-    final third = containerOver(again);
-    addTearDown(() {
-      third.dispose();
-      again.close();
-    });
+    final third = containerOver(await server.override());
+    addTearDown(third.dispose);
 
     final finalRecord = third.read(comparisonsProvider).single;
     expect(finalRecord.outcome, ComparisonOutcome.merged);

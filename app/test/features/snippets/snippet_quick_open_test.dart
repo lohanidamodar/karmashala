@@ -18,7 +18,6 @@ import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/test_machine.dart';
-import '../../support/conversation_index_database.dart';
 
 /// Snippets as a **group of quick open**, rather than a second palette.
 ///
@@ -57,7 +56,6 @@ void main() {
   }) async {
     final container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -325,7 +323,6 @@ void main() {
       build: () {
         final container = ProviderContainer(
           overrides: [
-            conversationIndexDatabase(),
             ...fakeTerminalOverrides(machine: db),
             dataClientProvider.overrideWithValue(client),
             clockProvider.overrideWithValue(FixedClock(testTime)),

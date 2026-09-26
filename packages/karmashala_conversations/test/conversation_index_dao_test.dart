@@ -1,11 +1,9 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/read.dart' show TranscriptResumePoint;
+import 'package:karmashala_conversations/store.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:agent_cli/process.dart';
+import 'package:test/test.dart';
 
-import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import 'support/seed.dart';
 
 void main() {
   late AppDatabase db;
@@ -256,16 +254,7 @@ void main() {
     );
 
     setUp(() {
-      // The environment is the server's; the mirror puts it where the
-      // index's own joins (still in this database) look.
-      (FakeDataServer()..mirrorInto(db)).environmentRows.upsert(
-        ExecutionEnvironment(
-          id: 'windows',
-          kind: EnvironmentKind.windowsNative,
-          name: 'Windows',
-          createdAt: DateTime.utc(2026, 9),
-        ),
-      );
+      Seed(db).environments.upsert(windowsEnv());
       db.execute(
         "INSERT INTO projects (id, name, root_environment_id, root_path, "
         "created_at) VALUES ('p1', 'P', 'windows', 'C:/p', "
@@ -363,5 +352,85 @@ void main() {
   test('a conversation nothing has indexed has no state', () {
     expect(dao.stateFor('nope'), isNull);
     expect(dao.indexedConversationIds(), isEmpty);
+  });
+
+  group('what the server asks of it', () {
+    test('knownOf: the index\'s own reading first', () {
+      Seed(db)
+        ..workspace()
+        ..importedSession('c1', '/imported/c1.jsonl');
+      write('c1', const [
+        ConversationTurn(ordinal: 0, role: 'user', text: 'x'),
+      ], cli: 'codex');
+
+      final known = dao.knownOf('c1');
+      expect(known.cli, 'codex');
+      expect(known.filePath, 'C:/store/c1.jsonl');
+    });
+
+    test('knownOf: then the imported record\'s path', () {
+      Seed(db)
+        ..workspace()
+        ..importedSession('c1', '/imported/c1.jsonl');
+
+      final known = dao.knownOf('c1');
+      expect(known.cli, 'claudeCode');
+      expect(known.filePath, '/imported/c1.jsonl');
+    });
+
+    test('knownOf: then the session row\'s agent, with no path', () {
+      Seed(db)
+        ..workspace()
+        ..session('s1', externalSessionId: 'c1');
+
+      final known = dao.knownOf('c1');
+      expect(known.cli, 'claudeCode');
+      expect(known.filePath, isNull);
+    });
+
+    test('knownOf: nothing for a conversation nothing names', () {
+      final known = dao.knownOf('nope');
+      expect(known.cli, isNull);
+      expect(known.filePath, isNull);
+    });
+
+    test('turnsOf: in the order said, from an ordinal, bounded', () {
+      write('c1', [
+        for (var i = 0; i < 5; i++)
+          ConversationTurn(
+            ordinal: i,
+            role: i.isEven ? 'user' : 'agent',
+            text: 'turn $i',
+            at: at.add(Duration(minutes: i)),
+          ),
+      ]);
+      write('c2', const [
+        ConversationTurn(ordinal: 0, role: 'user', text: 'elsewhere'),
+      ]);
+
+      final turns = dao.turnsOf('c1', from: 1, limit: 3);
+      expect(turns.map((t) => t.text), ['turn 1', 'turn 2', 'turn 3']);
+      expect(turns.first.role, 'agent');
+      expect(turns.first.at, at.add(const Duration(minutes: 1)));
+      expect(dao.turnsOf('nope'), isEmpty);
+    });
+
+    test('counts: conversations read and turns held', () {
+      expect(dao.counts(), (conversations: 0, turns: 0));
+      write('c1', const [
+        ConversationTurn(ordinal: 0, role: 'user', text: 'a'),
+        ConversationTurn(ordinal: 1, role: 'agent', text: 'b'),
+      ]);
+      write('c2', const []);
+
+      expect(dao.counts(), (conversations: 2, turns: 2));
+    });
+
+    test('backfilledAt: null until stamped, then the stamp', () {
+      expect(dao.backfilledAt, isNull);
+      dao.markBackfilled(at);
+      expect(dao.backfilledAt, at);
+      expect(db.readMetadata(kConversationIndexBackfilledAtKey), isNotNull);
+    });
   });
 }

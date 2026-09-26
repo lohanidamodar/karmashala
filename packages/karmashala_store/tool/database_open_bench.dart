@@ -1,11 +1,11 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
 import 'package:sqlite3/sqlite3.dart';
+import 'package:test/test.dart';
 
-/// Benchmark — NOT part of `flutter test`'s default run. Run it on demand:
+/// Benchmark — NOT part of `dart test`'s default run. Run it on demand:
 ///
-///   flutter test tool/benchmark/database_open_bench.dart
+///   cd packages/karmashala_store && dart test tool/database_open_bench.dart
 ///
 /// What one `AppDatabase.memory()` costs, split into the bare `sqlite3` handle,
 /// the connection pragmas and the migration ladder — and what the same schema

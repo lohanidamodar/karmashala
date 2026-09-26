@@ -47,12 +47,12 @@ class FakeHostRows<T extends Object> {
 
   DataChange _put(T row) {
     _rows[_keyOf(row)] = row;
-    return _server._hostTold(_changed(row));
+    return _changed(row);
   }
 
   DataChange _remove(T row) {
     _rows.remove(_keyOf(row));
-    return _server._hostTold(_removed(row));
+    return _removed(row);
   }
 
   /// [row] and what the schema's cascade takes with it: an environment its
@@ -183,9 +183,7 @@ extension _FakeHosts on FakeDataServer {
     plan.versions.forEach((id, version) {
       changes.add(
         installationRows._put(
-          _installation(
-            id,
-          ).copyWith(version: version, versionReadAt: r.readAt),
+          _installation(id).copyWith(version: version, versionReadAt: r.readAt),
         ),
       );
     });
@@ -276,7 +274,7 @@ extension _FakeHosts on FakeDataServer {
         : account.copyWith(id: existing.id);
     claudeAccountRows._rows[saved.id] = saved;
     final stripped = claudeAccountWithoutCredentials(saved);
-    changes.add(_hostTold(ClaudeAccountChanged(stripped)));
+    changes.add(ClaudeAccountChanged(stripped));
     return stripped;
   }
 
@@ -290,7 +288,7 @@ extension _FakeHosts on FakeDataServer {
         : account.copyWith(id: existing.id);
     codexAccountRows._rows[saved.id] = saved;
     final stripped = codexAccountWithoutCredentials(saved);
-    changes.add(_hostTold(CodexAccountChanged(stripped)));
+    changes.add(CodexAccountChanged(stripped));
     return stripped;
   }
 
@@ -334,10 +332,9 @@ extension _FakeHosts on FakeDataServer {
         AgentsList() => _agentsSnapshot(),
         final InstallationsReconcile r => _reconcile(r, c),
         final InstallationVersion r => () {
-          final row = _installation(r.id).copyWith(
-            version: r.version,
-            versionReadAt: r.readAt,
-          );
+          final row = _installation(
+            r.id,
+          ).copyWith(version: r.version, versionReadAt: r.readAt);
           c.add(installationRows._put(row));
           return row;
         }(),
@@ -358,7 +355,7 @@ extension _FakeHosts on FakeDataServer {
               (throw DataRefused.notFound('no saved Claude account $id')),
         ClaudeAccountDelete(:final id) => () {
           if (claudeAccountRows._rows.remove(id) != null) {
-            c.add(_hostTold(ClaudeAccountRemoved(id)));
+            c.add(ClaudeAccountRemoved(id));
           }
           return const DataAck();
         }(),
@@ -368,7 +365,7 @@ extension _FakeHosts on FakeDataServer {
               (throw DataRefused.notFound('no saved Codex account $id')),
         CodexAccountDelete(:final id) => () {
           if (codexAccountRows._rows.remove(id) != null) {
-            c.add(_hostTold(CodexAccountRemoved(id)));
+            c.add(CodexAccountRemoved(id));
           }
           return const DataAck();
         }(),

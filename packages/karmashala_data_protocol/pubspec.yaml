@@ -46,6 +46,9 @@ dependencies:
     path: ../karmashala_checkpoints
   karmashala_comparisons:
     path: ../karmashala_comparisons
+  # A conversation search's hits and pages, and the index's status.
+  karmashala_conversations:
+    path: ../karmashala_conversations
   karmashala_verification:
     path: ../karmashala_verification
   # The sessions domain's values its requests carry: a session and the

@@ -46,7 +46,6 @@ import '../test/features/terminal/fake_instance.dart';
 import '../test/support/fake_command_runner.dart';
 import '../test/support/fake_data_server.dart';
 import '../test/support/fixtures.dart';
-import '../test/support/conversation_index_database.dart';
 import '../test/support/test_machine.dart';
 
 const _outDir = 'build/ui-screenshots';
@@ -296,7 +295,6 @@ void main() {
 
     container = ProviderContainer(
       overrides: [
-        conversationIndexDatabase(),
         ...fakeTerminalOverrides(machine: db),
         await server.override(),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),

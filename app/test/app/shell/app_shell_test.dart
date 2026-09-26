@@ -17,7 +17,6 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../../support/conversation_index_database.dart';
 import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
@@ -41,10 +40,7 @@ void main() {
   /// well as a database — otherwise the workbench's first frame spawns a PTY.
   ProviderContainer shellContainer() {
     final container = ProviderContainer(
-      overrides: [
-        conversationIndexDatabase(),
-        ...fakeTerminalOverrides(machine: db, data: data),
-      ],
+      overrides: [...fakeTerminalOverrides(machine: db, data: data)],
     );
     addTearDown(container.dispose);
     return container;

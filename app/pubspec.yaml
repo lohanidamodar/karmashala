@@ -103,6 +103,10 @@ dependencies:
   # Fan-out comparisons as values; the server keeps them.
   karmashala_comparisons:
     path: ../packages/karmashala_comparisons
+  # A conversation search's hits and pages, as values; the server keeps the
+  # index.
+  karmashala_conversations:
+    path: ../packages/karmashala_conversations
   # What is asking for the user's attention, as values: the key a session is
   # followed by, the attention kinds and the inbox that queues them, the status
   # and delivery transitions, the policy that decides whether a change is worth
@@ -128,11 +132,6 @@ dependencies:
   # Pure Dart.
   karmashala_ssh:
     path: ../packages/karmashala_ssh
-  # The SQLite store: the connection, the migration ladder and the column
-  # conversions. Pure Dart with no Riverpod, so the session host binary carries
-  # the same schema as the app and two machines that talk cannot diverge.
-  karmashala_store:
-    path: ../packages/karmashala_store
   # What a terminal is, as values: profiles and launch contexts, the pane and
   # workspace geometry, the grid vocabulary, OSC shell integration and the cast
   # format. A Flutter package — `xterm2`'s buffer types are its vocabulary

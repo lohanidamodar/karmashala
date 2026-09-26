@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_git/git.dart'
     show WorktreeSetup, WorktreeSetupReport;
+import 'package:karmashala_core/util.dart' as core show Clock;
 import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
 import 'automations_handler.dart';
+import 'conversations_handler.dart';
 import 'evidence_handler.dart';
 import 'filing_lookup.dart';
 import 'hosts_handler.dart';
@@ -51,6 +55,7 @@ class DataService {
     _sessions = SessionsHandler(database, _now, runs: runsSession);
     _hosts = HostsHandler(database, _now, opens: opens);
     _evidence = EvidenceHandler(database, _now);
+    conversations = ConversationsHandler(database, _Clock(_now));
     _workspace = WorkspaceHandler(
       database,
       _now,
@@ -82,6 +87,10 @@ class DataService {
   late final SessionsHandler _sessions;
   late final HostsHandler _hosts;
   late final EvidenceHandler _evidence;
+
+  /// The conversation index: searched by every client, kept once [serve]
+  /// starts it with the agents' stores.
+  late final ConversationsHandler conversations;
   final _links = <DataSession>{};
   var _revision = 0;
 
@@ -100,6 +109,7 @@ class DataService {
   /// outside any request, under the next revision.
   void announce(List<DataChange> changes) {
     if (changes.isEmpty) return;
+    conversations.noticed(changes);
     _tell(null, DataChanges(++_revision, List.unmodifiable(changes)));
   }
 
@@ -186,6 +196,15 @@ class DataService {
           final SnippetDelete r => _snippets.delete(r, changes),
           final PresetSave r => _snippets.savePreset(r, changes),
           final PresetDelete r => _snippets.deletePreset(r, changes),
+        },
+        final ConversationsRequest r => switch (r) {
+          final ConversationsSearch r => conversations.searchFor(r),
+          final ConversationsTurns r => conversations.turns(r),
+          ConversationsStatus() => conversations.status(),
+          // Reads transcripts, so answered when done: `DataSession.handleLater`.
+          ConversationsCatchUp() => throw const DataRefused.invalid(
+            'conversations.catchUp is answered asynchronously',
+          ),
         },
         final PairingsRequest r => switch (r) {
           DevicesList() => _pairings.list(),
@@ -275,6 +294,7 @@ class DataService {
       );
     }
     if (changes.isEmpty) return DataReply(result as R, _revision);
+    conversations.noticed(changes);
     final batch = DataChanges(++_revision, List.unmodifiable(changes));
     _tell(origin, batch);
     return DataReply(result as R, _revision, batch.changes);
@@ -289,15 +309,33 @@ class DataSession {
   final void Function(DataChanges changes) _deliver;
   var _subscribed = false;
 
-  /// Answers [request] now, or throws [DataRefused].
+  /// Answers [request] now, or throws [DataRefused]. A request that reads
+  /// the disk ([isAnsweredLater]) is refused here: [handleLater] it.
   DataReply<R> handle<R>(DataRequest<R> request) =>
       _service._handle(this, request);
 
-  /// Answers the envelope [json] with the envelope to send back.
-  Map<String, Object?> handleJson(Map<String, Object?> json) {
+  /// Whether [request] is answered when its work is done rather than at
+  /// once — out of order, which only a request that writes nothing a client
+  /// copies may be.
+  static bool isAnsweredLater(DataRequest<Object?> request) =>
+      request is ConversationsCatchUp;
+
+  /// Answers any request: at once, or when its work is done.
+  Future<DataReply<R>> handleLater<R>(DataRequest<R> request) async {
+    if (request is ConversationsCatchUp) {
+      final changed = await _service.conversations.catchUp();
+      return DataReply(changed as R, _service._revision);
+    }
+    return handle(request);
+  }
+
+  /// Answers the envelope [json] with the envelope to send back — now, or
+  /// (for [isAnsweredLater]) a future of it.
+  FutureOr<Map<String, Object?>> handleJson(Map<String, Object?> json) {
     final read = DataEnvelope.readRequest(json);
     final request = read.request;
     if (request == null) return DataEnvelope.refusal(read.id, read.refusal!);
+    if (isAnsweredLater(request)) return _answerLater(read.id, request);
     try {
       return _answer(read.id, request);
     } on DataRefused catch (refusal) {
@@ -309,10 +347,36 @@ class DataSession {
     return DataEnvelope.answer(id, request, handle(request));
   }
 
+  Future<Map<String, Object?>> _answerLater<R>(
+    int id,
+    DataRequest<R> request,
+  ) async {
+    try {
+      return DataEnvelope.answer(id, request, await handleLater(request));
+    } on DataRefused catch (refusal) {
+      return DataEnvelope.refusal(id, refusal);
+    } on Object catch (error) {
+      return DataEnvelope.refusal(
+        id,
+        DataRefused(DataRefusalCode.failed, '${request.kind} failed: $error'),
+      );
+    }
+  }
+
   void close() => _service._links.remove(this);
 
   DataAck _subscribe() {
     _subscribed = true;
     return const DataAck();
   }
+}
+
+/// [DataService]'s clock, as the conversation index asks for one.
+final class _Clock implements core.Clock {
+  const _Clock(this._now);
+
+  final DateTime Function() _now;
+
+  @override
+  DateTime nowUtc() => _now().toUtc();
 }

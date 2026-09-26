@@ -27,7 +27,6 @@ import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
-import '../../support/conversation_index_database.dart';
 
 /// Adoption through the real providers, and the point of the exercise: what it
 /// produces is a session row like any other.
@@ -71,7 +70,6 @@ Future<Harness> harness() async {
   );
   final container = ProviderContainer(
     overrides: [
-      conversationIndexDatabase(),
       ...fakeTerminalOverrides(machine: db),
       await server.override(),
       // Hermetic: the real probe would read this machine's own agent store.
@@ -154,35 +152,6 @@ void main() {
       h.container.read(sessionsDataProvider).getByRepository('r1'),
       hasLength(1),
       reason: 'it hangs under the repository the Explorer draws',
-    );
-  });
-
-  test('adoption queues the conversation for the search index', () async {
-    final h = await harness();
-    addTearDown(h.container.dispose);
-    openAgentLookingPane(h);
-    await runStoreSlot(h);
-
-    expect(
-      h.container.read(conversationIndexerProvider).wantedIds,
-      isEmpty,
-      reason: 'nothing has been adopted yet',
-    );
-
-    h.container
-        .read(sessionAdoptionServiceProvider)
-        .onHookPayload(
-          agentId: AgentIds.claudeCode,
-          sessionId: 'cli-abc',
-          body: '{"session_id":"cli-abc","cwd":"$_repoPath"}',
-        );
-
-    // A conversation entering the workspace is the first of the two triggers
-    // the index is built on. Queuing is a map entry — the disk work happens on
-    // the store slot that is already open, and only there.
-    expect(
-      h.container.read(conversationIndexerProvider).wantedIds,
-      contains('cli-abc'),
     );
   });
 

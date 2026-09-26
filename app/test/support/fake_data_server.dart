@@ -7,6 +7,7 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
+import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_git/git.dart'
@@ -45,6 +46,7 @@ part 'fake_sessions.dart';
 part 'fake_pairings.dart';
 part 'fake_worktrees.dart';
 part 'fake_automations.dart';
+part 'fake_conversations.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -198,39 +200,12 @@ class FakeDataServer {
   /// The paired devices, keys and push tokens kept as the store keeps them.
   late final deviceRows = FakeDeviceRows._(this);
 
+  /// The conversation index: turns a test seeds, found by plain words.
+  final conversations = FakeConversations._();
+
   /// Worktree setups, their runs and review threads; snippets and presets.
   late final worktreeRows = FakeWorktreeRows._(this);
   late final snippetRows = FakeSnippetRows._(this);
-
-  /// Told every environment and installation row this server writes or
-  /// removes — the mirror's feed, for the foreign keys of the tables not
-  /// moved yet.
-  final hostRowListeners = <void Function(HostsDomainChange change)>[];
-
-  DataChange _hostTold(DataChange change) {
-    if (change is HostsDomainChange) {
-      for (final listener in hostRowListeners) {
-        listener(change);
-      }
-    }
-    return change;
-  }
-
-  /// Told every workspace row this server writes, however it was written —
-  /// what `workspace_mirror.dart` copies into a test's database for the
-  /// domains that still read those tables there.
-  final rowListeners = <void Function(RowChange change)>[];
-
-  /// Told every session row this server writes or removes — the mirror's
-  /// feed, for the foreign keys of the tables not moved yet.
-  final sessionRowListeners = <void Function(SessionDomainChange change)>[];
-
-  void _mirror(DataChange change) {
-    if (change is! SessionDomainChange) return;
-    for (final listener in sessionRowListeners) {
-      listener(change);
-    }
-  }
 
   /// [preferences] as a store — for a test to seed before a client
   /// connects, or to read back what one wrote (once it has landed).
@@ -422,7 +397,6 @@ class FakeDataServer {
       recording.addAll(changes);
       return;
     }
-    changes.forEach(_mirror);
     final batch = DataChanges(++revision, List.unmodifiable(changes));
     for (final link in _links) {
       if (link != origin && link._subscribed) link._changes.add(batch);
@@ -436,6 +410,7 @@ class FakeDataServer {
       DataSubscribe() => _subscribe(origin),
       final AutomationsRequest<Object?> r => automationRows._handle(r, changes),
       final PairingsRequest<Object?> r => deviceRows._handle(r, changes),
+      final ConversationsRequest<Object?> r => conversations._handle(r),
       final WorktreesRequest<Object?> r => worktreeRows._handle(r, changes),
       final SnippetsRequest<Object?> r => snippetRows._handle(r, changes),
       final CheckpointsRequest<Object?> r => checkpointRows._handle(r, changes),
@@ -1008,12 +983,12 @@ class FakeRows<T extends Object> {
 
   RowChange _put(T row) {
     _rows[_idOf(row)] = row;
-    return _told(_changed(row));
+    return _changed(row);
   }
 
   RowChange _remove(String id) {
     _rows.remove(id);
-    return _told(_removed(id));
+    return _removed(id);
   }
 
   List<RowChange> _removeCascading(String id) => [
@@ -1022,13 +997,6 @@ class FakeRows<T extends Object> {
         _server.repositoryRows._remove(checkout.id),
     _remove(id),
   ];
-
-  RowChange _told(RowChange change) {
-    for (final listener in _server.rowListeners) {
-      listener(change);
-    }
-    return change;
-  }
 }
 
 extension FakeWorkspaceRows on FakeRows<Workspace> {

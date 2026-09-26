@@ -36,6 +36,8 @@ dependencies:
   # Fan-out comparisons: the server keeps their tables.
   karmashala_comparisons:
     path: ../packages/karmashala_comparisons
+  karmashala_conversations:
+    path: ../packages/karmashala_conversations
   karmashala_core:
     path: ../packages/karmashala_core
   karmashala_git:

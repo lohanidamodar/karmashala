@@ -49,10 +49,14 @@ class CodexStore implements AgentStore {
   /// dash-separated fields (a UUID's shape) rather than by splitting on the
   /// first dash.
   @override
-  Future<Set<String>?> conversationIds(String storeHome) async {
+  Future<Set<String>?> conversationIds(String storeHome) async =>
+      (await transcripts(storeHome))?.keys.toSet();
+
+  @override
+  Future<Map<String, String>?> transcripts(String storeHome) async {
     final sessions = Directory(p.join(storeHome, 'sessions'));
     if (!await sessions.exists()) return null;
-    final ids = <String>{};
+    final found = <String, String>{};
     await for (final entity in sessions.list(recursive: true)) {
       if (entity is! File) continue;
       final name = p.basename(entity.path);
@@ -61,9 +65,9 @@ class CodexStore implements AgentStore {
           .substring('rollout-'.length, name.length - '.jsonl'.length)
           .split('-');
       if (parts.length < 5) continue;
-      ids.add(parts.sublist(parts.length - 5).join('-'));
+      found[parts.sublist(parts.length - 5).join('-')] = entity.path;
     }
-    return ids;
+    return found;
   }
 
   @override

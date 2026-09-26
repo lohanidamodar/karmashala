@@ -52,20 +52,29 @@ class AntigravityStore implements AgentStore {
   }
 
   @override
-  Future<Set<String>?> conversationIds(String storeHome) async {
+  Future<Set<String>?> conversationIds(String storeHome) async =>
+      (await transcripts(storeHome))?.keys.toSet();
+
+  /// A conversation's record is its `.db`, or its `.pb` where it has no
+  /// `.db` — the order [recordCandidates] tries them in.
+  @override
+  Future<Map<String, String>?> transcripts(String storeHome) async {
     final conversations = Directory(p.join(storeHome, 'conversations'));
     if (!await conversations.exists()) return null;
-    final ids = <String>{};
+    final found = <String, String>{};
     await for (final file in conversations.list()) {
       if (file is! File) continue;
       final name = p.basename(file.path);
       if (name.endsWith('.db')) {
-        ids.add(name.substring(0, name.length - '.db'.length));
+        found[name.substring(0, name.length - '.db'.length)] = file.path;
       } else if (name.endsWith('.pb')) {
-        ids.add(name.substring(0, name.length - '.pb'.length));
+        found.putIfAbsent(
+          name.substring(0, name.length - '.pb'.length),
+          () => file.path,
+        );
       }
     }
-    return ids;
+    return found;
   }
 
   /// The scan leaves out a conversation the store places in no directory — 38

@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/read.dart';
-import '../data/conversation_index_dao.dart';
+import 'conversation_index_dao.dart';
+import 'conversation_values.dart';
 
 /// The roles a search may find. The gate is what is read: `text` off these
 /// rows, and never `TranscriptMessage.thinking`, whatever CLI it came from.
@@ -23,6 +24,10 @@ typedef TranscriptReader =
 /// Measures a transcript without reading it.
 typedef TranscriptStat = Future<TranscriptWatermark> Function(String filePath);
 
+/// Where agent [cli]'s store keeps [conversationId]'s transcript, or null.
+typedef TranscriptLocate =
+    Future<String?> Function(String cli, String conversationId);
+
 Future<TranscriptTurnsRead> _readIndexable(
   String filePath,
   String cli, {
@@ -35,7 +40,9 @@ Future<TranscriptTurnsRead> _readIndexable(
 );
 
 /// Keeps the conversation index in step with the transcripts on disk, on the
-/// app's existing triggers. Nothing polls: the index is as of its last trigger.
+/// server's triggers: a session row or an imported record that names a
+/// conversation is written, or a search asks it to catch up. Nothing polls:
+/// the index is as of its last trigger.
 ///
 /// A transcript that grew is read from where the last read stopped, never
 /// again from the start; only a file that shrank or changed before that point
@@ -79,7 +86,7 @@ class ConversationIndexer {
   Iterable<String> get wantedIds => _wanted.keys;
 
   /// Queues [conversationId] for indexing — a map entry, nothing else until
-  /// [drain], which resolves a missing [filePath] against the slot's store scan.
+  /// [drain], which resolves what the caller could not say.
   void want(String conversationId, {String? cli, String? filePath}) {
     if (conversationId.isEmpty) return;
     final existing = _wanted[conversationId];
@@ -89,35 +96,33 @@ class ConversationIndexer {
     );
   }
 
-  /// Indexes everything queued, resolving unknown paths through [scan]. Returns
-  /// how many changed; [scan] runs only for a queued conversation with no path.
-  Future<int> drain(Future<List<DetectedSession>> Function() scan) async {
+  /// Indexes everything queued. A want with no path takes the one the index
+  /// or the imported history already holds, and only then asks [locate] — the
+  /// agent's store, by the conversation's id. Returns how many changed.
+  Future<int> drain(TranscriptLocate locate) async {
     if (_wanted.isEmpty) return 0;
     final queued = Map.of(_wanted);
     _wanted.clear();
-    final unresolved = queued.entries
-        .where((entry) => entry.value.filePath == null)
-        .map((entry) => entry.key)
-        .toSet();
-    var found = <String, DetectedSession>{};
-    if (unresolved.isNotEmpty) {
-      try {
-        found = {
-          for (final session in await scan()) session.sessionId: session,
-        };
-      } on Object {
-        // A store we cannot read answers as an empty one. Wants are dropped,
-        // not kept — keeping them makes every later slot re-scan for ever.
-        return 0;
-      }
-    }
     var changed = 0;
     for (final entry in queued.entries) {
-      final want = entry.value;
-      final detected = found[entry.key];
-      final path = want.filePath ?? detected?.filePath;
-      final cli = want.cli ?? detected?.cli;
-      if (path == null || cli == null) continue;
+      var cli = entry.value.cli;
+      var path = entry.value.filePath;
+      if (cli == null || path == null) {
+        final known = dao.knownOf(entry.key);
+        cli ??= known.cli;
+        path ??= known.filePath;
+      }
+      if (cli == null) continue;
+      if (path == null) {
+        try {
+          path = await locate(cli, entry.key);
+        } on Object {
+          // A store we cannot read answers as an empty one. The want is
+          // dropped, not kept: the next trigger queues it again.
+          path = null;
+        }
+      }
+      if (path == null) continue;
       if (await indexConversation(
         conversationId: entry.key,
         cli: cli,
@@ -125,6 +130,9 @@ class ConversationIndexer {
       )) {
         changed++;
       }
+      // The store is synchronous on the server's one isolate: hand the event
+      // loop back between conversations.
+      await Future<void>.delayed(Duration.zero);
     }
     return changed;
   }

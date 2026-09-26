@@ -7,19 +7,14 @@ import 'dart:math';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
-import 'package:karmashala/src/features/cli_detection/application/session_search.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
+import 'package:karmashala_conversations/store.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
+import 'package:test/test.dart';
 
-import '../../support/fakes.dart';
-import '../../support/fixtures.dart';
-import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
+import 'support/seed.dart';
 
 /// Times the DAO's writes: `package:sqlite3` is synchronous, so this is the
 /// share of indexing that lands on the isolate that draws.
@@ -237,12 +232,7 @@ void main() {
       final dbDir = Directory('${dir.path}/db')..createSync();
       final db = AppDatabase.open(dbDir);
       addTearDown(db.close);
-      final server = FakeDataServer()..mirrorInto(db);
-      server.environmentRows.upsert(windowsEnv());
-      server.projectRows.insert(project());
-      server.repositoryRows.insert(repository());
-      server.installationRows.insert(agentInstallation());
-      final sessions = mirroredServer(db).sessionRows;
+      final sessions = (Seed(db)..workspace()).sessions;
       db.transaction(() {
         for (var i = 0; i < count; i++) {
           sessions.insert(

@@ -5,33 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// **The app is a client of the server's data** (docs/daemon-architecture.md,
 /// "Slice 1 — data through the server").
 ///
-/// Notes, todos, preferences, the workspace (contexts, projects, checkouts,
-/// saved sections), sessions (their rows, checkouts, records and the imported
-/// history), and where agents run and who they run as (environments, SSH
-/// hosts, trusted host keys, agent installations, saved accounts, usage
-/// history) go through the server's data API (`lib/src/core/data/`,
-/// `WorkspaceData`, `SessionsData`, `EnvironmentsData`, `SshHostsData`,
-/// `AgentInstallationsData`, …); nothing under `lib/` opens their tables or the
-/// `app_metadata` rows itself. The domains not moved yet still use the
-/// database the app opens, from the files listed in [remaining] — a list that
-/// only shrinks: a new file fails here, and a listed file that stopped
-/// touching the database fails until it is taken off.
+/// Every domain — notes, todos, preferences, the workspace, sessions and
+/// their records, environments and agents, automations, checkpoints,
+/// verification, comparisons, the git side tables, snippets, pairings and the
+/// conversation index — goes through the server's data API
+/// (`lib/src/core/data/` and each feature's `*Data`); the app opens no
+/// database of the server's, and imports no `karmashala_store`. Its one store
+/// of its own is the terminal layout (`TerminalLayoutStore`, client-local).
 void main() {
-  /// Every file under `lib/` still naming `databaseProvider` or `AppDatabase`,
-  /// by the domain that keeps it there.
-  const remaining = <String, List<String>>{
-    // The bootstrap that opens the store for everything below. Goes with the
-    // last domain.
-    'bootstrap': [
-      'main.dart',
-      'src/core/database/database_providers.dart',
-      'src/core/lifecycle/app_lifecycle.dart',
-    ],
-    'the conversation index': [
-      'src/features/cli_detection/application/cli_detection_providers.dart',
-      'src/features/cli_detection/data/conversation_index_dao.dart',
-    ],
-  };
+  /// Files under `lib/` allowed to name `databaseProvider` or the store's
+  /// database class ([_database], spelled so this file is not one of them).
+  /// Empty since slice 1f, and asserted so.
+  const remaining = <String>[];
 
   late Map<String, String> sources;
 
@@ -67,9 +52,7 @@ void main() {
           r'explorer_sections?|explorer_section_members)\b',
         ),
       ),
-      // The index's search narrows to a project's checkouts inside its own
-      // query; it moves with the conversation index (1f).
-      ['src/features/cli_detection/data/conversation_index_dao.dart'],
+      isEmpty,
       reason: 'the workspace goes through WorkspaceData',
     );
     expect(
@@ -94,9 +77,7 @@ void main() {
           r'session_follow_ups|imported_sessions)\b',
         ),
       ),
-      // The index's own queries join the rows it indexes; it moves with the
-      // conversation index (1f), reading only.
-      ['src/features/cli_detection/data/conversation_index_dao.dart'],
+      isEmpty,
       reason: 'sessions go through SessionsData',
     );
     expect(
@@ -135,9 +116,7 @@ void main() {
           r'codex_accounts|usage_samples)\b',
         ),
       ),
-      // The index's search names the agent of each hit inside its own query;
-      // it moves with the conversation index (1f), reading only.
-      ['src/features/cli_detection/data/conversation_index_dao.dart'],
+      isEmpty,
       reason: 'environments and agents go through the server',
     );
     expect(
@@ -191,10 +170,28 @@ void main() {
     );
     expect(
       filesMatching(RegExp(r'\.(readMetadata|writeMetadata)\(')),
-      // The index's own write counter, a key the data API reserves for its
-      // domain; it moves with the conversation index.
-      ['src/features/cli_detection/data/conversation_index_dao.dart'],
+      isEmpty,
       reason: 'preferences go through AppPreferences',
+    );
+    expect(
+      filesMatching(
+        RegExp(
+          r'\b(ConversationIndexDao|ConversationIndexer|SessionSearchService|'
+          r'ConversationIndexBackfill)\b|karmashala_conversations/store|'
+          r'\b(FROM|INTO|UPDATE|JOIN)\s+(conversation_turns|'
+          r'conversation_turns_fts|conversation_turns_vocab|'
+          r'conversation_index_state)\b',
+        ),
+      ),
+      isEmpty,
+      reason:
+          'the conversation index is the server\'s: search, catch-up, turns '
+          'and status go through ConversationSearch',
+    );
+    expect(
+      filesMatching(RegExp(r'package:karmashala_store/')),
+      isEmpty,
+      reason: 'the app opens no store of the server\'s, and imports none',
     );
     expect(
       [
@@ -202,7 +199,7 @@ void main() {
           RegExp(r'\b(TerminalLayoutDao|terminalLayoutDaoProvider)\b'),
         ))
           if (RegExp(
-            r'\bdatabaseProvider\b|\bAppDatabase\b',
+            r'\bdatabaseProvider\b|\b' + _database + r'\b',
           ).hasMatch(sources[file]!))
             file,
       ],
@@ -233,7 +230,7 @@ void main() {
       expect(
         [
           for (final file in filesMatching(
-            RegExp(r'\bdatabaseProvider\b|\bAppDatabase\b'),
+            RegExp(r'\bdatabaseProvider\b|\b' + _database + r'\b'),
           ))
             if (file.startsWith(folder)) file,
         ],
@@ -253,12 +250,12 @@ void main() {
     );
     expect(
       filesMatching(
-        RegExp(r'\bdatabaseProvider\b|\bAppDatabase\b'),
+        RegExp(r'\bdatabaseProvider\b|\b' + _database + r'\b'),
       ).where((file) => file.startsWith('src/core/data/')),
       isEmpty,
       reason: 'the data client reaches the server, never the store',
     );
-    expect(filesMatching(RegExp(r'\bAppDatabase\.open\(')), ['main.dart']);
+    expect(filesMatching(RegExp(r'\b' + _database + r'\.open\(')), isEmpty);
   });
 
   test('no app test reaches the moved domains in a store', () {
@@ -269,9 +266,7 @@ void main() {
     // fake server (test/support/fake_data_server.dart);
     // their rules are tested in packages/karmashala_notes,
     // karmashala_projects, karmashala_session(_engine), karmashala_environments,
-    // karmashala_store and server/test/data. The one exception is the
-    // transitional `workspace_mirror.dart`, which copies the fake's rows into
-    // the conversation index's database for the rows its queries join.
+    // karmashala_conversations, karmashala_store and server/test/data.
     final reaching = <String>[];
     for (final file in Directory(
       'test',
@@ -289,7 +284,9 @@ void main() {
         r'CodexAccountDao|UsageSampleDao|WorktreeSetupDao|ReviewThreadDao|'
         r'CommandSnippetDao|TerminalPresetDao|PairedDeviceDao|CheckpointDao|'
         r'VerificationDao|ComparisonDao|AutomationDao|ScheduledResumeDao|'
-        r'ProjectCheckDao)\b|karmashala_automations/store|'
+        r'ProjectCheckDao|ConversationIndexDao|ConversationIndexer|'
+        r'SessionSearchService)\b|karmashala_automations/store|'
+        r'karmashala_conversations/store|package:karmashala_store/|'
         r'karmashala_checkpoints/store|karmashala_verification/store|'
         r'karmashala_comparisons/store|'
         r'karmashala_store/devices|karmashala_companion_server/store|'
@@ -315,27 +312,13 @@ void main() {
         reaching.add(path);
       }
     }
-    expect(reaching..sort(), ['test/support/workspace_mirror.dart']);
+    expect(reaching..sort(), isEmpty);
   });
 
-  test('only the conversation index\'s tests open a database', () {
-    // Everything else a test drives reads through the fake server; the index
-    // (and the bootstrap that closes its store) moves in 1f.
-    const allowed = [
-      'test/app/shell/quick_open/quick_open_conversations_test.dart',
-      'test/core/lifecycle/app_lifecycle_test.dart',
-      'test/features/cli_detection/conversation_index_backfill_test.dart',
-      'test/features/cli_detection/conversation_index_dao_test.dart',
-      'test/features/cli_detection/conversation_indexer_test.dart',
-      'test/features/cli_detection/session_search_benchmark_test.dart',
-      'test/features/cli_detection/session_search_test.dart',
-      'test/features/cli_detection/store_slot_cost_test.dart',
-      'test/features/cli_detection/thinking_is_not_indexed_test.dart',
-      'test/features/mcp/session_search_tool_test.dart',
-      'test/features/terminal/fake_instance.dart',
-      'test/support/conversation_index_database.dart',
-      'test/support/workspace_mirror.dart',
-    ];
+  test('no app test opens a database', () {
+    // Everything a test drives reads through the fake server
+    // (test/support/fake_data_server.dart); the store's own tests live in
+    // packages/karmashala_store, the index's in karmashala_conversations.
     final opening = [
       for (final file in Directory(
         'test',
@@ -343,38 +326,34 @@ void main() {
         if (file.path.endsWith('.dart') &&
             !file.path.endsWith('guard_test.dart') &&
             RegExp(
-              r'\b(AppDatabase|databaseProvider)\b',
+              r'\b(' + _database + r'|databaseProvider)\b',
             ).hasMatch(_code(file.readAsStringSync())))
           file.path.replaceAll(r'\', '/'),
     ]..sort();
     expect(
       opening,
-      allowed,
-      reason:
-          'a test of a moved domain seeds the fake server; one reaching the '
-          'index takes conversationIndexDatabase()',
+      isEmpty,
+      reason: 'a test of a server domain seeds the fake server',
     );
   });
 
-  test('the files still touching the database only shrink', () {
-    final listed = {for (final files in remaining.values) ...files};
-    final touching = filesMatching(
-      RegExp(r'\bdatabaseProvider\b|\bAppDatabase\b'),
-    ).toSet();
+  test('the app opens no database', () {
+    expect(remaining, isEmpty, reason: 'the list only ever shrank to this');
     expect(
-      touching.difference(listed).toList()..sort(),
-      isEmpty,
+      filesMatching(RegExp(r'\bdatabaseProvider\b|\b' + _database + r'\b')),
+      remaining,
       reason:
-          'a new file reaches the database: go through the data API '
+          'a file reaches the server\'s database: go through the data API '
           '(lib/src/core/data/) instead',
-    );
-    expect(
-      listed.difference(touching).toList()..sort(),
-      isEmpty,
-      reason: 'these no longer touch the database: take them off the list',
     );
   });
 }
+
+/// The store's database class, written so `grep -w` over the app finds only
+/// the files that use it — none since slice 1f — and not this guard.
+const _database =
+    'App'
+    'Database';
 
 /// [source] without `//` comments, so prose naming a DAO is not a use of it.
 String _code(String source) => source

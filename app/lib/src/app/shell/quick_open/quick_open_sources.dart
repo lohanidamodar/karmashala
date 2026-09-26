@@ -8,7 +8,7 @@ import '../../../core/util/clock_provider.dart';
 import '../shell_shortcuts.dart' show shellCommandLabel;
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
-import '../../../features/cli_detection/data/conversation_index_dao.dart';
+import 'package:karmashala_conversations/karmashala_conversations.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
 import '../../../features/automations/application/scheduled_resume_providers.dart';
 import '../../../features/automations/presentation/resume_on_reset_dialog.dart';
