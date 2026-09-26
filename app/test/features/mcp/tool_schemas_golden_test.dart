@@ -1,4 +1,5 @@
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
+import 'package:karmashala_host/mcp_tools.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// The served tool list, frozen byte for byte.
 ///
-/// `McpToolDispatcher.toolSchemas` is composed from a dozen files by
+/// `_served` is composed from a dozen files by
 /// spreading each family's const list in a fixed order, and that composition is
 /// the whole wire contract: an MCP client receives these names, in this order,
 /// with these descriptions and these annotations. Moving a family out of the
@@ -32,7 +33,7 @@ const _goldenPath = 'test/features/mcp/tool_schemas.golden.json';
 /// Everything a caller can observe about the catalogue: the served list, and
 /// the per-tool listing the settings page reads.
 Map<String, Object?> _catalogue() {
-  final served = annotatedToolSchemas(McpToolDispatcher.toolSchemas);
+  final served = annotatedToolSchemas(_served);
   return <String, Object?>{
     'note':
         'The served MCP tool list, in order. Regenerate with '
@@ -76,3 +77,10 @@ void main() {
     );
   });
 }
+
+/// What agents are served: the server's own tools, then the app's — the
+/// order the server's relay composes them in.
+final List<Map<String, dynamic>> _served = [
+  ...serverToolSchemas,
+  ...McpToolDispatcher.toolSchemas,
+];

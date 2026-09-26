@@ -214,7 +214,7 @@ void main() {
       // there is no first.
       final response = await call(
         legacy('tools/call', {
-          'name': 'list_projects',
+          'name': 'inbox_list',
           'arguments': <String, Object?>{},
         }),
       );
@@ -293,7 +293,8 @@ void main() {
     test('tools/list serves every tool, each with annotations', () async {
       final response = await call(legacy('tools/list'));
       final tools = resultOf(response.body)['tools']! as List<Object?>;
-      expect(tools, hasLength(McpToolDispatcher.toolSchemas.length));
+      // The app's own server, where no Karmashala server runs.
+      expect(tools, hasLength(McpToolDispatcher.standaloneCatalogue().length));
       for (final tool in tools.cast<Map<String, Object?>>()) {
         expect(
           tool['annotations'],
@@ -365,7 +366,7 @@ void main() {
 
     test('a tool call carries resultType', () async {
       final request = modern('tools/call', {
-        'name': 'list_projects',
+        'name': 'inbox_list',
         'arguments': <String, Object?>{},
       });
       final response = await call(request.body, headers: request.headers);
@@ -381,12 +382,12 @@ void main() {
 
     test('a Mcp-Name that disagrees with the body is refused', () async {
       final request = modern('tools/call', {
-        'name': 'list_projects',
+        'name': 'inbox_list',
         'arguments': <String, Object?>{},
       });
       final response = await call(
         request.body,
-        headers: {...request.headers, 'Mcp-Name': 'list_sessions'},
+        headers: {...request.headers, 'Mcp-Name': 'terminal_list'},
       );
       expect(response.status, 400);
       expect(errorOf(response.body)['code'], McpErrorCode.headerMismatch);
@@ -394,10 +395,10 @@ void main() {
 
     test('a base64-encoded Mcp-Name is decoded before comparing', () async {
       final request = modern('tools/call', {
-        'name': 'list_projects',
+        'name': 'inbox_list',
         'arguments': <String, Object?>{},
       });
-      final encoded = base64.encode(utf8.encode('list_projects'));
+      final encoded = base64.encode(utf8.encode('inbox_list'));
       final response = await call(
         request.body,
         headers: {...request.headers, 'Mcp-Name': '=?base64?$encoded?='},

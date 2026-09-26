@@ -12,7 +12,6 @@ import '../data/data_service.dart';
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
-import '../hooks/hook_holds.dart';
 import '../host_version.dart';
 import '../mcp/mcp_tool_relay.dart';
 import '../protocol/frame.dart';
@@ -20,6 +19,7 @@ import '../protocol/messages.dart';
 import '../protocol/wire.dart';
 import '../pty/pty.dart';
 import '../server/server_admin.dart';
+import '../sessions/client_panes.dart';
 import '../status/daemon_prompt_answers.dart';
 import '../transport/transport.dart';
 import 'lifecycle_feed.dart';
@@ -36,14 +36,9 @@ class HostServer {
     this.build,
     this.mcpTools,
     this.automations,
-    HookHolds? holds,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
-       lifecycle = LifecycleFeed(
-         registry,
-         clock: clock ?? _utcNow,
-         holds: holds,
-       );
+       lifecycle = LifecycleFeed(registry, clock: clock ?? _utcNow);
 
   final SessionRegistry registry;
   final LifecycleFeed lifecycle;
@@ -76,6 +71,14 @@ class HostServer {
 
   /// Answers every client's data requests; null refuses them (no store).
   DataService? data;
+
+  /// Takes each hook a client took itself ([HookForwardMessage]) — its own
+  /// route or a spool — for the checkpoint recorder. Null ignores them.
+  void Function(AgentHookEvent hook)? onForwardedHook;
+
+  /// Takes each client's terminal panes as facts ([PaneFactsMessage]):
+  /// adoption and attribution decide what they mean. Null ignores them.
+  PaneFactsReceiver? panes;
 
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
@@ -165,6 +168,7 @@ class _ClientSession {
     await _lifecycleWatch?.cancel();
     _server.mcpTools?.detach(this);
     _server.automations?.detach(this);
+    _server.panes?.detach(this);
     await _server.companion?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
@@ -302,8 +306,8 @@ class _ClientSession {
           _send,
           runByClient: message.runByClient,
         );
-      case HookReplyMessage():
-        _server.lifecycle.replyHook(message.holdId);
+      case HookForwardMessage(:final hook):
+        _server.onForwardedHook?.call(hook);
       case McpToolsMessage():
         _server.mcpTools?.adopt(this, message.tools, _send);
       case McpResultMessage():
@@ -330,6 +334,8 @@ class _ClientSession {
         _onServerCall(message);
       case DataRequestMessage():
         _onDataRequest(message);
+      case PaneFactsMessage(:final panes):
+        _server.panes?.report(this, panes, _send);
       default:
         _send(
           ErrorMessage(

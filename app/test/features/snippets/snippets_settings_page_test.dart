@@ -6,7 +6,6 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/mcp/snippet_tools.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
@@ -88,8 +87,9 @@ void main() {
     final before = tester.element(find.byType(SnippetsSettingsPage));
 
     // Written through the controller, which is exactly what the library
-    // dialog, the palette's editor and `snippet_add` all do — no widget of
-    // this page is involved.
+    // dialog and the palette's editor do — no widget of this page is
+    // involved. An agent's `snippet_add` is the server's, and reaches this
+    // copy as any other client's write does.
     container
         .read(commandSnippetsProvider.notifier)
         .add(label: 'Run the tests', command: 'flutter test');
@@ -111,18 +111,18 @@ void main() {
     );
   });
 
-  testWidgets("an agent's snippet_add lands on the open page too", (
+  testWidgets('a tagged snippet lands on the open page as a card', (
     tester,
   ) async {
     await pumpPage(tester);
 
-    // The MCP path, through the tool an agent actually calls, on the same
-    // container the page is mounted in.
-    await SnippetControlTools(container).call('snippet_add', {
-      'label': 'Tail the log',
-      'command': 'tail -f /var/log/syslog',
-      'shell': 'wsl',
-    });
+    container
+        .read(commandSnippetsProvider.notifier)
+        .add(
+          label: 'Tail the log',
+          command: 'tail -f /var/log/syslog',
+          shellId: 'wsl',
+        );
     await tester.pump();
 
     expect(find.text('Tail the log'), findsOneWidget);

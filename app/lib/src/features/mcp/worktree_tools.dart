@@ -18,6 +18,10 @@ import 'package:karmashala_session/session.dart';
 
 /// Making a git worktree and taking one away. Removing is not the mirror of
 /// creating: [_remove] refuses unless the branch is merged **and** pushed.
+///
+/// The server runs both tools itself (and serves their schemas); a call
+/// reaches this only for a checkout on an SSH host, which only this app
+/// reaches.
 class WorktreeControlTools {
   WorktreeControlTools(this._container);
 
@@ -388,99 +392,3 @@ class WorktreeControlTools {
     return branch;
   }
 }
-
-/// The schemas for [WorktreeControlTools].
-const List<Map<String, dynamic>> worktreeControlToolSchemas = [
-  {
-    'name': 'worktree_create',
-    'description':
-        'Add a git worktree to a checkout, on a new branch, so work can run '
-        'in parallel with whatever is already checked out. The folder is '
-        'placed in a .karmashala-worktrees directory beside the checkout and '
-        'named <checkout>-<name>. Refuses rather than colliding: a path a '
-        'worktree already occupies, a branch that already exists, and a '
-        'branch another worktree has out are all named back to you. The '
-        'returned repositoryId reads "not recorded" when the worktree was '
-        'made but Karmashala could not scan the project to record it — the '
-        'folder is still there; run project_rescan.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'repositoryId': {
-          'type': 'string',
-          'description':
-              'The checkout to make a worktree of, from list_checkouts.',
-        },
-        'name': {
-          'type': 'string',
-          'description':
-              'The worktree\'s own name — one folder name, no separators.',
-        },
-        'branch': {
-          'type': 'string',
-          'description':
-              'The new branch to create in it. Must not already exist.',
-        },
-        'baseRef': {
-          'type': 'string',
-          'description':
-              'What to branch from (e.g. origin/main). Defaults to the '
-              'checkout\'s own HEAD.',
-        },
-      },
-      'required': ['repositoryId', 'name', 'branch'],
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'fromRepositoryId': {'type': 'string'},
-        'projectId': {'type': 'string'},
-        'path': {'type': 'string'},
-        'environmentId': {'type': 'string'},
-        'branch': {'type': 'string'},
-        'baseRef': {'type': 'string'},
-        'repositoryId': {'type': 'string'},
-      },
-      'required': ['path', 'branch', 'repositoryId'],
-    },
-  },
-  {
-    'name': 'worktree_remove',
-    'description':
-        'Delete a worktree\'s directory. Destructive and deliberately hard to '
-        'get: it happens only when the worktree is clean, its branch is '
-        'merged into its base, AND those commits are held by some remote '
-        'branch — merged is not pushed. It also refuses while a session is '
-        'running in it, and refuses on any reading Karmashala could not take '
-        '("not recorded" is never read as "fine"). There is no force '
-        'argument; every refusal is a sentence saying what to do instead. The '
-        'branch is left alone and the checkout row stays until project_rescan '
-        'retires it.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'repositoryId': {
-          'type': 'string',
-          'description':
-              'The worktree checkout to remove, from list_checkouts. It must '
-              'be one whose isWorktree is true.',
-        },
-      },
-      'required': ['repositoryId'],
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'repositoryId': {'type': 'string'},
-        'path': {'type': 'string'},
-        'branch': {'type': 'string'},
-        'baseBranch': {'type': 'string'},
-        'removed': {'type': 'boolean'},
-        'branchKept': {'type': 'boolean'},
-        'checkoutRecordKept': {'type': 'boolean'},
-        'note': {'type': 'string'},
-      },
-      'required': ['repositoryId', 'path', 'removed'],
-    },
-  },
-];

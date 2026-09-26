@@ -67,7 +67,7 @@ void main() {
                   socketPath,
                   jsonEncode({
                     'token': handshake['token'],
-                    'tool': 'list_projects',
+                    'tool': 'inbox_list',
                     'arguments': const <String, dynamic>{},
                   }),
                 ),

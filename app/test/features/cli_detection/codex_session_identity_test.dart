@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -19,14 +17,15 @@ import 'package:path/path.dart' as p;
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 
-import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
 
-/// The owner's bug, end to end, on a real `.codex` store.
+/// The owner's bug, the app's half: what this app does once the server has
+/// learned which conversation a launched Codex row is on (slice 2b — the
+/// store reading and the writes are the server's, in its `test/sessions/`).
 ///
 /// > "i started new session with codex, and started conversation. sessions
 /// > explorer has the updated session with conv title, but the tabbar is still
@@ -70,58 +69,11 @@ void main() {
     }
   });
 
-  /// One rollout, in the shape Codex 0.151 writes it.
-  ///
-  /// The envelope timestamp is when the line was *flushed* and the payload's is
-  /// when the conversation began — 30 seconds apart in the owner's own file, so
-  /// which one is read is not a detail.
-  void writeRollout({
-    String id = conversation,
-    String cwd = repoPath,
-    Duration startedAfterLaunch = const Duration(seconds: 5),
-    String? name = threadName,
-  }) {
-    final startedAt = testTime.add(startedAfterLaunch);
-    final file = File(
-      p.join(storeHome, 'sessions', '2026', '09', '01', 'rollout-$id.jsonl'),
-    )..createSync(recursive: true);
-    file.writeAsStringSync(
-      '${jsonEncode({
-        'timestamp': startedAt.add(const Duration(seconds: 30)).toIso8601String(),
-        'type': 'session_meta',
-        'payload': {'id': id, 'session_id': id, 'timestamp': startedAt.toIso8601String(), 'cwd': cwd, 'originator': 'codex-tui'},
-      })}\n'
-      '${jsonEncode({
-        'timestamp': startedAt.toIso8601String(),
-        'type': 'response_item',
-        'payload': {
-          'type': 'message',
-          'role': 'user',
-          'content': [
-            {'type': 'input_text', 'text': 'hey lets work on karmashala app'},
-          ],
-        },
-      })}\n',
-    );
-    if (name == null) return;
-    File(p.join(storeHome, 'session_index.jsonl'))
-      ..createSync(recursive: true)
-      ..writeAsStringSync('${jsonEncode({'id': id, 'thread_name': name})}\n');
-  }
-
   ProviderContainer container() => ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(machine: db),
       dataClientProvider.overrideWithValue(client),
       clockProvider.overrideWithValue(FixedClock(testTime)),
-      cliStoreLocatorProvider.overrideWithValue(
-        FixedLocator([
-          CliStore(
-            environmentId: 'windows',
-            homesByAgentId: {AgentIds.codex: storeHome},
-          ),
-        ]),
-      ),
     ],
   );
 
@@ -142,6 +94,19 @@ void main() {
     createdAt: testTime,
     paneId: paneId,
   );
+
+  /// What the server's session sync writes once it has read the store
+  /// (`LaunchedAttribution`, then `TitleSync`, tested in the server's
+  /// `test/sessions/`): the conversation, then its name — told to this app
+  /// as the row.
+  Future<void> serverLearnsTheConversation(ProviderContainer ref) async {
+    await ref.read(dataClientProvider).settled();
+    db.server.sessionRows
+      ..updateExternalSessionId('s1', conversation)
+      ..updateTitle('s1', threadName);
+    await pumpEventQueue();
+    await ref.read(dataClientProvider).settled();
+  }
 
   /// The same conversation as the auto-import files it: read-only history.
   void importRecord() {
@@ -169,24 +134,7 @@ void main() {
     );
   }
 
-  test('a launched Codex row learns its conversation and its name', () async {
-    writeRollout();
-    db.server.sessionRows.insert(launchedRow());
-    final ref = container();
-    addTearDown(ref.dispose);
-
-    await ref.read(cliStoreSyncRunnerProvider)();
-    // The rename lands in the copy at once and at the server after.
-    await ref.read(dataClientProvider).settled();
-
-    final row = db.server.sessionRows.getById('s1')!;
-    expect(row.externalSessionId, conversation);
-    // The tab strip reads the row at display time, so this *is* the tab strip.
-    expect(row.title, threadName);
-  });
-
   test('the tab strip and the tree end up saying the same thing', () async {
-    writeRollout();
     final ref = container();
     addTearDown(ref.dispose);
     final controller = ref.read(terminalSessionsControllerProvider.notifier);
@@ -201,9 +149,7 @@ void main() {
     ref.read(sessionsDataProvider).insert(launchedRow(paneId: opened.paneId));
     expect(controller.titleForTab(opened.tabId), 'New session');
 
-    await ref.read(cliStoreSyncRunnerProvider)();
-    // The rename lands in the copy at once and at the server after.
-    await ref.read(dataClientProvider).settled();
+    await serverLearnsTheConversation(ref);
 
     expect(controller.titleForTab(opened.tabId), threadName);
   });
@@ -212,16 +158,13 @@ void main() {
     // The imported record is what the owner saw wearing the conversation's
     // name. Once the native row holds the conversation id it supersedes that
     // record, and one conversation is one card again.
-    writeRollout();
     importRecord();
     db.server.sessionRows.insert(launchedRow());
     final ref = container();
     addTearDown(ref.dispose);
     expect(db.server.importedRows.getAll(), hasLength(1));
 
-    await ref.read(cliStoreSyncRunnerProvider)();
-    // The rename lands in the copy at once and at the server after.
-    await ref.read(dataClientProvider).settled();
+    await serverLearnsTheConversation(ref);
 
     expect(db.server.importedRows.getAll(), isEmpty);
   });
@@ -229,7 +172,6 @@ void main() {
   test(
     'the inbox opens a session that has a live pane, and finds it active',
     () async {
-      writeRollout();
       importRecord();
       final ref = container();
       addTearDown(ref.dispose);
@@ -244,9 +186,7 @@ void main() {
       );
       ref.read(sessionsDataProvider).insert(launchedRow(paneId: opened.paneId));
 
-      await ref.read(cliStoreSyncRunnerProvider)();
-      // The rename lands in the copy at once and at the server after.
-      await ref.read(dataClientProvider).settled();
+      await serverLearnsTheConversation(ref);
 
       // What the inbox is offered: one watched session, and it is the row with
       // the pane — not the read-only history the notification used to open.
@@ -276,16 +216,16 @@ void main() {
       // conversation at the time; the id landing a slot later hides that record
       // from the tree but would leave the user looking at it, with no sign that
       // the session they are reading is running in a pane behind them.
-      writeRollout();
       importRecord();
       db.server.sessionRows.insert(launchedRow());
       final ref = container();
       addTearDown(ref.dispose);
       ref.read(selectedImportedSessionIdProvider.notifier).select('i1');
+      // The app's sessions copy is live, as it always is in the app: it is
+      // what hears the server's word on the row.
+      ref.read(sessionsDataProvider);
 
-      await ref.read(cliStoreSyncRunnerProvider)();
-      // The rename lands in the copy at once and at the server after.
-      await ref.read(dataClientProvider).settled();
+      await serverLearnsTheConversation(ref);
 
       expect(ref.read(selectedImportedSessionIdProvider), isNull);
       expect(ref.read(selectedSessionIdProvider), 's1');
@@ -293,7 +233,6 @@ void main() {
   );
 
   test('a selection on some other history is left where it is', () async {
-    writeRollout();
     importRecord();
     db.server.importedRows.insertIfAbsent(
       ImportedSession(
@@ -314,42 +253,9 @@ void main() {
     addTearDown(ref.dispose);
     ref.read(selectedImportedSessionIdProvider.notifier).select('i2');
 
-    await ref.read(cliStoreSyncRunnerProvider)();
-    // The rename lands in the copy at once and at the server after.
-    await ref.read(dataClientProvider).settled();
+    await serverLearnsTheConversation(ref);
 
     expect(ref.read(selectedImportedSessionIdProvider), 'i2');
     expect(ref.read(selectedSessionIdProvider), isNull);
-  });
-
-  test('a conversation nobody named leaves the row its placeholder', () async {
-    // Codex writes `session_index.jsonl` only once a thread has a name. The id
-    // still lands — that is what the inbox and a resume need — and the title
-    // sync says nothing, which is the honest answer.
-    writeRollout(name: null);
-    db.server.sessionRows.insert(launchedRow());
-    final ref = container();
-    addTearDown(ref.dispose);
-
-    await ref.read(cliStoreSyncRunnerProvider)();
-    // The rename lands in the copy at once and at the server after.
-    await ref.read(dataClientProvider).settled();
-
-    final row = db.server.sessionRows.getById('s1')!;
-    expect(row.externalSessionId, conversation);
-    expect(row.title, 'New session');
-  });
-
-  test('a conversation from before the launch is left where it was', () async {
-    writeRollout(startedAfterLaunch: const Duration(hours: -1));
-    db.server.sessionRows.insert(launchedRow());
-    final ref = container();
-    addTearDown(ref.dispose);
-
-    await ref.read(cliStoreSyncRunnerProvider)();
-    // The rename lands in the copy at once and at the server after.
-    await ref.read(dataClientProvider).settled();
-
-    expect(db.server.sessionRows.getById('s1')!.externalSessionId, isNull);
   });
 }

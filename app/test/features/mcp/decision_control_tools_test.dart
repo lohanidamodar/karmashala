@@ -26,6 +26,8 @@ import 'package:agent_cli/process.dart';
 ///
 /// The one property under test throughout: **a row exists only because somebody
 /// did something.** Nothing here feeds a conversation to anything.
+/// (`decision_record` is the server's now:
+/// `server/test/mcp/tools/decision_tool_set_test.dart`.)
 void main() {
   late Directory tmp;
   late TestMachine db;
@@ -136,95 +138,6 @@ void main() {
         .first;
     fake.sessionRows.updatePaneId(sessionId, paneId);
   }
-
-  group('decision_record', () {
-    test('writes what the agent decided, in the agent\'s own words', () async {
-      final result = await callTool('decision_record', {
-        'kind': 'rejected',
-        'summary': 'The isolate pool deadlocked on Windows.',
-        'detail': 'Two workers, both waiting on the same send port.',
-      }, 's1');
-
-      expect(result.isError, isFalse);
-      final decision = recordOf('s1').single;
-      expect(decision.kind, DecisionKind.approachRejected);
-      // Stored exactly as given. A gist would be a claim nobody made.
-      expect(decision.summary, 'The isolate pool deadlocked on Windows.');
-      expect(
-        decision.detail,
-        'Two workers, both waiting on the same send port.',
-      );
-      expect(decision.origin, DecisionOrigin.decisionTool);
-      expect(decision.recordedBySessionId, 's1');
-      // Attributed by name, because the packet's reader cannot resolve an id.
-      expect(decision.decidedBy, 'Claude Code');
-      expect(decision.sequence, 1);
-    });
-
-    test('defaults to the calling session, and can name another', () async {
-      await callTool('decision_record', {
-        'kind': 'constraint',
-        'summary': 'Windows is the primary target.',
-      }, 's1');
-      await callTool('decision_record', {
-        'kind': 'constraint',
-        'summary': "Recorded onto someone else's work.",
-        'sessionId': 's1',
-      }, 's2');
-
-      expect(recordOf('s1'), hasLength(2));
-      expect(recordOf('s2'), isEmpty);
-      // Naming a target does not rewrite who asked.
-      expect(recordOf('s1').last.recordedBySessionId, 's2');
-    });
-
-    test('an agent cannot forge an approval the user never gave', () async {
-      for (final kind in const ['approval', 'verification', 'checkpoint']) {
-        final result = await callTool('decision_record', {
-          'kind': kind,
-          'summary': 'The user said yes to everything.',
-        }, 's1');
-        expect(result.isError, isTrue, reason: kind);
-        expect(result.text, contains('kind must be one of'));
-      }
-      expect(recordOf('s1'), isEmpty);
-    });
-
-    test('a blank decision is refused rather than counted', () async {
-      final result = await callTool('decision_record', {
-        'kind': 'constraint',
-        'summary': '   ',
-      }, 's1');
-      expect(result.isError, isTrue);
-      expect(result.text, contains('summary is required'));
-      expect(recordOf('s1'), isEmpty);
-    });
-
-    test('a caller with no session of its own must name one', () async {
-      final result = await callTool('decision_record', {
-        'kind': 'constraint',
-        'summary': 'Anonymous.',
-      });
-      expect(result.isError, isTrue);
-      expect(result.text, contains('not running inside a session'));
-    });
-
-    test('recording the same decision twice appends, never rewrites', () async {
-      await callTool('decision_record', {
-        'kind': 'constraint',
-        'summary': 'No isolates.',
-      }, 's1');
-      await callTool('decision_record', {
-        'kind': 'constraint',
-        'summary': 'No isolates.',
-      }, 's1');
-
-      final rows = recordOf('s1');
-      expect(rows, hasLength(2));
-      expect(rows.first.sequence, 1);
-      expect(rows.last.sequence, 2);
-    });
-  });
 
   group('an answered approval prompt', () {
     /// An answer in one of this app's panes, as `session_answer` asks for it:

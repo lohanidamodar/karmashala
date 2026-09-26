@@ -10,7 +10,9 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
 import 'package:karmashala_host/src/status/daemon_prompt_answers.dart';
-import 'package:karmashala_host/src/status/session_answer_tool.dart';
+import 'package:karmashala_host/data.dart' show DataService;
+import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
+import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/events.dart';
@@ -268,7 +270,7 @@ void main() {
             body: {'session_id': 'conv-1', 'hook_event_name': event},
           );
           kept.hook(fired);
-          await feed.relayHook(fired);
+          feed.relayHook(fired);
           kept.tick();
         }
 
@@ -345,8 +347,18 @@ void main() {
     test(
       'session_answer is answered here for a session the host holds',
       () async {
+        final tools = SessionToolSet(
+          ServerToolContext(
+            database: database,
+            data: DataService(database),
+            dataDirectory: '/nowhere',
+          ),
+          prompts: prompts,
+          registry: registry,
+          appConnected: () => true,
+        );
         final result =
-            await sessionAnswerTool(prompts, 'session_answer', {
+            await tools.call('session_answer', {
                   'sessionId': 's1',
                   'decision': 'approve',
                 }, 'caller-1')!
@@ -359,14 +371,14 @@ void main() {
           'an agent in session caller-1',
         );
         expect(
-          sessionAnswerTool(prompts, 'session_answer', {
+          tools.call('session_answer', {
             'sessionId': 'elsewhere',
             'decision': 'approve',
           }, null),
           isNull,
           reason: 'a session this host does not hold is the app\'s',
         );
-        expect(sessionAnswerTool(prompts, 'session_send', {}, null), isNull);
+        expect(tools.call('open_session', {}, null), isNull);
       },
     );
   });

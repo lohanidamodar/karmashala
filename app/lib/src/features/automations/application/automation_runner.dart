@@ -5,7 +5,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_automations/runs.dart';
-import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
@@ -14,7 +13,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
-import '../../checkpoints/application/checkpoint_providers.dart';
+import '../../checkpoints/data/checkpoints_data.dart';
 import '../../sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -27,7 +26,8 @@ import 'unattended_preflight.dart';
 
 export 'package:karmashala_automations/runner.dart' show AutomationRunner;
 
-/// The base of a run this app starts, from its checkpoint service.
+/// The base of a run this app starts, taken by the server's checkpoint
+/// recorder.
 class AppBaseCheckpoint implements RunBaseCheckpoint {
   const AppBaseCheckpoint(this._ref);
   final Ref _ref;
@@ -40,14 +40,8 @@ class AppBaseCheckpoint implements RunBaseCheckpoint {
   }) async {
     // `evenIfUnchanged`: undo needs a point to restore to either way.
     final base = await _ref
-        .read(checkpointServiceProvider)
-        .capture(
-          checkout,
-          sessionId: runId,
-          reason: CheckpointReason.manual,
-          label: label,
-          evenIfUnchanged: true,
-        );
+        .read(checkpointsDataProvider)
+        .captureBase(checkout, runId: runId, label: label);
     return base?.id;
   }
 }

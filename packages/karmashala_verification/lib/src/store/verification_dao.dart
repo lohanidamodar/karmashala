@@ -94,7 +94,9 @@ class VerificationDao {
 
   /// Every run, without steps or artifacts, newest first.
   List<VerificationRun> headers() => _db
-      .query('SELECT * FROM verification_runs ORDER BY started_at DESC, id DESC;')
+      .query(
+        'SELECT * FROM verification_runs ORDER BY started_at DESC, id DESC;',
+      )
       .map(_runFromRow)
       .toList();
 

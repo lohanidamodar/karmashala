@@ -46,9 +46,10 @@ enum MessageType {
   lifecycle(0x19),
   // An agent hook the host's loopback endpoint received, pushed to watchers.
   hook(0x1a),
-  // client → host: the app has done what a held hook waited for (its
-  // checkpoint); the agent's request is answered.
-  hookReply(0x1b),
+  // client → host: a hook the client took on its own route or spool, for the
+  // server's checkpoint recorder (slice 2b; was `hookReply`, the watcher's
+  // hold, which the server now does itself).
+  hookForward(0x1b),
   // 0x1c: `sessionChanged`, retired in protocol 13 — a status the daemon
   // records reaches clients as a change on the data channel (slice 1c).
   // Protocol 3: the daemon serves agents' MCP and the app runs the tools.
@@ -97,7 +98,12 @@ enum MessageType {
   // changes. Each carries a `karmashala_data_protocol` envelope as JSON.
   dataRequest(0x32),
   dataAnswer(0x33),
-  dataChanges(0x34);
+  dataChanges(0x34),
+  // Slice 2b: the app's terminal panes as facts (`pane_messages.dart`).
+  // client → host: every pane it has now; host → client: the panes whose
+  // bottom rows to send with the next report.
+  paneFacts(0x36),
+  paneTailsWanted(0x37);
 
   const MessageType(this.code);
   final int code;

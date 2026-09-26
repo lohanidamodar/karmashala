@@ -6,6 +6,8 @@ import 'package:karmashala_host/lifecycle_client.dart'
         CompanionCallMessage,
         CompanionEventMessage,
         CompanionNoticeMessage,
+        PaneFacts,
+        PaneTailsWantedMessage,
         PairedMessage;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -21,7 +23,7 @@ class HostLifecycleFeed {
     required this.close,
     this.hookSnapshot = const [],
     Stream<RelayedAgentHook>? hooks,
-    void Function(int holdId)? replyHook,
+    void Function(RelayedAgentHook hook)? forwardHook,
     Stream<HostMcpCall>? mcpCalls,
     void Function(List<Map<String, Object?>> tools)? offerMcpTools,
     void Function(int callId, {Object? result, String? error})? answerMcpCall,
@@ -40,10 +42,12 @@ class HostLifecycleFeed {
     Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)?
     answerPrompt,
     ServerCall? serverCall,
+    void Function(List<PaneFacts> panes)? reportPanes,
+    Stream<PaneTailsWantedMessage>? paneTailsWanted,
   }) : hooks = hooks ?? const Stream.empty(),
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
-       replyHook = replyHook ?? _noReply,
+       forwardHook = forwardHook ?? _noForward,
        mcpCalls = mcpCalls ?? const Stream.empty(),
        offerMcpTools = offerMcpTools ?? _noOffer,
        answerMcpCall = answerMcpCall ?? _noAnswer,
@@ -57,7 +61,19 @@ class HostLifecycleFeed {
        automationCalls = automationCalls ?? const Stream.empty(),
        noticeAutomations = noticeAutomations ?? _noAutomationNotice,
        answerAutomationCall = answerAutomationCall ?? _noAutomationAnswer,
-       runChecks = runChecks ?? _noChecks;
+       runChecks = runChecks ?? _noChecks,
+       reportPanes = reportPanes ?? _noPanes,
+       paneTailsWanted = paneTailsWanted ?? const Stream.empty();
+
+  static void _noPanes(List<PaneFacts> panes) {}
+
+  /// Tells the server every terminal pane this app has now, as facts: the
+  /// server adopts a session a person started by hand in one, and reads the
+  /// resume line an agent printed there.
+  final void Function(List<PaneFacts> panes) reportPanes;
+
+  /// The panes whose bottom rows the server wants with the next report.
+  final Stream<PaneTailsWantedMessage> paneTailsWanted;
 
   static Future<SessionApprovalAnswer> _noAnswers(PromptAnswerRequest r) =>
       Future.error(const SessionPromptRefusal('this host answers no prompts'));
@@ -93,7 +109,7 @@ class HostLifecycleFeed {
   /// Runs a session's project checks in sessions the host owns.
   final Future<ChecksRanMessage> Function(String sessionId) runChecks;
 
-  static void _noReply(int holdId) {}
+  static void _noForward(RelayedAgentHook hook) {}
   static void _noOffer(List<Map<String, Object?>> tools) {}
   static void _noAnswer(int callId, {Object? result, String? error}) {}
   static void _noAttach({String? localRelayUrl}) {}
@@ -160,8 +176,9 @@ class HostLifecycleFeed {
   /// Opens a pairing window at the host.
   final CompanionPair pairCompanion;
 
-  /// Lets the agent held under a hook's [RelayedAgentHook.holdId] go on.
-  final void Function(int holdId) replyHook;
+  /// Hands the host a hook this app took itself — on its own `/agent-hook`
+  /// route or from a spool — for the server's checkpoint recorder.
+  final void Function(RelayedAgentHook hook) forwardHook;
 
   /// Hangs up; the host's sessions are untouched.
   final Future<void> Function() close;

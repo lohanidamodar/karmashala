@@ -6,7 +6,6 @@ class RelayedAgentHook {
     required this.body,
     required this.receivedAt,
     this.paneSessionId,
-    this.holdId,
   });
 
   final String agentId;
@@ -18,11 +17,6 @@ class RelayedAgentHook {
 
   /// The pane's `KARMASHALA_SESSION_ID`, when the hook sent one.
   final String? paneSessionId;
-
-  /// Set when the host is holding the agent until this app replies — a live
-  /// `PreToolUse`, so its checkpoint can be taken before the tool runs. Null
-  /// when the host answered the agent at once: nothing waited for this app.
-  final int? holdId;
 
   /// The host keeps the latest hook per this key, and so does the app.
   String get sessionKey => paneSessionId ?? 'agent:$agentId';

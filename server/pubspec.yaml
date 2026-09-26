@@ -30,6 +30,10 @@ dependencies:
   # them. Pure Dart; the app runs the same code only for its own panes.
   karmashala_agent_status:
     path: ../packages/karmashala_agent_status
+  # Whose TUI a pane's screen shows (`TerminalGridStatusSource`), for
+  # adopting a session a person started by hand where the shell said nothing.
+  karmashala_agent_reporting:
+    path: ../packages/karmashala_agent_reporting
   # The base checkpoint an automation run is undone to.
   karmashala_checkpoints:
     path: ../packages/karmashala_checkpoints
@@ -75,6 +79,10 @@ dependencies:
   # it writes.
   karmashala_environments:
     path: ../packages/karmashala_environments
+  # `evidenceLine`: what a session blocked on a person is quoted as by
+  # `session_wait` and `session_send`, the same line the app's inbox shows.
+  karmashala_notifications:
+    path: ../packages/karmashala_notifications
   # The notes and todos a phone's `notes.get` reads.
   karmashala_notes:
     path: ../packages/karmashala_notes

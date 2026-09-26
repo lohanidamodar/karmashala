@@ -2,18 +2,14 @@
   "note": "The served MCP tool list, in order. Regenerate with KARMASHALA_WRITE_TOOL_SCHEMA_GOLDEN=1; see test/features/mcp/tool_schemas_golden_test.dart.",
   "served": [
     {
-      "name": "checkpoint_list",
-      "description": "List the checkpoints of a session — taken as each agent turn starts and ends in every repository it changed, plus manual and pre-restore safety checkpoints. Each entry says its title (the panel's words, including when a before-turn snapshot may already hold the turn's first edit), turn, prompt and what changed since the previous checkpoint of its repository. Defaults to the calling session's own checkpoints.",
+      "name": "instructions",
+      "description": "Karmashala's own operating guides: what a tool's success does NOT prove, which refusals are permanent, and which acts have no undo. Call with no argument to list the topics; pass topic to read one. Worth reading before the first time you use a family in a task — these cover the things a per-tool description has no room for, such as the fact that a successful session_send proves delivery into a terminal and nothing about completion, or that terminal_run cannot know an exit code without OSC 133 shell integration and says so rather than reporting a zero it did not receive.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "sessionId": {
+          "topic": {
             "type": "string",
-            "description": "Session to list. Defaults to the caller."
-          },
-          "limit": {
-            "type": "number",
-            "description": "Most recent N."
+            "description": "Which guide. Omit to list them. Unknown topics are refused with the list."
           }
         }
       },
@@ -21,86 +17,6 @@
         "readOnlyHint": true,
         "destructiveHint": false,
         "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "checkpoint_capture",
-      "description": "Record the working tree as it is right now, so it can be restored later. Nothing in the repository is staged, committed or moved: the snapshot is a git tree written through a private index.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string",
-            "description": "What this checkpoint is, for a human reading it."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "checkpoint_diff",
-      "description": "The unified diff a checkpoint represents: what changed between the checkpoint before it and it.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Checkpoint id."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "checkpoint_restore",
-      "description": "Put the working tree back to a checkpoint. DESTRUCTIVE: it discards edits made since. A checkpoint of the current tree is always taken first, so the restore can itself be undone. If anything has changed since the most recent checkpoint the call is refused unless \"confirm\" is true — ask the user before setting it. The index is not touched.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Checkpoint id to restore."
-          },
-          "confirm": {
-            "type": "boolean",
-            "description": "Restore even though the working tree has moved since the last checkpoint. Requires the user to have said so."
-          },
-          "paths": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Restore only these paths. Omit to restore everything."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
         "openWorldHint": false,
         "movesAttentionHint": false
       }
@@ -310,6 +226,1140 @@
       }
     },
     {
+      "name": "notes_list",
+      "description": "The notes kept in Karmashala, newest first. Pass sessionId to see only the ones captured from one session, and projectId to see only the ones filed under one project — or the literal \"none\" for the ones filed under no project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Only notes captured from this session."
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Only notes filed under this project (list_projects has the ids), or \"none\" for only the ones filed under no project. Omit for all of them."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "notesPanelEnabled": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sourceSessionId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sourceRepositoryId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "body"
+              ]
+            }
+          }
+        },
+        "required": [
+          "notes",
+          "notesPanelEnabled"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "note_add",
+      "description": "Write a note. The body is kept EXACTLY as given — nothing here trims it to a gist — so pass the words that should survive, not a summary of them. Attributed to the calling session unless sessionId names another, and filed under that session's project unless projectId says otherwise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The note, verbatim."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional. Without one the note is named by its first line."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Which session this came from. Defaults to the calling session."
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Which project to file it under (list_projects has the ids), or \"none\" for no project. Defaults to the project of the session it came from."
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceSessionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "note_delete",
+      "description": "Delete a note. DESTRUCTIVE: notes are not versioned and there is no undo.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Note id, from notes_list."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "todos_list",
+      "description": "The todo list Karmashala shows the person using it: open todos first in their own order, then the finished ones. This is a written list, not an alert queue — nothing appears in it on its own, which is what makes it different from inbox_list. Pass projectId to see one project's todos, or the literal \"none\" to see only the ones filed under no project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Only todos filed under this project (list_projects has the ids), or \"none\" for only the ones filed under no project. Omit for all of them."
+          },
+          "includeDone": {
+            "type": "boolean",
+            "description": "Include todos already ticked off. Default false."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "number"
+          },
+          "todos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "done": {
+                  "type": "boolean"
+                },
+                "projectId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "position": {
+                  "type": "number"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "doneAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "body",
+                "done"
+              ]
+            }
+          }
+        },
+        "required": [
+          "open",
+          "todos"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "todo_add",
+      "description": "Add one todo to the bottom of the list. The body is one line, kept as given. Filed under the calling session's project unless projectId says otherwise; pass the literal \"none\" for a todo that belongs to no project, which is an ordinary todo rather than an unfinished one. Use this for work that outlives your turn — a person reads this list.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The todo, one line."
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Which project to file it under (list_projects has the ids), or \"none\" for no project. Defaults to the calling session's project."
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "doneAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "done"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "todo_done",
+      "description": "Tick a todo off, or reopen it with done: false. Nothing is removed — the row stays in the list under DONE, so a mistake is one more call to undo. Tick off only what you actually finished: this list is read by a person who will not check.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Todo id, from todos_list."
+          },
+          "done": {
+            "type": "boolean",
+            "description": "True to finish it, false to reopen. Default true."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "doneAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "done"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "todo_delete",
+      "description": "Delete a todo. DESTRUCTIVE: todos are not versioned and there is no undo. To mark one finished, use todo_done — that keeps the row.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Todo id, from todos_list."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "decision_record",
+      "description": "Write down a decision so it survives this conversation. A session's decision record is carried into the handoff packet AHEAD of the quoted transcript, so what you record here reaches the next agent even when the turn you decided it in has been trimmed away — which is what happens to decisions made early in a long session. Record a constraint the work is now bound by, or an approach you tried and abandoned and why. The summary is stored EXACTLY as given and is never summarised; write the words that should be read later, not a gist of them. Approvals, verification verdicts and marked checkpoints are NOT written here — the acts that produce them record them, so that every row has something real behind it. Append-only: nothing you write can be edited or removed, and recording a reversal later leaves the original standing so a reader can see it was reversed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "constraint",
+              "rejected"
+            ],
+            "description": "constraint: a rule the work is now bound by. rejected: an approach that was tried and abandoned."
+          },
+          "summary": {
+            "type": "string",
+            "description": "What was decided, verbatim. Include the reason — \"the isolate pool deadlocked on Windows\" is worth ten times \"no isolates\"."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Optional. More of the same words."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Whose record to write to. Defaults to the calling session."
+          }
+        },
+        "required": [
+          "kind",
+          "summary"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "number",
+            "description": "Position in this session's record, 1-based."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "decidedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recordedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "sequence",
+          "kind",
+          "summary"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "review_thread_list",
+      "description": "List the review comment threads on a checkout. Each thread carries an anchor (a file, optionally a line range), a status, and every comment made in it. READ THE `attachment` FIELD: \"attached\" means the file is byte-for-byte what the comment was written against, so the line numbers still locate the code; \"detached\" means the file has changed since and the line numbers locate NOTHING — use the excerpt to find what was meant, and do not assume the code moved by a fixed offset. \"unknown\" means the file could not be read at all. Nothing in Karmashala re-anchors a detached thread by guessing, because a guess that is usually right cannot be told from one that is wrong.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "Which checkout. Defaults to the calling session's."
+          },
+          "path": {
+            "type": "string",
+            "description": "Only threads on this repository-relative file path."
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "open",
+                "shouldFix",
+                "dismissed",
+                "resolved"
+              ]
+            },
+            "description": "Only threads in these states. Omit for all of them. \"shouldFix\" is the set a human has decided must change."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string"
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "repositoryId",
+          "threads"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "review_thread_get",
+      "description": "One review thread by id, with every comment in it and whether it is still anchored to the file it was written against.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The thread's id."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "review_thread_add",
+      "description": "Raise a review comment against a file, so a human can triage it and it survives this conversation. This is where a review finding belongs — a finding reported only in your transcript is one nobody can find later, and nobody can answer. Give a line range when you mean a place in the file, or omit it for a comment about the file as a whole; line numbers are 1-based and counted in the file AS IT IS ON DISK RIGHT NOW, which is the content Karmashala hashes to anchor the thread. It anchors itself: there is no argument for the hash, and one you supplied could describe content you read three turns ago. A thread you raise starts as \"open\" — a claim awaiting triage — and only a human moves it to \"shouldFix\", which is the set that gets sent back to an author agent. That is deliberate: deciding a change must be made is the job a human review exists to do.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Repository-relative path of the file, as git spells it."
+          },
+          "comment": {
+            "type": "string",
+            "description": "What you found, in the words it should be read in. Stored exactly as given and never summarised. Say what you expected and what you saw, not just that something is wrong."
+          },
+          "startLine": {
+            "type": "number",
+            "description": "First line of the range, 1-based, in the current file. Omit for a comment about the whole file."
+          },
+          "endLine": {
+            "type": "number",
+            "description": "Last line of the range, inclusive. Defaults to startLine."
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "The code you are commenting on, quoted verbatim. This is EVIDENCE FOR A HUMAN and is never used to relocate the comment, so quote what is actually there rather than a paraphrase — it is what somebody reads when the file has moved on and the line numbers no longer help."
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Which checkout. Defaults to the calling session's."
+          }
+        },
+        "required": [
+          "path",
+          "comment"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "review_thread_reply",
+      "description": "Answer a review comment in its own thread. Use this to say what you changed, or to say why you did not — the reply lands beside the request instead of scrolling past in a different conversation. Append-only: nothing you write here can be edited or removed afterwards. Replying does not change the status; whoever raised the thread decides when it is resolved.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The thread to reply in."
+          },
+          "comment": {
+            "type": "string",
+            "description": "The reply, stored exactly as given."
+          }
+        },
+        "required": [
+          "id",
+          "comment"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "review_thread_status",
+      "description": "Move a review thread between open, shouldFix, dismissed and resolved. Nothing written in the thread is touched — the comments and the anchor stay exactly as they are, and a status can be moved back, so this is triage rather than a record. \"shouldFix\" is the set the Changes panel hands to an author agent, so putting a thread there is asking for the change to be made; \"dismissed\" keeps the thread and the fact that somebody looked at it, which is why there is no way to delete one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The thread to move."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "shouldFix",
+              "dismissed",
+              "resolved"
+            ],
+            "description": "Where to move it."
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "snippets_list",
+      "description": "The commands the user keeps: their saved snippets, each with the shell it is tagged for and whether picking it also presses Enter. Read this to find out how this person actually runs their tests, builds and tools before inventing a command line of your own. Also reports the pane a snippet would go into — the focused one, or the paneId you pass — and, per snippet, whether it fits that pane's shell. Nothing is filtered out: a WSL snippet is listed in a PowerShell pane with fitsPane=false, because hiding it would look like it was never saved.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "paneId": {
+            "type": "string",
+            "description": "Which pane to answer fitsPane for, from terminal_list. Defaults to the focused pane."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "pane": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "snippets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "command": {
+                  "type": "string"
+                },
+                "shell": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "submit": {
+                  "type": "boolean"
+                },
+                "fitsPane": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "command",
+                "submit"
+              ]
+            }
+          }
+        },
+        "required": [
+          "snippets"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "snippet_add",
+      "description": "Save a command as a snippet, so the user can pick it from the palette or the terminal toolbar instead of retyping it. Worth doing when you and the user have just worked out the incantation for something — the exact test command, the right build flags. Tag it with the shell it is written for (powerShell, commandPrompt, wsl, posix) and it will only be offered in a pane running that shell; leave the tag off for something that works everywhere. submit defaults to false and should stay false: a snippet is typed at the prompt for the user to read and press Enter on, and turning that off for somebody else's saved command is not a default you get to choose.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The command. Flattened to a single line — a stored newline would be a submit nobody asked for."
+          },
+          "label": {
+            "type": "string",
+            "description": "What it is called in the picker. Defaults to the command itself."
+          },
+          "shell": {
+            "type": "string",
+            "description": "powerShell, commandPrompt, wsl or posix. Omit for any shell. An unknown value is refused rather than dropped."
+          },
+          "submit": {
+            "type": "boolean",
+            "description": "Whether picking it also presses Enter. Default false, and leave it there unless the user asked for a command that runs itself."
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "shell": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "submit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "command",
+          "submit"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "fanout_list",
+      "description": "List the fan-out comparisons — one prompt run on several agents in parallel worktrees. Each row gives the prompt, when it ran, the outcome (pending/merged/discarded) and every candidate with its agent and diff stat. Comparisons persist: a merged one whose losing worktrees were deleted is still listed. Use fanout_get for the full record of one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "Only comparisons for this repository."
+          },
+          "includeArchived": {
+            "type": "boolean",
+            "description": "Include comparisons the user archived."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Most recent N (default 20)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "fanout_get",
+      "description": "The full record of one fan-out comparison: the prompt, the winner, the merge commit, and every candidate with its session, branch, worktree (and whether that worktree has been removed), diff stat, verification verdict and failure reason. Each verdict says who produced it: attribution is \"author\" when the candidate graded itself, \"independent\" when another session did, and \"notRecorded\" when nobody recorded a verifier — a self-graded pass is not evidence, so say which one it was when you report on a comparison the user ran.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Comparison id, from fanout_list."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "list_checkouts",
+      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Which project, from list_projects."
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "checkouts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "repositoryId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "environmentId": {
+                  "type": "string"
+                },
+                "selected": {
+                  "type": "boolean"
+                },
+                "branch": {
+                  "type": "string"
+                },
+                "isWorktree": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "sessionsWorkingHere": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sessionId": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "sessionId",
+                      "title",
+                      "status"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "repositoryId",
+                "name",
+                "path",
+                "branch",
+                "sessionsWorkingHere"
+              ]
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "checkouts"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "project_rescan",
+      "description": "Re-read a project's directory for checkouts Karmashala does not know about yet — a worktree added from the command line, a clone dropped in beside the others. Returns every checkout found afterwards, not a list of what changed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Which project, from list_projects."
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          },
+          "checkouts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "checkouts",
+          "count"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "delivery_status",
+      "description": "What a session's checkout still owes: branch, how far ahead of and behind its base, dirty files, unpushed commits, its pull request, and the actions Karmashala offers on it. Omit sessionId for your own session. Any value Karmashala could not measure reads \"not recorded\" — never 0, and never \"none\". A failed git call and a clean tree are different facts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Which session. Defaults to the calling session."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "baseBranch": {
+            "type": "string"
+          },
+          "upstream": {
+            "type": "string"
+          },
+          "hasWorktree": {
+            "type": "boolean"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "dirtyFiles": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "aheadOfBase": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "behindBase": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "unpushed": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "agentRunning": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "pullRequest": {
+            "type": [
+              "object",
+              "string"
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "primary": {
+                  "type": "boolean"
+                },
+                "available": {
+                  "type": "boolean"
+                },
+                "unavailableBecause": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "label",
+                "available"
+              ]
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "stage",
+          "branch",
+          "actions"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "project_add",
       "description": "Add a project to the Karmashala workspace: adopt a folder that is already there, clone a Git repository into one, or both. Every Git checkout beneath the folder is discovered and recorded, and any CLI sessions those checkouts already have are imported. Use this rather than telling the user to open the New Project dialog.",
       "inputSchema": {
@@ -461,6 +1511,390 @@
       }
     },
     {
+      "name": "worktree_create",
+      "description": "Add a git worktree to a checkout, on a new branch, so work can run in parallel with whatever is already checked out. The folder is placed in a .karmashala-worktrees directory beside the checkout and named <checkout>-<name>. Refuses rather than colliding: a path a worktree already occupies, a branch that already exists, and a branch another worktree has out are all named back to you. The returned repositoryId reads \"not recorded\" when the worktree was made but Karmashala could not scan the project to record it — the folder is still there; run project_rescan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "The checkout to make a worktree of, from list_checkouts."
+          },
+          "name": {
+            "type": "string",
+            "description": "The worktree's own name — one folder name, no separators."
+          },
+          "branch": {
+            "type": "string",
+            "description": "The new branch to create in it. Must not already exist."
+          },
+          "baseRef": {
+            "type": "string",
+            "description": "What to branch from (e.g. origin/main). Defaults to the checkout's own HEAD."
+          }
+        },
+        "required": [
+          "repositoryId",
+          "name",
+          "branch"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "fromRepositoryId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "environmentId": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "baseRef": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "branch",
+          "repositoryId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "worktree_remove",
+      "description": "Delete a worktree's directory. Destructive and deliberately hard to get: it happens only when the worktree is clean, its branch is merged into its base, AND those commits are held by some remote branch — merged is not pushed. It also refuses while a session is running in it, and refuses on any reading Karmashala could not take (\"not recorded\" is never read as \"fine\"). There is no force argument; every refusal is a sentence saying what to do instead. The branch is left alone and the checkout row stays until project_rescan retires it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "The worktree checkout to remove, from list_checkouts. It must be one whose isWorktree is true."
+          }
+        },
+        "required": [
+          "repositoryId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "baseBranch": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "branchKept": {
+            "type": "boolean"
+          },
+          "checkoutRecordKept": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repositoryId",
+          "path",
+          "removed"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "verification_start",
+      "description": "Begin recording a verification run — a durable, inspectable record that a change actually works, which you can hand to the human. Give EXACTLY ONE of: url (a browser run: attaches to the browser, goes there, and starts watching the console and network), serial (+ optional package: a device run, which brings that app to the front), or change:true (a review run: nothing is driven, and the record is what you read in the diff). While a browser or device run is recording, every browser_* and device_* call you make is captured as a step with its screenshots; console errors, failed requests and the log slice are collected for you at the end. Drive the change the way a user would, then call verification_finish with a verdict. One run at a time. Pass sessionId when you are checking someone else's work: it is what makes the verdict count as an independent one rather than a self-graded pass.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The page to verify, e.g. \"localhost:3000/settings\". Makes this a browser run."
+          },
+          "serial": {
+            "type": "string",
+            "description": "Device serial from list_devices. Makes this a device run."
+          },
+          "change": {
+            "type": "boolean",
+            "description": "Makes this a review run: the subject is a code change rather than a page or a device, so nothing is attached to and nothing is collected for you. Write what you find with verification_note, and finish with a verdict — a review that found nothing is a pass with a reason, never silence."
+          },
+          "package": {
+            "type": "string",
+            "description": "Android package to verify, e.g. \"com.example.app\". It is launched at the start of the run, and the closing logcat slice is filtered to it. Without it, the run records the device but collects no log."
+          },
+          "title": {
+            "type": "string",
+            "description": "What is being verified, in one line — \"the settings page saves on Enter\". Defaults to the target."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "The session whose WORK is being verified, from list_sessions — not yours. Defaults to yours, which is the self-graded case. Attaching it is what lets the human find the evidence from the conversation, and naming someone else's session is what makes the verdict independent."
+          },
+          "launch": {
+            "type": "boolean",
+            "description": "Device runs only: set false to verify the app already on screen instead of relaunching it. Default true."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "verification_note",
+      "description": "Add your own step to the running verification — what you are about to check, or what you observed that the tools cannot see (\"the spinner never stopped\"). Notes are what turn a list of clicks into an argument.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "One line. Required."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Anything longer — an expected value, a stack trace."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "verification_finish",
+      "description": "Close the run with a verdict and the reason for it, collect the closing evidence (a screenshot, the console errors, the failed requests, the logcat slice, the UI tree) and write a markdown report next to the artifacts. Use \"inconclusive\" honestly — a run that could not reach the page is not a fail.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "inconclusive"
+            ],
+            "description": "Required."
+          },
+          "reason": {
+            "type": "string",
+            "description": "One or two sentences saying what you observed that justifies the verdict. This is the part a human reads first."
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "verification_list",
+      "description": "List recorded verification runs, newest first — one line each with the verdict, the target and the step count.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Only runs attached to this session."
+          },
+          "limit": {
+            "type": "number",
+            "description": "How many runs to show. Default 20."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "verification_get",
+      "description": "Read one run: its verdict, its steps and what it captured. Compact by default — step summaries and a list of artifacts, no images and no file contents. Pass full:true for step detail and the text of the evidence files, or images:true to attach the screenshots. Ask for images only when you need to look at one; they are the expensive part.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Run id, or a unique prefix of one. Omit for the run that is recording now."
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Include step detail and the contents of text artifacts."
+          },
+          "images": {
+            "type": "boolean",
+            "description": "Attach the screenshots as images."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "checkpoint_list",
+      "description": "List the checkpoints of a session — taken as each agent turn starts and ends in every repository it changed, plus manual and pre-restore safety checkpoints. Each entry says its title (the panel's words, including when a before-turn snapshot may already hold the turn's first edit), turn, prompt and what changed since the previous checkpoint of its repository. Defaults to the calling session's own checkpoints.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session to list. Defaults to the caller."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Most recent N."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "checkpoint_capture",
+      "description": "Record the working tree as it is right now, so it can be restored later. Nothing in the repository is staged, committed or moved: the snapshot is a git tree written through a private index.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "What this checkpoint is, for a human reading it."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "checkpoint_diff",
+      "description": "The unified diff a checkpoint represents: what changed between the checkpoint before it and it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Checkpoint id."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "checkpoint_restore",
+      "description": "Put the working tree back to a checkpoint. DESTRUCTIVE: it discards edits made since. A checkpoint of the current tree is always taken first, so the restore can itself be undone. If anything has changed since the most recent checkpoint the call is refused unless \"confirm\" is true — ask the user before setting it. The index is not touched.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Checkpoint id to restore."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Restore even though the working tree has moved since the last checkpoint. Requires the user to have said so."
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Restore only these paths. Omit to restore everything."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "checks_run",
       "description": "Run the project checks the user configured for a session's repository (tests, analyze, lint — whatever they added), in sessions Karmashala owns (watchable from the app) in the directory that session works in, one after another, and WAIT for them. The batch is recorded against the session as ONE verification run whose verdict is the worst of its checks — Karmashala's own reading, never your claim — readable with verification_get. Use it before saying work is done. A check that is closed by hand, or that could not start, is INCONCLUSIVE, never a pass. Answers NOTHING WAS CHECKED when the repository has none.",
       "inputSchema": {
@@ -478,345 +1912,6 @@
         "idempotentHint": false,
         "openWorldHint": false,
         "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "open_new_session",
-      "description": "Start a NEW agent session (not a resume) in a project, as a terminal tab in Karmashala. Choose the agent with agentInstallationId (from list_agents) or cli (\"claude\"/\"codex\"); omit both to use the configured default. repositoryId is optional (defaults to the project's first repository). The agent must be installed in the project's environment. Sessions you start this way are recorded as your children, and nesting is capped: if the call is refused for depth, do the work yourself instead of delegating it further.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string",
-            "description": "Project id from list_projects."
-          },
-          "cli": {
-            "type": "string",
-            "description": "Agent CLI to use: \"claude\" or \"codex\"."
-          },
-          "agentInstallationId": {
-            "type": "string",
-            "description": "Specific installation id from list_agents."
-          },
-          "repositoryId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string",
-            "description": "Short name for the session, shown in the tab."
-          },
-          "prompt": {
-            "type": "string",
-            "description": "Opening instruction for the new agent. Sent as its first message, prefixed with a line naming this session."
-          },
-          "useWorktree": {
-            "type": "boolean",
-            "description": "Run in a dedicated Git worktree instead of the repository itself. Use this when the new session will edit files and you are still working in the same repository."
-          },
-          "permissionMode": {
-            "type": "string",
-            "enum": [
-              "readOnly",
-              "ask",
-              "acceptEdits",
-              "autoRun",
-              "bypass"
-            ],
-            "description": "How much the new agent may do without asking, on the scale every agent shares. The chosen agent is given the closest mode it really has, never one it does not — Codex, for instance, has nothing at \"ask\". Omit to use the mode configured in Settings, which is what the New-session dialog does. A session you start holds no more than the least of your own mode and \"autoRun\"; a mode above that is refused, and only the user can raise it, from the new session's permission chip."
-          }
-        },
-        "required": [
-          "projectId"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "get_usage",
-      "description": "An agent account's usage against its limits, read live. cli is \"claude\", \"codex\" or \"antigravity\"; environmentId is optional (defaults to the first matching installation). Each window carries a label and, when the agent reported one, a \"percent\" used and a \"resetsAt\". A window with no \"percent\" was not measured — Antigravity names the account's tiers and reports no quota against them — and that absence means unknown, never zero. \"fetchedAt\" is when the reading was taken.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "cli": {
-            "type": "string"
-          },
-          "environmentId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "cli"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "open_session",
-      "description": "Open one session by its id. A Karmashala session that is still running is reattached to a tab; anything else is resumed. An imported CLI session opens a new external terminal window every time this is called, and nothing here closes one — do not call it over a list of sessions.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Session id from list_sessions."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "fanout_list",
-      "description": "List the fan-out comparisons — one prompt run on several agents in parallel worktrees. Each row gives the prompt, when it ran, the outcome (pending/merged/discarded) and every candidate with its agent and diff stat. Comparisons persist: a merged one whose losing worktrees were deleted is still listed. Use fanout_get for the full record of one.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "repositoryId": {
-            "type": "string",
-            "description": "Only comparisons for this repository."
-          },
-          "includeArchived": {
-            "type": "boolean",
-            "description": "Include comparisons the user archived."
-          },
-          "limit": {
-            "type": "number",
-            "description": "Most recent N (default 20)."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "fanout_get",
-      "description": "The full record of one fan-out comparison: the prompt, the winner, the merge commit, and every candidate with its session, branch, worktree (and whether that worktree has been removed), diff stat, verification verdict and failure reason. Each verdict says who produced it: attribution is \"author\" when the candidate graded itself, \"independent\" when another session did, and \"notRecorded\" when nobody recorded a verifier — a self-graded pass is not evidence, so say which one it was when you report on a comparison the user ran.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Comparison id, from fanout_list."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "session_handoff",
-      "description": "Continue an existing session in a different agent. Builds a handoff packet from that session — a quoted recap of its conversation, the files changed in the working tree, the current branch, anything listed as unresolved, and your instruction — and starts a new session with the packet as its first message, in the SAME worktree and on the SAME branch by default. The packet states its provenance: the new agent is told the conversation is not its own. The original session is left running and untouched; ending it is the user's decision. Use preview:true to read the packet without starting anything.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "description": "Session id from list_sessions (kind \"native\")."
-          },
-          "cli": {
-            "type": "string",
-            "description": "Agent to continue in: \"claude\" or \"codex\". Ignored when agentInstallationId is given."
-          },
-          "agentInstallationId": {
-            "type": "string",
-            "description": "Specific installation id from list_agents."
-          },
-          "instruction": {
-            "type": "string",
-            "description": "What the receiving agent should do. Required: the packet carries the conversation, this is the part it cannot infer."
-          },
-          "unresolved": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Work still open, listed for the new agent."
-          },
-          "newWorktree": {
-            "type": "boolean",
-            "description": "Start in a fresh Git worktree instead of continuing in the same one. Default false, which is what a handoff usually wants."
-          },
-          "preview": {
-            "type": "boolean",
-            "description": "Return the packet without starting anything. Read it before handing over work you care about."
-          }
-        },
-        "required": [
-          "sessionId",
-          "instruction"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "session_fork",
-      "description": "Branch a session into a new one that shares its history up to now and then diverges. Runs the SAME agent — a fork is a branch of one conversation, not a change of provider. Uses the CLI's own fork when it has one and Karmashala knows the conversation id; otherwise it falls back to a handoff packet, and the result says which happened. The original session is untouched. Use preview:true to see which route would be taken before committing to it.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "description": "Session id from list_sessions (kind \"native\")."
-          },
-          "instruction": {
-            "type": "string",
-            "description": "Optional opening message for the branch. Leave it out to fork and wait."
-          },
-          "newWorktree": {
-            "type": "boolean",
-            "description": "Fork into a fresh Git worktree so the two branches do not edit the same files. Default false."
-          },
-          "preview": {
-            "type": "boolean",
-            "description": "Report the plan without starting anything."
-          }
-        },
-        "required": [
-          "sessionId"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "session_fork_from_checkpoint",
-      "description": "Fork a session AND put its working tree back to one of its checkpoints, named by checkpointId or by turn. TWO HALVES, and only one of them is a rewind: the files go back to the checkpoint, and the CONVERSATION IS CARRIED WHOLE — no agent CLI here can resume a conversation at a turn, so the fork still remembers everything said after that point, including edits the files no longer hold. Say what you rolled back in \"instruction\". The result lists \"delivered\" and \"notDelivered\" separately and never claims a half it did not do. DESTRUCTIVE on the file half: it discards edits made since that checkpoint, exactly as checkpoint_restore does, taking a safety checkpoint first and refusing a tree that has moved unless \"confirm\" is true. It refuses the file half outright — and says so rather than failing — when another session is working in that checkout, when the repository cannot be checkpointed from here, or when newWorktree is true, because a checkpoint restores only into the checkout it was taken in. Use preview:true to read both decisions before committing.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "description": "Session to fork, from list_sessions (kind \"native\"). Named, never defaulted to you: this one rewrites files."
-          },
-          "checkpointId": {
-            "type": "string",
-            "description": "Checkpoint id from checkpoint_list. Name this or \"turn\", not both. It must belong to the session being forked."
-          },
-          "turn": {
-            "type": "number",
-            "description": "Fork from the state that turn began in — the turnStart checkpoint of that turn, or the earliest one recorded for it."
-          },
-          "instruction": {
-            "type": "string",
-            "description": "Opening message for the fork. This is where the fork learns what was rolled back; it cannot tell from its own memory."
-          },
-          "newWorktree": {
-            "type": "boolean",
-            "description": "Fork into a fresh Git worktree. Default false. True gives the branches separate files and gives up the restore: the worktree is a fresh checkout of the branch, not the checkpoint."
-          },
-          "confirm": {
-            "type": "boolean",
-            "description": "Restore even though the working tree has moved since the last checkpoint. Requires the user to have said so."
-          },
-          "preview": {
-            "type": "boolean",
-            "description": "Report both halves without starting anything and without touching a file."
-          }
-        },
-        "required": [
-          "sessionId"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "open_sessions_in_tmux",
-      "description": "Open several sessions together as windows in a single tmux session (WSL), in one new terminal tab. All sessions must live in the same WSL distribution. Pass the session ids from list_sessions. Non-destructive: if a tmux session with the given name already exists it is NOT killed — the sessions are appended as new windows without switching the focused window of any running tab.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Session ids to open together."
-          },
-          "name": {
-            "type": "string",
-            "description": "Optional tmux session name."
-          }
-        },
-        "required": [
-          "ids"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "instructions",
-      "description": "Karmashala's own operating guides: what a tool's success does NOT prove, which refusals are permanent, and which acts have no undo. Call with no argument to list the topics; pass topic to read one. Worth reading before the first time you use a family in a task — these cover the things a per-tool description has no room for, such as the fact that a successful session_send proves delivery into a terminal and nothing about completion, or that terminal_run cannot know an exit code without OSC 133 shell integration and says so rather than reporting a zero it did not receive.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "topic": {
-            "type": "string",
-            "description": "Which guide. Omit to list them. Unknown topics are refused with the list."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
       }
     },
     {
@@ -1230,6 +2325,274 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "open_new_session",
+      "description": "Start a NEW agent session (not a resume) in a project, as a terminal tab in Karmashala. Choose the agent with agentInstallationId (from list_agents) or cli (\"claude\"/\"codex\"); omit both to use the configured default. repositoryId is optional (defaults to the project's first repository). The agent must be installed in the project's environment. Sessions you start this way are recorded as your children, and nesting is capped: if the call is refused for depth, do the work yourself instead of delegating it further.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id from list_projects."
+          },
+          "cli": {
+            "type": "string",
+            "description": "Agent CLI to use: \"claude\" or \"codex\"."
+          },
+          "agentInstallationId": {
+            "type": "string",
+            "description": "Specific installation id from list_agents."
+          },
+          "repositoryId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short name for the session, shown in the tab."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Opening instruction for the new agent. Sent as its first message, prefixed with a line naming this session."
+          },
+          "useWorktree": {
+            "type": "boolean",
+            "description": "Run in a dedicated Git worktree instead of the repository itself. Use this when the new session will edit files and you are still working in the same repository."
+          },
+          "permissionMode": {
+            "type": "string",
+            "enum": [
+              "readOnly",
+              "ask",
+              "acceptEdits",
+              "autoRun",
+              "bypass"
+            ],
+            "description": "How much the new agent may do without asking, on the scale every agent shares. The chosen agent is given the closest mode it really has, never one it does not — Codex, for instance, has nothing at \"ask\". Omit to use the mode configured in Settings, which is what the New-session dialog does. A session you start holds no more than the least of your own mode and \"autoRun\"; a mode above that is refused, and only the user can raise it, from the new session's permission chip."
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "get_usage",
+      "description": "An agent account's usage against its limits, read live. cli is \"claude\", \"codex\" or \"antigravity\"; environmentId is optional (defaults to the first matching installation). Each window carries a label and, when the agent reported one, a \"percent\" used and a \"resetsAt\". A window with no \"percent\" was not measured — Antigravity names the account's tiers and reports no quota against them — and that absence means unknown, never zero. \"fetchedAt\" is when the reading was taken.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cli": {
+            "type": "string"
+          },
+          "environmentId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cli"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "open_session",
+      "description": "Open one session by its id. A Karmashala session that is still running is reattached to a tab; anything else is resumed. An imported CLI session opens a new external terminal window every time this is called, and nothing here closes one — do not call it over a list of sessions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Session id from list_sessions."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "session_handoff",
+      "description": "Continue an existing session in a different agent. Builds a handoff packet from that session — a quoted recap of its conversation, the files changed in the working tree, the current branch, anything listed as unresolved, and your instruction — and starts a new session with the packet as its first message, in the SAME worktree and on the SAME branch by default. The packet states its provenance: the new agent is told the conversation is not its own. The original session is left running and untouched; ending it is the user's decision. Use preview:true to read the packet without starting anything.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session id from list_sessions (kind \"native\")."
+          },
+          "cli": {
+            "type": "string",
+            "description": "Agent to continue in: \"claude\" or \"codex\". Ignored when agentInstallationId is given."
+          },
+          "agentInstallationId": {
+            "type": "string",
+            "description": "Specific installation id from list_agents."
+          },
+          "instruction": {
+            "type": "string",
+            "description": "What the receiving agent should do. Required: the packet carries the conversation, this is the part it cannot infer."
+          },
+          "unresolved": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Work still open, listed for the new agent."
+          },
+          "newWorktree": {
+            "type": "boolean",
+            "description": "Start in a fresh Git worktree instead of continuing in the same one. Default false, which is what a handoff usually wants."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Return the packet without starting anything. Read it before handing over work you care about."
+          }
+        },
+        "required": [
+          "sessionId",
+          "instruction"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "session_fork",
+      "description": "Branch a session into a new one that shares its history up to now and then diverges. Runs the SAME agent — a fork is a branch of one conversation, not a change of provider. Uses the CLI's own fork when it has one and Karmashala knows the conversation id; otherwise it falls back to a handoff packet, and the result says which happened. The original session is untouched. Use preview:true to see which route would be taken before committing to it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session id from list_sessions (kind \"native\")."
+          },
+          "instruction": {
+            "type": "string",
+            "description": "Optional opening message for the branch. Leave it out to fork and wait."
+          },
+          "newWorktree": {
+            "type": "boolean",
+            "description": "Fork into a fresh Git worktree so the two branches do not edit the same files. Default false."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Report the plan without starting anything."
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "session_fork_from_checkpoint",
+      "description": "Fork a session AND put its working tree back to one of its checkpoints, named by checkpointId or by turn. TWO HALVES, and only one of them is a rewind: the files go back to the checkpoint, and the CONVERSATION IS CARRIED WHOLE — no agent CLI here can resume a conversation at a turn, so the fork still remembers everything said after that point, including edits the files no longer hold. Say what you rolled back in \"instruction\". The result lists \"delivered\" and \"notDelivered\" separately and never claims a half it did not do. DESTRUCTIVE on the file half: it discards edits made since that checkpoint, exactly as checkpoint_restore does, taking a safety checkpoint first and refusing a tree that has moved unless \"confirm\" is true. It refuses the file half outright — and says so rather than failing — when another session is working in that checkout, when the repository cannot be checkpointed from here, or when newWorktree is true, because a checkpoint restores only into the checkout it was taken in. Use preview:true to read both decisions before committing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session to fork, from list_sessions (kind \"native\"). Named, never defaulted to you: this one rewrites files."
+          },
+          "checkpointId": {
+            "type": "string",
+            "description": "Checkpoint id from checkpoint_list. Name this or \"turn\", not both. It must belong to the session being forked."
+          },
+          "turn": {
+            "type": "number",
+            "description": "Fork from the state that turn began in — the turnStart checkpoint of that turn, or the earliest one recorded for it."
+          },
+          "instruction": {
+            "type": "string",
+            "description": "Opening message for the fork. This is where the fork learns what was rolled back; it cannot tell from its own memory."
+          },
+          "newWorktree": {
+            "type": "boolean",
+            "description": "Fork into a fresh Git worktree. Default false. True gives the branches separate files and gives up the restore: the worktree is a fresh checkout of the branch, not the checkpoint."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Restore even though the working tree has moved since the last checkpoint. Requires the user to have said so."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Report both halves without starting anything and without touching a file."
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "open_sessions_in_tmux",
+      "description": "Open several sessions together as windows in a single tmux session (WSL), in one new terminal tab. All sessions must live in the same WSL distribution. Pass the session ids from list_sessions. Non-destructive: if a tmux session with the given name already exists it is NOT killed — the sessions are appended as new windows without switching the focused window of any running tab.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Session ids to open together."
+          },
+          "name": {
+            "type": "string",
+            "description": "Optional tmux session name."
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "movesAttentionHint": true
@@ -1660,142 +3023,6 @@
       }
     },
     {
-      "name": "snippets_list",
-      "description": "The commands the user keeps: their saved snippets, each with the shell it is tagged for and whether picking it also presses Enter. Read this to find out how this person actually runs their tests, builds and tools before inventing a command line of your own. Also reports the pane a snippet would go into — the focused one, or the paneId you pass — and, per snippet, whether it fits that pane's shell. Nothing is filtered out: a WSL snippet is listed in a PowerShell pane with fitsPane=false, because hiding it would look like it was never saved.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "paneId": {
-            "type": "string",
-            "description": "Which pane to answer fitsPane for, from terminal_list. Defaults to the focused pane."
-          }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "pane": {
-            "type": [
-              "object",
-              "null"
-            ]
-          },
-          "snippets": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "label": {
-                  "type": "string"
-                },
-                "command": {
-                  "type": "string"
-                },
-                "shell": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "submit": {
-                  "type": "boolean"
-                },
-                "fitsPane": {
-                  "type": [
-                    "boolean",
-                    "null"
-                  ]
-                }
-              },
-              "required": [
-                "id",
-                "label",
-                "command",
-                "submit"
-              ]
-            }
-          }
-        },
-        "required": [
-          "snippets"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "snippet_add",
-      "description": "Save a command as a snippet, so the user can pick it from the palette or the terminal toolbar instead of retyping it. Worth doing when you and the user have just worked out the incantation for something — the exact test command, the right build flags. Tag it with the shell it is written for (powerShell, commandPrompt, wsl, posix) and it will only be offered in a pane running that shell; leave the tag off for something that works everywhere. submit defaults to false and should stay false: a snippet is typed at the prompt for the user to read and press Enter on, and turning that off for somebody else's saved command is not a default you get to choose.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "command": {
-            "type": "string",
-            "description": "The command. Flattened to a single line — a stored newline would be a submit nobody asked for."
-          },
-          "label": {
-            "type": "string",
-            "description": "What it is called in the picker. Defaults to the command itself."
-          },
-          "shell": {
-            "type": "string",
-            "description": "powerShell, commandPrompt, wsl or posix. Omit for any shell. An unknown value is refused rather than dropped."
-          },
-          "submit": {
-            "type": "boolean",
-            "description": "Whether picking it also presses Enter. Default false, and leave it there unless the user asked for a command that runs itself."
-          }
-        },
-        "required": [
-          "command"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "command": {
-            "type": "string"
-          },
-          "shell": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "submit": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "label",
-          "command",
-          "submit"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
       "name": "snippet_insert",
       "description": "Type a saved snippet into a terminal pane and STOP — the command sits at the prompt and the user presses Enter. Use it to put a line in front of somebody rather than to run one: if you mean to run a command and read its output, that is terminal_run. The only exception is a snippet the user themselves saved with submit=true, which does run; you cannot ask for that from here. Refuses a snippet tagged for a different shell than the pane is running, and never submits into a pane hosting an agent CLI, where a carriage return would take a turn in a live session.",
       "inputSchema": {
@@ -1850,147 +3077,6 @@
       }
     },
     {
-      "name": "list_checkouts",
-      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string",
-            "description": "Which project, from list_projects."
-          }
-        },
-        "required": [
-          "projectId"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string"
-          },
-          "checkouts": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "repositoryId": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "path": {
-                  "type": "string"
-                },
-                "environmentId": {
-                  "type": "string"
-                },
-                "selected": {
-                  "type": "boolean"
-                },
-                "branch": {
-                  "type": "string"
-                },
-                "isWorktree": {
-                  "type": [
-                    "boolean",
-                    "null"
-                  ]
-                },
-                "sessionsWorkingHere": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "sessionId": {
-                        "type": "string"
-                      },
-                      "title": {
-                        "type": "string"
-                      },
-                      "status": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "sessionId",
-                      "title",
-                      "status"
-                    ]
-                  }
-                }
-              },
-              "required": [
-                "repositoryId",
-                "name",
-                "path",
-                "branch",
-                "sessionsWorkingHere"
-              ]
-            }
-          }
-        },
-        "required": [
-          "projectId",
-          "checkouts"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "project_rescan",
-      "description": "Re-read a project's directory for checkouts Karmashala does not know about yet — a worktree added from the command line, a clone dropped in beside the others. Returns every checkout found afterwards, not a list of what changed.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string",
-            "description": "Which project, from list_projects."
-          }
-        },
-        "required": [
-          "projectId"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string"
-          },
-          "count": {
-            "type": "number"
-          },
-          "checkouts": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          }
-        },
-        "required": [
-          "projectId",
-          "checkouts",
-          "count"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
       "name": "select_checkout",
       "description": "Point Karmashala's Explorer, diff view and side panel at a checkout. This is what the user sees change on screen, so use it to show someone where you are working rather than to navigate for yourself.",
       "inputSchema": {
@@ -2035,253 +3121,6 @@
         "idempotentHint": true,
         "openWorldHint": false,
         "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "delivery_status",
-      "description": "What a session's checkout still owes: branch, how far ahead of and behind its base, dirty files, unpushed commits, its pull request, and the actions Karmashala offers on it. Omit sessionId for your own session. Any value Karmashala could not measure reads \"not recorded\" — never 0, and never \"none\". A failed git call and a clean tree are different facts.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "description": "Which session. Defaults to the calling session."
-          }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "stage": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "baseBranch": {
-            "type": "string"
-          },
-          "upstream": {
-            "type": "string"
-          },
-          "hasWorktree": {
-            "type": "boolean"
-          },
-          "archived": {
-            "type": "boolean"
-          },
-          "dirtyFiles": {
-            "type": [
-              "number",
-              "string"
-            ]
-          },
-          "aheadOfBase": {
-            "type": [
-              "number",
-              "string"
-            ]
-          },
-          "behindBase": {
-            "type": [
-              "number",
-              "string"
-            ]
-          },
-          "unpushed": {
-            "type": [
-              "number",
-              "string"
-            ]
-          },
-          "agentRunning": {
-            "type": [
-              "boolean",
-              "string"
-            ]
-          },
-          "pullRequest": {
-            "type": [
-              "object",
-              "string"
-            ]
-          },
-          "actions": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "action": {
-                  "type": "string"
-                },
-                "label": {
-                  "type": "string"
-                },
-                "primary": {
-                  "type": "boolean"
-                },
-                "available": {
-                  "type": "boolean"
-                },
-                "unavailableBecause": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
-              },
-              "required": [
-                "action",
-                "label",
-                "available"
-              ]
-            }
-          }
-        },
-        "required": [
-          "sessionId",
-          "stage",
-          "branch",
-          "actions"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "worktree_create",
-      "description": "Add a git worktree to a checkout, on a new branch, so work can run in parallel with whatever is already checked out. The folder is placed in a .karmashala-worktrees directory beside the checkout and named <checkout>-<name>. Refuses rather than colliding: a path a worktree already occupies, a branch that already exists, and a branch another worktree has out are all named back to you. The returned repositoryId reads \"not recorded\" when the worktree was made but Karmashala could not scan the project to record it — the folder is still there; run project_rescan.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "repositoryId": {
-            "type": "string",
-            "description": "The checkout to make a worktree of, from list_checkouts."
-          },
-          "name": {
-            "type": "string",
-            "description": "The worktree's own name — one folder name, no separators."
-          },
-          "branch": {
-            "type": "string",
-            "description": "The new branch to create in it. Must not already exist."
-          },
-          "baseRef": {
-            "type": "string",
-            "description": "What to branch from (e.g. origin/main). Defaults to the checkout's own HEAD."
-          }
-        },
-        "required": [
-          "repositoryId",
-          "name",
-          "branch"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "fromRepositoryId": {
-            "type": "string"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "environmentId": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "baseRef": {
-            "type": "string"
-          },
-          "repositoryId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "branch",
-          "repositoryId"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "worktree_remove",
-      "description": "Delete a worktree's directory. Destructive and deliberately hard to get: it happens only when the worktree is clean, its branch is merged into its base, AND those commits are held by some remote branch — merged is not pushed. It also refuses while a session is running in it, and refuses on any reading Karmashala could not take (\"not recorded\" is never read as \"fine\"). There is no force argument; every refusal is a sentence saying what to do instead. The branch is left alone and the checkout row stays until project_rescan retires it.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "repositoryId": {
-            "type": "string",
-            "description": "The worktree checkout to remove, from list_checkouts. It must be one whose isWorktree is true."
-          }
-        },
-        "required": [
-          "repositoryId"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "repositoryId": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "baseBranch": {
-            "type": "string"
-          },
-          "removed": {
-            "type": "boolean"
-          },
-          "branchKept": {
-            "type": "boolean"
-          },
-          "checkoutRecordKept": {
-            "type": "boolean"
-          },
-          "note": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "repositoryId",
-          "path",
-          "removed"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
       }
     },
     {
@@ -3036,690 +3875,6 @@
       }
     },
     {
-      "name": "notes_list",
-      "description": "The notes kept in Karmashala, newest first. Pass sessionId to see only the ones captured from one session, and projectId to see only the ones filed under one project — or the literal \"none\" for the ones filed under no project.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "description": "Only notes captured from this session."
-          },
-          "projectId": {
-            "type": "string",
-            "description": "Only notes filed under this project (list_projects has the ids), or \"none\" for only the ones filed under no project. Omit for all of them."
-          }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "notesPanelEnabled": {
-            "type": "boolean"
-          },
-          "notes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "title": {
-                  "type": "string"
-                },
-                "body": {
-                  "type": "string"
-                },
-                "projectId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "sourceSessionId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "sourceRepositoryId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "createdAt": {
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "id",
-                "title",
-                "body"
-              ]
-            }
-          }
-        },
-        "required": [
-          "notes",
-          "notesPanelEnabled"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "note_add",
-      "description": "Write a note. The body is kept EXACTLY as given — nothing here trims it to a gist — so pass the words that should survive, not a summary of them. Attributed to the calling session unless sessionId names another, and filed under that session's project unless projectId says otherwise.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "body": {
-            "type": "string",
-            "description": "The note, verbatim."
-          },
-          "title": {
-            "type": "string",
-            "description": "Optional. Without one the note is named by its first line."
-          },
-          "sessionId": {
-            "type": "string",
-            "description": "Which session this came from. Defaults to the calling session."
-          },
-          "projectId": {
-            "type": "string",
-            "description": "Which project to file it under (list_projects has the ids), or \"none\" for no project. Defaults to the project of the session it came from."
-          }
-        },
-        "required": [
-          "body"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "projectId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "sourceSessionId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "createdAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "note_delete",
-      "description": "Delete a note. DESTRUCTIVE: notes are not versioned and there is no undo.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Note id, from notes_list."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "deleted": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "deleted"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "todos_list",
-      "description": "The todo list Karmashala shows the person using it: open todos first in their own order, then the finished ones. This is a written list, not an alert queue — nothing appears in it on its own, which is what makes it different from inbox_list. Pass projectId to see one project's todos, or the literal \"none\" to see only the ones filed under no project.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string",
-            "description": "Only todos filed under this project (list_projects has the ids), or \"none\" for only the ones filed under no project. Omit for all of them."
-          },
-          "includeDone": {
-            "type": "boolean",
-            "description": "Include todos already ticked off. Default false."
-          }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "open": {
-            "type": "number"
-          },
-          "todos": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "body": {
-                  "type": "string"
-                },
-                "done": {
-                  "type": "boolean"
-                },
-                "projectId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "position": {
-                  "type": "number"
-                },
-                "createdAt": {
-                  "type": "string"
-                },
-                "doneAt": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
-              },
-              "required": [
-                "id",
-                "body",
-                "done"
-              ]
-            }
-          }
-        },
-        "required": [
-          "open",
-          "todos"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "todo_add",
-      "description": "Add one todo to the bottom of the list. The body is one line, kept as given. Filed under the calling session's project unless projectId says otherwise; pass the literal \"none\" for a todo that belongs to no project, which is an ordinary todo rather than an unfinished one. Use this for work that outlives your turn — a person reads this list.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "body": {
-            "type": "string",
-            "description": "The todo, one line."
-          },
-          "projectId": {
-            "type": "string",
-            "description": "Which project to file it under (list_projects has the ids), or \"none\" for no project. Defaults to the calling session's project."
-          }
-        },
-        "required": [
-          "body"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string"
-          },
-          "done": {
-            "type": "boolean"
-          },
-          "projectId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "position": {
-            "type": "number"
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "doneAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "body",
-          "done"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "todo_done",
-      "description": "Tick a todo off, or reopen it with done: false. Nothing is removed — the row stays in the list under DONE, so a mistake is one more call to undo. Tick off only what you actually finished: this list is read by a person who will not check.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Todo id, from todos_list."
-          },
-          "done": {
-            "type": "boolean",
-            "description": "True to finish it, false to reopen. Default true."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string"
-          },
-          "done": {
-            "type": "boolean"
-          },
-          "projectId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "position": {
-            "type": "number"
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "doneAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "body",
-          "done"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "todo_delete",
-      "description": "Delete a todo. DESTRUCTIVE: todos are not versioned and there is no undo. To mark one finished, use todo_done — that keeps the row.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Todo id, from todos_list."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "deleted": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "deleted"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "decision_record",
-      "description": "Write down a decision so it survives this conversation. A session's decision record is carried into the handoff packet AHEAD of the quoted transcript, so what you record here reaches the next agent even when the turn you decided it in has been trimmed away — which is what happens to decisions made early in a long session. Record a constraint the work is now bound by, or an approach you tried and abandoned and why. The summary is stored EXACTLY as given and is never summarised; write the words that should be read later, not a gist of them. Approvals, verification verdicts and marked checkpoints are NOT written here — the acts that produce them record them, so that every row has something real behind it. Append-only: nothing you write can be edited or removed, and recording a reversal later leaves the original standing so a reader can see it was reversed.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "constraint",
-              "rejected"
-            ],
-            "description": "constraint: a rule the work is now bound by. rejected: an approach that was tried and abandoned."
-          },
-          "summary": {
-            "type": "string",
-            "description": "What was decided, verbatim. Include the reason — \"the isolate pool deadlocked on Windows\" is worth ten times \"no isolates\"."
-          },
-          "detail": {
-            "type": "string",
-            "description": "Optional. More of the same words."
-          },
-          "sessionId": {
-            "type": "string",
-            "description": "Whose record to write to. Defaults to the calling session."
-          }
-        },
-        "required": [
-          "kind",
-          "summary"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string"
-          },
-          "sequence": {
-            "type": "number",
-            "description": "Position in this session's record, 1-based."
-          },
-          "kind": {
-            "type": "string"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "decidedBy": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "recordedAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "sessionId",
-          "sequence",
-          "kind",
-          "summary"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "review_thread_list",
-      "description": "List the review comment threads on a checkout. Each thread carries an anchor (a file, optionally a line range), a status, and every comment made in it. READ THE `attachment` FIELD: \"attached\" means the file is byte-for-byte what the comment was written against, so the line numbers still locate the code; \"detached\" means the file has changed since and the line numbers locate NOTHING — use the excerpt to find what was meant, and do not assume the code moved by a fixed offset. \"unknown\" means the file could not be read at all. Nothing in Karmashala re-anchors a detached thread by guessing, because a guess that is usually right cannot be told from one that is wrong.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "repositoryId": {
-            "type": "string",
-            "description": "Which checkout. Defaults to the calling session's."
-          },
-          "path": {
-            "type": "string",
-            "description": "Only threads on this repository-relative file path."
-          },
-          "status": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "open",
-                "shouldFix",
-                "dismissed",
-                "resolved"
-              ]
-            },
-            "description": "Only threads in these states. Omit for all of them. \"shouldFix\" is the set a human has decided must change."
-          }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "repositoryId": {
-            "type": "string"
-          },
-          "threads": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          }
-        },
-        "required": [
-          "repositoryId",
-          "threads"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "review_thread_get",
-      "description": "One review thread by id, with every comment in it and whether it is still anchored to the file it was written against.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "The thread's id."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "review_thread_add",
-      "description": "Raise a review comment against a file, so a human can triage it and it survives this conversation. This is where a review finding belongs — a finding reported only in your transcript is one nobody can find later, and nobody can answer. Give a line range when you mean a place in the file, or omit it for a comment about the file as a whole; line numbers are 1-based and counted in the file AS IT IS ON DISK RIGHT NOW, which is the content Karmashala hashes to anchor the thread. It anchors itself: there is no argument for the hash, and one you supplied could describe content you read three turns ago. A thread you raise starts as \"open\" — a claim awaiting triage — and only a human moves it to \"shouldFix\", which is the set that gets sent back to an author agent. That is deliberate: deciding a change must be made is the job a human review exists to do.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Repository-relative path of the file, as git spells it."
-          },
-          "comment": {
-            "type": "string",
-            "description": "What you found, in the words it should be read in. Stored exactly as given and never summarised. Say what you expected and what you saw, not just that something is wrong."
-          },
-          "startLine": {
-            "type": "number",
-            "description": "First line of the range, 1-based, in the current file. Omit for a comment about the whole file."
-          },
-          "endLine": {
-            "type": "number",
-            "description": "Last line of the range, inclusive. Defaults to startLine."
-          },
-          "excerpt": {
-            "type": "string",
-            "description": "The code you are commenting on, quoted verbatim. This is EVIDENCE FOR A HUMAN and is never used to relocate the comment, so quote what is actually there rather than a paraphrase — it is what somebody reads when the file has moved on and the line numbers no longer help."
-          },
-          "repositoryId": {
-            "type": "string",
-            "description": "Which checkout. Defaults to the calling session's."
-          }
-        },
-        "required": [
-          "path",
-          "comment"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "review_thread_reply",
-      "description": "Answer a review comment in its own thread. Use this to say what you changed, or to say why you did not — the reply lands beside the request instead of scrolling past in a different conversation. Append-only: nothing you write here can be edited or removed afterwards. Replying does not change the status; whoever raised the thread decides when it is resolved.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "The thread to reply in."
-          },
-          "comment": {
-            "type": "string",
-            "description": "The reply, stored exactly as given."
-          }
-        },
-        "required": [
-          "id",
-          "comment"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "review_thread_status",
-      "description": "Move a review thread between open, shouldFix, dismissed and resolved. Nothing written in the thread is touched — the comments and the anchor stay exactly as they are, and a status can be moved back, so this is triage rather than a record. \"shouldFix\" is the set the Changes panel hands to an author agent, so putting a thread there is asking for the change to be made; \"dismissed\" keeps the thread and the fact that somebody looked at it, which is why there is no way to delete one.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "The thread to move."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "open",
-              "shouldFix",
-              "dismissed",
-              "resolved"
-            ],
-            "description": "Where to move it."
-          }
-        },
-        "required": [
-          "id",
-          "status"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
       "name": "browser_connect",
       "description": "Attach to a Chrome/Edge that is already listening on a debugging port — the window the developer is actually looking at, with their session and logins. If nothing is listening, a separate browser is launched on a throwaway profile. Optional: url (where to end up), port (default 9222), targetId (a specific tab from browser_tabs). browser_navigate connects on its own, so this is only needed to attach without navigating.",
       "inputSchema": {
@@ -4306,179 +4461,12 @@
         "openWorldHint": true,
         "movesAttentionHint": true
       }
-    },
-    {
-      "name": "verification_start",
-      "description": "Begin recording a verification run — a durable, inspectable record that a change actually works, which you can hand to the human. Give EXACTLY ONE of: url (a browser run: attaches to the browser, goes there, and starts watching the console and network), serial (+ optional package: a device run, which brings that app to the front), or change:true (a review run: nothing is driven, and the record is what you read in the diff). While a browser or device run is recording, every browser_* and device_* call you make is captured as a step with its screenshots; console errors, failed requests and the log slice are collected for you at the end. Drive the change the way a user would, then call verification_finish with a verdict. One run at a time. Pass sessionId when you are checking someone else's work: it is what makes the verdict count as an independent one rather than a self-graded pass.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "description": "The page to verify, e.g. \"localhost:3000/settings\". Makes this a browser run."
-          },
-          "serial": {
-            "type": "string",
-            "description": "Device serial from list_devices. Makes this a device run."
-          },
-          "change": {
-            "type": "boolean",
-            "description": "Makes this a review run: the subject is a code change rather than a page or a device, so nothing is attached to and nothing is collected for you. Write what you find with verification_note, and finish with a verdict — a review that found nothing is a pass with a reason, never silence."
-          },
-          "package": {
-            "type": "string",
-            "description": "Android package to verify, e.g. \"com.example.app\". It is launched at the start of the run, and the closing logcat slice is filtered to it. Without it, the run records the device but collects no log."
-          },
-          "title": {
-            "type": "string",
-            "description": "What is being verified, in one line — \"the settings page saves on Enter\". Defaults to the target."
-          },
-          "sessionId": {
-            "type": "string",
-            "description": "The session whose WORK is being verified, from list_sessions — not yours. Defaults to yours, which is the self-graded case. Attaching it is what lets the human find the evidence from the conversation, and naming someone else's session is what makes the verdict independent."
-          },
-          "launch": {
-            "type": "boolean",
-            "description": "Device runs only: set false to verify the app already on screen instead of relaunching it. Default true."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "verification_note",
-      "description": "Add your own step to the running verification — what you are about to check, or what you observed that the tools cannot see (\"the spinner never stopped\"). Notes are what turn a list of clicks into an argument.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "One line. Required."
-          },
-          "detail": {
-            "type": "string",
-            "description": "Anything longer — an expected value, a stack trace."
-          }
-        },
-        "required": [
-          "text"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "verification_finish",
-      "description": "Close the run with a verdict and the reason for it, collect the closing evidence (a screenshot, the console errors, the failed requests, the logcat slice, the UI tree) and write a markdown report next to the artifacts. Use \"inconclusive\" honestly — a run that could not reach the page is not a fail.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "verdict": {
-            "type": "string",
-            "enum": [
-              "pass",
-              "fail",
-              "inconclusive"
-            ],
-            "description": "Required."
-          },
-          "reason": {
-            "type": "string",
-            "description": "One or two sentences saying what you observed that justifies the verdict. This is the part a human reads first."
-          }
-        },
-        "required": [
-          "verdict"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "verification_list",
-      "description": "List recorded verification runs, newest first — one line each with the verdict, the target and the step count.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "description": "Only runs attached to this session."
-          },
-          "limit": {
-            "type": "number",
-            "description": "How many runs to show. Default 20."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "verification_get",
-      "description": "Read one run: its verdict, its steps and what it captured. Compact by default — step summaries and a list of artifacts, no images and no file contents. Pass full:true for step detail and the text of the evidence files, or images:true to attach the screenshots. Ask for images only when you need to look at one; they are the expensive part.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Run id, or a unique prefix of one. Omit for the run that is recording now."
-          },
-          "full": {
-            "type": "boolean",
-            "description": "Include step detail and the contents of text artifacts."
-          },
-          "images": {
-            "type": "boolean",
-            "description": "Attach the screenshots as images."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
     }
   ],
   "listings": {
-    "checkpoint_list": {
-      "category": "checkpoints",
-      "summary": "A session's checkpoints, and what changed since the one before."
-    },
-    "checkpoint_capture": {
-      "category": "checkpoints",
-      "summary": "Record the working tree as it is now, staging and committing nothing."
-    },
-    "checkpoint_diff": {
-      "category": "checkpoints",
-      "summary": "The diff between a checkpoint and the checkpoint before it."
-    },
-    "checkpoint_restore": {
-      "category": "checkpoints",
-      "summary": "Put the working tree back to a checkpoint, discarding edits since."
+    "instructions": {
+      "category": "guides",
+      "summary": "Karmashala's operating guides, one topic at a time."
     },
     "list_projects": {
       "category": "workspace",
@@ -4496,29 +4484,65 @@
       "category": "sessions",
       "summary": "Search what was said in every conversation; a session per result."
     },
-    "project_add": {
-      "category": "workspace",
-      "summary": "Add a project: adopt a folder, or clone a repository into one."
+    "notes_list": {
+      "category": "records",
+      "summary": "The notes kept in Karmashala, newest first."
     },
-    "project_update": {
-      "category": "workspace",
-      "summary": "Rename a project, move its root folder, or set its default checkout."
+    "note_add": {
+      "category": "records",
+      "summary": "Write a note, kept exactly as given and filed under a project."
     },
-    "checks_run": {
-      "category": "verification",
-      "summary": "Run the repository's configured checks and record each exit code."
+    "note_delete": {
+      "category": "records",
+      "summary": "Delete a note. Notes are not versioned and there is no undo."
     },
-    "open_new_session": {
-      "category": "sessions",
-      "summary": "Start a new agent session in a project, as a tab in Karmashala."
+    "todos_list": {
+      "category": "records",
+      "summary": "The written todo list a person reads: open first, then finished."
     },
-    "get_usage": {
-      "category": "sessions",
-      "summary": "An agent's usage against its limit, where the agent reports one."
+    "todo_add": {
+      "category": "records",
+      "summary": "Add one todo to the bottom of the list, kept as one line."
     },
-    "open_session": {
-      "category": "sessions",
-      "summary": "Reattach to a session or resume it; an imported one opens a window."
+    "todo_done": {
+      "category": "records",
+      "summary": "Tick a todo off, or reopen it. The row stays either way."
+    },
+    "todo_delete": {
+      "category": "records",
+      "summary": "Delete a todo. todo_done finishes one and keeps the row."
+    },
+    "decision_record": {
+      "category": "records",
+      "summary": "Write down a decision so it reaches the next agent. Append-only."
+    },
+    "review_thread_list": {
+      "category": "review",
+      "summary": "The review threads on a checkout, and whether each still anchors."
+    },
+    "review_thread_get": {
+      "category": "review",
+      "summary": "One thread: every comment, and whether it still anchors to the file."
+    },
+    "review_thread_add": {
+      "category": "review",
+      "summary": "Raise a review comment against a file, for a human to triage."
+    },
+    "review_thread_reply": {
+      "category": "review",
+      "summary": "Answer a review comment in its own thread. Append-only."
+    },
+    "review_thread_status": {
+      "category": "review",
+      "summary": "Move a thread between open, shouldFix, dismissed and resolved."
+    },
+    "snippets_list": {
+      "category": "snippets",
+      "summary": "The commands this person keeps, and whether each fits a given pane."
+    },
+    "snippet_add": {
+      "category": "snippets",
+      "summary": "Save a command as a snippet, tagged for the shell it is written for."
     },
     "fanout_list": {
       "category": "fanout",
@@ -4528,25 +4552,73 @@
       "category": "fanout",
       "summary": "One comparison in full: every candidate, its diff and its verdict."
     },
-    "session_handoff": {
-      "category": "sessions",
-      "summary": "Continue a session in a different agent, on the same branch."
+    "list_checkouts": {
+      "category": "workspace",
+      "summary": "A project's checkouts: the branch each is on, and who works in it."
     },
-    "session_fork": {
-      "category": "sessions",
-      "summary": "Branch a session into one that shares its history and then diverges."
+    "project_rescan": {
+      "category": "workspace",
+      "summary": "Re-read a project's directory for checkouts not known about yet."
     },
-    "session_fork_from_checkpoint": {
-      "category": "sessions",
-      "summary": "Fork a session and roll its files back to a checkpoint; not its conversation."
+    "delivery_status": {
+      "category": "workspace",
+      "summary": "What a checkout still owes: ahead, behind, dirty, unpushed, its PR."
     },
-    "open_sessions_in_tmux": {
-      "category": "sessions",
-      "summary": "Open several sessions as tmux windows in one terminal tab (WSL)."
+    "project_add": {
+      "category": "workspace",
+      "summary": "Add a project: adopt a folder, or clone a repository into one."
     },
-    "instructions": {
-      "category": "guides",
-      "summary": "Karmashala's operating guides, one topic at a time."
+    "project_update": {
+      "category": "workspace",
+      "summary": "Rename a project, move its root folder, or set its default checkout."
+    },
+    "worktree_create": {
+      "category": "workspace",
+      "summary": "Add a git worktree on a new branch, beside the checkout."
+    },
+    "worktree_remove": {
+      "category": "workspace",
+      "summary": "Delete a worktree — only when it is clean, merged and pushed."
+    },
+    "verification_start": {
+      "category": "verification",
+      "summary": "Begin recording a run against a URL, a device, or a diff."
+    },
+    "verification_note": {
+      "category": "verification",
+      "summary": "Add a step of your own: what you are checking, or what you saw."
+    },
+    "verification_finish": {
+      "category": "verification",
+      "summary": "Close the run with a verdict, collect the evidence, write the report."
+    },
+    "verification_list": {
+      "category": "verification",
+      "summary": "The recorded runs, newest first, one line each."
+    },
+    "verification_get": {
+      "category": "verification",
+      "summary": "One run: its verdict, its steps, and what it captured."
+    },
+    "checkpoint_list": {
+      "category": "checkpoints",
+      "summary": "A session's checkpoints, and what changed since the one before."
+    },
+    "checkpoint_capture": {
+      "category": "checkpoints",
+      "summary": "Record the working tree as it is now, staging and committing nothing."
+    },
+    "checkpoint_diff": {
+      "category": "checkpoints",
+      "summary": "The diff between a checkpoint and the checkpoint before it."
+    },
+    "checkpoint_restore": {
+      "category": "checkpoints",
+      "summary": "Put the working tree back to a checkpoint, discarding edits since."
+    },
+    "checks_run": {
+      "category": "verification",
+      "summary": "Run the repository's configured checks and record each exit code."
     },
     "session_send": {
       "category": "sessions",
@@ -4571,6 +4643,34 @@
     "session_end": {
       "category": "sessions",
       "summary": "Stop the agent process behind a session; the turn in flight is lost."
+    },
+    "open_new_session": {
+      "category": "sessions",
+      "summary": "Start a new agent session in a project, as a tab in Karmashala."
+    },
+    "get_usage": {
+      "category": "sessions",
+      "summary": "An agent's usage against its limit, where the agent reports one."
+    },
+    "open_session": {
+      "category": "sessions",
+      "summary": "Reattach to a session or resume it; an imported one opens a window."
+    },
+    "session_handoff": {
+      "category": "sessions",
+      "summary": "Continue a session in a different agent, on the same branch."
+    },
+    "session_fork": {
+      "category": "sessions",
+      "summary": "Branch a session into one that shares its history and then diverges."
+    },
+    "session_fork_from_checkpoint": {
+      "category": "sessions",
+      "summary": "Fork a session and roll its files back to a checkpoint; not its conversation."
+    },
+    "open_sessions_in_tmux": {
+      "category": "sessions",
+      "summary": "Open several sessions as tmux windows in one terminal tab (WSL)."
     },
     "terminal_list": {
       "category": "terminals",
@@ -4608,41 +4708,13 @@
       "category": "devices",
       "summary": "Stop that recording and say what file it produced, if any."
     },
-    "snippets_list": {
-      "category": "snippets",
-      "summary": "The commands this person keeps, and whether each fits a given pane."
-    },
-    "snippet_add": {
-      "category": "snippets",
-      "summary": "Save a command as a snippet, tagged for the shell it is written for."
-    },
     "snippet_insert": {
       "category": "snippets",
       "summary": "Type a saved snippet at a pane's prompt and stop, for the user to run."
     },
-    "list_checkouts": {
-      "category": "workspace",
-      "summary": "A project's checkouts: the branch each is on, and who works in it."
-    },
-    "project_rescan": {
-      "category": "workspace",
-      "summary": "Re-read a project's directory for checkouts not known about yet."
-    },
     "select_checkout": {
       "category": "workspace",
       "summary": "Point the Explorer, diff view and side panel at a checkout."
-    },
-    "delivery_status": {
-      "category": "workspace",
-      "summary": "What a checkout still owes: ahead, behind, dirty, unpushed, its PR."
-    },
-    "worktree_create": {
-      "category": "workspace",
-      "summary": "Add a git worktree on a new branch, beside the checkout."
-    },
-    "worktree_remove": {
-      "category": "workspace",
-      "summary": "Delete a worktree — only when it is clean, merged and pushed."
     },
     "list_devices": {
       "category": "devices",
@@ -4724,58 +4796,6 @@
       "category": "records",
       "summary": "Take an item off the inbox without opening it."
     },
-    "notes_list": {
-      "category": "records",
-      "summary": "The notes kept in Karmashala, newest first."
-    },
-    "note_add": {
-      "category": "records",
-      "summary": "Write a note, kept exactly as given and filed under a project."
-    },
-    "note_delete": {
-      "category": "records",
-      "summary": "Delete a note. Notes are not versioned and there is no undo."
-    },
-    "todos_list": {
-      "category": "records",
-      "summary": "The written todo list a person reads: open first, then finished."
-    },
-    "todo_add": {
-      "category": "records",
-      "summary": "Add one todo to the bottom of the list, kept as one line."
-    },
-    "todo_done": {
-      "category": "records",
-      "summary": "Tick a todo off, or reopen it. The row stays either way."
-    },
-    "todo_delete": {
-      "category": "records",
-      "summary": "Delete a todo. todo_done finishes one and keeps the row."
-    },
-    "decision_record": {
-      "category": "records",
-      "summary": "Write down a decision so it reaches the next agent. Append-only."
-    },
-    "review_thread_list": {
-      "category": "review",
-      "summary": "The review threads on a checkout, and whether each still anchors."
-    },
-    "review_thread_get": {
-      "category": "review",
-      "summary": "One thread: every comment, and whether it still anchors to the file."
-    },
-    "review_thread_add": {
-      "category": "review",
-      "summary": "Raise a review comment against a file, for a human to triage."
-    },
-    "review_thread_reply": {
-      "category": "review",
-      "summary": "Answer a review comment in its own thread. Append-only."
-    },
-    "review_thread_status": {
-      "category": "review",
-      "summary": "Move a thread between open, shouldFix, dismissed and resolved."
-    },
     "browser_connect": {
       "category": "browser",
       "summary": "Attach to a Chrome or Edge already listening on a debugging port."
@@ -4851,26 +4871,6 @@
     "project_build": {
       "category": "appProjects",
       "summary": "What a checkout is, and the artifact its own toolchain builds."
-    },
-    "verification_start": {
-      "category": "verification",
-      "summary": "Begin recording a run against a URL, a device, or a diff."
-    },
-    "verification_note": {
-      "category": "verification",
-      "summary": "Add a step of your own: what you are checking, or what you saw."
-    },
-    "verification_finish": {
-      "category": "verification",
-      "summary": "Close the run with a verdict, collect the evidence, write the report."
-    },
-    "verification_list": {
-      "category": "verification",
-      "summary": "The recorded runs, newest first, one line each."
-    },
-    "verification_get": {
-      "category": "verification",
-      "summary": "One run: its verdict, its steps, and what it captured."
     }
   }
 }

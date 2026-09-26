@@ -36,6 +36,7 @@ import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/temp_directory.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 /// Forker's own vocabulary. Deliberately **has no accept-edits**: the carry
 /// rule's downwards-only clause is only visible against an agent that cannot

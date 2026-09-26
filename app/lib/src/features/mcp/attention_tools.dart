@@ -1,13 +1,11 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../notes/application/notes_providers.dart';
-import 'package:karmashala_notes/karmashala_notes.dart';
 import '../notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'todo_tools.dart';
 
-/// What is written down, and what is waiting: notes are the app's own
-/// scratchpad, the inbox is every session that needs somebody.
+/// What is waiting: the inbox is every session that needs somebody, and it is
+/// this app's own reading — the notes and todos are the server's
+/// (`NotesTodosToolSet`).
 class AttentionControlTools {
   AttentionControlTools(this._container, {this.callerSessionId});
 
@@ -15,9 +13,6 @@ class AttentionControlTools {
   final String? callerSessionId;
 
   static const Set<String> _names = <String>{
-    'notes_list',
-    'note_add',
-    'note_delete',
     'inbox_list',
     'inbox_open',
     'inbox_dismiss',
@@ -27,98 +22,11 @@ class AttentionControlTools {
 
   Future<Object?> call(String name, Map<String, dynamic> args) async =>
       switch (name) {
-        'notes_list' => _notesList(
-          args['sessionId'] as String?,
-          projectId: args['projectId'] as String?,
-        ),
-        'note_add' => await _noteAdd(
-          body: (args['body'] as String?) ?? '',
-          title: args['title'] as String?,
-          sessionId: args['sessionId'] as String? ?? callerSessionId,
-          projectId: args['projectId'] as String?,
-        ),
-        'note_delete' => await _noteDelete(args['id'] as String?),
         'inbox_list' => _inboxList(includeSeen: args['includeSeen'] == true),
         'inbox_open' => _inboxOpen(args['id'] as String?),
         'inbox_dismiss' => _inboxDismiss(args['id'] as String?),
         _ => throw ArgumentError('Unknown tool: $name'),
       };
-
-  /// The notes, optionally narrowed to one session and one project, where
-  /// `projectId: 'none'` means the unfiled ones and omitting it means all.
-  Object? _notesList(String? sessionId, {String? projectId}) {
-    final notes = <Note>[
-      for (final note in _container.read(notesRepositoryProvider).list())
-        if ((sessionId == null || note.sourceSessionId == sessionId) &&
-            (projectId == null ||
-                (projectId == TodoControlTools.unfiled
-                    ? note.projectId == null
-                    : note.projectId == projectId)))
-          note,
-    ];
-    return <String, Object?>{
-      // Whether the panel is switched on. A caller adding notes into a surface
-      // nobody can see deserves to know that, and it is not a reason to refuse.
-      'notesPanelEnabled': _container.read(notesEnabledProvider),
-      'notes': <Object?>[
-        for (final note in notes)
-          <String, Object?>{
-            'id': note.id,
-            'title': note.displayTitle,
-            'body': note.body,
-            'projectId': note.projectId,
-            'sourceSessionId': note.sourceSessionId,
-            'sourceRepositoryId': note.sourceRepositoryId,
-            'createdAt': note.createdAt.toIso8601String(),
-            'updatedAt': note.updatedAt.toIso8601String(),
-          },
-      ],
-    };
-  }
-
-  /// Writes a note, keeping [body] **exactly as given**: a note is evidence, and
-  /// a paraphrase's errors are invisible to whoever reads it next.
-  Future<Object?> _noteAdd({
-    required String body,
-    String? title,
-    String? sessionId,
-    String? projectId,
-  }) async {
-    if (body.trim().isEmpty) {
-      throw ArgumentError('body is required and cannot be blank.');
-    }
-    // Which project it lands under: an explicit id wins, `'none'` files it
-    // nowhere, and omitting it follows the session's own repository — which
-    // the server looks up.
-    final unfiled = projectId == TodoControlTools.unfiled;
-    final note = await _container
-        .read(notesProvider.notifier)
-        .captureStored(
-          body: body,
-          title: title,
-          sourceSessionId: sessionId,
-          projectId: unfiled ? null : projectId,
-          inheritProjectFromSource: !unfiled,
-        );
-    return <String, Object?>{
-      'id': note.id,
-      'title': note.displayTitle,
-      'projectId': note.projectId,
-      'sourceSessionId': note.sourceSessionId,
-      'createdAt': note.createdAt.toIso8601String(),
-    };
-  }
-
-  Future<Object?> _noteDelete(String? id) async {
-    if (id == null || id.isEmpty) {
-      throw ArgumentError('id is required. notes_list has the ids.');
-    }
-    if (_container.read(notesRepositoryProvider).byId(id) == null) {
-      throw StateError('No note with id $id.');
-    }
-    await _container.read(notesProvider.notifier).deleteStored(id);
-    return <String, Object?>{'id': id, 'deleted': true};
-  }
 
   /// Everything waiting on somebody, newest first. `kind` is the fact that
   /// matters: `needsApproval` and `failed` will not restart themselves.
@@ -322,129 +230,6 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
         'mayReturn': {'type': 'boolean'},
       },
       'required': ['id', 'dismissed', 'mayReturn'],
-    },
-  },
-  {
-    'name': 'notes_list',
-    'description':
-        'The notes kept in Karmashala, newest first. Pass sessionId to see '
-        'only the ones captured from one session, and projectId to see only '
-        'the ones filed under one project — or the literal "none" for the '
-        'ones filed under no project.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'sessionId': {
-          'type': 'string',
-          'description': 'Only notes captured from this session.',
-        },
-        'projectId': {
-          'type': 'string',
-          'description':
-              'Only notes filed under this project (list_projects has the '
-              'ids), or "none" for only the ones filed under no project. '
-              'Omit for all of them.',
-        },
-      },
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'notesPanelEnabled': {'type': 'boolean'},
-        'notes': {
-          'type': 'array',
-          'items': {
-            'type': 'object',
-            'properties': {
-              'id': {'type': 'string'},
-              'title': {'type': 'string'},
-              'body': {'type': 'string'},
-              'projectId': {
-                'type': ['string', 'null'],
-              },
-              'sourceSessionId': {
-                'type': ['string', 'null'],
-              },
-              'sourceRepositoryId': {
-                'type': ['string', 'null'],
-              },
-              'createdAt': {'type': 'string'},
-              'updatedAt': {'type': 'string'},
-            },
-            'required': ['id', 'title', 'body'],
-          },
-        },
-      },
-      'required': ['notes', 'notesPanelEnabled'],
-    },
-  },
-  {
-    'name': 'note_add',
-    'description':
-        'Write a note. The body is kept EXACTLY as given — nothing here trims '
-        'it to a gist — so pass the words that should survive, not a summary '
-        'of them. Attributed to the calling session unless sessionId names '
-        'another, and filed under that session\'s project unless projectId '
-        'says otherwise.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'body': {'type': 'string', 'description': 'The note, verbatim.'},
-        'title': {
-          'type': 'string',
-          'description':
-              'Optional. Without one the note is named by its first line.',
-        },
-        'sessionId': {
-          'type': 'string',
-          'description':
-              'Which session this came from. Defaults to the calling session.',
-        },
-        'projectId': {
-          'type': 'string',
-          'description':
-              'Which project to file it under (list_projects has the ids), or '
-              '"none" for no project. Defaults to the project of the session '
-              'it came from.',
-        },
-      },
-      'required': ['body'],
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'id': {'type': 'string'},
-        'title': {'type': 'string'},
-        'projectId': {
-          'type': ['string', 'null'],
-        },
-        'sourceSessionId': {
-          'type': ['string', 'null'],
-        },
-        'createdAt': {'type': 'string'},
-      },
-      'required': ['id', 'title'],
-    },
-  },
-  {
-    'name': 'note_delete',
-    'description':
-        'Delete a note. DESTRUCTIVE: notes are not versioned and there is no '
-        'undo.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'id': {'type': 'string', 'description': 'Note id, from notes_list.'},
-      },
-      'required': ['id'],
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'id': {'type': 'string'},
-        'deleted': {'type': 'boolean'},
-      },
-      'required': ['id', 'deleted'],
     },
   },
 ];

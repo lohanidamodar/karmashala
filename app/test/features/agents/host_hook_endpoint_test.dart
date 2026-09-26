@@ -53,8 +53,21 @@ void main() {
     expect(kHookPayloadLimitBytes, kAgentHookPayloadLimitBytes);
   });
 
-  test('with host-backed panes off, the app route is what is installed', () {
+  test('with host-backed panes off, hooks still go to the server: it '
+      'checkpoints and adopts from them (slice 2b)', () {
     final container = containerWith(hostBacked: false);
+    expect(container.read(agentHooksAtHostProvider), isTrue);
+    expect(
+      installableHookEndpoint(container, appRoute: appRoute),
+      isNot(appRoute),
+    );
+  });
+
+  test('with no server reachable, the app route is what is installed', () {
+    final container = ProviderContainer(
+      overrides: [localHostSessionAccessProvider.overrideWithValue(null)],
+    );
+    addTearDown(container.dispose);
     expect(container.read(agentHooksAtHostProvider), isFalse);
     expect(installableHookEndpoint(container, appRoute: appRoute), appRoute);
   });

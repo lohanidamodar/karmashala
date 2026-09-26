@@ -11,6 +11,11 @@ import 'package:karmashala_session/session.dart';
 
 /// Where the work is: the checkouts under a project, and what one of them owes.
 /// Every session runs in a checkout, where `list_projects` stops at the project.
+///
+/// The server runs `list_checkouts`, `project_rescan` and `delivery_status`
+/// itself (and serves their schemas); a call reaches this only for a checkout
+/// on an SSH host, which only this app reaches. `select_checkout` moves this
+/// app's own screen and is always here.
 class WorkspaceControlTools {
   WorkspaceControlTools(this._container, {this.callerSessionId});
 
@@ -204,104 +209,6 @@ class WorkspaceControlTools {
 /// The schemas for [WorkspaceControlTools].
 const List<Map<String, dynamic>> workspaceControlToolSchemas = [
   {
-    'name': 'list_checkouts',
-    'description':
-        'The checkouts under a project: the main clone and every worktree, '
-        'with the branch each is on, which one the side panel is pointed at, '
-        'and which sessions Karmashala records as working in each. A branch '
-        'reads "not recorded" when git could not be asked — that is not the '
-        'same as being on no branch. Only a session\'s own worktree is '
-        'isolated: a session works in one worktree at most, so any other '
-        'repository it touches is a checkout shared with every other session '
-        'that touches it — same working tree, same index, same branch. Read '
-        'sessionsWorkingHere before editing or running a build in a checkout '
-        'that is not your own; an empty list means none was recorded, not that '
-        'the checkout is free.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'projectId': {
-          'type': 'string',
-          'description': 'Which project, from list_projects.',
-        },
-      },
-      'required': ['projectId'],
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'projectId': {'type': 'string'},
-        'checkouts': {
-          'type': 'array',
-          'items': {
-            'type': 'object',
-            'properties': {
-              'repositoryId': {'type': 'string'},
-              'name': {'type': 'string'},
-              'path': {'type': 'string'},
-              'environmentId': {'type': 'string'},
-              'selected': {'type': 'boolean'},
-              'branch': {'type': 'string'},
-              'isWorktree': {
-                'type': ['boolean', 'null'],
-              },
-              'sessionsWorkingHere': {
-                'type': 'array',
-                'items': {
-                  'type': 'object',
-                  'properties': {
-                    'sessionId': {'type': 'string'},
-                    'title': {'type': 'string'},
-                    'status': {'type': 'string'},
-                  },
-                  'required': ['sessionId', 'title', 'status'],
-                },
-              },
-            },
-            'required': [
-              'repositoryId',
-              'name',
-              'path',
-              'branch',
-              'sessionsWorkingHere',
-            ],
-          },
-        },
-      },
-      'required': ['projectId', 'checkouts'],
-    },
-  },
-  {
-    'name': 'project_rescan',
-    'description':
-        'Re-read a project\'s directory for checkouts Karmashala does not '
-        'know about yet — a worktree added from the command line, a clone '
-        'dropped in beside the others. Returns every checkout found '
-        'afterwards, not a list of what changed.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'projectId': {
-          'type': 'string',
-          'description': 'Which project, from list_projects.',
-        },
-      },
-      'required': ['projectId'],
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'projectId': {'type': 'string'},
-        'count': {'type': 'number'},
-        'checkouts': {
-          'type': 'array',
-          'items': {'type': 'object'},
-        },
-      },
-      'required': ['projectId', 'checkouts', 'count'],
-    },
-  },
-  {
     'name': 'select_checkout',
     'description':
         'Point Karmashala\'s Explorer, diff view and side panel at a '
@@ -328,73 +235,6 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
         'selected': {'type': 'boolean'},
       },
       'required': ['repositoryId', 'selected'],
-    },
-  },
-  {
-    'name': 'delivery_status',
-    'description':
-        'What a session\'s checkout still owes: branch, how far ahead of and '
-        'behind its base, dirty files, unpushed commits, its pull request, and '
-        'the actions Karmashala offers on it. Omit sessionId for your own '
-        'session. Any value Karmashala could not measure reads "not recorded" '
-        '— never 0, and never "none". A failed git call and a clean tree are '
-        'different facts.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'sessionId': {
-          'type': 'string',
-          'description': 'Which session. Defaults to the calling session.',
-        },
-      },
-    },
-    'outputSchema': {
-      'type': 'object',
-      'properties': {
-        'sessionId': {'type': 'string'},
-        'title': {'type': 'string'},
-        'stage': {'type': 'string'},
-        'branch': {'type': 'string'},
-        'baseBranch': {'type': 'string'},
-        'upstream': {'type': 'string'},
-        'hasWorktree': {'type': 'boolean'},
-        'archived': {'type': 'boolean'},
-        'dirtyFiles': {
-          'type': ['number', 'string'],
-        },
-        'aheadOfBase': {
-          'type': ['number', 'string'],
-        },
-        'behindBase': {
-          'type': ['number', 'string'],
-        },
-        'unpushed': {
-          'type': ['number', 'string'],
-        },
-        'agentRunning': {
-          'type': ['boolean', 'string'],
-        },
-        'pullRequest': {
-          'type': ['object', 'string'],
-        },
-        'actions': {
-          'type': 'array',
-          'items': {
-            'type': 'object',
-            'properties': {
-              'action': {'type': 'string'},
-              'label': {'type': 'string'},
-              'primary': {'type': 'boolean'},
-              'available': {'type': 'boolean'},
-              'unavailableBecause': {
-                'type': ['string', 'null'],
-              },
-            },
-            'required': ['action', 'label', 'available'],
-          },
-        },
-      },
-      'required': ['sessionId', 'stage', 'branch', 'actions'],
     },
   },
 ];

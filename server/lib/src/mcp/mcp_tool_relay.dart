@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:karmashala_mcp/catalogue.dart';
+
 import '../protocol/messages.dart';
 import 'mcp_credentials.dart';
+import 'tools/server_tools.dart';
 
 /// What an agent is told when a tool needs the app and no app is connected.
 const String kMcpAppNotRunning =
@@ -18,14 +21,19 @@ class McpToolRelayFailure implements Exception {
   String toString() => message;
 }
 
-/// Tool calls taken by the daemon and run by the connected app: the catalogue
-/// the app last sent, the one connection calls go to, and the calls in flight.
-/// No call is timed out here — `session_wait` and `terminal_run` block for as
-/// long as their own arguments say, exactly as they did in the app's server.
+/// Tool calls taken by the daemon: run here by [tools] — every tool that
+/// needs no desktop UI (slice 2b) — or forwarded to the connected app, whose
+/// tools (panes, the editor, browsers, devices, recordings) it sent last. No
+/// call is timed out here — `session_wait` and `terminal_run` block for as
+/// long as their own arguments say.
 class McpToolRelay {
-  McpToolRelay({this.cachePath}) {
+  McpToolRelay({this.cachePath, ServerTools? tools})
+    : tools = tools ?? ServerTools() {
     _catalogue = _readCache();
   }
+
+  /// The tools the server runs itself.
+  final ServerTools tools;
 
   /// Where the catalogue is kept between runs, so agents still list tools when
   /// the daemon starts before the app. Null keeps it in memory only.
@@ -36,19 +44,15 @@ class McpToolRelay {
   final _pending = <int, _PendingCall>{};
   var _lastCallId = 0;
 
-  /// What `tools/list` serves: the connected app's tools, else the last sent.
-  List<Map<String, dynamic>> catalogue() => _catalogue;
+  /// What `tools/list` serves, annotated: the server's own tools, then the
+  /// connected app's (else the last it sent) that the server does not run.
+  List<Map<String, dynamic>> catalogue() => annotatedToolSchemas([
+    ...tools.schemas,
+    for (final tool in _catalogue)
+      if (!tools.serves('${tool['name']}')) tool,
+  ]);
 
   bool get appConnected => _app != null;
-
-  /// A tool the daemon answers itself (`checks_run` on this machine), or null
-  /// to hand the call to the app like every other.
-  Future<Object?>? Function(
-    String tool,
-    Map<String, dynamic> arguments,
-    String? callerSessionId,
-  )?
-  local;
 
   /// [owner] runs tools from now on, with [tools] as its catalogue; frames to
   /// it go through [send].
@@ -88,14 +92,15 @@ class McpToolRelay {
     }
   }
 
-  /// Runs [tool] in the app for [callerSessionId]. Throws
-  /// [McpToolRelayFailure] when no app is connected or the tool failed.
+  /// Runs [tool] for [callerSessionId]: here when the server runs it, else in
+  /// the app. Throws [McpToolRelayFailure] when the app is needed and none is
+  /// connected, or its tool failed.
   Future<Object?> call(
     String tool,
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
-    final here = local?.call(tool, arguments, callerSessionId);
+    final here = tools.call(tool, arguments, callerSessionId);
     if (here != null) return here;
     final app = _app;
     if (app == null) {

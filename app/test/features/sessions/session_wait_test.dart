@@ -19,6 +19,7 @@ import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 /// **The wait, driven by events and never by a clock.**
 ///
@@ -520,7 +521,7 @@ void main() {
       expect(SessionWaitService.boundFor(0), SessionWaitService.defaultBound);
       expect(SessionWaitService.boundFor(-5), SessionWaitService.defaultBound);
       expect(SessionWaitService.boundFor(10), const Duration(seconds: 10));
-      expect(SessionWaitService.boundFor(600), SessionWaitService.maxBound);
+      expect(SessionWaitService.boundFor(600), kSessionWaitMaxBound);
     });
 
     test('the cap clears the transports a call has to cross', () {
@@ -528,7 +529,7 @@ void main() {
       // same — and it *retries*. A bound at or over either would turn one wait
       // into two.
       expect(
-        SessionWaitService.maxBound,
+        kSessionWaitMaxBound,
         lessThan(const Duration(seconds: 60)),
       );
     });

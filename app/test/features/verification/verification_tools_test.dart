@@ -1,7 +1,5 @@
-import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
-import 'package:karmashala/src/features/verification/application/verification_tool_schemas.dart';
-import 'package:karmashala/src/features/verification/application/verification_tools.dart';
+import 'package:karmashala_verification/tools.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,6 +18,9 @@ String textOf(Object? result) =>
 int imagesIn(Object? result) =>
     blocks(result).where((b) => b['type'] == 'image').length;
 
+/// The tools over the app's own recorder: the runs it holds are the ones that
+/// drive its browser or a device (the server forwards those calls here). A
+/// review of a change is the server's — `server/test/mcp/tools/`.
 void main() {
   late VerificationHarness h;
   late VerificationTools tools;
@@ -35,16 +36,6 @@ void main() {
       expect(VerificationTools.handles('verification_start'), isTrue);
       expect(VerificationTools.handles('browser_click'), isFalse);
       expect(VerificationTools.handles('device_tap'), isFalse);
-    });
-
-    test('every schema is served by the control server', () {
-      final served = McpToolDispatcher.toolSchemas
-          .map((s) => s['name'])
-          .toSet();
-      for (final schema in verificationToolSchemas) {
-        expect(served, contains(schema['name']));
-      }
-      expect(verificationToolSchemas, hasLength(5));
     });
 
     test('an unknown tool in the namespace is named, not swallowed', () {

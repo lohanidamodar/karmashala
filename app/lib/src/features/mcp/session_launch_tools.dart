@@ -6,10 +6,8 @@ import '../agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import '../checkpoints/application/checkpoint_fork.dart';
-import '../checkpoints/application/checkpoint_providers.dart';
+import '../checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import '../checkpoints/domain/checkpoint_title.dart';
 import '../environments/application/environment_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../projects/application/projects_controller.dart';
@@ -438,7 +436,7 @@ class SessionLaunchTools {
     bool preview = false,
   }) async {
     if (sessionId == null) throw ArgumentError('Missing sessionId.');
-    final checkpoints = _container.read(checkpointServiceProvider);
+    final checkpoints = _container.read(checkpointsDataProvider);
     final checkpoint = await _forkCheckpoint(
       checkpoints,
       sessionId: sessionId,
@@ -451,9 +449,7 @@ class SessionLaunchTools {
     final others = _sessionsSharing(checkpoint.repository, sessionId);
     final fileRefusal = checkpointForkFileRefusal(
       intoNewWorktree: newWorktree,
-      unsupportedEnvironmentReason: checkpoints.unsupportedReason(
-        checkpoint.repository,
-      ),
+      unsupportedEnvironmentReason: _unsupportedReason(checkpoint.repository),
       otherSessionsInCheckout: others,
     );
 
@@ -535,7 +531,7 @@ class SessionLaunchTools {
   /// The checkpoint the caller named, by id or by turn. Refuses rather than
   /// guessing: a checkpoint of another session is not a smaller right answer.
   Future<Checkpoint> _forkCheckpoint(
-    CheckpointService service, {
+    CheckpointsData service, {
     required String sessionId,
     String? checkpointId,
     int? turn,
@@ -572,6 +568,22 @@ class SessionLaunchTools {
       );
     }
     return checkpoint;
+  }
+
+  /// Why [repository]'s tree cannot be restored here, in the checkpoint
+  /// service's words, or null.
+  String? _unsupportedReason(EnvironmentPath repository) {
+    final env = _container
+        .read(environmentsDataProvider)
+        .getById(repository.environmentId);
+    if (env == null) {
+      return 'its environment ${repository.environmentId} is unknown';
+    }
+    if (env.kind == EnvironmentKind.ssh) {
+      return 'checkpoints are not supported for repositories on ${env.name}: '
+          'they need a private git index this machine can write to';
+    }
+    return null;
   }
 
   /// The **other** sessions recorded as working in [repository]. Empty is not a
@@ -764,67 +776,6 @@ class SessionLaunchTools {
 /// The schemas for the tools in [SessionLaunchTools] that start or reopen a
 /// session. Two lists, because the served order is a contract the golden holds.
 const List<Map<String, dynamic>> sessionLaunchToolSchemas = [
-  {
-    'name': 'open_new_session',
-    'description':
-        'Start a NEW agent session (not a resume) in a project, as a terminal '
-        'tab in Karmashala. Choose the agent with agentInstallationId (from '
-        'list_agents) or cli ("claude"/"codex"); omit both to use the '
-        "configured default. repositoryId is optional (defaults to the "
-        "project's first repository). The agent must be installed in the "
-        "project's environment. Sessions you start this way are recorded as "
-        'your children, and nesting is capped: if the call is refused for '
-        'depth, do the work yourself instead of delegating it further.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'projectId': {
-          'type': 'string',
-          'description': 'Project id from list_projects.',
-        },
-        'cli': {
-          'type': 'string',
-          'description': 'Agent CLI to use: "claude" or "codex".',
-        },
-        'agentInstallationId': {
-          'type': 'string',
-          'description': 'Specific installation id from list_agents.',
-        },
-        'repositoryId': {'type': 'string'},
-        'title': {
-          'type': 'string',
-          'description': 'Short name for the session, shown in the tab.',
-        },
-        'prompt': {
-          'type': 'string',
-          'description':
-              'Opening instruction for the new agent. Sent as its first '
-              'message, prefixed with a line naming this session.',
-        },
-        'useWorktree': {
-          'type': 'boolean',
-          'description':
-              'Run in a dedicated Git worktree instead of the repository '
-              'itself. Use this when the new session will edit files and you '
-              'are still working in the same repository.',
-        },
-        'permissionMode': {
-          'type': 'string',
-          'enum': permissionRiskNames,
-          'description':
-              'How much the new agent may do without asking, on the scale '
-              'every agent shares. The chosen agent is given the closest '
-              'mode it really has, never one it does not — Codex, for '
-              'instance, has nothing at "ask". Omit to use the mode '
-              'configured in Settings, which is what the New-session dialog '
-              'does. A session you start holds no more than the least of your '
-              'own mode and "autoRun"; a mode above that is refused, and only '
-              'the user can raise it, from the new session\'s permission chip.',
-        },
-      },
-      'required': ['projectId'],
-    },
-  },
   {
     'name': 'get_usage',
     'description':

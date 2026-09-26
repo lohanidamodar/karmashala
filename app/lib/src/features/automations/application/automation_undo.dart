@@ -1,7 +1,6 @@
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../checkpoints/application/checkpoint_providers.dart';
 import '../../checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../../git/application/changes_providers.dart';
@@ -74,8 +73,9 @@ class AutomationUndo {
     );
   }
 
-  /// Puts the files back as they stood before [run] started. A moved tree is
-  /// refused once with a [CheckpointConflict] — `CheckpointService`'s own rule.
+  /// Puts the files back as they stood before [run] started, at the server. A
+  /// moved tree is refused once with a [CheckpointConflict] — the checkpoint
+  /// service's own rule, carried back whole.
   Future<RestoreOutcome> restoreFiles(
     AutomationRun run, {
     bool confirm = false,
@@ -94,7 +94,7 @@ class AutomationUndo {
         'nothing to put the files back to.',
       );
     }
-    return _ref.read(checkpointServiceProvider).restore(base, confirm: confirm);
+    return _ref.read(checkpointsDataProvider).restore(base, confirm: confirm);
   }
 
   /// Whether the commits may be dropped, in the tooltip's words; null means yes.

@@ -1,38 +1,12 @@
-import '../../workspaces/data/workspace_data.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/process/command_runner_providers.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
-import '../../environments/application/environment_providers.dart';
 import '../../git/application/parsed_diff.dart';
-import 'package:agent_cli/process.dart';
-import '../../sessions/application/session_providers.dart';
-import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../data/checkpoints_data.dart';
 
-final checkpointServiceProvider = Provider<CheckpointService>(
-  (ref) => CheckpointService(
-    runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environmentOf: ref.watch(environmentsDataProvider).getById,
-    records: ref.watch(checkpointsDataProvider),
-    clock: ref.watch(clockProvider),
-    newId: () => ref.read(idGeneratorProvider).newId(),
-  ),
-);
-
-/// The working tree a session's checkpoints are taken of. `null` when the
-/// session or its repository is gone — a reason not to checkpoint, not an error.
-EnvironmentPath? checkpointTargetFor(Ref ref, String sessionId) {
-  final session = ref.read(sessionsDataProvider).getById(sessionId);
-  if (session == null) return null;
-  final worktree = session.worktree;
-  if (worktree != null) return worktree;
-  return ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
-}
-
-/// Moves whenever a checkpoint is recorded or pruned — here or by another
-/// client — so views refresh without polling.
+/// Moves whenever a checkpoint is recorded or pruned, or a session's skip
+/// reason changes — here or by another client — so views refresh without
+/// polling.
 class CheckpointsRevisionController extends Notifier<int> {
   @override
   int build() {
@@ -61,11 +35,20 @@ final sessionCheckpointsProvider = FutureProvider.autoDispose
       return chain.reversed.toList();
     });
 
-/// What [checkpoint] changed, read from git once and parsed once. A future in
-/// `build` re-ran `git diff` on every rebuild of the expanded row.
+/// Why [sessionId] has no automatic checkpoints right now, in the server's
+/// recorder's words; null while it is checkpointing.
+final checkpointSkipReasonProvider = Provider.autoDispose
+    .family<String?, String>((ref, sessionId) {
+      ref.watch(checkpointsRevisionProvider);
+      return ref.watch(checkpointsDataProvider).skipReasonOf(sessionId);
+    });
+
+/// What [checkpoint] changed, read from git by the server once and parsed
+/// once. A future in `build` re-ran the diff on every rebuild of the
+/// expanded row.
 final checkpointDiffProvider = FutureProvider.autoDispose
     .family<ParsedDiff, Checkpoint>(
       (ref, checkpoint) async => ParsedDiff.parse(
-        await ref.read(checkpointServiceProvider).diffOf(checkpoint),
+        await ref.read(checkpointsDataProvider).diffOf(checkpoint),
       ),
     );

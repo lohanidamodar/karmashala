@@ -346,13 +346,5 @@ void main() {
       expect(launcher.launches, 2);
       expect(a['sessionId'], isNot(b['sessionId']));
     });
-
-    test('a read answers freshly every time', () async {
-      expect(await call('list_sessions', const {}), isEmpty);
-      db.server.sessionRows.insert(session());
-      // The ledger must not be in the way of a read: the identical call, made
-      // a moment later, has to see what changed in between.
-      expect(await call('list_sessions', const {}), hasLength(1));
-    });
   });
 }

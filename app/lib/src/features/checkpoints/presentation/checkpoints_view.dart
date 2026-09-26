@@ -10,14 +10,14 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/session_context.dart';
 import '../../git/presentation/diff_line_tile.dart';
-import 'package:karmashala_git/git.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/agent_rewind_points.dart';
 import '../application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import '../application/session_checkpoint_recorder.dart';
-import '../domain/checkpoint_title.dart';
+import '../data/checkpoints_data.dart';
 
 /// Which session's checkpoints the panel is describing — the session **on
 /// screen**, not the one last clicked in the Explorer.
@@ -78,9 +78,7 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
 
     final checkpoints =
         ref.watch(sessionCheckpointsProvider(sessionId)).value ?? const [];
-    final skipped = ref.watch(
-      checkpointSkipReasonsProvider.select((reasons) => reasons[sessionId]),
-    );
+    final skipped = ref.watch(checkpointSkipReasonProvider(sessionId));
     final native = _AgentRewindNote(sessionId: sessionId);
     if (checkpoints.isEmpty) {
       return Column(
@@ -174,8 +172,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     );
   }
 
-  /// Puts [checkpoint] back — the whole tree, or only [paths], sent as one
-  /// whole-file [HunkSelection] each exactly as `checkpoint_restore` does.
+  /// Puts [checkpoint] back — the whole tree, or only [paths] — at the server,
+  /// exactly as `checkpoint_restore` does.
   Future<void> _restore(
     Checkpoint checkpoint, {
     bool confirm = false,
@@ -185,12 +183,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       final outcome = await ref
-          .read(checkpointServiceProvider)
-          .restore(
-            checkpoint,
-            confirm: confirm,
-            selection: [for (final path in paths) HunkSelection(path)],
-          );
+          .read(checkpointsDataProvider)
+          .restore(checkpoint, confirm: confirm, paths: paths);
       // The service's own sentence, not a second one written here.
       messenger?.showSnackBar(
         SnackBar(content: Text(restoreOutcomeMessage(outcome))),
@@ -202,6 +196,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
         await _restore(checkpoint, confirm: true, paths: paths);
         return;
       }
+    } on DataRefused catch (refusal) {
+      messenger?.showSnackBar(SnackBar(content: Text(refusal.message)));
     } catch (error) {
       messenger?.showSnackBar(SnackBar(content: Text('$error')));
     } finally {
@@ -209,14 +205,14 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     }
   }
 
-  /// **Capture now**, through [SessionCheckpointRecorder] — the door the MCP
-  /// tool uses. Going straight to the service skips the guard, revision and record.
+  /// **Capture now**, through the server's recorder — the door the MCP tool
+  /// uses, so it waits its turn behind the session's own captures.
   Future<void> _captureNow(String sessionId) async {
     setState(() => _capturing = true);
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       final checkpoint = await ref
-          .read(sessionCheckpointRecorderProvider.notifier)
+          .read(checkpointsDataProvider)
           .captureNow(sessionId, decidedBy: 'the user');
       messenger?.showSnackBar(
         SnackBar(
@@ -227,13 +223,16 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
           ),
         ),
       );
+    } on DataRefused catch (refusal) {
+      messenger?.showSnackBar(SnackBar(content: Text(refusal.message)));
     } finally {
       if (mounted) setState(() => _capturing = false);
     }
   }
 
   /// The refusal, in the service's words: [checkpointRestoreRefusal] is the
-  /// function `restore` refuses on, so this *is* the rule that was applied.
+  /// function the server's restore refuses on, so this *is* the rule that
+  /// was applied.
   Future<bool> _askToOverwrite(CheckpointConflict conflict) async {
     final answer = await showDialog<bool>(
       context: context,

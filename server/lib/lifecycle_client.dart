@@ -25,6 +25,8 @@ export 'src/protocol/messages.dart'
         LifecycleEvent,
         LifecycleEventKind,
         McpCallMessage,
+        PaneFacts,
+        PaneTailsWantedMessage,
         PairedMessage,
         PromptAnsweredMessage,
         PromptRefusalKind,

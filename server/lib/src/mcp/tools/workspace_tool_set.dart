@@ -1,0 +1,418 @@
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_git/git.dart';
+import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_projects/store.dart';
+import 'package:karmashala_session/delivery.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session_engine/store.dart';
+
+import 'checkout_delivery.dart';
+import 'checkout_labels.dart';
+import 'checkout_reach.dart';
+import 'project_folders.dart';
+import 'server_tool_context.dart';
+import 'server_tool_set.dart';
+import 'session_liveness.dart';
+
+/// Where the work is: the checkouts under a project, a rescan for the ones it
+/// does not know, and what a session's checkout still owes. Every session
+/// runs in a checkout, where `list_projects` stops at the project.
+///
+/// A project or session in an environment the server does not reach (an SSH
+/// host; WSL off Windows) is handed to the app. `select_checkout` moves the
+/// app's own screen and stays the app's.
+class WorkspaceToolSet extends ServerToolSet {
+  WorkspaceToolSet(
+    this._context, {
+    required CheckoutReach reach,
+    required ProjectFolders folders,
+    required Future<List<GitWorktree>> Function(EnvironmentPath) worktreesOf,
+    SessionLiveness liveness = SessionLiveness.rowsOnly,
+  }) : _reach = reach,
+       _folders = folders,
+       _worktreesOf = worktreesOf,
+       _liveness = liveness,
+       _delivery = CheckoutDeliveryReader(reach);
+
+  final ServerToolContext _context;
+  final CheckoutReach _reach;
+  final ProjectFolders _folders;
+  final Future<List<GitWorktree>> Function(EnvironmentPath) _worktreesOf;
+  final SessionLiveness _liveness;
+  final CheckoutDeliveryReader _delivery;
+
+  @override
+  List<Map<String, Object?>> get schemas => workspaceToolSchemas;
+
+  @override
+  Future<Object?>? call(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) => switch (tool) {
+    'list_checkouts' => _listCheckouts(arguments['projectId'] as String?),
+    'project_rescan' => _rescan(arguments['projectId'] as String?),
+    'delivery_status' => _deliveryStatus(arguments, callerSessionId),
+    _ => runTool(() => throw ArgumentError('Unknown tool: $tool')),
+  };
+
+  Future<Object?>? _listCheckouts(String? projectId) {
+    if (projectId == null || projectId.isEmpty) {
+      return runTool(
+        () => throw ArgumentError(
+          'projectId is required. list_projects has the ids.',
+        ),
+      );
+    }
+    final repositories = RepositoryDao(
+      _context.database,
+    ).getByProject(projectId);
+    if (repositories.isEmpty) {
+      return runTool(
+        () => throw StateError(
+          'No project with id $projectId, or it has no checkouts. Try '
+          'project_rescan.',
+        ),
+      );
+    }
+    if (!repositories.every((r) => _reach.answers(r.environmentId))) {
+      return null;
+    }
+    return runTool(() async {
+      // One `git worktree list` per family, and it may simply fail: a
+      // checkout whose git could not answer is absent from the map rather
+      // than wrong in it.
+      final labels = await readCheckoutLabels(repositories, _worktreesOf);
+      // Who else is standing here: without occupancy, fan-out candidates
+      // sharing every repository but the primary one could not notice each
+      // other.
+      final rows = SessionDao(_context.database).getAll();
+      return <String, Object?>{
+        'projectId': projectId,
+        'checkouts': <Object?>[
+          for (final repository in repositories)
+            <String, Object?>{
+              'repositoryId': repository.id,
+              'name': repository.name,
+              'path': repository.path.path,
+              'environmentId': repository.path.environmentId,
+              // `selected` is the app's screen, which the server does not
+              // see; select_checkout (the app's) moves it.
+              'branch': labels[repository.id]?.branch ?? 'not recorded',
+              'isWorktree': labels[repository.id]?.isWorktree,
+              // Sessions the workspace records as working in this exact
+              // directory: an empty list is **not** a promise that nobody is
+              // here.
+              'sessionsWorkingHere': <Object?>[
+                for (final session in sessionsWorkingIn(
+                  repository.path,
+                  excluding: '',
+                  among: rows,
+                  pathsMatch: samePath,
+                ))
+                  <String, Object?>{
+                    'sessionId': session.id,
+                    'title': session.title,
+                    'status': session.status.name,
+                  },
+              ],
+            },
+        ],
+      };
+    });
+  }
+
+  /// Re-reads a project's directory for checkouts it does not know about,
+  /// and returns what is there afterwards: a diff would be a fact nobody
+  /// measured.
+  Future<Object?>? _rescan(String? projectId) {
+    if (projectId == null || projectId.isEmpty) {
+      return runTool(
+        () => throw ArgumentError(
+          'projectId is required. list_projects has the ids.',
+        ),
+      );
+    }
+    final project = ProjectDao(_context.database).getById(projectId);
+    if (project == null) {
+      return runTool(
+        () => throw StateError('This project is no longer in the workspace.'),
+      );
+    }
+    if (!_reach.answers(project.environmentId)) return null;
+    return runTool(() async {
+      final found = await _folders.rediscover(project);
+      return <String, Object?>{
+        'projectId': projectId,
+        'checkouts': <Object?>[
+          for (final repository in found)
+            <String, Object?>{
+              'repositoryId': repository.id,
+              'name': repository.name,
+              'path': repository.path.path,
+            },
+        ],
+        'count': found.length,
+      };
+    });
+  }
+
+  /// What a session's checkout still owes. Every count is nullable at the
+  /// source, and an unknown reads "not recorded" rather than `0`.
+  Future<Object?>? _deliveryStatus(
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) {
+    final String sessionId;
+    try {
+      sessionId = _targetSession(arguments, callerSessionId);
+    } on ArgumentError catch (error) {
+      return runTool(() => throw error);
+    }
+    final session = SessionDao(_context.database).getById(sessionId);
+    if (session == null) {
+      return runTool(() => throw StateError('No session with id $sessionId.'));
+    }
+    final repository = RepositoryDao(
+      _context.database,
+    ).getById(session.repositoryId);
+    final directory = session.worktree ?? repository?.path;
+    if (directory != null && !_reach.answers(directory.environmentId)) {
+      return null;
+    }
+    return runTool(() async {
+      final delivery = await _delivery.session(
+        session,
+        repository,
+        agentRunning: _liveness.isLive(session),
+      );
+      final actions = deliveryActionsFor(delivery);
+      final pr = delivery.pullRequest;
+      return <String, Object?>{
+        'sessionId': sessionId,
+        'title': session.title,
+        'stage': delivery.stage.label,
+        'branch': delivery.branch ?? 'not recorded',
+        'baseBranch': delivery.baseBranch ?? 'not recorded',
+        'upstream': delivery.upstream ?? 'not recorded',
+        'hasWorktree': delivery.hasWorktree,
+        'archived': delivery.archived,
+        'dirtyFiles': delivery.dirtyFiles ?? 'not recorded',
+        'aheadOfBase': delivery.aheadOfBase ?? 'not recorded',
+        'behindBase': delivery.behindBase ?? 'not recorded',
+        'unpushed': delivery.unpushed ?? 'not recorded',
+        'agentRunning': delivery.agentRunning ?? 'not recorded',
+        'pullRequest': pr == null
+            ? 'not recorded — no open pull request was found for this branch'
+            : <String, Object?>{
+                'number': pr.number,
+                'title': pr.title,
+                'state': pr.state.name,
+                'url': pr.url,
+                'isDraft': pr.isDraft,
+                'mergeable': pr.mergeable ?? 'not recorded',
+                'reviewDecision': pr.reviewDecision?.name ?? 'not recorded',
+                'checks': pr.checks.toString(),
+              },
+        // What the delivery strip would offer a user looking at this
+        // session, so an agent and the person beside it are choosing from
+        // the same list.
+        'actions': <Object?>[
+          for (final offered in actions)
+            <String, Object?>{
+              'action': offered.action.name,
+              'label': offered.action.label,
+              'primary': offered.isPrimary,
+              'available': offered.disabledReason == null,
+              'unavailableBecause': offered.disabledReason,
+            },
+        ],
+      };
+    });
+  }
+
+  /// The session named, else the caller — in this tool's own words.
+  static String _targetSession(
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) {
+    final named = arguments['sessionId'] as String?;
+    if (named != null && named.trim().isNotEmpty) return named.trim();
+    if (callerSessionId != null && callerSessionId.isNotEmpty) {
+      return callerSessionId;
+    }
+    throw ArgumentError(
+      'No sessionId, and this caller is not running inside a session. Pass '
+      'sessionId — list_sessions has the ids.',
+    );
+  }
+}
+
+/// The schemas for [WorkspaceToolSet].
+const List<Map<String, Object?>> workspaceToolSchemas = [
+  {
+    'name': 'list_checkouts',
+    'description':
+        'The checkouts under a project: the main clone and every worktree, '
+        'with the branch each is on, which one the side panel is pointed at, '
+        'and which sessions Karmashala records as working in each. A branch '
+        'reads "not recorded" when git could not be asked — that is not the '
+        'same as being on no branch. Only a session\'s own worktree is '
+        'isolated: a session works in one worktree at most, so any other '
+        'repository it touches is a checkout shared with every other session '
+        'that touches it — same working tree, same index, same branch. Read '
+        'sessionsWorkingHere before editing or running a build in a checkout '
+        'that is not your own; an empty list means none was recorded, not that '
+        'the checkout is free.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'projectId': {
+          'type': 'string',
+          'description': 'Which project, from list_projects.',
+        },
+      },
+      'required': ['projectId'],
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'projectId': {'type': 'string'},
+        'checkouts': {
+          'type': 'array',
+          'items': {
+            'type': 'object',
+            'properties': {
+              'repositoryId': {'type': 'string'},
+              'name': {'type': 'string'},
+              'path': {'type': 'string'},
+              'environmentId': {'type': 'string'},
+              'selected': {'type': 'boolean'},
+              'branch': {'type': 'string'},
+              'isWorktree': {
+                'type': ['boolean', 'null'],
+              },
+              'sessionsWorkingHere': {
+                'type': 'array',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'sessionId': {'type': 'string'},
+                    'title': {'type': 'string'},
+                    'status': {'type': 'string'},
+                  },
+                  'required': ['sessionId', 'title', 'status'],
+                },
+              },
+            },
+            'required': [
+              'repositoryId',
+              'name',
+              'path',
+              'branch',
+              'sessionsWorkingHere',
+            ],
+          },
+        },
+      },
+      'required': ['projectId', 'checkouts'],
+    },
+  },
+  {
+    'name': 'project_rescan',
+    'description':
+        'Re-read a project\'s directory for checkouts Karmashala does not '
+        'know about yet — a worktree added from the command line, a clone '
+        'dropped in beside the others. Returns every checkout found '
+        'afterwards, not a list of what changed.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'projectId': {
+          'type': 'string',
+          'description': 'Which project, from list_projects.',
+        },
+      },
+      'required': ['projectId'],
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'projectId': {'type': 'string'},
+        'count': {'type': 'number'},
+        'checkouts': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
+      },
+      'required': ['projectId', 'checkouts', 'count'],
+    },
+  },
+  {
+    'name': 'delivery_status',
+    'description':
+        'What a session\'s checkout still owes: branch, how far ahead of and '
+        'behind its base, dirty files, unpushed commits, its pull request, and '
+        'the actions Karmashala offers on it. Omit sessionId for your own '
+        'session. Any value Karmashala could not measure reads "not recorded" '
+        '— never 0, and never "none". A failed git call and a clean tree are '
+        'different facts.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'Which session. Defaults to the calling session.',
+        },
+      },
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {'type': 'string'},
+        'title': {'type': 'string'},
+        'stage': {'type': 'string'},
+        'branch': {'type': 'string'},
+        'baseBranch': {'type': 'string'},
+        'upstream': {'type': 'string'},
+        'hasWorktree': {'type': 'boolean'},
+        'archived': {'type': 'boolean'},
+        'dirtyFiles': {
+          'type': ['number', 'string'],
+        },
+        'aheadOfBase': {
+          'type': ['number', 'string'],
+        },
+        'behindBase': {
+          'type': ['number', 'string'],
+        },
+        'unpushed': {
+          'type': ['number', 'string'],
+        },
+        'agentRunning': {
+          'type': ['boolean', 'string'],
+        },
+        'pullRequest': {
+          'type': ['object', 'string'],
+        },
+        'actions': {
+          'type': 'array',
+          'items': {
+            'type': 'object',
+            'properties': {
+              'action': {'type': 'string'},
+              'label': {'type': 'string'},
+              'primary': {'type': 'boolean'},
+              'available': {'type': 'boolean'},
+              'unavailableBecause': {
+                'type': ['string', 'null'],
+              },
+            },
+            'required': ['action', 'label', 'available'],
+          },
+        },
+      },
+      'required': ['sessionId', 'stage', 'branch', 'actions'],
+    },
+  },
+];

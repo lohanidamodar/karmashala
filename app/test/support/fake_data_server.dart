@@ -130,6 +130,10 @@ class FakeDataServer {
   /// Checkpoints (numbered per session), verification runs (kept whole, told
   /// by header) and comparisons, shaped like the server's DAOs.
   late final checkpointRows = FakeCheckpointRows._(this);
+
+  /// What the server's checkpoint recorder would answer: captures, diffs,
+  /// restores and skip reasons, scripted by a test.
+  late final checkpointWork = FakeCheckpointWork._(this);
   late final verificationRows = FakeVerificationRows._(this);
   late final comparisonRows = FakeComparisonRows._(this);
 
@@ -414,6 +418,7 @@ class FakeDataServer {
       final WorktreesRequest<Object?> r => worktreeRows._handle(r, changes),
       final SnippetsRequest<Object?> r => snippetRows._handle(r, changes),
       final CheckpointsRequest<Object?> r => checkpointRows._handle(r, changes),
+      final CheckpointWorkRequest<Object?> r => checkpointWork._handle(r),
       final VerificationRequest<Object?> r => verificationRows._handle(
         r,
         changes,

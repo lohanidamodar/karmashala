@@ -73,6 +73,70 @@ class FakeCheckpointRows {
       _rows[id] ?? (throw DataRefused.notFound('no checkpoint with id $id'));
 }
 
+/// The checkpoint work of a [FakeDataServer] — what the server's recorder
+/// does in git — scripted: every request is kept in [asked], a capture
+/// records [nextCapture] (null: nothing moved), a diff answers [diffs], a
+/// restore answers [restoreWith], and skip reasons are [setSkip].
+class FakeCheckpointWork {
+  FakeCheckpointWork._(this._server);
+
+  final FakeDataServer _server;
+
+  /// Every checkpoint work request, in the order asked.
+  final asked = <CheckpointWorkRequest<Object?>>[];
+
+  /// What the next capture (or run base) records; null answers "nothing
+  /// moved".
+  Checkpoint? nextCapture;
+
+  /// Checkpoint id → the diff the server reads from git.
+  final diffs = <String, String>{};
+
+  /// How a restore is answered; by default it restores every file the
+  /// checkpoint names (or only the paths asked for).
+  CheckpointRestoreAnswer Function(CheckpointRestore request, Checkpoint c)?
+  restoreWith;
+
+  final _skips = <String, String>{};
+
+  /// Says why [sessionId] has no automatic checkpoints (null: it has again),
+  /// told to every client as the recorder would.
+  void setSkip(String sessionId, String? reason) {
+    reason == null ? _skips.remove(sessionId) : _skips[sessionId] = reason;
+    _server._tell(null, [CheckpointSkipChanged(sessionId, reason)]);
+  }
+
+  Object? _handle(CheckpointWorkRequest<Object?> r) {
+    asked.add(r);
+    switch (r) {
+      case CheckpointCapture() || CheckpointCaptureBase():
+        final next = nextCapture;
+        nextCapture = null;
+        return next == null ? null : _server.checkpointRows.insert(next);
+      case CheckpointDiff(:final id):
+        _server.checkpointRows._checkpoint(id);
+        return diffs[id] ?? '';
+      case final CheckpointRestore r:
+        final checkpoint = _server.checkpointRows._checkpoint(r.id);
+        final answer = restoreWith;
+        if (answer != null) return answer(r, checkpoint);
+        return CheckpointRestoreAnswer.restored(
+          RestoreOutcome(
+            restored: checkpoint,
+            safetyCheckpoint: null,
+            files: [
+              for (final file in checkpoint.files)
+                if (r.paths.isEmpty || r.paths.contains(file.path)) file,
+            ],
+            alreadyThere: false,
+          ),
+        );
+      case CheckpointSkips():
+        return Map.of(_skips);
+    }
+  }
+}
+
 /// The verification runs of a [FakeDataServer], kept whole; a client is
 /// told their headers.
 class FakeVerificationRows {
@@ -382,7 +446,9 @@ extension on FakeDataServer {
         comparisonRows._rows[comparison.id] = comparison;
       case ComparisonRemoved(:final id):
         comparisonRows._rows.remove(id);
-      case CheckpointsPruned() || VerificationEvidenceAdded():
+      case CheckpointsPruned() ||
+          CheckpointSkipChanged() ||
+          VerificationEvidenceAdded():
         break;
     }
   }

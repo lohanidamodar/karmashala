@@ -12,6 +12,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../agents/application/agent_hook_intake.dart';
 import '../../../automations/application/host_automations.dart';
+import '../../../cli_detection/application/cli_detection_providers.dart'
+    show paneFactsReporterProvider;
 import '../../../agents/application/agent_hook_sweep.dart';
 import '../../../environments/application/environment_providers.dart';
 import '../../../workspaces/data/workspace_data.dart';
@@ -81,7 +83,6 @@ hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
       event: hook.event,
       body: hook.body,
       receivedAt: hook.receivedAt,
-      held: hook.holdId != null,
       paneSessionId: hook.paneSessionId,
       logger: hookLog,
     ),
@@ -107,6 +108,8 @@ hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
     companion: ref.read(hostCompanionLinkProvider),
     // The host runs automations; this app answers what only it can.
     automations: ref.read(hostAutomationsLinkProvider),
+    // The server adopts and attributes; this app reports its panes.
+    panes: ref.read(paneFactsReporterProvider),
   );
   // A pane starting on the host may have just started the host itself: the
   // launch's start failed, or the host went away since.

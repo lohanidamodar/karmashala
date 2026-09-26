@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
-import 'package:karmashala/src/features/verification/application/verification_tools.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/verification/data/verification_data.dart';
 import 'package:karmashala_verification/artifacts.dart';

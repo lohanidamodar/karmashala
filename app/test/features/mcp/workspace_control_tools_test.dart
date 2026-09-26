@@ -19,12 +19,10 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
 
-/// The workspace tools, over the endpoint, with git answering the way a test
-/// tells it to.
-///
-/// The rule these are really about is the last one: **a reading Karmashala
-/// could not take is reported as "not recorded", never as zero.** A model that
-/// reads `unpushed: 0` from a failed git call concludes the branch is pushed.
+/// `select_checkout`, over the endpoint: the one workspace tool that moves
+/// this app's own screen. `list_checkouts`, `project_rescan` and
+/// `delivery_status` are the server's now (`server/test/mcp/tools/
+/// workspace_tool_set_test.dart`).
 void main() {
   late Directory tmp;
   late TestMachine db;
@@ -150,54 +148,6 @@ branch refs/heads/feature/login
     }
   }
 
-  group('list_checkouts', () {
-    test('names every checkout with the branch git reported', () async {
-      final structured =
-          (await callTool('list_checkouts', {'projectId': 'p1'})).structured!
-              as Map<String, Object?>;
-      final checkouts = (structured['checkouts']! as List<Object?>)
-          .cast<Map<String, Object?>>();
-
-      expect(checkouts, hasLength(2));
-      expect(checkouts.first['repositoryId'], 'r1');
-      expect(checkouts.first['branch'], 'main');
-      expect(checkouts.first['isWorktree'], isFalse);
-      expect(checkouts.last['branch'], 'feature/login');
-      expect(
-        checkouts.last['isWorktree'],
-        isTrue,
-        reason: 'git lists the main worktree first; the rest are worktrees',
-      );
-    });
-
-    test('a branch git could not report reads "not recorded"', () async {
-      git.responder = (_) => const CommandResult(
-        exitCode: 128,
-        stdout: '',
-        stderr: 'fatal: not a git repository',
-      );
-
-      final structured =
-          (await callTool('list_checkouts', {'projectId': 'p1'})).structured!
-              as Map<String, Object?>;
-      final checkouts = structured['checkouts']! as List<Object?>;
-
-      // The checkouts are still listed — we know they exist. What we do not
-      // know is what branch they are on, and that is said rather than guessed.
-      expect(checkouts, hasLength(2));
-      for (final checkout in checkouts.cast<Map<String, Object?>>()) {
-        expect(checkout['branch'], 'not recorded');
-        expect(checkout['isWorktree'], isNull);
-      }
-    });
-
-    test('an unknown project is an error', () async {
-      final result = await callTool('list_checkouts', {'projectId': 'ghost'});
-      expect(result.isError, isTrue);
-      expect(result.text, contains('ghost'));
-    });
-  });
-
   group('select_checkout', () {
     test('the app\'s selection actually moves', () async {
       expect(container.read(selectedRepositoryIdProvider), isNull);
@@ -215,63 +165,6 @@ branch refs/heads/feature/login
       });
       expect(result.isError, isTrue);
       expect(container.read(selectedRepositoryIdProvider), isNull);
-    });
-  });
-
-  group('delivery_status', () {
-    test('unknown readings say so instead of reading as zero', () async {
-      final structured =
-          (await callTool('delivery_status', {'sessionId': 's1'})).structured!
-              as Map<String, Object?>;
-
-      // Every one of these is null at the source because git failed. Zero
-      // would mean "nothing outstanding", which is the opposite of true here.
-      expect(structured['dirtyFiles'], 'not recorded');
-      expect(structured['unpushed'], 'not recorded');
-      expect(structured['aheadOfBase'], 'not recorded');
-      expect(structured['behindBase'], 'not recorded');
-      expect(structured['branch'], 'not recorded');
-      expect(structured['pullRequest'], startsWith('not recorded'));
-    });
-
-    test('offers the same actions the delivery strip would', () async {
-      final structured =
-          (await callTool('delivery_status', {'sessionId': 's1'})).structured!
-              as Map<String, Object?>;
-      final actions = (structured['actions']! as List<Object?>)
-          .cast<Map<String, Object?>>();
-
-      expect(actions, isNotEmpty);
-      for (final action in actions) {
-        expect(action['label'], isA<String>());
-        // An unavailable action carries its reason, so an agent is never left
-        // guessing why it cannot push.
-        if (action['available'] == false) {
-          expect(action['unavailableBecause'], isA<String>());
-        }
-      }
-      expect(structured['stage'], isA<String>());
-    });
-
-    test('defaults to the calling session', () async {
-      final structured =
-          (await callTool('delivery_status', const {}, 's1')).structured!
-              as Map<String, Object?>;
-      expect(structured['sessionId'], 's1');
-      expect(structured['title'], 'Work');
-    });
-
-    test('an unattributed caller must name a session', () async {
-      final result = await callTool('delivery_status');
-      expect(result.isError, isTrue);
-      expect(result.text, contains('not running inside a session'));
-    });
-  });
-
-  group('project_rescan', () {
-    test('an unknown project is an error, not an empty success', () async {
-      final result = await callTool('project_rescan', {'projectId': 'ghost'});
-      expect(result.isError, isTrue);
     });
   });
 }

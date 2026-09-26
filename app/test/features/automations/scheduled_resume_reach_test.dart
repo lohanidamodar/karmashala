@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
     show formatResetClock;
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
-import 'package:karmashala/src/features/mcp/inventory_tools.dart';
 import 'package:karmashala/src/features/remote/application/remote_session_snapshots.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 
@@ -25,23 +24,8 @@ void main() {
     fireAt: h.now.add(const Duration(hours: 2)),
   );
 
-  test(
-    'list_sessions shows a waiting resume, and nothing when none waits',
-    () async {
-      final tools = InventoryTools(h.container);
-      Future<Map<String, dynamic>> row() async =>
-          ((await tools.call('list_sessions', const {}))! as List)
-              .cast<Map<String, dynamic>>()
-              .single;
-
-      expect(await row(), isNot(contains('scheduledResume')));
-      final resume = h.controller.schedule(inTwoHours());
-      expect((await row())['scheduledResume'], {
-        'state': 'pending',
-        'fireAt': resume.fireAt.toIso8601String(),
-      });
-    },
-  );
+  // `list_sessions` showing a waiting resume is the server's:
+  // `server/test/mcp/tools/inventory_tool_set_test.dart`.
 
   test('no served tool arms, changes or cancels a resume', () {
     // Arming one is a person's act or the setting a person chose. A tool that

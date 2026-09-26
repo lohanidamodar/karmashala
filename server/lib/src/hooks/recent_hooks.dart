@@ -14,12 +14,11 @@ class RecentHooks {
   /// Oldest first, so a watcher replays them in the order they came.
   List<AgentHookEvent> latest() => List.unmodifiable(_latest.values);
 
-  /// Kept without a hold id: whoever reads the snapshot did not hold it.
   void record(AgentHookEvent hook) {
     final key = keyOf(hook);
     _latest
       ..remove(key)
-      ..[key] = hook.unheld;
+      ..[key] = hook;
     if (_latest.length > capacity) _latest.remove(_latest.keys.first);
   }
 

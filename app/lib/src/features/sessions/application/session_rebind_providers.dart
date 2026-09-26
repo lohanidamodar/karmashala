@@ -128,7 +128,7 @@ String? rebindSessionFromHook(
     if (session.isArchived) continue;
     final bound = session.externalSessionId ?? '';
     // A row with no conversation at all belongs to attribution, not here:
-    // `LaunchedSessionAttributionService` matches those off the store.
+    // the server's launched attribution matches those off the store.
     if (bound.isEmpty || bound == conversationId) continue;
     if (installations.getById(session.agentInstallationId)?.agentId !=
         agentId) {

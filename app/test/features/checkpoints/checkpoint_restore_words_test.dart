@@ -3,131 +3,70 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/data/data_client.dart';
-import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
-import 'package:karmashala_git/git.dart';
+import 'package:karmashala_git/git.dart' show FileChange, FileChangeType;
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 
-/// [GitFiles] with no disk behind it.
-class _MemoryGitFiles implements GitFiles {
-  final Map<String, String> written = {};
-
-  @override
-  Future<void> createDirectory(String path) async {}
-
-  @override
-  Future<bool> exists(String path) async => written.containsKey(path);
-
-  @override
-  Future<PathEntry> typeOf(String path) async =>
-      throw UnimplementedError('the checkpoint path never stats');
-
-  @override
-  Future<void> writeString(String path, String contents) async =>
-      written[path] = contents;
-
-  @override
-  Future<String?> readString(String path) async => written[path];
-}
-
-/// **The restore dialog says what the service refused, and what it cannot do.**
+/// **The restore dialog says what the server refused, and what it cannot do.**
 ///
-/// Two properties, and the first is what keeps the second true. The words on
-/// screen are produced by [checkpointRestoreRefusal] — the same function
-/// `restore` asserts on — so a change to the rule rewrites the sentence, and a
-/// sentence promising something the service will not do cannot be written. On
-/// top of that every one of them carries [kRestoreLeavesTheConversation],
-/// because a checkpoint is a tree of files and an agent's conversation is not
-/// one of them.
+/// The words on screen are the ones the server's restore refused with —
+/// produced by [checkpointRestoreRefusal], the function the service asserts
+/// on (tested with it in `karmashala_checkpoints` and at the server) — carried
+/// back whole, never a second sentence written here. Every one of them carries
+/// [kRestoreLeavesTheConversation], because a checkpoint is a tree of files
+/// and an agent's conversation is not one of them.
 void main() {
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\demo');
   late FakeDataServer server;
-  late DataClient client;
-  late CheckpointsData dao;
-  late CheckpointService service;
-  late List<String> trees;
-  late int ids;
 
-  CommandResult respond(CommandRequest request) {
-    final args = request.arguments;
-    if (args.contains('--absolute-git-dir') ||
-        args.contains('--git-common-dir')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout: 'C:/src/demo/.git',
-        stderr: '',
-      );
-    }
-    if (args.contains('write-tree')) {
-      return CommandResult(
-        exitCode: 0,
-        stdout: trees.length > 1 ? trees.removeAt(0) : trees.first,
-        stderr: '',
-      );
-    }
-    if (args.contains('commit-tree')) {
-      return CommandResult(exitCode: 0, stdout: 'commit${++ids}', stderr: '');
-    }
-    if (args.contains('rev-parse') && args.contains('--verify')) {
-      return const CommandResult(exitCode: 0, stdout: 'head1', stderr: '');
-    }
-    if (args.contains('--name-status')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout: 'M\tlib/a.dart\n',
-        stderr: '',
-      );
-    }
-    if (args.contains('diff')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout:
-            'diff --git a/lib/a.dart b/lib/a.dart\n'
-            'index 111..222 100644\n'
-            '--- a/lib/a.dart\n'
-            '+++ b/lib/a.dart\n'
-            '@@ -1 +1 @@\n'
-            '-before\n'
-            '+after\n',
-        stderr: '',
-      );
-    }
-    return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-  }
+  Checkpoint checkpoint(int sequence) => Checkpoint(
+    id: 'ckpt$sequence',
+    sessionId: 's1',
+    repository: repo,
+    sequence: sequence,
+    treeSha: 'tree$sequence',
+    commitSha: 'commit$sequence',
+    parentCommitSha: null,
+    headSha: 'head1',
+    reason: CheckpointReason.turn,
+    createdAt: testTime,
+  );
 
-  setUp(() async {
+  setUp(() {
     server = FakeDataServer();
-    client = await server.connect();
-    server.environmentRows.upsert(
-      ExecutionEnvironment(
-        id: 'windows',
-        kind: EnvironmentKind.windowsNative,
-        name: 'Windows',
-        createdAt: testTime,
-      ),
-    );
-    dao = CheckpointsData(client);
-    trees = ['tree1'];
-    ids = 0;
-    service = CheckpointService(
-      runnerFactory: FakeCommandRunnerFactory(
-        fallback: FakeCommandRunner(responder: respond),
-      ),
-      environmentOf: server.environmentRows.getById,
-      records: dao,
-      clock: FixedClock(testTime),
-      newId: () => 'ckpt${ids + 100}',
-      files: _MemoryGitFiles(),
-    );
+    server.checkpointRows.insert(checkpoint(1));
+    // The agent has been working since, so the restore is refused until it
+    // is confirmed; sequence 2 is the safety checkpoint the server took.
+    server.checkpointWork.restoreWith = (request, target) => request.confirm
+        ? CheckpointRestoreAnswer.restored(
+            RestoreOutcome(
+              restored: target,
+              safetyCheckpoint: checkpoint(2),
+              files: const [
+                FileChange(
+                  path: 'lib/a.dart',
+                  type: FileChangeType.modified,
+                  staged: false,
+                  unstaged: true,
+                ),
+              ],
+              alreadyThere: false,
+            ),
+          )
+        : CheckpointRestoreAnswer.refused(
+            CheckpointConflict(
+              checkpointRestoreRefusal(
+                treeMovedSinceLastCheckpoint: true,
+                safetySequence: 2,
+              )!,
+              safetyCheckpoint: checkpoint(2),
+            ),
+          );
   });
 
   /// Bounded pumps, not `pumpAndSettle`: the row spins while the restore is in
@@ -147,9 +86,7 @@ void main() {
       ProviderScope(
         overrides: [
           checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
-          dataClientProvider.overrideWithValue(client),
-          checkpointsDataProvider.overrideWithValue(dao),
-          checkpointServiceProvider.overrideWithValue(service),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
         ],
         child: MaterialApp(
@@ -161,58 +98,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  test('a refusal is one function, and it names the half we cannot undo', () {
-    expect(
-      checkpointRestoreRefusal(
-        treeMovedSinceLastCheckpoint: false,
-        safetySequence: null,
-      ),
-      isNull,
-      reason: 'a tree that has not moved is not refused',
-    );
-    final refusal = checkpointRestoreRefusal(
-      treeMovedSinceLastCheckpoint: true,
-      safetySequence: 7,
-    );
-    expect(refusal, contains('checkpoint 7'));
-    expect(refusal, contains(kRestoreLeavesTheConversation));
-  });
-
-  test('the service refuses in exactly those words', () async {
-    final target = (await service.capture(repo, sessionId: 's1'))!;
-    trees = ['tree2'];
-
-    Object? thrown;
-    try {
-      await service.restore(target);
-    } catch (error) {
-      thrown = error;
-    }
-
-    final conflict = thrown! as CheckpointConflict;
-    expect(
-      conflict.message,
-      checkpointRestoreRefusal(
-        treeMovedSinceLastCheckpoint: true,
-        safetySequence: conflict.safetyCheckpoint!.sequence,
-      ),
-      reason: 'the refusal and the sentence must be one function',
-    );
-  });
-
-  testWidgets('a refused restore shows the service\'s own words', (
+  testWidgets('a refused restore shows the server\'s own words', (
     tester,
   ) async {
-    await service.capture(repo, sessionId: 's1');
-    // The agent has been working since, so the restore will be refused.
-    trees = ['tree2'];
     await pumpPanel(tester);
 
     await tester.tap(find.text('Restore').first);
     await settle(tester);
 
-    // Sequence 2 is the safety checkpoint the refusal took of the tree as it
-    // is now — the service's number, not the dialog's guess.
     expect(
       find.text(
         checkpointRestoreRefusal(
@@ -225,8 +118,6 @@ void main() {
   });
 
   testWidgets('and a restore that goes through says it too', (tester) async {
-    await service.capture(repo, sessionId: 's1');
-    trees = ['tree2'];
     await pumpPanel(tester);
 
     await tester.tap(find.text('Restore').first);
@@ -237,5 +128,6 @@ void main() {
     // The conversation is not rewound whether or not anything was refused, so
     // the sentence is on the outcome as well as on the refusal.
     expect(find.textContaining(kRestoreLeavesTheConversation), findsOneWidget);
+    expect(find.textContaining('Restored 1 file.'), findsOneWidget);
   });
 }

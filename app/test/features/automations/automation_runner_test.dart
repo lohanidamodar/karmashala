@@ -1,12 +1,12 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_runner.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
@@ -18,41 +18,6 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-
-/// Records what it was asked to capture, and captures nothing.
-class _FakeCheckpoints implements CheckpointService {
-  final captures = <({EnvironmentPath repo, String sessionId, bool even})>[];
-
-  @override
-  Future<Checkpoint?> capture(
-    EnvironmentPath repo, {
-    required String sessionId,
-    CheckpointReason reason = CheckpointReason.turn,
-    String? label,
-    bool evenIfUnchanged = false,
-    int? turn,
-    String? prompt,
-  }) async {
-    captures.add((repo: repo, sessionId: sessionId, even: evenIfUnchanged));
-    return Checkpoint(
-      id: 'cp1',
-      sessionId: sessionId,
-      repository: repo,
-      sequence: 1,
-      treeSha: 'tree',
-      commitSha: 'commit',
-      parentCommitSha: null,
-      headSha: 'head',
-      reason: reason,
-      createdAt: testTime,
-      label: label,
-    );
-  }
-
-  @override
-  Never noSuchMethod(Invocation invocation) =>
-      throw UnsupportedError('not in this test');
-}
 
 /// Records the launch request and starts nothing.
 class _FakeLauncher extends SessionLauncher {
@@ -71,13 +36,13 @@ class _FakeLauncher extends SessionLauncher {
 }
 
 /// This app fires an automation only where the server forwards it (a WSL or
-/// SSH checkout): through its own checkpoint service and launcher, the gate
-/// read from its copies, and every row recorded at the server. The runner's
+/// SSH checkout): its base taken by the server's checkpoint recorder, its
+/// launcher, the gate read from its copies, and every row recorded at the
+/// server. The runner's
 /// rules are tested in `karmashala_automations`.
 void main() {
   late FakeDataServer server;
   late ProviderContainer container;
-  late _FakeCheckpoints checkpoints;
   late _FakeLauncher launcher;
   final due = DateTime.utc(2026, 9, 9, 3);
 
@@ -115,13 +80,26 @@ void main() {
           createdAt: testTime,
         ),
       );
-    checkpoints = _FakeCheckpoints();
+    server.checkpointWork.nextCapture = Checkpoint(
+      id: 'cp1',
+      sessionId: 'run-1',
+      repository: const EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\src\demo',
+      ),
+      sequence: 1,
+      treeSha: 'tree',
+      commitSha: 'commit',
+      parentCommitSha: null,
+      headSha: 'head',
+      reason: CheckpointReason.manual,
+      createdAt: testTime,
+    );
     container = ProviderContainer(
       overrides: [
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('run-')),
-        checkpointServiceProvider.overrideWithValue(checkpoints),
         sessionLauncherProvider.overrideWith(_FakeLauncher.new),
       ],
     );
@@ -137,9 +115,9 @@ void main() {
     expect(run.state, AutomationRunState.running);
     expect(run.sessionId, 'started');
     expect(run.baseCheckpointId, 'cp1');
-    final capture = checkpoints.captures.single;
-    expect(capture.sessionId, run.id);
-    expect(capture.even, isTrue);
+    final capture = server.checkpointWork.asked.single as CheckpointCaptureBase;
+    expect(capture.runId, run.id);
+    expect(capture.checkout, repository().path);
     final request = launcher.requests.single;
     expect(request.firstMessage, 'Run the checks and fix what broke.');
     expect(request.purpose, SessionPurpose.newSession);

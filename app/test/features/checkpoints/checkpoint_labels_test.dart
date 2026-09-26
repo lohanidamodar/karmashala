@@ -4,11 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
-import 'package:karmashala/src/features/mcp/checkpoint_tools.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/theme.dart';
 
@@ -59,97 +56,9 @@ void main() {
     ],
   );
 
+  // Titles themselves are the shared rule (`checkpointTitle`), tested in
+  // packages/karmashala_checkpoints; here, what only the panel says.
   group('labels', () {
-    test('a turn is titled by what it was asked, both sides of it', () {
-      const prompt = 'Fix the login redirect loop';
-      expect(
-        checkpointTitle(
-          checkpoint(reason: CheckpointReason.turnStart, prompt: prompt),
-        ),
-        'Before: Fix the login redirect loop',
-      );
-      expect(
-        checkpointTitle(checkpoint(prompt: prompt)),
-        'After: Fix the login redirect loop',
-      );
-    });
-
-    test('a prompt becomes one short line, not a paste', () {
-      String title(String prompt) =>
-          checkpointTitle(checkpoint(prompt: prompt));
-      // Fenced code is skipped, markdown noise stripped, and an unbroken run
-      // long enough to be a key or a blob never reaches the title.
-      expect(
-        title(
-          '```\nStackTrace at main.dart:12\n```\n'
-          '## Fix the crash when sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdef '
-          'is set\nand run the tests\n\nLogs follow: a b c',
-        ),
-        'After: Fix the crash when … is set and run the tests',
-      );
-      final long = title('word ' * 40);
-      expect(long.length, lessThanOrEqualTo('After: '.length + 72));
-      expect(long, endsWith('word…'));
-      expect(title('   \n```\nonly code\n```'), 'After: a.dart, b.dart');
-    });
-
-    test('with no prompt: the files after a turn, the number before one', () {
-      expect(checkpointTitle(checkpoint()), 'After: a.dart, b.dart');
-      expect(
-        checkpointTitle(
-          checkpoint(files: const ['lib/a.dart', 'b.dart', 'c.dart', 'd.dart']),
-        ),
-        'After: a.dart, b.dart and 2 more',
-      );
-      // A before-turn row's files changed *before* the turn: not its title.
-      expect(
-        checkpointTitle(checkpoint(reason: CheckpointReason.turnStart)),
-        'Before turn 3',
-      );
-      expect(checkpointTitle(checkpoint(files: const [])), 'After turn 3');
-      expect(
-        checkpointTitle(checkpoint(turn: null, files: const [])),
-        'Turn #7',
-      );
-    });
-
-    test('an unverified before-turn keeps its warning under any title', () {
-      // Old rows carry the whole old title as their label; new ones the same.
-      final marked = checkpoint(
-        reason: CheckpointReason.turnStart,
-        prompt: 'Change the app',
-        label: lateTurnStartLabel(3),
-      );
-      expect(
-        checkpointTitle(marked),
-        'Before: Change the app — may already include its first edit',
-      );
-      expect(
-        checkpointTitle(
-          checkpoint(reason: CheckpointReason.turnStart, label: 'anything'),
-        ),
-        'Before turn 3 — may already include its first edit',
-      );
-      // A long prompt is clipped; the warning is not.
-      expect(
-        checkpointTitle(
-          checkpoint(
-            reason: CheckpointReason.turnStart,
-            prompt: 'word ' * 40,
-            label: lateTurnStartLabel(3),
-          ),
-        ),
-        endsWith('… — may already include its first edit'),
-      );
-      // Only a before-turn row is ever marked: a label elsewhere is a name.
-      expect(
-        checkpointTitle(
-          checkpoint(reason: CheckpointReason.manual, label: 'Before deploy'),
-        ),
-        'Before deploy',
-      );
-    });
-
     test('the summary carries turn, files, lines, repository and age', () {
       final c = checkpoint(
         lineStats: const {
@@ -223,11 +132,12 @@ void main() {
 
   group('panel', () {
     late TestMachine db;
+    late FakeDataServer server;
     late ProviderContainer container;
 
     setUp(() async {
       db = TestMachine();
-      final server = FakeDataServer()..runsOn(db);
+      server = FakeDataServer()..runsOn(db);
       server.environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
@@ -297,41 +207,22 @@ void main() {
       expect(find.textContaining('/rewind'), findsOneWidget);
     });
 
-    test(
-      'checkpoint_list gives an agent the panel\'s title, warning and all',
-      () async {
-        db.server.checkpointRows.insert(
-          checkpoint(
-            reason: CheckpointReason.turnStart,
-            prompt: 'Change the app',
-            label: lateTurnStartLabel(3),
-          ),
-        );
-        final listed =
-            await CheckpointControlTools(
-                  container,
-                ).call('checkpoint_list', {'sessionId': 's1'})
-                as List;
-        final entry = listed.single as Map;
-        expect(
-          entry['title'],
-          'Before: Change the app — may already include its first edit',
-        );
-        expect(entry['turn'], 3);
-      },
-    );
-
-    testWidgets('an empty panel gives the recorder\'s reason', (tester) async {
-      container
-          .read(checkpointSkipReasonsProvider.notifier)
-          .set('s1', 'it has no repository to checkpoint');
+    testWidgets('an empty panel gives the server recorder\'s reason', (
+      tester,
+    ) async {
+      server.checkpointWork.setSkip('s1', 'it has no repository to checkpoint');
       await pumpPanel(tester);
+      await tester.pump();
       expect(
         find.textContaining(
           'No checkpoints yet: it has no repository to checkpoint.',
         ),
         findsOneWidget,
       );
+      // And it goes when the recorder says it is checkpointing again.
+      server.checkpointWork.setSkip('s1', null);
+      await tester.pump();
+      expect(find.textContaining('No checkpoints yet:'), findsNothing);
     });
   });
 }

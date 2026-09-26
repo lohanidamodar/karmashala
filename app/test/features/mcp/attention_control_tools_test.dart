@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -18,11 +17,10 @@ import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 
-/// Notes and the inbox, over the endpoint.
-///
-/// The inbox half is the one that matters most: it is what makes an agent able
-/// to notice that another agent is stuck. Until now the only consumer of that
-/// state was a human reading a badge.
+/// The inbox, over the endpoint: what makes an agent able to notice that
+/// another agent is stuck. Until now the only consumer of that state was a
+/// human reading a badge. (Notes are the server's now:
+/// `server/test/mcp/tools/notes_todos_tool_set_test.dart`.)
 void main() {
   late Directory tmp;
   late TestMachine db;
@@ -289,75 +287,6 @@ void main() {
             as Map<String, Object?>)['items'],
         hasLength(1),
       );
-    });
-  });
-
-  group('notes', () {
-    test('a note is written and comes back verbatim', () async {
-      const body = 'The isolate pool deadlocked on Windows.\n  Do not retry.';
-
-      final added =
-          (await callTool('note_add', {'body': body})).structured!
-              as Map<String, Object?>;
-      final listed =
-          (await callTool('notes_list')).structured! as Map<String, Object?>;
-      final note =
-          (listed['notes']! as List<Object?>).single as Map<String, Object?>;
-
-      expect(note['id'], added['id']);
-      expect(
-        note['body'],
-        body,
-        reason: 'a note is evidence; nothing here trims it to a gist',
-      );
-      expect(note['title'], 'The isolate pool deadlocked on Windows.');
-    });
-
-    test('a note is attributed to the calling session', () async {
-      await callTool('note_add', {'body': 'from s1'}, 's1');
-
-      final listed =
-          (await callTool('notes_list')).structured! as Map<String, Object?>;
-      expect(
-        (listed['notes']! as List<Object?>).single,
-        containsPair('sourceSessionId', 's1'),
-      );
-    });
-
-    test('notes_list can be scoped to one session', () async {
-      await callTool('note_add', {'body': 'from s1'}, 's1');
-      await callTool('note_add', {'body': 'from nobody'});
-
-      final all =
-          (await callTool('notes_list')).structured! as Map<String, Object?>;
-      final scoped =
-          (await callTool('notes_list', {'sessionId': 's1'})).structured!
-              as Map<String, Object?>;
-
-      expect(all['notes'], hasLength(2));
-      expect(scoped['notes'], hasLength(1));
-    });
-
-    test('a blank body is refused', () async {
-      final result = await callTool('note_add', {'body': '  \n '});
-      expect(result.isError, isTrue);
-      expect(container.read(notesProvider), isEmpty);
-    });
-
-    test('note_delete removes it', () async {
-      final added =
-          (await callTool('note_add', {'body': 'temporary'})).structured!
-              as Map<String, Object?>;
-
-      final result = await callTool('note_delete', {'id': added['id']});
-
-      expect(result.isError, isFalse);
-      expect(container.read(notesProvider), isEmpty);
-    });
-
-    test('deleting a note that is not there is an error', () async {
-      final result = await callTool('note_delete', {'id': 'ghost'});
-      expect(result.isError, isTrue);
     });
   });
 }

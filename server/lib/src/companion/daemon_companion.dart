@@ -237,6 +237,23 @@ class DaemonCompanion implements CompanionHandler {
   /// calls say the app is not running.
   void serveSessions({required SessionMcpAccessPoint mcp}) {
     final facts = _facts;
+    final launcher = HostedAgentLauncher(
+      registry: registry,
+      sessions: _sessions,
+      onRowWritten: _announceSession,
+      mcp: mcp,
+      now: () => _now().toUtc(),
+      newId: _newId,
+      hostEnvironment: _hostEnvironment,
+      worktrees: daemonWorktrees(
+        database: database,
+        registry: registry,
+        facts: facts,
+        newId: _newId,
+        record: _dataService.recordWorktreeSetup,
+      ),
+    );
+    this.launcher = launcher;
     _control = DaemonSessionControl(
       rows: _rows,
       facts: facts,
@@ -248,24 +265,14 @@ class DaemonCompanion implements CompanionHandler {
       press: prompts?.press,
       screenOf: prompts?.screen,
       onRowWritten: _announceSession,
-      launcher: HostedAgentLauncher(
-        registry: registry,
-        sessions: _sessions,
-        onRowWritten: _announceSession,
-        mcp: mcp,
-        now: () => _now().toUtc(),
-        newId: _newId,
-        hostEnvironment: _hostEnvironment,
-        worktrees: daemonWorktrees(
-          database: database,
-          registry: registry,
-          facts: facts,
-          newId: _newId,
-          record: _dataService.recordWorktreeSetup,
-        ),
-      ),
+      launcher: launcher,
     );
   }
+
+  /// How this server starts an agent session in its own environment — a
+  /// phone's start, and an agent's `open_new_session` while no app is open.
+  /// Null until [serveSessions].
+  HostedAgentLauncher? launcher;
 
   /// A row this companion wrote, told to every client on the data channel.
   void _announceSession(String sessionId) =>

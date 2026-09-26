@@ -8,6 +8,10 @@ DataChange? _checkpointsChangeFromJson(
 ) => switch (name) {
   'checkpointRecorded' => CheckpointRecorded(checkpointFromJson(_row(json))),
   'checkpointsPruned' => CheckpointsPruned(json['id']! as String),
+  'checkpointSkipChanged' => CheckpointSkipChanged(
+    json['id']! as String,
+    json['reason'] as String?,
+  ),
   'verificationRunChanged' => VerificationRunChanged(
     verificationRunFromJson(_row(json)),
   ),
@@ -48,6 +52,23 @@ final class CheckpointsPruned extends EvidenceChange {
   Map<String, Object?> toJson() => {
     'change': 'checkpointsPruned',
     'id': sessionId,
+  };
+}
+
+/// Why session [sessionId] has no automatic checkpoints right now, as the
+/// server's recorder found it — or, [reason] null, that it is checkpointing
+/// again. Not a row: the recorder keeps it in memory.
+final class CheckpointSkipChanged extends EvidenceChange {
+  const CheckpointSkipChanged(this.sessionId, this.reason);
+
+  final String sessionId;
+  final String? reason;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'checkpointSkipChanged',
+    'id': sessionId,
+    'reason': ?reason,
   };
 }
 

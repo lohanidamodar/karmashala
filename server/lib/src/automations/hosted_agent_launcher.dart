@@ -15,6 +15,7 @@ import '../pty/pty.dart';
 import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
 import 'package:karmashala_session_engine/store.dart';
+import 'package:karmashala_session/lineage.dart';
 
 /// The environment variable a hook and the MCP bridge read the session from.
 const String kSessionIdEnvironmentVariable = 'KARMASHALA_SESSION_ID';
@@ -31,6 +32,8 @@ class HostedLaunch {
     this.prompt,
     this.worktree = false,
     this.resuming,
+    this.parentSessionId,
+    this.parentLink,
   });
 
   final Repository repository;
@@ -56,6 +59,11 @@ class HostedLaunch {
   /// The row being resumed: its id, its conversation, its directory, its mode
   /// and model are kept, and it is marked running again.
   final Session? resuming;
+
+  /// The session that asked for this one (an agent's `open_new_session`),
+  /// and why — a spawn unless said otherwise.
+  final String? parentSessionId;
+  final SessionLink? parentLink;
 }
 
 /// Starts an agent as a session this host owns: the row first, then the PTY
@@ -177,6 +185,10 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         surface: SessionSurface.pane,
         view: agents.defaultView(agentId),
         permissionMode: launch.permissionMode,
+        parentSessionId: launch.parentSessionId,
+        parentLink: launch.parentSessionId == null
+            ? null
+            : (launch.parentLink ?? SessionLink.spawn),
       );
       sessions.insertWithPrimaryRepository(session);
       onRowWritten?.call(id);

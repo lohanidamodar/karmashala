@@ -21,13 +21,16 @@ const String kWorktreeSetupSessionPrefix = 'karmashala-setup-';
 /// setting and verdict table (recorded through [record], which tells every
 /// client) — with a repository's setup command run as a
 /// session this host owns (watchable from any client) where the app would
-/// open a pane.
+/// open a pane. [environmentOf] widens where it makes them (the agent tools
+/// reach WSL from a Windows server too); by default only this machine's own
+/// environment.
 WorktreeService daemonWorktrees({
   required AppDatabase database,
   required SessionRegistry registry,
   required DaemonCheckoutFacts facts,
   required String Function() newId,
   required void Function(WorktreeSetupReport report) record,
+  WorktreeEnvironmentOf? environmentOf,
 }) {
   final rows = CheckoutRows(database);
   final setups = WorktreeSetupDao(database);
@@ -78,16 +81,18 @@ WorktreeService daemonWorktrees({
   );
   return WorktreeService(
     runnerFactory: const CommandRunnerFactory(),
-    environmentOf: (repo) {
-      final environment = rows.environment(repo.environmentId);
-      if (environment == null || !facts.isHere(environment)) {
-        throw GitException(
-          'The session host makes worktrees only on this machine, and '
-          '${environment?.name ?? repo.environmentId} is not it',
-        );
-      }
-      return environment;
-    },
+    environmentOf:
+        environmentOf ??
+        (repo) {
+          final environment = rows.environment(repo.environmentId);
+          if (environment == null || !facts.isHere(environment)) {
+            throw GitException(
+              'The session host makes worktrees only on this machine, and '
+              '${environment?.name ?? repo.environmentId} is not it',
+            );
+          }
+          return environment;
+        },
     setup: setup,
   );
 }

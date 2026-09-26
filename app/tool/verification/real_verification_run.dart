@@ -26,7 +26,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
-import 'package:karmashala/src/features/verification/application/verification_tools.dart';
 import 'package:karmashala/src/features/verification/data/verification_data.dart';
 import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';

@@ -7,15 +7,15 @@ import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 
 import '../agents/application/host_hook_endpoint.dart';
-import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../terminal/application/local_host_providers.dart';
 import 'control_server_status.dart';
 import 'host_session_mcp.dart';
 import 'mcp_session_token_reaper.dart';
 import 'session_mcp.dart';
 
-/// Whether this machine's session host serves agents' MCP: whenever local
-/// panes are host-backed. This app then runs no control server of its own.
+/// Whether this machine's server serves agents' MCP: whenever one may be
+/// reached — it runs every tool that needs no desktop UI itself (slice 2b).
+/// This app then runs no control server of its own.
 final agentToolsAtHostProvider = Provider<bool>(
   (ref) => ref.watch(agentHooksAtHostProvider),
 );
@@ -69,11 +69,6 @@ class HostAgentTools {
     _container
         .read(controlServerStatusProvider.notifier)
         .set(ControlServerStatus.atHost);
-    try {
-      _container.read(sessionCheckpointRecorderProvider.notifier).start();
-    } on Object catch (error, stack) {
-      _logger.warning('Checkpoint recorder failed to start.', error, stack);
-    }
     _reaper = McpSessionTokenReaper(_container, null, logger: _logger)..start();
     _logger.info('Agent tools are served by the session host.');
     return true;

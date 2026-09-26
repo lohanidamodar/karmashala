@@ -253,13 +253,12 @@ void main() {
     final hooks = <AgentHookEvent>[];
     feed.hooks.listen(hooks.add);
 
-    await server.lifecycle.relayHook(hook('Stop', pane: 'p1'));
+    server.lifecycle.relayHook(hook('Stop', pane: 'p1'));
     await pump();
 
     expect(hooks.single.event, 'Stop');
     expect(hooks.single.sessionHeader, 'p1');
     expect(hooks.single.body['session_id'], 'c-Stop');
-    expect(hooks.single.holdId, isNull, reason: 'a Stop is never held');
     await feed.close();
   });
 

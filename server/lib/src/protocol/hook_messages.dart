@@ -8,7 +8,6 @@ class AgentHookEvent {
     required this.receivedAt,
     required this.body,
     this.sessionHeader,
-    this.holdId,
   });
 
   final String agent;
@@ -21,41 +20,12 @@ class AgentHookEvent {
   /// The hook's own JSON payload.
   final Map<String, Object?> body;
 
-  /// Set only on a live `hook` frame whose agent the host is holding: a
-  /// watcher answers it with [HookReplyMessage] once it has done its work. A
-  /// hook without one was answered at once — a held-kind hook without one had
-  /// nobody watching to wait for, and the snapshot never carries one.
-  final int? holdId;
-
-  /// This hook as relayed while its agent waits on [id].
-  AgentHookEvent heldAs(int id) => AgentHookEvent(
-    agent: agent,
-    event: event,
-    receivedAt: receivedAt,
-    body: body,
-    sessionHeader: sessionHeader,
-    holdId: id,
-  );
-
-  /// This hook as kept for the snapshot: its hold is over by the time anyone
-  /// reads it there.
-  AgentHookEvent get unheld => holdId == null
-      ? this
-      : AgentHookEvent(
-          agent: agent,
-          event: event,
-          receivedAt: receivedAt,
-          body: body,
-          sessionHeader: sessionHeader,
-        );
-
   Map<String, Object?> toJson() => {
     'agent': agent,
     'event': event,
     if (sessionHeader != null) 'sessionHeader': sessionHeader,
     'receivedAt': receivedAt.toUtc().toIso8601String(),
     'body': body,
-    if (holdId != null) 'holdId': holdId,
   };
 
   static AgentHookEvent fromJson(Object? json) {
@@ -66,15 +36,13 @@ class AgentHookEvent {
       sessionHeader: _optional<String>(map, 'sessionHeader'),
       receivedAt: _time(map, 'receivedAt') ?? _missing('receivedAt'),
       body: _object(map['body'], 'hook body'),
-      holdId: _optional<int>(map, 'holdId'),
     );
   }
 
   @override
   String toString() =>
       'AgentHookEvent($agent $event'
-      '${sessionHeader == null ? '' : ' pane $sessionHeader'}'
-      '${holdId == null ? '' : ' held $holdId'})';
+      '${sessionHeader == null ? '' : ' pane $sessionHeader'})';
 }
 
 /// host → client: one hook, pushed to every watching connection.
@@ -94,25 +62,22 @@ class HookMessage extends HostMessage {
   );
 }
 
-/// client → host: the watcher has done what the hook held under [holdId]
-/// waited for, so the agent may go on. The first reply releases it; a late or
-/// repeated one is ignored.
-class HookReplyMessage extends HostMessage {
-  const HookReplyMessage(this.holdId);
-  final int holdId;
+/// client → host: a hook the client took itself — on its own `/agent-hook`
+/// route, or from a spool — for the server's checkpoint recorder. The agent
+/// was answered long before this arrives, so it is never held; a
+/// `PreToolUse` in it marks its turn's before-turn checkpoints unverified.
+class HookForwardMessage extends HostMessage {
+  const HookForwardMessage(this.hook);
+  final AgentHookEvent hook;
 
   @override
   Frame toFrame() => Frame(
-    MessageType.hookReply,
+    MessageType.hookForward,
     0,
-    (WireWriter()..str(jsonEncode({'holdId': holdId}))).take(),
+    (WireWriter()..str(jsonEncode(hook.toJson()))).take(),
   );
 
-  static HookReplyMessage decode(Frame frame) {
-    final map = _object(
-      _decodeJson(WireReader(frame.payload).str()),
-      'hook reply',
-    );
-    return HookReplyMessage(_required<int>(map, 'holdId'));
-  }
+  static HookForwardMessage decode(Frame frame) => HookForwardMessage(
+    AgentHookEvent.fromJson(_decodeJson(WireReader(frame.payload).str())),
+  );
 }

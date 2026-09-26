@@ -4,133 +4,60 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import 'package:karmashala/src/features/checkpoints/data/checkpoints_data.dart';
-import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/git.dart';
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
-/// [GitFiles] with no disk behind it, keeping the patch that was written.
-class _MemoryGitFiles implements GitFiles {
-  final Map<String, String> written = {};
-
-  @override
-  Future<void> createDirectory(String path) async {}
-
-  @override
-  Future<bool> exists(String path) async => written.containsKey(path);
-
-  @override
-  Future<PathEntry> typeOf(String path) async =>
-      throw UnimplementedError('the checkpoint path never stats');
-
-  @override
-  Future<void> writeString(String path, String contents) async =>
-      written[path] = contents;
-
-  @override
-  Future<String?> readString(String path) async => written[path];
-}
-
-/// Counts the `git diff` a checkpoint's expansion costs.
-class _CountingService extends CheckpointService {
-  _CountingService({
-    required super.runnerFactory,
-    required super.environmentOf,
-    required super.records,
-    required super.clock,
-    required super.newId,
-    super.files,
-  });
-
-  int diffs = 0;
-
-  @override
-  Future<String> diffOf(Checkpoint checkpoint) {
-    diffs++;
-    return super.diffOf(checkpoint);
-  }
-}
-
-/// **The two verbs the MCP tools had and the panel did not.**
-///
-/// `checkpoint_capture` and `checkpoint_restore`'s `paths:` were reachable by
-/// an agent and by nobody else. Both now have a control, and both go through
-/// the same service and recorder the tools call — never around them.
+/// **The two verbs the MCP tools have, in the panel.** Capture now and a
+/// per-path restore go to the server's checkpoint recorder — the same doors
+/// `checkpoint_capture` and `checkpoint_restore` use — and the panel never
+/// runs git itself. What git does with them is tested at the server
+/// (`server/test/checkpoints/`).
 void main() {
   late TestMachine db;
+  late FakeDataServer server;
   late ProviderContainer container;
-  late FakeCommandRunner runner;
-  late _MemoryGitFiles files;
-  late _CountingService service;
-  late List<String> trees;
-  late int ids;
 
-  CommandResult respond(CommandRequest request) {
-    final args = request.arguments;
-    if (args.contains('--absolute-git-dir') ||
-        args.contains('--git-common-dir')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout: 'C:/src/demo/app/.git',
-        stderr: '',
-      );
-    }
-    if (args.contains('write-tree')) {
-      return CommandResult(
-        exitCode: 0,
-        stdout: trees.length > 1 ? trees.removeAt(0) : trees.first,
-        stderr: '',
-      );
-    }
-    if (args.contains('commit-tree')) {
-      return CommandResult(exitCode: 0, stdout: 'commit${++ids}', stderr: '');
-    }
-    if (args.contains('rev-parse') && args.contains('--verify')) {
-      return const CommandResult(exitCode: 0, stdout: 'head1', stderr: '');
-    }
-    if (args.contains('--name-status')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout: 'M\tlib/a.dart\nM\tlib/b.dart\n',
-        stderr: '',
-      );
-    }
-    if (args.contains('diff')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout:
-            'diff --git a/lib/a.dart b/lib/a.dart\n'
-            'index 111..222 100644\n'
-            '--- a/lib/a.dart\n'
-            '+++ b/lib/a.dart\n'
-            '@@ -1 +1 @@\n'
-            '-before a\n'
-            '+after a\n'
-            'diff --git a/lib/b.dart b/lib/b.dart\n'
-            'index 333..444 100644\n'
-            '--- a/lib/b.dart\n'
-            '+++ b/lib/b.dart\n'
-            '@@ -1 +1 @@\n'
-            '-before b\n'
-            '+after b\n',
-        stderr: '',
-      );
-    }
-    return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-  }
+  Checkpoint captured(int sequence) => Checkpoint(
+    id: 'ckpt$sequence',
+    sessionId: 's1',
+    repository: const EnvironmentPath(
+      environmentId: 'windows',
+      path: r'C:\src\demo',
+    ),
+    sequence: sequence,
+    treeSha: 'tree$sequence',
+    commitSha: 'commit$sequence',
+    parentCommitSha: null,
+    headSha: 'head1',
+    reason: CheckpointReason.manual,
+    createdAt: testTime,
+    files: const [
+      FileChange(
+        path: 'lib/a.dart',
+        type: FileChangeType.modified,
+        staged: false,
+        unstaged: true,
+      ),
+      FileChange(
+        path: 'lib/b.dart',
+        type: FileChangeType.modified,
+        staged: false,
+        unstaged: true,
+      ),
+    ],
+  );
 
   setUp(() async {
     db = TestMachine();
-    final server = FakeDataServer()..runsOn(db);
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
@@ -138,26 +65,12 @@ void main() {
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     db.server.sessionRows.insert(session(id: 's1'));
-    trees = ['tree1'];
-    ids = 0;
-    runner = FakeCommandRunner(responder: respond);
-    files = _MemoryGitFiles();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         await server.override(),
         checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        checkpointServiceProvider.overrideWithValue(
-          service = _CountingService(
-            runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-            environmentOf: server.environmentRows.getById,
-            records: CheckpointsData(await server.connect()),
-            clock: FixedClock(testTime),
-            newId: () => 'ckpt${++ids}',
-            files: files,
-          ),
-        ),
       ],
     );
   });
@@ -165,9 +78,7 @@ void main() {
     container.dispose();
   });
 
-  List<List<String>> gitCalls() => [
-    for (final r in runner.requests) r.arguments,
-  ];
+  List<T> asked<T>() => server.checkpointWork.asked.whereType<T>().toList();
 
   /// Bounded pumps: a row spins while work is in flight, so nothing settles.
   Future<void> settle(WidgetTester tester) async {
@@ -200,19 +111,27 @@ void main() {
     await settle(tester);
   }
 
+  Future<void> captureOne(WidgetTester tester) async {
+    server.checkpointWork.nextCapture = captured(1);
+    await tester.tap(find.byTooltip('Capture the working tree now'));
+    await settle(tester);
+    await clearSnackBar(tester);
+  }
+
   group('Capture now', () {
-    testWidgets('records the working tree through the recorder', (
-      tester,
-    ) async {
+    testWidgets('asks the server\'s recorder, as the user', (tester) async {
       await pumpPanel(tester);
       expect(find.textContaining('No checkpoints yet'), findsOneWidget);
 
+      server.checkpointWork.nextCapture = captured(1);
       await tester.tap(find.byTooltip('Capture the working tree now'));
       await settle(tester);
 
-      expect(db.server.checkpointRows.forSession('s1'), hasLength(1));
+      final capture = asked<CheckpointCapture>().single;
+      expect(capture.sessionId, 's1');
+      expect(capture.decidedBy, 'the user');
       expect(find.textContaining('Captured checkpoint 1'), findsOneWidget);
-      // The list is behind the revision the recorder bumps, so it refreshes
+      // The list is kept by the change the server told, so it refreshes
       // without anything polling.
       expect(find.textContaining('Checkpoint #1'), findsOneWidget);
     });
@@ -220,9 +139,7 @@ void main() {
     testWidgets('a tree that has not moved says both reasons it might not '
         'have been captured', (tester) async {
       await pumpPanel(tester);
-      await tester.tap(find.byTooltip('Capture the working tree now'));
-      await settle(tester);
-      await clearSnackBar(tester);
+      await captureOne(tester);
       await tester.tap(find.byTooltip('Capture the working tree now'));
       await settle(tester);
 
@@ -232,59 +149,87 @@ void main() {
   });
 
   group('per-path restore', () {
-    testWidgets('touches only the file it was asked for', (tester) async {
+    testWidgets('asks for only the file it was given, and says so', (
+      tester,
+    ) async {
       await pumpPanel(tester);
-      await tester.tap(find.byTooltip('Capture the working tree now'));
-      await settle(tester);
-      await clearSnackBar(tester);
-      // Nothing has moved since, so the restore is not refused and no dialog
-      // stands between the tap and the patch.
+      await captureOne(tester);
       await tester.tap(find.textContaining('Checkpoint #1'));
       await settle(tester);
 
       expect(find.text('lib/a.dart'), findsOneWidget);
       expect(find.text('lib/b.dart'), findsOneWidget);
-      // The tree has moved on since the checkpoint, so there is something to
-      // put back.
-      trees = ['tree2'];
 
       await tester.tap(find.byTooltip('Restore this file only').first);
       await settle(tester);
-      // The refusal is expected — the tree moved — and confirming it is the
-      // same per-path restore.
-      if (find.text('Restore anyway').evaluate().isNotEmpty) {
-        await tester.tap(find.text('Restore anyway'));
-        await settle(tester);
-      }
 
-      final patch =
-          files.written['C:/src/demo/app/.git/karmashala/apply.patch'];
-      expect(patch, contains('lib/a.dart'));
-      expect(
-        patch,
-        isNot(contains('lib/b.dart')),
-        reason: 'a per-path restore must not write a file it was not given',
-      );
-      final apply = gitCalls().firstWhere((c) => c.contains('apply'));
-      expect(apply, contains('-R'));
-      expect(apply, isNot(contains('--cached')));
-      // And it says it restored one file, not every file that differs.
+      final restore = asked<CheckpointRestore>().single;
+      expect(restore.id, 'ckpt1');
+      expect(restore.paths, ['lib/a.dart']);
+      expect(restore.confirm, isFalse);
+      // The server's answer names one file, and the panel says one.
       expect(find.textContaining('Restored 1 file.'), findsOneWidget);
+    });
+
+    testWidgets('a moved tree asks first, in the server\'s words, and '
+        'confirming sends the same restore again', (tester) async {
+      final refusal = checkpointRestoreRefusal(
+        treeMovedSinceLastCheckpoint: true,
+        safetySequence: 2,
+      )!;
+      server.checkpointWork.restoreWith = (request, checkpoint) =>
+          request.confirm
+          ? CheckpointRestoreAnswer.restored(
+              RestoreOutcome(
+                restored: checkpoint,
+                safetyCheckpoint: captured(2),
+                files: checkpoint.files.take(1).toList(),
+                alreadyThere: false,
+              ),
+            )
+          : CheckpointRestoreAnswer.refused(
+              CheckpointConflict(refusal, safetyCheckpoint: captured(2)),
+            );
+      await pumpPanel(tester);
+      await captureOne(tester);
+      await tester.tap(find.textContaining('Checkpoint #1'));
+      await settle(tester);
+      await tester.tap(find.byTooltip('Restore this file only').first);
+      await settle(tester);
+
+      expect(find.text('Discard newer changes?'), findsOneWidget);
+      expect(find.text(refusal), findsOneWidget);
+      await tester.tap(find.text('Restore anyway'));
+      await settle(tester);
+
+      final restores = asked<CheckpointRestore>();
+      expect([for (final r in restores) r.confirm], [false, true]);
+      expect(restores.last.paths, ['lib/a.dart']);
+      expect(
+        find.textContaining('Undo it by restoring checkpoint 2.'),
+        findsOneWidget,
+      );
     });
   });
 
   group('the expanded diff', () {
-    testWidgets('is read once, however often the panel rebuilds', (
+    testWidgets('is asked for once, however often the panel rebuilds', (
       tester,
     ) async {
+      server.checkpointWork.diffs['ckpt1'] =
+          'diff --git a/lib/a.dart b/lib/a.dart\n'
+          'index 111..222 100644\n'
+          '--- a/lib/a.dart\n'
+          '+++ b/lib/a.dart\n'
+          '@@ -1 +1 @@\n'
+          '-before a\n'
+          '+after a\n';
       await pumpPanel(tester);
-      await tester.tap(find.byTooltip('Capture the working tree now'));
-      await settle(tester);
-      await clearSnackBar(tester);
+      await captureOne(tester);
       await tester.tap(find.textContaining('Checkpoint #1'));
       await settle(tester);
 
-      expect(service.diffs, 1);
+      expect(asked<CheckpointDiff>(), hasLength(1));
       expect(find.text('+after a'), findsOneWidget);
 
       for (var i = 0; i < 3; i++) {
@@ -293,7 +238,7 @@ void main() {
         await settle(tester);
       }
 
-      expect(service.diffs, 1);
+      expect(asked<CheckpointDiff>(), hasLength(1));
     });
   });
 }

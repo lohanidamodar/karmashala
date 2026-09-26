@@ -9,6 +9,7 @@ import 'package:karmashala_notifications/evidence.dart';
 import 'package:karmashala_notifications/attention.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import 'package:agent_cli/stream.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'session_engine_provider.dart';
 import 'session_launcher.dart';
 import 'session_status_providers.dart';
@@ -21,21 +22,10 @@ class SessionWaitService {
   final Ref _ref;
 
   /// The bound a caller that names none gets.
-  static const Duration defaultBound = Duration(seconds: 30);
+  static const Duration defaultBound = kSessionWaitDefaultBound;
 
-  /// The most a caller may ask for. Two 60-second walls sit between a tool call
-  /// and its answer — the local RPC timeout, and an MCP client that re-sends.
-  static const Duration maxBound = Duration(seconds: 45);
-
-  /// The bound for a caller's `timeoutSeconds`, clamped rather than refused:
-  /// `timeout` with the session still running is true whichever bound applied.
-  static Duration boundFor(num? seconds) {
-    if (seconds == null) return defaultBound;
-    final rounded = seconds.round();
-    if (rounded <= 0) return defaultBound;
-    final asked = Duration(seconds: rounded);
-    return asked > maxBound ? maxBound : asked;
-  }
+  /// The bound for a caller's `timeoutSeconds` — the server's rule.
+  static Duration boundFor(num? seconds) => sessionWaitBoundFor(seconds);
 
   /// **What [sessionId] is blocked on right now**, or null. Asked *before* a
   /// send; only [InboxItemKind.needsApproval] blocks, not a finished item.
@@ -263,86 +253,6 @@ class SessionWaitService {
     }
     return true;
   }
-}
-
-/// What a wait ended on. [done] is idle-and-seen-changed; [idle] is equally
-/// true of a session that never started, which is why they are two states.
-enum SessionWaitState {
-  /// Ready for input, and nothing moved while we watched.
-  idle,
-
-  /// Ready for input, and the session's evidence moved during the wait.
-  done,
-
-  /// Stopped for a person: an approval prompt, or a question in the inbox.
-  blocked,
-
-  /// The pane or the session is over.
-  ended,
-
-  /// The caller's bound was reached. The session is still running.
-  timeout,
-}
-
-/// What a session is blocked on, in the source's own words.
-class SessionBlock {
-  const SessionBlock({required this.kind, this.text});
-
-  /// `approvalPrompt` for a modal on screen, otherwise the inbox item's kind.
-  final String kind;
-
-  /// The agent's own words, or null when the source gave none. Never
-  /// synthesised — an absent line reads as "not recorded".
-  final String? text;
-}
-
-/// One wait's answer.
-class SessionWaitOutcome {
-  const SessionWaitOutcome({
-    required this.state,
-    required this.agentStatus,
-    required this.source,
-    required this.changed,
-    this.since,
-    this.evidenceAge,
-    this.transcriptChanged,
-    this.blockedOn,
-    this.exitCode,
-    this.exitCodeKnown = false,
-    this.inputSent,
-  });
-
-  final SessionWaitState state;
-
-  /// The status word behind [state], so a turn that ended in `failed` is not
-  /// flattened into "done" with the reason dropped.
-  final AgentActivityStatus agentStatus;
-
-  final AgentStatusSource source;
-
-  /// When the evidence behind this answer was **produced** — never when we
-  /// looked. Null when no source could tell us anything.
-  final DateTime? since;
-
-  /// How old that evidence was at the moment of the answer.
-  final Duration? evidenceAge;
-
-  /// Whether the session's evidence moved during the wait. The one thing that
-  /// separates [SessionWaitState.done] from [SessionWaitState.idle].
-  final bool changed;
-
-  /// Whether the conversation moved, or null when no source could tell.
-  final bool? transcriptChanged;
-
-  final SessionBlock? blockedOn;
-
-  final int? exitCode;
-
-  /// Whether [exitCode] was learned. A missing code is never a zero.
-  final bool exitCodeKnown;
-
-  /// Whether this call sent input before waiting. Null when it sent none.
-  final bool? inputSent;
 }
 
 /// How a wait's bound is served. Injected so a test can bound a wait by an

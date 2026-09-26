@@ -26,6 +26,7 @@ class HostLifecycleSubscriber {
     this.mcpTools,
     this.companion,
     this.automations,
+    this.panes,
     this.retryDelays = kHostRedialDelays,
     this.idleRetry = const Duration(seconds: 30),
     AppLogger? logger,
@@ -41,7 +42,7 @@ class HostLifecycleSubscriber {
   final bool Function(String paneId) hasLivePane;
 
   /// Each hook once: a snapshot hook already applied on an earlier link is not
-  /// applied again. A held hook is replied to when this completes, or fails.
+  /// applied again.
   final FutureOr<void> Function(RelayedAgentHook hook)? onHook;
 
   /// Every agent status the host keeps, whenever a link opens — and nothing,
@@ -72,6 +73,11 @@ class HostLifecycleSubscriber {
   /// every loss. Null leaves the host running them on its own.
   final HostLinkPeer? automations;
 
+  /// This app's terminal panes, reported to the host as facts; told of every
+  /// link and every loss. Null reports none, and the host adopts nothing
+  /// started by hand in them.
+  final HostLinkPeer? panes;
+
   /// Waits before each dial after the link is lost, then [idleRetry] between
   /// dials; a pane starting on the host dials at once through [nudge].
   final List<Duration> retryDelays;
@@ -101,6 +107,12 @@ class HostLifecycleSubscriber {
 
   bool isRunning(String sessionId) =>
       _known[hostSessionIdOf(sessionId)] == HostSessionState.running;
+
+  /// Hands the host a hook this app took itself — on its own `/agent-hook`
+  /// route or from a spool — so the server's checkpoint recorder hears the
+  /// turns of panes it does not run. Nothing while no link is open: those
+  /// turns go unrecorded, as they would with no server.
+  void forwardHook(RelayedAgentHook hook) => _feed?.forwardHook(hook);
 
   /// Asks the host to answer a prompt in a session it runs. Throws
   /// [SessionPromptRefusal] when it will not, or no link is open.
@@ -179,10 +191,10 @@ class HostLifecycleSubscriber {
     for (final hook in feed.hookSnapshot) {
       final applied = _hookApplied[hook.sessionKey];
       if (applied == null || hook.receivedAt.isAfter(applied)) {
-        unawaited(_applyHook(hook, feed));
+        unawaited(_applyHook(hook));
       }
     }
-    _hooks = feed.hooks.listen((hook) => unawaited(_applyHook(hook, feed)));
+    _hooks = feed.hooks.listen((hook) => unawaited(_applyHook(hook)));
     final tools = mcpTools;
     if (tools != null) {
       _mcpCalls = feed.mcpCalls.listen(
@@ -192,6 +204,7 @@ class HostLifecycleSubscriber {
     }
     companion?.attached(feed);
     automations?.attached(feed);
+    panes?.attached(feed);
   }
 
   /// Runs one forwarded call and answers it; a failure is the text the agent
@@ -220,18 +233,14 @@ class HostLifecycleSubscriber {
     }
   }
 
-  /// Applies [hook], then releases the agent when [feed] holds it for us. The
-  /// synchronous part of [onHook] runs before this returns, so hooks are
-  /// applied in the order they came even while one waits.
-  Future<void> _applyHook(RelayedAgentHook hook, HostLifecycleFeed feed) async {
+  /// Applies [hook]. Nothing waits on this app: the server held the agent,
+  /// when it did, for its own checkpoint before relaying the hook.
+  Future<void> _applyHook(RelayedAgentHook hook) async {
     _hookApplied[hook.sessionKey] = hook.receivedAt;
     try {
       await onHook?.call(hook);
     } on Object catch (error) {
       _log.warning('Applying a relayed agent hook failed: $error');
-    } finally {
-      final holdId = hook.holdId;
-      if (holdId != null) feed.replyHook(holdId);
     }
   }
 
@@ -252,6 +261,7 @@ class HostLifecycleSubscriber {
     onAgentStatuses?.call(const []);
     companion?.detached();
     automations?.detached();
+    panes?.detached();
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
@@ -290,6 +300,7 @@ class HostLifecycleSubscriber {
     if (_feed != null) {
       companion?.detached();
       automations?.detached();
+      panes?.detached();
     }
     final feed = _feed;
     _feed = null;

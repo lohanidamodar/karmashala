@@ -24,6 +24,7 @@ import 'session_providers.dart';
 import 'session_signals.dart';
 import 'session_wait.dart';
 import 'session_working_directory.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 /// How many of the source's snapshots the packet offers. Enough to reach the
 /// last few turns, few enough that the list is an offer rather than a dump.

@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/mcp/session_tools.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';

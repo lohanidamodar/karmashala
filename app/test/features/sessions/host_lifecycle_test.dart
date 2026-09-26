@@ -1,6 +1,5 @@
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart';
@@ -9,8 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
-import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_agent_statuses.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
@@ -36,27 +33,6 @@ import 'package:karmashala/src/features/sessions/application/session_providers.d
 
 DateTime _at(int second) => testTime.add(Duration(seconds: second));
 
-/// The checkpoint recorder as a hook's hold sees it: [settled] waits on
-/// [capture] while one is set, and the unheld / expired marks are recorded.
-class _RecordingRecorder extends SessionCheckpointRecorder {
-  Completer<void>? capture;
-  var settledCalls = 0;
-  final unheld = <String>[];
-  final expired = <String>[];
-
-  @override
-  Future<void> settled(String sessionId) async {
-    settledCalls++;
-    await capture?.future;
-  }
-
-  @override
-  void noteToolUnheld(String sessionId) => unheld.add(sessionId);
-
-  @override
-  void noteHoldExpired(String sessionId) => expired.add(sessionId);
-}
-
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
     await Future<void>.delayed(Duration.zero);
@@ -70,7 +46,6 @@ void main() {
   late FakeSessionRows dao;
   late FakeHostLifecycle host;
   late ProviderContainer container;
-  late _RecordingRecorder recorder;
 
   setUp(() async {
     db = TestMachine();
@@ -96,9 +71,6 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostLifecycleSourceProvider.overrideWithValue(host),
-        sessionCheckpointRecorderProvider.overrideWith(
-          () => recorder = _RecordingRecorder(),
-        ),
       ],
     );
     addTearDown(() {
@@ -502,63 +474,70 @@ void main() {
     );
   });
 
-  group('a PreToolUse the host relayed', () {
-    RelayedAgentHook preToolUse({int? holdId, int second = 5}) =>
-        RelayedAgentHook(
+  // Checkpoints are the server's (slice 2b): it holds a `PreToolUse` for
+  // them itself, so nothing waits on this app; a hook this app took on its
+  // own route or from a spool is forwarded for the server's recorder.
+  group('hooks and the server\'s checkpoints', () {
+    RelayedAgentHook preToolUse({int second = 5}) => RelayedAgentHook(
+      agentId: AgentIds.claudeCode,
+      event: 'PreToolUse',
+      body: jsonEncode({
+        'session_id': 'cli-s1',
+        'hook_event_name': 'PreToolUse',
+        'tool_name': 'Edit',
+        'tool_input': {'file_path': '/repo/main.txt'},
+      }),
+      receivedAt: _at(second),
+      paneSessionId: 's1',
+    );
+
+    test('a PreToolUse the host relayed is applied and handed back to '
+        'nobody', () async {
+      row('s1');
+      await startWatching();
+
+      host.hookLink.add(preToolUse());
+      await _settle();
+      expect(
+        container
+            .read(agentHookReportsProvider)
+            .latest(AgentIds.claudeCode, 'cli-s1')
+            ?.status,
+        AgentActivityStatus.working,
+      );
+      expect(host.forwarded, isEmpty, reason: 'the server already has it');
+    });
+
+    test(
+      'a hook this app took itself is forwarded to the server whole',
+      () async {
+        row('s1');
+        await startWatching();
+
+        forwardAgentHookToServer(
+          container,
           agentId: AgentIds.claudeCode,
           event: 'PreToolUse',
-          body: jsonEncode({
-            'session_id': 'cli-s1',
-            'hook_event_name': 'PreToolUse',
-            'tool_name': 'Edit',
-            'tool_input': {'file_path': '/repo/main.txt'},
-          }),
-          receivedAt: _at(second),
+          body: preToolUse().body,
+          receivedAt: _at(6),
           paneSessionId: 's1',
-          holdId: holdId,
         );
+        final forwarded = host.forwarded.single;
+        expect(forwarded.event, 'PreToolUse');
+        expect(forwarded.paneSessionId, 's1');
+        expect(forwarded.receivedAt, _at(6));
+        expect(jsonDecode(forwarded.body), jsonDecode(preToolUse().body));
+      },
+    );
 
-    test('held, it is replied to only once its checkpoint work is done, and '
-        'its tool is not marked unheld', () async {
-      row('s1');
-      await startWatching();
-      container.read(sessionCheckpointRecorderProvider);
-      final capture = recorder.capture = Completer<void>();
-
-      host.hookLink.add(preToolUse(holdId: 7));
-      await _settle();
-      expect(recorder.settledCalls, 1, reason: 'the hold waits on the queue');
-      expect(host.replies, isEmpty, reason: 'the capture is still running');
-
-      capture.complete();
-      await _settle();
-      expect(host.replies, [7]);
-      expect(recorder.unheld, isEmpty);
-      expect(recorder.expired, isEmpty);
-    });
-
-    test('held, for a session this app does not know, it is replied to at '
-        'once', () async {
-      await startWatching();
-      container.read(sessionCheckpointRecorderProvider);
-      recorder.capture = Completer<void>();
-
-      host.hookLink.add(preToolUse(holdId: 3));
-      await _settle();
-      expect(host.replies, [3]);
-      expect(recorder.settledCalls, 0);
-    });
-
-    test('not held — the host had nobody watching — it is marked unheld and '
-        'nothing is replied', () async {
-      row('s1');
-      host.hookSnapshot = [preToolUse()];
-      await startWatching();
-      container.read(sessionCheckpointRecorderProvider);
-
-      expect(recorder.unheld, ['s1']);
-      expect(recorder.settledCalls, 0);
-      expect(host.replies, isEmpty);
+    test('with no link to the server, a forwarded hook goes nowhere', () {
+      forwardAgentHookToServer(
+        container,
+        agentId: AgentIds.claudeCode,
+        event: 'Stop',
+        body: '{}',
+      );
+      expect(host.forwarded, isEmpty);
     });
   });
 
@@ -742,16 +721,12 @@ void main() {
             paneSessionId: 's1',
           ),
         ];
-      // A launch's first cycle: its store sync is slow, and still running.
-      final storeSync = Completer<void>();
-      addTearDown(storeSync.complete);
       final app = ProviderContainer(
         overrides: [
           dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostLifecycleSourceProvider.overrideWithValue(host),
-          cliStoreSyncRunnerProvider.overrideWithValue(() => storeSync.future),
         ],
       );
       addTearDown(app.dispose);

@@ -10,6 +10,7 @@ import '../data/sessions_data.dart';
 import 'session_decision_providers.dart';
 import 'session_repositories_service.dart';
 import 'session_signals.dart';
+import 'superseded_history.dart';
 
 /// The sessions as the server keeps them, read from this app's copy and
 /// written through the server. Also where the server's own word on a row —
@@ -49,6 +50,23 @@ final sessionsDataProvider = Provider<SessionsData>((ref) {
     client.imported.serverChanges.listen(
       (change) => publish(importedChangeOf(change)),
     ),
+    // A row the server has just told which conversation it is on — launched
+    // or directory attribution — takes the selection off the history it
+    // supersedes.
+    client.sessions.serverChanges.listen((change) {
+      final before = change.before;
+      final conversation = change.after?.externalSessionId;
+      if (before == null || conversation == null || conversation.isEmpty) {
+        return;
+      }
+      if (before.externalSessionId == conversation) return;
+      followSupersededHistory(
+        ref,
+        change.key,
+        conversation,
+        importedById: (id) => client.imported[id],
+      );
+    }),
     // A decision filed elsewhere — a prompt answered from a phone, through
     // the server — reaches the open panel.
     client.decisions.serverChanges.listen(

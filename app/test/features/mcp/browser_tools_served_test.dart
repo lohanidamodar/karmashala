@@ -15,7 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('the control server serves the browser tools alongside its own', () {
     final names = [for (final s in McpToolDispatcher.toolSchemas) s['name']];
-    expect(names, containsAll(['list_sessions', 'browser_click']));
+    expect(names, containsAll(['inbox_list', 'browser_click']));
     expect(names.toSet(), hasLength(names.length));
     // The package's own list is the source: every schema it publishes has to
     // reach a client, not just the one named above.

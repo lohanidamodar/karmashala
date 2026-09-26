@@ -4,7 +4,6 @@ import '../domain/host_session.dart';
 import '../domain/registry_change.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
-import '../hooks/hook_holds.dart';
 import '../hooks/recent_hooks.dart';
 import '../protocol/messages.dart';
 
@@ -16,10 +15,8 @@ class LifecycleFeed {
     this._registry, {
     required DateTime Function() clock,
     RecentHooks? hooks,
-    HookHolds? holds,
   }) : _now = clock,
-       hooks = hooks ?? RecentHooks(),
-       holds = holds ?? HookHolds() {
+       hooks = hooks ?? RecentHooks() {
     for (final session in _registry.sessions) {
       _watchExit(session);
     }
@@ -34,17 +31,12 @@ class LifecycleFeed {
 
   final SessionRegistry _registry;
   final RecentHooks hooks;
-  final HookHolds holds;
   final DateTime Function() _now;
   final _events = StreamController<LifecycleEvent>.broadcast(sync: true);
 
   /// What a watcher is sent after its snapshot: lifecycle events and hooks, in
-  /// the one order they happened. The last watcher hanging up releases every
-  /// hold: nobody is left to reply.
-  late final _out = StreamController<HostMessage>.broadcast(
-    sync: true,
-    onCancel: holds.releaseAll,
-  );
+  /// the one order they happened.
+  final _out = StreamController<HostMessage>.broadcast(sync: true);
   final _closed = <String, HostSessionFacts>{};
 
   /// Keyed by the session object, so a reopened id is a new session and a
@@ -93,30 +85,18 @@ class LifecycleFeed {
     return subscription;
   }
 
-
   /// Tells every watcher what the agent in the row [sessionId] is doing now,
   /// or — [status] null — that it is no longer kept.
   void publishAgentStatus(String sessionId, Map<String, Object?>? status) =>
       _out.add(AgentStatusMessage(sessionId: sessionId, status: status));
 
-  /// Keeps [hook] for the snapshot and relays it to every watcher. Completes
-  /// when the agent may be answered: at once, unless [hook] is a kind that is
-  /// held and someone is watching — then on the first watcher's
-  /// [HookReplyMessage], or at [HookHolds.bound]. With nobody watching there is
-  /// nobody to wait for; the hook then reaches the app, unheld, in a snapshot.
-  Future<void> relayHook(AgentHookEvent hook) {
+  /// Keeps [hook] for the snapshot and relays it to every watcher. Nothing
+  /// waits on a watcher: a tool the hook announces is held, when it is, by
+  /// the server's own checkpoint recorder before this is called.
+  void relayHook(AgentHookEvent hook) {
     hooks.record(hook);
-    if (!hasWatchers || !holds.wants(hook)) {
-      _out.add(HookMessage(hook));
-      return Future<void>.value();
-    }
-    final hold = holds.open();
-    _out.add(HookMessage(hook.heldAs(hold.id)));
-    return hold.released;
+    _out.add(HookMessage(hook));
   }
-
-  /// A watcher is done with the hold [holdId]; false when it was over already.
-  bool replyHook(int holdId) => holds.release(holdId);
 
   /// Watchers get the event before any row change it causes.
   void _emit(LifecycleEvent event) {

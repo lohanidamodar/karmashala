@@ -1,5 +1,6 @@
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/instructions.dart';
 
 /// The skills, held against the two things they claim: that they list the
@@ -13,7 +14,11 @@ import 'package:karmashala_mcp/instructions.dart';
 /// has — to every session on the machine, until someone notices.
 void main() {
   final servedNames = <String>{
-    for (final schema in McpToolDispatcher.toolSchemas)
+    // What agents are served: the server's own tools, and the app's.
+    for (final schema in [
+      ...serverToolSchemas,
+      ...McpToolDispatcher.toolSchemas,
+    ])
       schema['name']! as String,
   };
 
@@ -53,7 +58,7 @@ void main() {
         named.difference(servedNames),
         isEmpty,
         reason:
-            '${skill.name} names these, and this app serves no such tool. '
+            '${skill.name} names these, and no such tool is served. '
             'A skill is read without being asked for, so a stale name is a '
             'capability claim on every session on the machine.',
       );

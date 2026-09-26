@@ -29,7 +29,15 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       close: watch.close,
       hookSnapshot: [for (final hook in watch.hookSnapshot) _hookOf(hook)],
       hooks: watch.hooks.map(_hookOf),
-      replyHook: watch.replyHook,
+      forwardHook: (hook) => watch.forwardHook(
+        wire.AgentHookEvent(
+          agent: hook.agentId,
+          event: hook.event,
+          sessionHeader: hook.paneSessionId,
+          receivedAt: hook.receivedAt,
+          body: _bodyOf(hook.body),
+        ),
+      ),
       mcpCalls: watch.mcpCalls.map(
         (call) => (
           callId: call.callId,
@@ -51,6 +59,8 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       noticeAutomations: watch.noticeAutomations,
       answerAutomationCall: watch.answerAutomationCall,
       runChecks: watch.runChecks,
+      reportPanes: watch.reportPanes,
+      paneTailsWanted: watch.paneTailsWanted,
       statusSnapshot: [
         for (final json in watch.statusSnapshot)
           ?HostedAgentStatus.fromJson(json),
@@ -81,13 +91,24 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
     );
   }
 
+  /// A hook's payload as the wire carries it: an object, or an empty one for
+  /// text that is not one (the host would refuse the frame otherwise).
+  static Map<String, Object?> _bodyOf(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) return decoded.cast<String, Object?>();
+    } on FormatException {
+      // Said below.
+    }
+    return const {};
+  }
+
   static RelayedAgentHook _hookOf(wire.AgentHookEvent hook) => RelayedAgentHook(
     agentId: hook.agent,
     event: hook.event,
     body: jsonEncode(hook.body),
     receivedAt: hook.receivedAt.toUtc(),
     paneSessionId: hook.sessionHeader,
-    holdId: hook.holdId,
   );
 
   static SessionFacts _factsOf(

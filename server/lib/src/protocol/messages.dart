@@ -14,10 +14,11 @@ part 'mcp_messages.dart';
 part 'status_messages.dart';
 part 'server_messages.dart';
 part 'data_messages.dart';
+part 'pane_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 16;
+const int kProtocolVersion = 17;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -888,7 +889,7 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.watching => WatchingMessage.decode(frame),
   MessageType.lifecycle => LifecycleMessage.decode(frame),
   MessageType.hook => HookMessage.decode(frame),
-  MessageType.hookReply => HookReplyMessage.decode(frame),
+  MessageType.hookForward => HookForwardMessage.decode(frame),
   MessageType.mcpTools => McpToolsMessage.decode(frame),
   MessageType.mcpCall => McpCallMessage.decode(frame),
   MessageType.mcpResult => McpResultMessage.decode(frame),
@@ -910,4 +911,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.dataRequest => DataRequestMessage.decode(frame),
   MessageType.dataAnswer => DataAnswerMessage.decode(frame),
   MessageType.dataChanges => DataChangesMessage.decode(frame),
+  MessageType.paneFacts => PaneFactsMessage.decode(frame),
+  MessageType.paneTailsWanted => PaneTailsWantedMessage.decode(frame),
 };

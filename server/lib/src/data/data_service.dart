@@ -80,6 +80,12 @@ class DataService {
   /// Told after a client wrote automations, runs, checks or resumes: the
   /// server's scheduler re-arms and drains what it can start.
   void Function()? automationsWritten;
+
+  /// Does the checkpoint work a client asks for ([CheckpointWorkRequest]:
+  /// capture, a run's base, diff, restore, skip reasons) — the server's
+  /// checkpoint recorder. Null refuses it (`unavailable`).
+  Future<Object?> Function(CheckpointWorkRequest<Object?> request)?
+  checkpointWork;
   late final WorktreesHandler _worktrees;
   late final SnippetsHandler _snippets;
   late final PairingsHandler _pairings;
@@ -178,6 +184,10 @@ class DataService {
         DataSubscribe() => origin._subscribe(),
         final AutomationsRequest r => _automations.handle(r, changes),
         final CheckpointsRequest r => _evidence.handleCheckpoints(r, changes),
+        // Runs git, so answered when done: `DataSession.handleLater`.
+        CheckpointWorkRequest() => throw DataRefused.invalid(
+          '${request.kind} is answered asynchronously',
+        ),
         final VerificationRequest r => _evidence.handleVerification(r, changes),
         final ComparisonsRequest r => _evidence.handleComparisons(r, changes),
         final WorktreesRequest r => switch (r) {
@@ -318,13 +328,22 @@ class DataSession {
   /// once — out of order, which only a request that writes nothing a client
   /// copies may be.
   static bool isAnsweredLater(DataRequest<Object?> request) =>
-      request is ConversationsCatchUp;
+      request is ConversationsCatchUp || request is CheckpointWorkRequest;
 
   /// Answers any request: at once, or when its work is done.
   Future<DataReply<R>> handleLater<R>(DataRequest<R> request) async {
     if (request is ConversationsCatchUp) {
       final changed = await _service.conversations.catchUp();
       return DataReply(changed as R, _service._revision);
+    }
+    if (request is CheckpointWorkRequest) {
+      // What it wrote was told as it wrote it (`announce`), to this link too.
+      final work = _service.checkpointWork;
+      if (work == null) {
+        throw const DataRefused.unavailable('this server keeps no checkpoints');
+      }
+      final value = await work(request as CheckpointWorkRequest<Object?>);
+      return DataReply(value as R, _service._revision);
     }
     return handle(request);
   }

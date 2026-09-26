@@ -20,6 +20,31 @@ import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
 import '../mcp/daemon_mcp.dart';
 import '../mcp/mcp_tool_relay.dart';
+import '../mcp/tools/instructions_tool_set.dart';
+import '../mcp/tools/server_tool_context.dart';
+import '../mcp/tools/server_tools.dart';
+import '../companion/daemon_worktrees.dart';
+import '../automations/daemon_checkout_facts.dart';
+import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import '../domain/uuid.dart';
+import '../mcp/tools/checkout_reach.dart';
+import '../mcp/tools/project_folders.dart';
+import '../mcp/tools/project_tool_set.dart';
+import '../mcp/tools/server_verification_runs.dart';
+import '../mcp/tools/session_liveness.dart';
+import '../mcp/tools/verification_tool_set.dart';
+import '../mcp/tools/workspace_tool_set.dart';
+import '../mcp/tools/worktree_tool_set.dart';
+import '../mcp/tools/decision_tool_set.dart';
+import '../mcp/tools/fanout_tool_set.dart';
+import '../mcp/tools/inventory_tool_set.dart';
+import '../mcp/tools/launch_tool_set.dart';
+import '../mcp/tools/notes_todos_tool_set.dart';
+import '../mcp/tools/review_thread_tool_set.dart';
+import '../mcp/tools/snippet_tool_set.dart';
+import '../mcp/tools/session_tool_set.dart';
+import '../automations/checks_tool_set.dart';
+import '../protocol/messages.dart' show AgentHookEvent;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
@@ -28,9 +53,11 @@ import '../data/data_service.dart';
 import '../server/server_config.dart';
 import '../server/server_config_service.dart';
 import '../server/server_data_directory.dart';
+import '../checkpoints/checkpoint_tool_set.dart';
+import '../checkpoints/daemon_checkpoints.dart';
+import '../sessions/daemon_session_sync.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
-import '../status/session_answer_tool.dart';
 import '../transport/socket_transport.dart';
 import 'package:karmashala_local_ipc/socket_location.dart';
 import 'host_build.dart';
@@ -255,7 +282,55 @@ Future<int> runServe(
     onLog: (message) => errSink.writeln('karmashala_host: $message'),
   );
 
-  final mcpTools = McpToolRelay(cachePath: paths.mcpToolsPath);
+  // Agents' tools: the server runs every one that needs no desktop UI
+  // itself (slice 2b); the rest are forwarded to the app.
+  final tools = ServerToolContext(
+    database: database,
+    data: data,
+    dataDirectory: dataDirectory,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final reach = CheckoutReach(database);
+  final folders = ProjectFolders(tools, reach);
+  final liveness = SessionLiveness(
+    (id) => registry.find(hostSessionIdOf(id)) != null,
+  );
+  final worktrees = daemonWorktrees(
+    database: database,
+    registry: registry,
+    facts: DaemonCheckoutFacts(CheckoutRows(database)),
+    newId: newUuid,
+    record: data.recordWorktreeSetup,
+    environmentOf: reach.environmentOf,
+  );
+  final mcpTools = McpToolRelay(
+    cachePath: paths.mcpToolsPath,
+    tools: ServerTools([
+      const InstructionsToolSet(),
+      InventoryToolSet(tools),
+      NotesTodosToolSet(tools),
+      DecisionToolSet(tools),
+      ReviewThreadToolSet(tools),
+      SnippetToolSet(tools),
+      FanOutToolSet(tools),
+      WorkspaceToolSet(
+        tools,
+        reach: reach,
+        folders: folders,
+        worktreesOf: worktrees.list,
+        liveness: liveness,
+      ),
+      ProjectToolSet(tools, reach: reach, folders: folders),
+      WorktreeToolSet(
+        tools,
+        reach: reach,
+        folders: folders,
+        worktrees: worktrees,
+        liveness: liveness,
+      ),
+      VerificationToolSet(ServerVerificationRuns(tools)),
+    ]),
+  );
   server = HostServer(
     registry: registry,
     ptyLibrary: pty.library,
@@ -264,6 +339,18 @@ Future<int> runServe(
     mcpTools: mcpTools,
   )..prompts = prompts;
   server.lifecycle.statusSnapshot = status.snapshot;
+  // Every turn's before and after checkpoints, taken here (slice 2b): off the
+  // status of a session this server runs, and off the hooks of any other
+  // row on this machine. A tool is held until its turn's checkpoint exists.
+  final checkpoints = DaemonCheckpoints(
+    database: database,
+    data: data,
+    heldHere: (id) => status.runningSessionOf(id) != null,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  data.checkpointWork = checkpoints.handle;
+  checkpoints.start(status.changes);
+  mcpTools.tools.add(CheckpointToolSet(checkpoints));
   status.start();
   final recording = SessionStatusRecording(
     server.lifecycle,
@@ -277,10 +364,34 @@ Future<int> runServe(
     status,
     errSink,
   );
+  // Title sync, attribution and adoption: the server's, over its own store
+  // and this machine's agent stores; the app only reports its panes.
+  final sessionSync = DaemonSessionSync(
+    database: database,
+    data: data,
+    registry: registry,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  server.panes = sessionSync;
+  // Hooks only the app took (its own route, the WSL spool): never held.
+  server.onForwardedHook = (hook) {
+    checkpoints.forwarded(hook);
+    sessionSync.hook(hook);
+  };
+  sessionSync.start();
   final hookServer = await _openHookServer(
     paths,
-    server.lifecycle,
-    status,
+    // The status first, so a watcher hears the status a hook moved no later
+    // than the hook itself; then what the server does with it itself.
+    (hook) {
+      // The checkpoint first: it files the prompt and paths before the
+      // status moves; the hook server awaits its hold.
+      final held = checkpoints.hook(hook);
+      status.hook(hook);
+      sessionSync.hook(hook);
+      server.lifecycle.relayHook(hook);
+      return held;
+    },
     errSink,
   );
   final mcp = await _openMcp(
@@ -311,12 +422,26 @@ Future<int> runServe(
     errSink: errSink,
     agentStatus: status,
   );
-  // `session_answer` for a session this host holds is answered here; every
-  // other local tool is the automations', and the rest go to the app.
-  final automationsTool = mcpTools.local;
-  mcpTools.local = (tool, arguments, caller) =>
-      sessionAnswerTool(prompts, tool, arguments, caller) ??
-      automationsTool?.call(tool, arguments, caller);
+  // `checks_run` for a checkout on this machine is the automations'.
+  mcpTools.tools
+    ..add(ChecksToolSet(automations?.localTool ?? (_, _, _) => null))
+    // A session this host runs is operated here, app or no app.
+    ..add(
+      SessionToolSet(
+        tools,
+        prompts: prompts,
+        registry: registry,
+        appConnected: () => mcpTools.appConnected,
+      ),
+    )
+    // With no app open, an agent's `open_new_session` starts here.
+    ..add(
+      LaunchToolSet(
+        tools,
+        appConnected: () => mcpTools.appConnected,
+        launcher: () => companion.launcher,
+      ),
+    );
   // `server.config.set` brings the phone listener in line at once.
   if (companionServing) {
     config.apply = (settings) => companion.reconfigure(
@@ -436,12 +561,15 @@ Future<int> runServe(
   await hookServer?.close();
   await mcp?.close();
   mcpTools.close();
+  tools.close();
   await companion.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await automations?.close();
   await recording.close();
   await registry.shutdown();
+  await sessionSync.close();
+  await checkpoints.close();
   data.conversations.close();
   database.close();
   lock.release();
@@ -458,20 +586,14 @@ Future<int> runServe(
 /// reported, when either fails: sessions do not need hooks.
 Future<HookServer?> _openHookServer(
   HostPaths paths,
-  LifecycleFeed lifecycle,
-  DaemonAgentStatus? status,
+  FutureOr<void> Function(AgentHookEvent hook) onHook,
   IOSink errSink,
 ) async {
   final previous = HookEndpoint.read(paths.hookEndpointPath);
   HookServer? server;
   try {
     server = await HookServer.bind(
-      // The status first, so a watcher hears the status a hook moved no later
-      // than the hook itself.
-      onHook: (hook) {
-        status?.hook(hook);
-        return lifecycle.relayHook(hook);
-      },
+      onHook: onHook,
       port: previous?.port ?? 0,
       token: previous?.token,
     );
@@ -562,7 +684,6 @@ Future<DaemonAutomations?> _startAutomations({
   data.automationsWritten = automations.written;
   try {
     server.automations = automations;
-    mcpTools.local = automations.localTool;
     await automations.start(
       recording.changes,
       agentStatus: agentStatus?.changes,
@@ -570,7 +691,6 @@ Future<DaemonAutomations?> _startAutomations({
     return automations;
   } on Object catch (error) {
     server.automations = null;
-    mcpTools.local = null;
     await automations.close();
     errSink.writeln('karmashala_host: automations did not start ($error)');
     return null;

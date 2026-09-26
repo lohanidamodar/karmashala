@@ -29,7 +29,7 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 25, 10, 0, 30);
 
   test('the feed\'s frame types, and the bump that reshaped `watch`', () {
-    expect(kProtocolVersion, 16);
+    expect(kProtocolVersion, 17);
     expect(MessageType.watch.code, 0x17);
     expect(MessageType.watching.code, 0x18);
     expect(MessageType.lifecycle.code, 0x19);
@@ -181,7 +181,6 @@ void main() {
     expect(alone.sessionHeader, 'pane-1');
     expect(alone.receivedAt, t0);
     expect(alone.body, hook.body);
-    expect(alone.holdId, isNull);
     expect(hook.toJson().containsKey('holdId'), isFalse);
 
     final unnamed = AgentHookEvent(
@@ -295,16 +294,19 @@ void main() {
     });
   });
 
-  test('a held hook carries its hold id, and the reply names it', () {
-    expect(MessageType.hookReply.code, 0x1b);
-    final held = AgentHookEvent(
+  test('a hook a client took itself is forwarded to the host whole', () {
+    expect(MessageType.hookForward.code, 0x1b);
+    final taken = AgentHookEvent(
       agent: 'claude-code',
       event: 'PreToolUse',
+      sessionHeader: 'row-1',
       receivedAt: t0,
-      body: const {},
-    ).heldAs(42);
-    expect(roundTrip(HookMessage(held)).hook.holdId, 42);
-    expect(held.unheld.holdId, isNull);
-    expect(roundTrip(const HookReplyMessage(42)).holdId, 42);
+      body: const {'session_id': 'c1'},
+    );
+    final back = roundTrip(HookForwardMessage(taken)).hook;
+    expect(back.event, 'PreToolUse');
+    expect(back.sessionHeader, 'row-1');
+    expect(back.receivedAt, t0);
+    expect(back.body, {'session_id': 'c1'});
   });
 }

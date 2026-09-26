@@ -25,6 +25,7 @@ class HostLifecycleWatch {
   final _automationCalls = StreamController<AutomationCallMessage>();
 
   final _agentStatuses = StreamController<AgentStatusMessage>();
+  final _paneTailsWanted = StreamController<PaneTailsWantedMessage>();
   final _pairings = <int, Completer<PairedMessage>>{};
   final _checks = <int, Completer<ChecksRanMessage>>{};
   final _prompts = <int, Completer<PromptAnsweredMessage>>{};
@@ -69,8 +70,8 @@ class HostLifecycleWatch {
   /// arriving before anyone listens are buffered, not lost.
   Stream<LifecycleEvent> get events => _events.stream;
 
-  /// Every hook after [hookSnapshot], buffered like [events]. One with an
-  /// [AgentHookEvent.holdId] keeps its agent waiting until [replyHook].
+  /// Every hook after [hookSnapshot], buffered like [events]. None is held:
+  /// the agent was answered by the time it arrives.
   Stream<AgentHookEvent> get hooks => _hooks.stream;
 
   /// Each agent tool call the daemon forwards, once this client has offered
@@ -214,9 +215,18 @@ class HostLifecycleWatch {
     }
   }
 
-  /// Releases the agent held under [holdId]. Nothing when the link is gone:
-  /// the host then releases it at its bound.
-  void replyHook(int holdId) => _write(HookReplyMessage(holdId));
+  /// Tells the server every terminal pane this client has now, as facts —
+  /// the whole list, each time it changes.
+  void reportPanes(List<PaneFacts> panes) => _write(PaneFactsMessage(panes));
+
+  /// Each time the server wants some panes' bottom rows with the next
+  /// [reportPanes]. Buffered like [events].
+  Stream<PaneTailsWantedMessage> get paneTailsWanted => _paneTailsWanted.stream;
+
+  /// Hands the host a hook this client took itself — on its own route or
+  /// from a spool — for the server's checkpoint recorder. Nothing when the
+  /// link is gone.
+  void forwardHook(AgentHookEvent hook) => _write(HookForwardMessage(hook));
 
   /// Completes when the link ends, from either side.
   Future<void> get done => _done.future;
@@ -368,6 +378,10 @@ class HostLifecycleWatch {
       if (!_agentStatuses.isClosed) _agentStatuses.add(message);
       return;
     }
+    if (message is PaneTailsWantedMessage) {
+      if (!_paneTailsWanted.isClosed) _paneTailsWanted.add(message);
+      return;
+    }
     if (message is PromptAnsweredMessage) {
       _prompts.remove(message.requestId)?.complete(message);
       return;
@@ -418,6 +432,7 @@ class HostLifecycleWatch {
     if (!_automationCalls.isClosed) unawaited(_automationCalls.close());
 
     if (!_agentStatuses.isClosed) unawaited(_agentStatuses.close());
+    if (!_paneTailsWanted.isClosed) unawaited(_paneTailsWanted.close());
     for (final pairing in _pairings.values) {
       pairing.completeError(
         const HostLifecycleWatchRefused('the host link closed'),

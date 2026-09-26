@@ -8,23 +8,16 @@ import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/artifacts.dart';
+import 'package:karmashala_verification/report.dart';
+import 'package:karmashala_verification/tools.dart';
 import 'package:karmashala_verification/verification.dart';
 
 import '../data/verification_data.dart';
 import 'verification_recorder.dart';
 
 export 'package:karmashala_verification/command_checks.dart' show CommandCheck;
-import 'verification_report.dart';
-
-/// Raised when a run cannot be started, noted or finished; its message is the
-/// whole message, since the bridge renders a thrown error verbatim.
-class VerificationException implements Exception {
-  const VerificationException(this.message);
-  final String message;
-
-  @override
-  String toString() => message;
-}
+export 'package:karmashala_verification/tools.dart'
+    show VerificationException, VerificationTools;
 
 /// "A run started, stepped or finished" — owned apart from
 /// [VerificationService] so a listener never reaches the artifact root for it.
@@ -42,8 +35,10 @@ class VerificationChangeSignal {
 }
 
 /// Starts, records and finishes verification runs. One at a time: the evidence
-/// sink goes on the app's single browser and adb services.
-class VerificationService {
+/// sink goes on the app's single browser and adb services. The server records
+/// a review of a change itself; the runs here are the ones that drive this
+/// app's browser or a device attached to its machine.
+class VerificationService implements VerificationToolBackend {
   VerificationService(
     this._data,
     this._store, {
@@ -74,6 +69,7 @@ class VerificationService {
 
   VerificationRecorder? _recorder;
 
+  @override
   VerificationRun? get activeRun => _recorder?.run;
 
   bool get isRecording => _recorder != null;
@@ -89,6 +85,7 @@ class VerificationService {
 
   /// Begins recording against [target]. A browser target attaches and
   /// navigates; a device target fronts its package unless [launch] is false.
+  @override
   Future<VerificationRun> start({
     required VerificationTarget target,
     String? title,
@@ -204,6 +201,7 @@ class VerificationService {
   Future<void> flush() => _recorder?.drain() ?? Future<void>.value();
 
   /// Adds a step the agent wrote itself.
+  @override
   void note(String text, {String? detail}) {
     final recorder = _require();
     if (text.trim().isEmpty) {
@@ -264,6 +262,7 @@ class VerificationService {
   );
 
   /// Closes the run: trailing evidence, the verdict, and the report.
+  @override
   Future<VerificationRun> finish({
     required VerificationVerdict verdict,
     String? reason,
@@ -394,6 +393,7 @@ class VerificationService {
 
   /// Runs newest first, with steps and artifacts — every caller shows a count.
   /// Every read waits for this service's own queued writes first.
+  @override
   Future<List<VerificationRun>> list({
     int limit = 50,
     String? sessionId,
@@ -402,12 +402,14 @@ class VerificationService {
     return _data.recent(limit: limit, sessionId: sessionId);
   }
 
+  @override
   Future<VerificationRun?> get(String id) async {
     await flush();
     return _data.get(id);
   }
 
   /// A run by id or unambiguous prefix; it refuses when several match.
+  @override
   Future<VerificationRun?> find(String idOrPrefix) async {
     final exact = await get(idOrPrefix);
     if (exact != null) return exact;
@@ -416,10 +418,12 @@ class VerificationService {
   }
 
   /// Every run whose id starts with [prefix] — for explaining a failed [find].
+  @override
   Future<List<VerificationRun>> matching(String prefix) =>
       _data.matching(prefix);
 
   /// The bytes of one artifact, or null when the file is gone.
+  @override
   Future<List<int>?> readArtifact(VerificationArtifact artifact) =>
       _store.read(artifact);
 

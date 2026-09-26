@@ -7,7 +7,11 @@ import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart'
-    show Checkpoint, checkpointFromJson, checkpointToJson;
+    show
+        Checkpoint,
+        CheckpointRestoreAnswer,
+        checkpointFromJson,
+        checkpointToJson;
 import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';

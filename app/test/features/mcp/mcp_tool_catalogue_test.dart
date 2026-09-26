@@ -1,4 +1,5 @@
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
+import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/instructions.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// decided whether it can be undone.
 void main() {
   final servedNames = <String>{
-    for (final schema in McpToolDispatcher.toolSchemas)
+    for (final schema in _served)
       schema['name']! as String,
   };
 
@@ -67,10 +68,10 @@ void main() {
   });
 
   test('annotations reach the served schemas, and only add to them', () {
-    final annotated = annotatedToolSchemas(McpToolDispatcher.toolSchemas);
-    expect(annotated, hasLength(McpToolDispatcher.toolSchemas.length));
+    final annotated = annotatedToolSchemas(_served);
+    expect(annotated, hasLength(_served.length));
     for (var i = 0; i < annotated.length; i++) {
-      final original = McpToolDispatcher.toolSchemas[i];
+      final original = _served[i];
       final hints = annotated[i]['annotations']! as Map<String, Object?>;
       expect(annotated[i]['name'], original['name']);
       expect(annotated[i]['description'], original['description']);
@@ -326,3 +327,10 @@ void main() {
     });
   });
 }
+
+/// What agents are served: the server's own tools, then the app's — the
+/// order the server's relay composes them in.
+final List<Map<String, dynamic>> _served = [
+  ...serverToolSchemas,
+  ...McpToolDispatcher.toolSchemas,
+];

@@ -4,14 +4,13 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/local_host_providers.dart';
 
-/// Whether local agents' hooks go to this machine's session host rather than
-/// the app's own `/agent-hook` route: local panes are host-backed and a host
-/// may be reached. The WSL spool is the app's either way. Asked in that order
-/// so that with no host possible the settings are never read.
+/// Whether local agents' hooks go to this machine's server rather than the
+/// app's own `/agent-hook` route: whenever a server may be reached, whatever
+/// runs the panes — the server takes every turn's checkpoint, adopts, and
+/// keeps status from them (slice 2b), and relays each hook to the app. The
+/// WSL spool is the app's either way.
 final agentHooksAtHostProvider = Provider<bool>(
-  (ref) =>
-      ref.watch(localHostSessionAccessProvider) != null &&
-      ref.watch(hostBackedLocalPanesProvider),
+  (ref) => ref.watch(localHostSessionAccessProvider) != null,
 );
 
 /// What the hook installer is given: the session host's endpoint when hooks go

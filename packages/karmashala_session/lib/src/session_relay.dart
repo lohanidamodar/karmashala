@@ -1,5 +1,11 @@
 import 'record_json.dart';
 
+/// How many messages one session may send another within
+/// [relayBudgetWindow]. Generous: it bounds two sessions trading turns
+/// forever, not ordinary coordination (docs/inter-agent-communication.md §4.5).
+const int relayBudget = 20;
+const Duration relayBudgetWindow = Duration(minutes: 10);
+
 /// One message a session sent another through `session_send`. The
 /// `session_relays` record is append-only, so "who told this session to do
 /// that" survives a restart (docs/inter-agent-communication.md §4.2).

@@ -13,8 +13,6 @@ import '../agents/application/host_hook_endpoint.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_reporting/hooks.dart' show kPaneSessionHeader;
-import '../checkpoints/application/checkpoint_turn_hints.dart';
-import '../checkpoints/application/session_checkpoint_recorder.dart';
 import 'control_server_status.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala_mcp/protocol.dart';
@@ -227,7 +225,7 @@ class LauncherControlServer implements SessionMcp {
       server: McpServer(
         name: kKarmashalaMcpName,
         version: kKarmashalaMcpVersion,
-        catalogue: McpToolDispatcher.servedCatalogue,
+        catalogue: McpToolDispatcher.standaloneCatalogue,
         invoke: _tools.dispatch,
         instructions: kKarmashalaMcpInstructions,
       ),
@@ -310,7 +308,6 @@ class LauncherControlServer implements SessionMcp {
     );
     if (await _abandonedMidStart()) return;
     _publishSessionMcp(this);
-    _startCheckpointRecorder();
     _tokenReaper.start();
   }
 
@@ -460,17 +457,6 @@ class LauncherControlServer implements SessionMcp {
       // A disposed container on the way out must not turn into a start/stop
       // failure; the log line above is the record that matters.
       _logger.warning('Could not publish control server status: $error');
-    }
-  }
-
-  /// Brings the per-turn checkpoint recorder to life. It subscribes to the
-  /// status registry itself: a Riverpod `listen` inside an unwatched provider
-  /// is paused, which is how every turn but a visible pane's went unrecorded.
-  void _startCheckpointRecorder() {
-    try {
-      _container.read(sessionCheckpointRecorderProvider.notifier).start();
-    } on Object catch (error, stack) {
-      _logger.warning('Checkpoint recorder failed to start.', error, stack);
     }
   }
 
@@ -715,27 +701,29 @@ class LauncherControlServer implements SessionMcp {
         return;
       }
       final body = await _readBoundedBody(request);
-      // The same three steps a spooled payload goes through, so the two
-      // transports cannot disagree about what "a hook arrived" means.
+      final agentId = request.uri.queryParameters['agent'];
+      final event = request.uri.queryParameters['event'];
+      final paneSessionId = request.headers.value(kPaneSessionHeader);
+      // The same steps a spooled payload goes through, so the two transports
+      // cannot disagree about what "a hook arrived" means.
       final report = applyAgentHookCallback(
         _container,
-        agentId: request.uri.queryParameters['agent'],
-        event: request.uri.queryParameters['event'],
+        agentId: agentId,
+        event: event,
         body: body,
-        paneSessionId: request.headers.value(kPaneSessionHeader),
+        paneSessionId: paneSessionId,
         logger: _logger,
       );
-      // The one bounded hold: a tool about to write waits, at most
-      // kCheckpointHookHold, for the checkpoint that can undo it.
-      try {
-        await holdToolForCheckpoint(
-          _container,
-          agentSessionId: report.sessionId,
-          event: request.uri.queryParameters['event'],
-        );
-      } on Object catch (error) {
-        _logger.warning('Holding a tool for its checkpoint failed: $error');
-      }
+      // Checkpoints are the server's: it hears this route's hooks only this
+      // way, and never held the tool — answered here at once.
+      forwardAgentHookToServer(
+        _container,
+        agentId: agentId,
+        event: event,
+        body: body,
+        paneSessionId: paneSessionId,
+        logger: _logger,
+      );
       // Always 200 on an authenticated callback, even for an event we do not
       // recognise: a hook must never fail the agent that fired it.
       response.headers.contentType = ContentType.json;

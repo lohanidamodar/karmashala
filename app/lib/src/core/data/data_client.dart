@@ -674,6 +674,7 @@ class DataClient {
         comparisons.applyAt(id, null, revision);
       case CheckpointRecorded() ||
           CheckpointsPruned() ||
+          CheckpointSkipChanged() ||
           VerificationEvidenceAdded():
         break;
     }

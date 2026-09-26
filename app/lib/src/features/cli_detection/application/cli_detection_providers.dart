@@ -9,9 +9,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:karmashala_git/repositories.dart';
-import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -19,14 +17,11 @@ import '../data/cli_session_mutator.dart';
 import 'agent_store_server_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
-import 'directory_conversation_attribution_service.dart';
 import 'cli_detection_service.dart';
 import 'detected_project_merger.dart';
-import 'launched_session_attribution_service.dart';
+import 'pane_facts_reporter.dart';
 import 'project_import_service.dart';
-import 'session_adoption_service.dart';
 import 'session_auto_import_service.dart';
-import 'session_title_sync_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
   (ref) => CliDetectionService(registry: ref.watch(agentRegistryProvider)),
@@ -68,171 +63,28 @@ final autoImportRunnerProvider = Provider<AutoImportRunner>(
   (ref) => ref.read(sessionAutoImportServiceProvider).importForRepositories,
 );
 
-/// Adopts agent sessions the user started by hand in one of our own panes.
-/// Cycled by `SessionStatusRegistry` and poked by `/agent-hook`; starts nothing.
-final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
-  return SessionAdoptionService(
-    sessionDao: ref.watch(sessionsDataProvider),
-    importedSessionDao: ref.watch(importedSessionsProvider),
-    workspace: ref.watch(workspaceDataProvider),
-    environmentDao: ref.watch(environmentsDataProvider),
-    installationDao: ref.watch(agentInstallationsDataProvider),
-    agents: ref.watch(agentRegistryProvider),
-    ids: ref.watch(idGeneratorProvider),
-    clock: ref.watch(clockProvider),
+/// Tells the server this app's terminal panes as facts, over the host link:
+/// the server adopts what a person started by hand in one, and reads the
+/// resume line an agent printed there. Reported on each status cycle.
+final paneFactsReporterProvider = Provider<PaneFactsReporter>(
+  (ref) => PaneFactsReporter(
     readPanes: () => adoptablePanes(ref),
-    readPaneTail: (paneId, lines) {
+    // Not the live-only rule of arming: an agent may print its resume hint
+    // as it exits. `restored` is refused — that buffer is replayed history.
+    readTail: (paneId, lines) {
+      if (!ref.exists(terminalSessionsControllerProvider)) return null;
       final instance = ref
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(paneId);
-      if (instance == null || !instance.liveness.value.isLive) return const [];
+      if (instance == null) return null;
+      if (instance.liveness.value == PaneLiveness.restored) return null;
       return terminalTailLines(instance.terminal, lines: lines);
     },
-    scanStores: () => scanCliStores(ref),
-    // A conversation entering the workspace is one of the moments the
-    // server's conversation index reads it: the row itself is the trigger.
-    onAdopted: (session) => ref
-        .read(sessionsRevisionProvider.notifier)
-        .changed(SessionChange.created(session.id)),
-  );
-});
-
-/// Writes the conversation id onto the session row that is on it, for an
-/// agent whose store records the last conversation per directory — a CLI that
-/// neither accepts an id nor writes one where a scan could match it.
-final directoryConversationAttributionServiceProvider =
-    Provider<DirectoryConversationAttributionService>((ref) {
-      return DirectoryConversationAttributionService(
-        sessionDao: ref.watch(sessionsDataProvider),
-        installationDao: ref.watch(agentInstallationsDataProvider),
-        workspace: ref.watch(workspaceDataProvider),
-        agents: ref.watch(agentRegistryProvider),
-        locateStores: () async => ref
-            .read(cliStoreLocatorProvider)
-            .locate(ref.read(environmentsDataProvider).getAll()),
-        // Not `adoptablePanes`' live-only rule: `agy` prints its resume hint
-        // as it exits. `restored` is refused — that buffer is replayed history.
-        readPaneTail: (paneId, lines) {
-          final instance = ref
-              .read(terminalSessionsControllerProvider.notifier)
-              .instanceFor(paneId);
-          if (instance == null) return const [];
-          if (instance.liveness.value == PaneLiveness.restored) return const [];
-          return terminalTailLines(instance.terminal, lines: lines);
-        },
-        onAttributed: (session, conversationId) {
-          followSupersededHistory(ref, session.id, conversationId);
-          // Which conversation this row is on — a placement. Its name did not
-          // change, so nothing that only draws names is woken.
-          ref
-              .read(sessionsRevisionProvider.notifier)
-              .changed(SessionChange.moved(session.id));
-        },
-      );
-    });
-
-/// Moves the selection off the read-only history a native row has just
-/// superseded — the detail pane resolves by id and would go on showing it.
-void followSupersededHistory(Ref ref, String sessionId, String conversationId) {
-  final selected = ref.read(selectedImportedSessionIdProvider);
-  if (selected == null) return;
-  final record = ref.read(importedSessionsProvider).getById(selected);
-  // Only the record this row just took over. Another conversation's history is
-  // what the user asked to look at.
-  if (record == null || record.externalId != conversationId) return;
-  ref.read(selectedImportedSessionIdProvider.notifier).select(null);
-  ref.read(selectedSessionIdProvider.notifier).select(sessionId);
-}
-
-/// Copies a CLI's own name for a conversation into the session row running it.
-final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((
-  ref,
-) {
-  return SessionTitleSyncService(
-    sessionDao: ref.watch(sessionsDataProvider),
-    agents: ref.watch(agentRegistryProvider),
-    scanStores: () => ref.read(cliStoreScanPassProvider).read(),
-    isRunningInPane: (id) =>
-        ref.read(sessionLauncherProvider).livePaneFor(id) != null,
-    // This fires on a timer, so it says only what it knows: a narrow rename
-    // bump, not a wake of every watcher of the revision counter.
-    onRenamed: (sessionId, _) {
-      ref
-          .read(sessionsRevisionProvider.notifier)
-          .changed(SessionChange.renamed(sessionId));
-      // The rename reaches the server as the row, which is the conversation
-      // index's evidence that the transcript moved.
-      ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .notifyTitleChanged();
-    },
-  );
-});
-
-/// Writes the CLI's conversation id onto a session we launched for an agent
-/// that would not accept one — Codex today, launched with a null id.
-final launchedSessionAttributionServiceProvider =
-    Provider<LaunchedSessionAttributionService>((ref) {
-      return LaunchedSessionAttributionService(
-        sessionDao: ref.watch(sessionsDataProvider),
-        installationDao: ref.watch(agentInstallationsDataProvider),
-        workspace: ref.watch(workspaceDataProvider),
-        environmentDao: ref.watch(environmentsDataProvider),
-        agents: ref.watch(agentRegistryProvider),
-        scanStores: () => ref.read(cliStoreScanPassProvider).read(),
-        // A row that just took over a conversation supersedes its history
-        // everywhere except a selection already pointing at it.
-        onAttributed: (session, conversationId) {
-          followSupersededHistory(ref, session.id, conversationId);
-          ref
-              .read(sessionsRevisionProvider.notifier)
-              .changed(SessionChange.moved(session.id));
-        },
-      );
-    });
-
-/// One store scan shared by the passengers on a single store slot: attribution
-/// and the title sync ask the disk the same expensive question.
-final cliStoreScanPassProvider = Provider<CliStoreScanPass>(
-  (ref) => CliStoreScanPass(() => scanCliStores(ref)),
+  ),
 );
 
-/// A store scan that is read once per pass. See [cliStoreScanPassProvider].
-class CliStoreScanPass {
-  CliStoreScanPass(this._scan);
-
-  final Future<List<DetectedSession>> Function() _scan;
-
-  /// The scan this pass started, held as the *future* so a second caller that
-  /// arrives before the first finishes still waits on the one read.
-  Future<List<DetectedSession>>? _inFlight;
-
-  Future<List<DetectedSession>> read() => _inFlight ??= _scan();
-
-  /// Ends the pass, so the next slot reads the disk again.
-  void end() => _inFlight = null;
-}
-
-/// Reconciles session rows against what the CLI stores now say. The order is
-/// load-bearing: attribution learns an id, the title sync can only match one.
-final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
-  return () async {
-    // Antigravity's attribution needs no store scan — one JSON file per store
-    // and the pane's own screen — so it runs outside the pass.
-    await ref.read(directoryConversationAttributionServiceProvider).attribute();
-    final pass = ref.read(cliStoreScanPassProvider);
-    try {
-      await ref.read(launchedSessionAttributionServiceProvider).attribute();
-      await ref.read(sessionTitleSyncServiceProvider).sync();
-    } finally {
-      // Whatever happened, the next slot must see the disk as it is then.
-      pass.end();
-    }
-  };
-});
-
-/// Every tracked pane, in the shape adoption reads them — read-only over the
-/// terminal layout's published state.
+/// Every tracked pane, as facts — read-only over the terminal layout's
+/// published state.
 List<AdoptablePane> adoptablePanes(Ref ref) {
   final controller = ref.read(terminalSessionsControllerProvider.notifier);
   final state = ref.read(terminalSessionsControllerProvider);
@@ -257,7 +109,7 @@ List<AdoptablePane> adoptablePanes(Ref ref) {
 }
 
 /// [adoptablePanes] for a reader that holds a container rather than a `Ref` —
-/// a hook callback. Callable, not cached: the pane list changes every frame.
+/// a hook callback (the launched-session rebind). Callable, not cached: the pane list changes every frame.
 final adoptablePanesProvider = Provider<List<AdoptablePane> Function()>(
   (ref) =>
       () => adoptablePanes(ref),

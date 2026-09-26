@@ -6,7 +6,6 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
-import 'package:karmashala/src/features/sessions/application/session_message_typist.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 
 import 'live_agent_screen.dart';

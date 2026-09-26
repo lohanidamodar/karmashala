@@ -18,6 +18,24 @@ DataRequest<Object?>? _checkpointsRequestFromJson(
     args.string('label'),
   ),
   CheckpointsPrune.name => CheckpointsPrune._from(args),
+  CheckpointCapture.name => CheckpointCapture(
+    args.string('sessionId'),
+    label: args.optionalString('label'),
+    decidedBy: args.optionalString('decidedBy'),
+    decidedBySessionId: args.optionalString('decidedBySessionId'),
+  ),
+  CheckpointCaptureBase.name => CheckpointCaptureBase(
+    args.value('checkout', environmentPathFromJson),
+    runId: args.string('runId'),
+    label: args.string('label'),
+  ),
+  CheckpointDiff.name => CheckpointDiff(args.string('id')),
+  CheckpointRestore.name => CheckpointRestore(
+    args.string('id'),
+    confirm: args.boolean('confirm', orElse: false),
+    paths: args.strings('paths', orEmpty: true),
+  ),
+  CheckpointSkips.name => const CheckpointSkips(),
   VerificationRuns.name => const VerificationRuns(),
   VerificationRecent.name => VerificationRecent(
     limit: args.optionalInt('limit') ?? 50,
@@ -264,6 +282,183 @@ sealed class _CheckpointAnswer extends CheckpointsRequest<Checkpoint> {
   @override
   Checkpoint resultFromJson(Object? json) =>
       _decode(kind, () => checkpointFromJson(_object(json, kind)));
+}
+
+// Checkpoint work: what runs git in the checkout (slice 2b). The server's
+// recorder does it, so a client never runs `CheckpointService` itself. Each
+// is answered when its work is done — by id, out of order — and every row it
+// writes is told as a change ([CheckpointRecorded], [CheckpointsPruned]).
+// A checkout the server cannot reach (SSH) is refused `invalid`, in words.
+
+/// A request the server's checkpoint recorder answers when its git work is
+/// done.
+sealed class CheckpointWorkRequest<R> extends DataRequest<R> {
+  const CheckpointWorkRequest();
+}
+
+/// Captures every working tree [sessionId] works in, now, through the
+/// recorder's queue for that session — the panel's "Capture now" and
+/// `checkpoint_capture`. Answers the first checkpoint taken (its own
+/// checkout's when that moved), or null when nothing moved or there is no
+/// repository. A [label]led one is filed to the decision record as decided
+/// by [decidedBy] (null: not recorded).
+final class CheckpointCapture extends CheckpointWorkRequest<Checkpoint?> {
+  const CheckpointCapture(
+    this.sessionId, {
+    this.label,
+    this.decidedBy,
+    this.decidedBySessionId,
+  });
+
+  static const String name = 'checkpoints.capture';
+
+  final String sessionId;
+  final String? label;
+  final String? decidedBy;
+  final String? decidedBySessionId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'label': ?label,
+    'decidedBy': ?decidedBy,
+    'decidedBySessionId': ?decidedBySessionId,
+  };
+
+  @override
+  Object? resultToJson(Checkpoint? result) =>
+      result == null ? null : checkpointToJson(result);
+
+  @override
+  Checkpoint? resultFromJson(Object? json) => json == null
+      ? null
+      : _decode(kind, () => checkpointFromJson(_object(json, kind)));
+}
+
+/// The base of an automation run the client starts itself (a checkout the
+/// server's own runner does not start in): [checkout] recorded under
+/// [runId], even when unchanged, so undo has a point to restore to.
+final class CheckpointCaptureBase extends CheckpointWorkRequest<Checkpoint?> {
+  const CheckpointCaptureBase(
+    this.checkout, {
+    required this.runId,
+    required this.label,
+  });
+
+  static const String name = 'checkpoints.captureBase';
+
+  final EnvironmentPath checkout;
+  final String runId;
+  final String label;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'checkout': environmentPathToJson(checkout),
+    'runId': runId,
+    'label': label,
+  };
+
+  @override
+  Object? resultToJson(Checkpoint? result) =>
+      result == null ? null : checkpointToJson(result);
+
+  @override
+  Checkpoint? resultFromJson(Object? json) => json == null
+      ? null
+      : _decode(kind, () => checkpointFromJson(_object(json, kind)));
+}
+
+/// The unified diff checkpoint [id] is: what changed between the checkpoint
+/// before it (or the commit it was taken on) and it. Refused `notFound` for
+/// an unknown id.
+final class CheckpointDiff extends CheckpointWorkRequest<String> {
+  const CheckpointDiff(this.id);
+
+  static const String name = 'checkpoints.diff';
+
+  final String id;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'id': id};
+
+  @override
+  Object? resultToJson(String result) => result;
+
+  @override
+  String resultFromJson(Object? json) =>
+      json is String ? json : _badAnswer(kind);
+}
+
+/// Puts checkpoint [id]'s working tree back — every file, or only [paths] —
+/// taking a safety checkpoint of the current tree first. A tree that moved
+/// since its last checkpoint is answered with the conflict (and the safety
+/// checkpoint) unless [confirm]; [CheckpointRestoreAnswer.outcomeOrThrow]
+/// throws it as the service did.
+final class CheckpointRestore
+    extends CheckpointWorkRequest<CheckpointRestoreAnswer> {
+  const CheckpointRestore(
+    this.id, {
+    this.confirm = false,
+    this.paths = const [],
+  });
+
+  static const String name = 'checkpoints.restore';
+
+  final String id;
+  final bool confirm;
+  final List<String> paths;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'id': id,
+    'confirm': confirm,
+    if (paths.isNotEmpty) 'paths': paths,
+  };
+
+  @override
+  Object? resultToJson(CheckpointRestoreAnswer result) => result.toJson();
+
+  @override
+  CheckpointRestoreAnswer resultFromJson(Object? json) => _decode(
+    kind,
+    () => CheckpointRestoreAnswer.fromJson(_object(json, kind)),
+  );
+}
+
+/// Why each session has no automatic checkpoints right now (session id →
+/// the reason, in the panel's words), as the recorder last found. Kept after
+/// by [CheckpointSkipChanged].
+final class CheckpointSkips extends CheckpointWorkRequest<Map<String, String>> {
+  const CheckpointSkips();
+
+  static const String name = 'checkpoints.skips';
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => const {};
+
+  @override
+  Object? resultToJson(Map<String, String> result) => result;
+
+  @override
+  Map<String, String> resultFromJson(Object? json) => _decode(kind, () {
+    final map = _object(json, kind);
+    return {for (final e in map.entries) e.key: e.value! as String};
+  });
 }
 
 // Verification runs.

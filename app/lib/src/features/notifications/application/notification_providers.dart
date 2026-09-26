@@ -207,17 +207,10 @@ sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
         ref.read(hostLifecycleSubscriberProvider)?.knows(session.openId) ??
         false,
     hostStatusFor: (session) => hostStatuses.of(session.openId),
-    // Adoption rides this cycle rather than starting a ticker of its own; its
-    // store scan shares the slow slot the transcript search already pays for.
-    onCycle: (mayScanStores) async {
-      final adoption = ref.read(sessionAdoptionServiceProvider);
-      adoption.observePanes();
-      if (!mayScanStores) return;
-      await adoption.sweep();
-      // The same slot, for the same reason: disk work, gated on a row waiting
-      // for it — see `cliStoreSyncRunnerProvider`.
-      await ref.read(cliStoreSyncRunnerProvider)();
-    },
+    // The panes ride this cycle rather than a ticker of their own: the server
+    // adopts what a person starts by hand in one, and keeps titles and
+    // conversation ids itself (slice 2b). Sent only when a pane changed.
+    onCycle: (_) async => ref.read(paneFactsReporterProvider).report(),
   );
   final moves = hostStatuses.changes.listen(registry.hostStatusMoved);
   ref.onDispose(() {
