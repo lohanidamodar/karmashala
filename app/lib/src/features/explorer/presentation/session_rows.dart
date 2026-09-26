@@ -128,7 +128,7 @@ class NativeSessionRow extends ConsumerWidget {
     // fact we own — and the tooltip says which of the two it is looking at.
     final since = lastActive.at ?? session.createdAt;
     final agentId = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     // What the pane shows wins over what the row recorded: a session started
@@ -294,7 +294,10 @@ class NativeSessionRow extends ConsumerWidget {
             // attached, because an empty dialog reads as a broken feature —
             // and while the server's log is still being read, when the
             // dialog says so itself if there is nothing.
-            if (ref.read(sentContextCardsProvider(session.id)).value?.isNotEmpty ??
+            if (ref
+                    .read(sentContextCardsProvider(session.id))
+                    .value
+                    ?.isNotEmpty ??
                 true)
               DesktopMenuItem(
                 value: 'context-sent',

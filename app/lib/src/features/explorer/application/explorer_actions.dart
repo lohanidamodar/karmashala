@@ -137,7 +137,7 @@ class ExplorerActions {
     }
 
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     final repository = _ref
         .read(workspaceDataProvider)
@@ -304,7 +304,7 @@ class ExplorerActions {
         installation ??
         launcher.defaultInstallationIn(environmentId) ??
         _ref
-            .read(agentInstallationDaoProvider)
+            .read(agentInstallationsDataProvider)
             .getByEnvironment(environmentId)
             .firstOrNull;
     if (agent == null) {
@@ -334,7 +334,7 @@ class ExplorerActions {
 
   /// Every agent installed where [repository] lives, for the "…with" menu.
   List<AgentInstallation> installationsFor(Repository repository) => _ref
-      .read(agentInstallationDaoProvider)
+      .read(agentInstallationsDataProvider)
       .getByEnvironment(repository.path.environmentId);
 
   /// Selects a native session, and the repository above it, so the detail pane

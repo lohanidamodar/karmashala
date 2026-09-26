@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/remote/application/remote_notes_bindings.dart';
@@ -20,7 +19,7 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     server = FakeDataServer();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
   });
   tearDown(() => db.close());

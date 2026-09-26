@@ -3,9 +3,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
@@ -76,10 +74,10 @@ void main() {
   _CountingDatabase seed(int count) {
     final db = _CountingDatabase();
     final server = serverOf[db] = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    mirroredServer(db).environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    mirroredServer(db).installationRows.insert(agentInstallation());
     for (var i = 0; i < count; i++) {
       server.sessionRows.insert(
         session(

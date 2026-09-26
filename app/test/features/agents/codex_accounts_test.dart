@@ -2,9 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/discovery.dart' show SystemClock;
-import 'package:karmashala/src/features/agents/data/codex_account_dao.dart';
 import 'package:agent_cli/usage.dart';
 
 import '../../support/fakes.dart';
@@ -44,42 +42,6 @@ void main() {
     expect(snapshot.email, 'owner@example.com');
     expect(snapshot.planType, 'pro');
     expect(snapshot.accessTokenExpiresAt, DateTime.utc(2030));
-  });
-
-  test('capture persists one row per Codex account', () async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    final dao = CodexAccountDao(db);
-    final directory = Directory.systemTemp.createTempSync('codex-auth-');
-    addTearDown(() => removeTempDirectory(directory));
-    final auth = File('${directory.path}${Platform.pathSeparator}auth.json');
-    auth.writeAsStringSync(
-      jsonEncode({
-        'tokens': {
-          'account_id': 'account-1',
-          'id_token': token({'email': 'first@example.com'}),
-        },
-      }),
-    );
-    final service = CodexAuthService(
-      ids: SequentialIdGenerator(),
-      clock: FixedClock(testTime),
-    );
-
-    final first = dao.upsert(await service.capture(auth.path, 'windows'));
-    auth.writeAsStringSync(
-      jsonEncode({
-        'tokens': {
-          'account_id': 'account-1',
-          'id_token': token({'email': 'updated@example.com'}),
-        },
-      }),
-    );
-    final updated = dao.upsert(await service.capture(auth.path, 'windows'));
-
-    expect(updated.id, first.id);
-    expect(dao.getAll(), hasLength(1));
-    expect(dao.getAll().single.email, 'updated@example.com');
   });
 
   test('switch replaces only tokens, atomically, with one backup', () async {

@@ -7,15 +7,17 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/control_server_status.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The verdicts the health panel is allowed to state, and the evidence behind
 /// each one.
@@ -27,11 +29,14 @@ import '../../support/temp_directory.dart';
 /// about it, and never imply a measurement that was not taken.
 void main() {
   late AppDatabase db;
+  late Override data;
   late Directory temp;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    FakeDataServer().mirrorInto(db);
     temp = Directory.systemTemp.createTempSync('system_health');
+    data = await mirroredServer(db).override();
   });
   tearDown(() {
     db.close();
@@ -67,6 +72,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         hostCommandRunnerProvider.overrideWithValue(host ?? quietHost()),
         commandRunnerFactoryProvider.overrideWithValue(
           factory ?? FakeCommandRunnerFactory(),
@@ -259,7 +265,7 @@ void main() {
 
   group('WSL interop is its own row, once per distribution', () {
     ProviderContainer withDistro(CommandResult Function(CommandRequest) reply) {
-      ExecutionEnvironmentDao(db)
+      mirroredServer(db).environmentRows
         ..upsert(windowsEnv())
         ..upsert(wslEnv(id: 'wsl:archlinux', distro: 'archlinux'));
       return containerWith(
@@ -332,7 +338,7 @@ void main() {
     );
 
     test('a machine with no WSL gets no interop row at all', () async {
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      mirroredServer(db).environmentRows.upsert(windowsEnv());
       final container = containerWith(
         probe: probeReturning(ProcessHandleScript.replies(initializeResult)),
       );

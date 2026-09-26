@@ -85,7 +85,7 @@ class AgentContextReadings extends Notifier<Map<String, AgentContextReading>> {
       );
     }
 
-    final environments = ref.read(executionEnvironmentDaoProvider);
+    final environments = ref.read(environmentsDataProvider);
     final environment = environments.getById(target.environmentId);
     if (environment == null) {
       return const AgentContextReading.absent(AgentContextAbsence.notRead);
@@ -194,8 +194,7 @@ class AgentContextReadings extends Notifier<Map<String, AgentContextReading>> {
     if (environment.kind != EnvironmentKind.wsl) return null;
     try {
       ExecutionEnvironment? windows;
-      for (final candidate
-          in ref.read(executionEnvironmentDaoProvider).getAll()) {
+      for (final candidate in ref.read(environmentsDataProvider).getAll()) {
         if (candidate.kind == EnvironmentKind.windowsNative) {
           windows = candidate;
           break;
@@ -225,7 +224,7 @@ class AgentContextReadings extends Notifier<Map<String, AgentContextReading>> {
     String agentId,
   ) async {
     try {
-      final all = ref.read(executionEnvironmentDaoProvider).getAll();
+      final all = ref.read(environmentsDataProvider).getAll();
       final needed = <ExecutionEnvironment>[
         environment,
         for (final candidate in all)

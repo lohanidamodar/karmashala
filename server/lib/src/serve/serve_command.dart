@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:agent_cli/process.dart' show localHostEnvironment;
+
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DecisionRecorded;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
@@ -67,7 +69,7 @@ Future<int> runServe(
   IOSink? err,
   HostPaths? paths,
   Future<void>? until,
-  ServerAgents Function(AppDatabase database)? agentsFor,
+  ServerAgents Function(DataService data)? agentsFor,
 }) async {
   // Nobody may be reading either once the app that started this has quit;
   // a write that fails must cost the line, never the daemon.
@@ -233,7 +235,7 @@ Future<int> runServe(
     database,
     runsSession: (sessionId) =>
         registry.find(hostSessionIdOf(sessionId)) != null,
-  );
+  )..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
   final prompts = DaemonPromptAnswers(
     status: status,
     database: database,
@@ -324,9 +326,7 @@ Future<int> runServe(
   }
   // Devices, revoke, agents and the config, from `karmashala_host` and the
   // desktop app on this machine; the server looks for its agent CLIs now.
-  final agents = (agentsFor ?? (database) => ServerAgents(database: database))(
-    database,
-  );
+  final agents = (agentsFor ?? (data) => ServerAgents(data: data))(data);
   server.data = data;
   server.admin = ServerAdministration(
     companion: companionServing ? companion : null,

@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/automations/application/automation_undo.
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_undo_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_data_server.dart';
@@ -68,7 +67,7 @@ void main() {
       build: () {
         final db = AppDatabase.memory();
         addTearDown(db.close);
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        server.environmentRows.upsert(windowsEnv());
         server.mirrorInto(db);
         final container = ProviderContainer(
           overrides: [

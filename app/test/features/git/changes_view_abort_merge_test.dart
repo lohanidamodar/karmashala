@@ -1,6 +1,6 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala_git/git.dart';
@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// A `.git` directory with, or without, the file `git merge` leaves behind.
 ///
@@ -77,7 +78,8 @@ void main() {
     unstaged: true,
   );
 
-  late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late FakeCommandRunner runner;
 
   /// Answers `merge --abort` with [aborted] and every read with nothing.
@@ -96,16 +98,15 @@ void main() {
     );
     return ChangesService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: EnvironmentsData(client),
       files: files,
     );
   }
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  setUp(() async {
+    server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    client = await server.connect();
   });
-  tearDown(() => db.close());
 
   /// [changes] of null is the listing failing — a folder that is not a
   /// repository, a checkout this host cannot reach, a real `fatal:`.
@@ -126,6 +127,11 @@ void main() {
                 changes ?? (throw StateError('fatal: not a git repository')),
           ),
           recentCommitsProvider.overrideWith((ref) async => const []),
+          // The pane's other reads are not what these cases count.
+          repositoryFileDiffStatsProvider.overrideWith((ref) async => const {}),
+          workingTreeStatusProvider.overrideWith(
+            (ref) async => const WorkingTreeStatus(branch: 'work'),
+          ),
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
           ),

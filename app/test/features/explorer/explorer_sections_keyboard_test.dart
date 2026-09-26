@@ -6,8 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
@@ -43,12 +41,12 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     seedDefaultSections(server);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(
       project(id: 'p1', name: 'Demo', path: r'C:\src\demo'),
     );
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     for (final (i, title) in ['Alpha fix', 'Bravo fix', 'Delta fix'].indexed) {
       mirroredServer(db).sessionRows.insert(
         session(

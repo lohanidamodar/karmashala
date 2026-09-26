@@ -5,7 +5,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -399,8 +398,8 @@ void main() {
     Future<ProviderContainer> containerFor(String filePath) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final server = FakeDataServer()..mirrorInto(db);
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       mirroredServer(db).importedRows.insertIfAbsent(

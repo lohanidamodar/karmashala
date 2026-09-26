@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/github/application/pull_request_context_service.dart';
 import 'package:karmashala_git/pull_request_context.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
@@ -37,11 +35,12 @@ void main() {
 
   Future<void> build({bool failSend = false}) async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    final server = FakeDataServer().mirrorInto(db)
+    final server = FakeDataServer().mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
+    server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     server.sessionRows.insert(session());
     container = ProviderContainer(
       overrides: [

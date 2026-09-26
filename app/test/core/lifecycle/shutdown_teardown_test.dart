@@ -4,18 +4,14 @@ import 'package:karmashala/src/features/environments/application/environment_res
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_providers.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,6 +22,8 @@ import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 /// What quitting has to end, beyond the components the lifecycle owner builds
 /// itself.
@@ -43,16 +41,17 @@ void main() {
   late Override data;
   late SessionsData sessions;
   late SessionRecordsData records;
+  late DataClient client;
 
   setUp(() async {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
-    final client = await server.connect();
+    server.installationRows.insert(agentInstallation());
+    client = await server.connect();
     sessions = SessionsData(client);
     records = SessionRecordsData(client);
   });
@@ -63,7 +62,7 @@ void main() {
     records: records,
     worktreeService: WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(),
-      environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
+      environmentOf: worktreeEnvironmentOf(EnvironmentsData(client)),
     ),
     resolveProtocol: resolver,
     clock: FixedClock(testTime),
@@ -172,8 +171,8 @@ void main() {
     test('the SSH pool is closed, and awaited', () async {
       final gate = Completer<void>();
       final pool = _RecordingPool(
-        hosts: SshHostDao(db),
-        knownHosts: KnownHostDao(db),
+        hosts: SshHostsData(client),
+        knownHosts: KnownHostsData(client),
         gate: gate.future,
       );
       final container = ProviderContainer(

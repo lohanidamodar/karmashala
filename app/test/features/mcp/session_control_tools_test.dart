@@ -5,12 +5,9 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/mcp/session_tools.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_wait.dart';
@@ -90,11 +87,13 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_session_tools_');
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     fake = FakeDataServer()..mirrorInto(db);
+    fake.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    fake.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Work'));
 
     statusLookup = (_) => null;
@@ -902,9 +901,7 @@ void main() {
     test('refuses to guess when the agent names no key to decline', () async {
       // Codex says how to continue and never says how to decline. Esc is a
       // guess, and the tool must not make it on the user's behalf.
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(id: 'a2', agentId: 'codex'));
+      fake.installationRows.insert(agentInstallation(id: 'a2', agentId: 'codex'));
       mirroredServer(db).sessionRows.insert(session(id: 's3', agentInstallationId: 'a2'));
       attachPane('s3');
 
@@ -1218,7 +1215,7 @@ void main() {
     // an agent outside that switch got the bare executable, so the tool opened
     // a terminal running a *new* conversation and reported success.
     setUp(() async {
-      AgentInstallationDao(db).insert(
+      fake.installationRows.insert(
         agentInstallation(
           id: 'a-silent',
           agentId: 'silent',
@@ -1257,7 +1254,7 @@ void main() {
         // worst of the family: `_ => ['--resume', id]` handed Claude Code's flag
         // to *every* other agent. A window that dies on an unknown option is the
         // good outcome there; the bad one is a flag that means something else.
-        ExecutionEnvironmentDao(db).upsert(wslEnv());
+        fake.environmentRows.upsert(wslEnv());
         fake.repositoryRows.insert(
           repository(
             id: 'r-wsl',
@@ -1265,7 +1262,7 @@ void main() {
             path: '/home/me/app',
           ),
         );
-        AgentInstallationDao(db).insert(
+        fake.installationRows.insert(
           agentInstallation(
             id: 'a-silent-wsl',
             agentId: 'silent',

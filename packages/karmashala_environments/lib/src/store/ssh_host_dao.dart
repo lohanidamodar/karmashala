@@ -1,10 +1,10 @@
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_ssh/connection.dart';
+import '../ssh_host.dart';
 
 /// Data-access for saved [SshHost] rows. Nothing here writes a secret: the
 /// table has no password or key column, only the *location* of a key file.
-class SshHostDao implements SshHostStore {
+class SshHostDao {
   SshHostDao(this._db);
 
   final AppDatabase _db;
@@ -36,7 +36,6 @@ class SshHostDao implements SshHostStore {
     );
   }
 
-  @override
   SshHost? getById(String id) {
     final rows = _db.query('SELECT * FROM ssh_hosts WHERE id = ?;', [id]);
     return rows.isEmpty ? null : _fromRow(rows.first);

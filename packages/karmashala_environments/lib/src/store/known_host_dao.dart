@@ -1,14 +1,13 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala_ssh/connection.dart';
+import '../ssh_host_key.dart';
 
 /// Data-access for trusted host keys — Karmashala's `known_hosts`. One row per
 /// `host:port`, which is what makes a changed key detectable at all.
-class KnownHostDao implements KnownHostStore {
+class KnownHostDao {
   KnownHostDao(this._db);
 
   final AppDatabase _db;
 
-  @override
   KnownHostKey? find(String host, int port) {
     final rows = _db.query(
       'SELECT * FROM ssh_known_hosts WHERE host = ? AND port = ?;',
@@ -26,7 +25,6 @@ class KnownHostDao implements KnownHostStore {
 
   /// Records [key] as trusted, replacing whatever was there. Only ever reached
   /// after an explicit user decision — never for a changed key.
-  @override
   void trust(KnownHostKey key) {
     _db.execute(
       'INSERT INTO ssh_known_hosts '

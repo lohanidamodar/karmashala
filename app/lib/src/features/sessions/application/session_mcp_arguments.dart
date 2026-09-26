@@ -50,7 +50,7 @@ final agentPaneMcpArgumentsProvider = Provider<AgentPaneMcpArguments>(
       final directory = sessionWorkingDirectory(ref, sessionId);
       if (directory == null) return const [];
       final environment = ref
-          .read(executionEnvironmentDaoProvider)
+          .read(environmentsDataProvider)
           .getById(directory.environmentId);
       if (environment == null) return const [];
       final descriptor = ref.read(agentRegistryProvider).byId(launch.agentId);

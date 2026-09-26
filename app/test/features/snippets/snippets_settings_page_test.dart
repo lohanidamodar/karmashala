@@ -7,8 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/snippet_tools.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
@@ -23,6 +21,10 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// Settings → Snippets: the library's *discoverable* door.
 ///
@@ -33,16 +35,22 @@ import '../terminal/fake_instance.dart';
 /// other half of the same report ("I added one and it didn't show up").
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late ProviderContainer container;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     // The settings screen's Terminal page resolves the default shell against
     // the environments, and the nav can reach it from here.
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    data = await server.override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(database: db, data: data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
@@ -341,7 +349,7 @@ void main() {
       build: () {
         final scope = ProviderContainer(
           overrides: [
-            ...fakeTerminalOverrides(database: db),
+            ...fakeTerminalOverrides(database: db, data: data),
             clockProvider.overrideWithValue(FixedClock(testTime)),
           ],
         );

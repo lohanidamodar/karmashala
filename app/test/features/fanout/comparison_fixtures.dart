@@ -1,5 +1,4 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
@@ -83,8 +82,8 @@ Comparison seededComparison({bool merged = true}) => Comparison(
 /// a container that reads the workspace takes `await server.override()`.
 AppDatabase seedDatabase({bool merged = true, FakeDataServer? server}) {
   final db = AppDatabase.memory();
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
   (server ?? FakeDataServer()).mirrorInto(db)
+    ..environmentRows.upsert(windowsEnv())
     ..projectRows.insert(project())
     ..repositoryRows.insert(repository());
   ComparisonDao(db).insert(seededComparison(merged: merged));

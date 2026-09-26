@@ -7,10 +7,8 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala_session/session.dart';
 
@@ -45,7 +43,7 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.connect();
-    ExecutionEnvironmentDao(db)
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(sshEnv());
     server.projectRows.insert(project());
@@ -58,7 +56,7 @@ void main() {
         path: '/home/me/projects',
       ),
     );
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
   });
   tearDown(() => db.close());
 

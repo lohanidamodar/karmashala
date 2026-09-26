@@ -1,25 +1,24 @@
 import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
-import '../data/execution_environment_dao.dart';
+import '../data/environments_data.dart';
 
-/// Repository-layer provider for execution-environment persistence.
-final executionEnvironmentDaoProvider = Provider<ExecutionEnvironmentDao>(
-  (ref) => ExecutionEnvironmentDao(ref.watch(databaseProvider)),
-);
+export '../data/environments_data.dart'
+    show EnvironmentsData, environmentsDataProvider;
 
-/// This machine's own environment row, or null before discovery has written
-/// one. Swept once and shared: callers used to run `getAll` per project, which
-/// is a table scan a row at a time.
-final localEnvironmentProvider = Provider<ExecutionEnvironment?>(
-  (ref) => ref
-      .watch(executionEnvironmentDaoProvider)
+/// This machine's own environment row, or null before the server has one.
+/// Read from the copy and followed: a server that records it later (its own
+/// start, or this app's discovery) is seen at once.
+final localEnvironmentProvider = Provider<ExecutionEnvironment?>((ref) {
+  final data = ref.watch(environmentsDataProvider);
+  final listening = data.changes.listen((_) => ref.invalidateSelf());
+  ref.onDispose(listening.cancel);
+  return data
       .getAll()
       .where(
         (e) =>
             e.kind == EnvironmentKind.windowsNative ||
             e.kind == EnvironmentKind.localPosix,
       )
-      .firstOrNull,
-);
+      .firstOrNull;
+});

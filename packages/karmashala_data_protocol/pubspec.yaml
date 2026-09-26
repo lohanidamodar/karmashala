@@ -23,6 +23,11 @@ dependencies:
   # and saved sections.
   agent_cli:
     path: ../agent_cli
+  # Environments, SSH hosts, trusted host keys, agent installations, saved
+  # accounts and usage samples: the values its requests carry, and which of
+  # their fields are credentials.
+  karmashala_environments:
+    path: ../karmashala_environments
   karmashala_git:
     path: ../karmashala_git
   karmashala_projects:

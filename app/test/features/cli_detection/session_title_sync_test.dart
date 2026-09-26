@@ -1,9 +1,7 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_title_sync_service.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,13 +31,13 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.antigravity));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.antigravity),
+    );
     dao = server.sessionRows;
     sessions = await sessionsOf(server);
   });

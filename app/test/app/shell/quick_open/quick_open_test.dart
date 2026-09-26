@@ -4,9 +4,6 @@ import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
@@ -26,6 +23,7 @@ import '../../../support/fixtures.dart';
 import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 void main() {
   late AppDatabase db;
@@ -36,10 +34,12 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows
       ..insert(session(id: 's1', title: 'Fix login redirect'))
       ..insert(session(id: 's2', title: 'Write the release notes'));

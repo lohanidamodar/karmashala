@@ -5,12 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// Every chord the menu bar *draws* is a chord the app actually *binds*.
 ///
@@ -24,11 +26,17 @@ import '../../support/fixtures.dart';
 /// fails unless `shellShortcutMap` has it too.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     commandKeyIsMeta = false;
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    data = await server.override();
   });
   tearDown(() {
     commandKeyIsMeta = false;
@@ -48,7 +56,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final container = fakeTerminalContainer(database: db);
+    final container = fakeTerminalContainer(database: db, data: data);
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(

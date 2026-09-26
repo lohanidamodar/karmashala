@@ -4,9 +4,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health.dart';
@@ -91,7 +88,7 @@ void main() {
     Future<ProviderContainer> withRepositorySelected() async {
       final server = FakeDataServer();
       final db = seedDatabase(server: server);
-      AgentInstallationDao(db)
+      server.installationRows
         ..insert(agentInstallation(id: 'a1', agentId: 'claudeCode'))
         ..insert(agentInstallation(id: 'a2', agentId: 'codex'));
       addTearDown(db.close);
@@ -170,11 +167,11 @@ void main() {
     Future<ProviderContainer> prepared() async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final server = FakeDataServer();
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
 
       final data = await server.override();
       final container = ProviderContainer(
@@ -242,13 +239,13 @@ void main() {
   testWidgets('DeliveryStrip', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     // The session is still in the database, and its foreign keys reach the
     // workspace rows the server holds.
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',
@@ -305,13 +302,16 @@ void main() {
   testWidgets('SshHostDialog', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db)
+    final server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
+    final data = await server.override();
 
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -329,8 +329,10 @@ void main() {
   testWidgets('RepositoryInfoView', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     final server = FakeDataServer();
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
 
@@ -362,13 +364,16 @@ void main() {
   testWidgets('EnvironmentHealthDialog', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db)
+    final server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
+    final data = await server.override();
 
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         ...noProcessOverrides(),
         // Checking health really spawns processes — `git --version` per
         // environment, the MCP bridge, a WSL shell; the dialog only needs rows
@@ -449,7 +454,6 @@ void main() {
     }) {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
@@ -471,7 +475,12 @@ void main() {
     }
 
     testWidgets('the default landing (nav plus General)', (tester) async {
-      final data = await FakeDataServer().override();
+      final data =
+          await (FakeDataServer()
+                ..environmentRows.upsert(
+                  localHostEnvironment(FixedClock(testTime).nowUtc()),
+                ))
+              .override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(prepared(data), const SettingsScreen()),
@@ -490,7 +499,12 @@ void main() {
       // two, and their labels are the CLI's own words rather than three short
       // shared ones. Four dropdowns across do not fit 720x560, which is why
       // the card wraps — and this is what proves it does.
-      final data = await FakeDataServer().override();
+      final data =
+          await (FakeDataServer()
+                ..environmentRows.upsert(
+                  localHostEnvironment(FixedClock(testTime).nowUtc()),
+                ))
+              .override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
@@ -507,7 +521,12 @@ void main() {
     testWidgets('the diagnostics section, watch-set readout and all', (
       tester,
     ) async {
-      final data = await FakeDataServer().override();
+      final data =
+          await (FakeDataServer()
+                ..environmentRows.upsert(
+                  localHostEnvironment(FixedClock(testTime).nowUtc()),
+                ))
+              .override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
@@ -526,7 +545,12 @@ void main() {
     ) async {
       // The measured state, not the "nothing yet" one: three value rows and,
       // when the rotation is behind, a paragraph of error text under them.
-      final data = await FakeDataServer().override();
+      final data =
+          await (FakeDataServer()
+                ..environmentRows.upsert(
+                  localHostEnvironment(FixedClock(testTime).nowUtc()),
+                ))
+              .override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
@@ -552,7 +576,12 @@ void main() {
     });
 
     testWidgets('the terminal section', (tester) async {
-      final data = await FakeDataServer().override();
+      final data =
+          await (FakeDataServer()
+                ..environmentRows.upsert(
+                  localHostEnvironment(FixedClock(testTime).nowUtc()),
+                ))
+              .override();
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(
@@ -570,11 +599,12 @@ void main() {
   testWidgets('NewProjectDialog', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db)
+    final server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
 
-    final data = await FakeDataServer().override();
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

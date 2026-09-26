@@ -9,7 +9,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
@@ -253,7 +252,7 @@ void main() {
         build: () {
           final db = AppDatabase.memory();
           addTearDown(db.close);
-          ExecutionEnvironmentDao(db).upsert(windowsEnv());
+          server.environmentRows.upsert(windowsEnv());
           final container = ProviderContainer(
             overrides: [
               databaseProvider.overrideWithValue(db),

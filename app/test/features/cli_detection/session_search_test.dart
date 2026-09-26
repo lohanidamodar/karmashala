@@ -4,11 +4,9 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_search.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
@@ -48,17 +46,17 @@ void main() {
     dao = ConversationIndexDao(db);
     clock = MovableClock(DateTime.utc(2026, 9, 21, 12));
     search = SessionSearchService(dao: dao, clock: clock);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.projectRows.insert(project(id: 'p2', name: 'Other', path: r'C:\o'));
     server.repositoryRows.insert(repository());
     server.repositoryRows.insert(
       repository(id: 'r2', projectId: 'p2', path: r'C:\o\x'),
     );
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
     sessionCount = 0;
   });
   tearDown(() => db.close());

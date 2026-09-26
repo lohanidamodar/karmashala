@@ -3,10 +3,8 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/watched_session_loader.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
@@ -19,6 +17,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 
 /// A clock the test moves forward, for the cold-recheck window.
 class _MovableClock implements Clock {
@@ -35,13 +34,13 @@ void main() {
   late FakeImportedRows imported;
   late SessionsData sessionsData;
   late ImportedSessionsData importedData;
-  late AgentInstallationDao installations;
+  late AgentInstallationsData installations;
   late AgentHookReports reports;
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer().mirrorInto(db)
+      ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     temp = Directory.systemTemp.createTempSync('watched-sessions');
@@ -50,9 +49,9 @@ void main() {
     final client = await server.connect();
     sessionsData = SessionsData(client);
     importedData = ImportedSessionsData(client, sessionsData);
-    installations = AgentInstallationDao(db);
+    server.installationRows.insert(agentInstallation());
+    installations = AgentInstallationsData(client);
     reports = AgentHookReports();
-    installations.insert(agentInstallation());
     addTearDown(() {
       db.close();
       try {

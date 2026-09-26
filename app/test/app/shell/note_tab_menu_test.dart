@@ -6,9 +6,6 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
 import 'package:karmashala_ui/code.dart';
@@ -19,6 +16,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'package:agent_cli/process.dart';
 
 /// A note body's right-click menu is the editor's, and of the file tab's
 /// entries only what a selection can become — a note has no path, and a note
@@ -43,11 +41,13 @@ void main() {
     );
     final db = CountingDatabase();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     final server = FakeDataServer();
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [

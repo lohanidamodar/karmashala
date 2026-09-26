@@ -52,7 +52,7 @@ class TerminalActions {
     final repo = ref.read(workspaceDataProvider).repository(repoId);
     if (repo == null) return null;
     final env = ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(repo.path.environmentId);
     final repoIsWindows = env?.kind == EnvironmentKind.windowsNative;
     if (profile.shell == TerminalShell.ssh) {

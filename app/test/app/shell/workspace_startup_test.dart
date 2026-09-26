@@ -4,10 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -29,6 +26,7 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// The whole shell, launched into a **stored split workspace** — which is the
 /// launch most users get, and the one no other test performed end to end.
@@ -47,10 +45,12 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
   });
   tearDown(() => db.close());
 

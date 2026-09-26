@@ -5,13 +5,10 @@ import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -133,11 +130,13 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(session(id: 's1'));
     trees = ['tree1'];
     ids = 0;
@@ -152,7 +151,7 @@ void main() {
         checkpointServiceProvider.overrideWithValue(
           service = _CountingService(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-            environmentOf: ExecutionEnvironmentDao(db).getById,
+            environmentOf: server.environmentRows.getById,
             dao: CheckpointDao(db),
             clock: FixedClock(testTime),
             newId: () => 'ckpt${++ids}',

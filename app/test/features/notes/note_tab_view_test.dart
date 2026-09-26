@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
 import 'package:karmashala_store/database.dart';
@@ -30,7 +29,7 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer();
     final data = await server.override();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     container = ProviderContainer(
       overrides: [

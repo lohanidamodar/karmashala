@@ -188,7 +188,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
       );
     }
     final installation = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(row.agentInstallationId);
     if (installation == null) {
       throw StateError('This session\'s agent installation is gone.');
@@ -233,7 +233,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
     final registry = ref.read(agentRegistryProvider);
     final installations = {
       for (final installation
-          in ref.read(agentInstallationDaoProvider).getAll())
+          in ref.read(agentInstallationsDataProvider).getAll())
         installation.id: installation,
     };
     final repositories = {

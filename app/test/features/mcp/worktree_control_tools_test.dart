@@ -5,8 +5,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -91,7 +89,8 @@ branch refs/heads/$worktreeBranch
     // checkouts are POSIX paths. Inserting the host's own environment made the
     // two disagree: on a Mac `p.dirname(r'C:\src\demo\app')` is `.`, so the
     // worktree landed at `./.karmashala-worktrees/C:\src\demo\app-mcp`.
-    ExecutionEnvironmentDao(db).upsert(
+    final fake = FakeDataServer()..mirrorInto(db);
+    fake.environmentRows.upsert(
       ExecutionEnvironment(
         id: localHostEnvironmentId,
         kind: EnvironmentKind.windowsNative,
@@ -99,13 +98,12 @@ branch refs/heads/$worktreeBranch
         createdAt: testTime,
       ),
     );
-    final fake = FakeDataServer()..mirrorInto(db);
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     fake.repositoryRows.insert(
       repository(id: 'r2', name: 'app-feature', path: worktreeRowPath),
     );
-    AgentInstallationDao(db).insert(agentInstallation());
+    fake.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(
       session(
         id: 's1',

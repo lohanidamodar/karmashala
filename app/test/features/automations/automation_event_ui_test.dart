@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/automations/application/automation_event_router.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dry_run_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_store/database.dart';
@@ -47,13 +45,11 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
     mirroredServer(db).sessionRows.insert(session(title: 'Fix the login'));
     container = ProviderContainer(
       overrides: [

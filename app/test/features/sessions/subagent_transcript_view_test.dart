@@ -1,10 +1,8 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/subagent_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/subagent_turns_tile.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -89,11 +87,11 @@ void main() {
   }) {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.mirrorInto(db);
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
     mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',

@@ -1,8 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -55,12 +53,12 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     data = await server.override();
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     sessions = server.sessionRows;
     sessions.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),

@@ -10,12 +10,10 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
 import 'package:karmashala/src/features/ssh/application/companion_route_store.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_entry.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
@@ -39,10 +37,10 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     server = FakeDataServer(clock: () => testTime);
-    ExecutionEnvironmentDao(db)
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(sshEnvFixture());
-    SshHostDao(db).upsert(
+    server.sshHostRows.upsert(
       SshHost(
         id: 'h1',
         name: 'build-box',

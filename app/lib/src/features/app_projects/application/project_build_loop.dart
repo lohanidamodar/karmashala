@@ -338,7 +338,7 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
   /// that came from the toolchain rather than from our parse of a build script.
   Future<ProjectArtifactReading> artifactOf(ProjectBuildRun run) async {
     final environment = ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(run.environmentId);
     if (environment == null) {
       return (

@@ -31,13 +31,13 @@ class EnvironmentHealthService {
   final Ref ref;
 
   Future<List<EnvironmentHealth>> checkAll() async {
-    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = ref.read(environmentsDataProvider).getAll();
     return Future.wait(environments.map(check));
   }
 
   Future<EnvironmentHealth> check(ExecutionEnvironment environment) async {
     final installs = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(environment.id);
     try {
       final result = await ref

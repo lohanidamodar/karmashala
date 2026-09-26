@@ -3,12 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart' show CodexStoreServerClient;
 import 'package:karmashala/src/features/cli_detection/application/agent_store_server_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -21,6 +19,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'dart:async';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 
 /// **A session Karmashala launched, renamed in Karmashala, reaching Codex.**
 ///
@@ -31,16 +31,20 @@ import 'dart:async';
 /// else, so this costs no walk over the CLI stores.
 void main() {
   late AppDatabase db;
+  late EnvironmentsData environments;
+  late AgentInstallationsData installations;
   late FakeCodexAppServer server;
   late FakeCommandRunner runner;
   late FakeDataServer data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(sqlite3.openInMemory());
     server = FakeCodexAppServer();
     runner = FakeCommandRunner(processFactory: (_) => server);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     data = FakeDataServer()..mirrorInto(db);
+    environments = EnvironmentsData(await data.connect());
+    installations = AgentInstallationsData(await data.connect());
+    data.environmentRows.upsert(windowsEnv());
     data
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
@@ -51,7 +55,7 @@ void main() {
     String agentId = AgentIds.codex,
     String? externalId = 'u1',
   }) {
-    AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+    data.installationRows.insert(agentInstallation(agentId: agentId));
     data.sessionRows.insert(
       session(title: 'Session 0').copyWith(externalSessionId: externalId),
     );
@@ -65,8 +69,8 @@ void main() {
         agentStoreServersProvider.overrideWithValue(
           AgentStoreServers(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-            environments: ExecutionEnvironmentDao(db),
-            installations: AgentInstallationDao(db),
+            environments: environments,
+            installations: installations,
           ),
         ),
       ],

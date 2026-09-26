@@ -11,8 +11,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/detected_projects_view.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -20,6 +18,7 @@ import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 class _NoStores implements CliDetectionService {
   const _NoStores();
@@ -42,12 +41,16 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    final data =
+        await (FakeDataServer()
+              ..environmentRows.upsert(localHostEnvironment(testTime)))
+            .override();
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(),
           ),

@@ -5,9 +5,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -59,10 +57,10 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.connect();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db)
+    server.installationRows
       // `a1` did the work; `a2` is the only agent that could check it.
       ..insert(agentInstallation())
       ..insert(
@@ -233,7 +231,7 @@ void main() {
     tester,
   ) async {
     // One agent installed, and a session cannot check its own work.
-    AgentInstallationDao(db).delete('a2');
+    server.installationRows.delete('a2');
     insertSession();
     await pump(tester);
 
@@ -263,7 +261,9 @@ void main() {
 
     // Launched by `ReviewSessionService`, not by anything the strip invented:
     // the row it writes is the one that carries the capped permission.
-    final review = mirroredServer(db).sessionRows.getAll().firstWhere((s) => s.id != 's1');
+    final review = mirroredServer(
+      db,
+    ).sessionRows.getAll().firstWhere((s) => s.id != 's1');
     expect(review.parentSessionId, 's1');
     expect(review.parentLink, SessionLink.spawn);
     expect(review.agentInstallationId, 'a2');

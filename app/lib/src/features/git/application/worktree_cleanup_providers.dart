@@ -78,7 +78,7 @@ final worktreeCleanupServiceProvider = Provider<WorktreeCleanupService>((ref) {
     },
     familyKeyOf: (path) => ref.read(changesServiceProvider).familyKey(path),
     environmentKind: (id) =>
-        ref.read(executionEnvironmentDaoProvider).getById(id)?.kind,
+        ref.read(environmentsDataProvider).getById(id)?.kind,
     gitFor: (repo) => ref.read(worktreeServiceProvider).gitFor(repo),
     removeIfClean: (repo, worktree) =>
         ref.read(worktreeServiceProvider).removeIfClean(repo, worktree),

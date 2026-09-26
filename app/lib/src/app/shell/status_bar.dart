@@ -138,7 +138,7 @@ final statusBarEnvironmentProvider =
         selectedRepositoryProvider.select((repo) => repo?.environmentId),
       );
       if (id == null) return null;
-      return ref.read(executionEnvironmentDaoProvider).getById(id);
+      return ref.read(environmentsDataProvider).getById(id);
     });
 
 /// What one item says and does, before it is fitted to the room it has.

@@ -3,9 +3,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
@@ -54,12 +52,12 @@ void main() {
     final db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     seedDefaultSections(server);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(
       project(id: 'p1', name: 'Demo', path: r'C:\src\demo'),
     );
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     for (var i = 0; i < failed; i++) {
       mirroredServer(db).sessionRows.insert(
         session(id: 'f$i', title: 'Failed $i', status: SessionStatus.failed),

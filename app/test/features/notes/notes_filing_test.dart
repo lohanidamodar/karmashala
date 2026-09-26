@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -28,15 +26,15 @@ void main() {
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     // The server files a note under its source repository's project.
     final server = FakeDataServer(projectOfRepository: {'r1': 'p1'})
       ..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project())
       ..insert(project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'));
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     final data = await server.override();
 
     final container = ProviderContainer(
@@ -157,9 +155,9 @@ void main() {
       build: () {
         final db = AppDatabase.memory();
         addTearDown(db.close);
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        server.environmentRows.upsert(windowsEnv());
         server.mirrorInto(db);
-        AgentInstallationDao(db).insert(agentInstallation());
+        server.installationRows.insert(agentInstallation());
         final container = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),

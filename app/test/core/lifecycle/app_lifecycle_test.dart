@@ -10,7 +10,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -782,7 +781,7 @@ void main() {
           '2026-07-28T00:00:00Z',
         );
         final data = await server.override();
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        server.environmentRows.upsert(windowsEnv());
         final runner = FakeCommandRunner(
           responder: (req) =>
               const CommandResult(exitCode: 1, stdout: '', stderr: ''),
@@ -816,11 +815,14 @@ void main() {
     test(
       'a workspace that has never discovered leaves it to the first run',
       () async {
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        final server = FakeDataServer();
+        server.environmentRows.upsert(windowsEnv());
+        final data = await server.override();
         final runner = FakeCommandRunner();
         final scoped = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            data,
             commandRunnerFactoryProvider.overrideWithValue(
               FakeCommandRunnerFactory(fallback: runner),
             ),

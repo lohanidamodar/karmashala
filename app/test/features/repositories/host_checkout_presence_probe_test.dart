@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
 import 'package:karmashala/src/features/remote/application/remote_binding_support.dart';
 import 'package:karmashala/src/features/repositories/application/host_checkout_presence_probe.dart';
@@ -16,6 +15,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// **The other two places that statted a WSL folder over `\\wsl.localhost`
 /// ask `wsl.exe` instead** (docs/windows-antivirus.md): a rescan's "is this
@@ -163,12 +163,15 @@ void main() {
         'next list has it', () async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
+      final server = FakeDataServer();
+      server.environmentRows
+        ..upsert(windowsEnv())
+        ..upsert(wslEnv());
       final host = windowsHost({'/home/me/here'});
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(host),
         ],

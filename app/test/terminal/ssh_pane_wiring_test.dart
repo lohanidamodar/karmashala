@@ -4,7 +4,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -14,6 +13,8 @@ import 'package:karmashala_host/protocol.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_host_access.dart';
+import '../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// Opening an SSH pane through the *real* factory provider, so the wiring
 /// between "the deployer answered" and "this pane speaks the host protocol" is
@@ -34,9 +35,11 @@ void main() {
     createdAt: DateTime.utc(2026),
   );
 
-  setUp(() {
+  late Override data;
+
+  setUp(() async {
     db = AppDatabase.memory();
-    SshHostDao(db).upsert(host);
+    data = await (FakeDataServer()..sshHostRows.upsert(host)).override();
   });
   tearDown(() => db.close());
 
@@ -44,6 +47,7 @@ void main() {
       ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           hostSessionAccessLookupProvider.overrideWithValue((_) => access),
         ],
       );

@@ -3,10 +3,8 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -105,13 +103,15 @@ typedef Harness = ({
 Future<Harness> harness(AgentDescriptor agent) async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(
+  server.installationRows.insert(
+    agentInstallation(agentId: agent.id, path: r'C:\bin\agent.exe'),
+  );
+  mirroredServer(
     db,
-  ).insert(agentInstallation(agentId: agent.id, path: r'C:\bin\agent.exe'));
-  mirroredServer(db).sessionRows.insert(session(id: 'n1', title: 'Native work'));
+  ).sessionRows.insert(session(id: 'n1', title: 'Native work'));
   mirroredServer(db).sessionRows.updateExternalSessionId('n1', 'ext-1');
   mirroredServer(db).importedRows.insertIfAbsent(_imported(agent));
 
@@ -195,7 +195,7 @@ void main() {
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
-        ExecutionEnvironmentDao(h.db).upsert(wslEnv());
+        mirroredServer(h.db).environmentRows.upsert(wslEnv());
         mirroredServer(h.db).sessionRows.insert(
           session(
             id: 'n2',

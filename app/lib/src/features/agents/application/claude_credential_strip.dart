@@ -12,7 +12,7 @@ import 'agent_providers.dart';
 /// launch only ever withholds on evidence.
 final claudeLoginPresentProvider =
     FutureProvider.family<bool, AgentInstallation>((ref, installation) async {
-      final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
+      final environments = ref.watch(environmentsDataProvider).getAll();
       final paths = await ref
           .watch(claudeAuthLocatorProvider)
           .pathsFor(installation, environments);

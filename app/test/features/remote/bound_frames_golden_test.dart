@@ -40,12 +40,10 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_remote/host.dart';
@@ -96,7 +94,7 @@ void main() {
     EnvironmentPath at(String path) =>
         EnvironmentPath(environmentId: 'windows', path: path);
 
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'windows',
         kind: EnvironmentKind.windowsNative,
@@ -107,7 +105,7 @@ void main() {
     // Three environments, because the badge and the attachment answer are
     // decided by the kind: the local host badges nothing and can be written
     // to, WSL badges and can be written to, and SSH badges and cannot.
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'wsl:Ubuntu',
         kind: EnvironmentKind.wsl,
@@ -116,7 +114,7 @@ void main() {
         createdAt: now,
       ),
     );
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'ssh:build-box',
         kind: EnvironmentKind.ssh,
@@ -186,7 +184,7 @@ void main() {
     // One known agent and one the registry has never heard of: `agentOption`
     // has a branch for each, and only a session on the unknown one produces
     // the structural absence word.
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       AgentInstallation(
         id: 'i1',
         agentId: 'claudeCode',
@@ -194,7 +192,7 @@ void main() {
         createdAt: now,
       ),
     );
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       AgentInstallation(
         id: 'i2',
         agentId: 'mystery',
@@ -202,7 +200,7 @@ void main() {
         createdAt: now,
       ),
     );
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       AgentInstallation(
         id: 'i3',
         agentId: 'claudeCode',
@@ -213,7 +211,7 @@ void main() {
         createdAt: now,
       ),
     );
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       AgentInstallation(
         id: 'i4',
         agentId: 'claudeCode',
@@ -374,7 +372,7 @@ void main() {
     final live = (await launcher.launch(
       SessionLaunchRequest(
         repository: server.repositoryRows.getById('r1')!,
-        installation: AgentInstallationDao(db).getById('i1')!,
+        installation: server.installationRows.getById('i1')!,
         title: 'Live pane',
         purpose: SessionPurpose.newSession,
         permissionOverride: claudeMode,

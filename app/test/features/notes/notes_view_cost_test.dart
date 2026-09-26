@@ -1,7 +1,5 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
@@ -47,11 +45,11 @@ void main() {
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
 
     final container = ProviderContainer(
       overrides: [

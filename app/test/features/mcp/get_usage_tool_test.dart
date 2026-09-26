@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/agents/application/agent_usage_providers
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/mcp/session_launch_tools.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
@@ -19,15 +20,17 @@ import '../agents/usage_fixtures.dart';
 /// a caller reading that would have concluded the account was untouched.
 /// A window nothing measured now omits the field entirely.
 void main() {
-  ProviderContainer containerFor(
+  Future<ProviderContainer> containerFor(
     String agentId,
     FakeAgentUsageService service,
-  ) {
-    final db = seedUsageDatabase(agentId: agentId);
+  ) async {
+    final server = FakeDataServer();
+    final db = seedUsageDatabase(agentId: agentId, server: server);
     addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -41,7 +44,7 @@ void main() {
     FakeAgentUsageService service,
   ) async =>
       (await SessionLaunchTools(
-            containerFor(agentId, service),
+            await containerFor(agentId, service),
           ).call('get_usage', {'cli': agentId}))!
           as Map<String, Object?>;
 

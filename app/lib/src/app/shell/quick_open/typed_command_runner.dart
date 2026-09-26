@@ -74,7 +74,7 @@ class TypedCommandRunner {
       return;
     }
     final installation = _container
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(command.installationId);
     if (installation == null ||
         installation.environmentId != repository.path.environmentId) {

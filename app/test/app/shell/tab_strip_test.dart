@@ -3,9 +3,6 @@ import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -32,6 +29,7 @@ import '../../support/window_matrix.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 void main() {
   testWidgets('a tab\'s close button sits at its edge, not beside the text', (
@@ -125,10 +123,12 @@ void main() {
     setUp(() async {
       db = AppDatabase.memory();
       final server = FakeDataServer()..mirrorInto(db);
-      ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+      server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       final data = await server.override();
       container = ProviderContainer(
         overrides: [

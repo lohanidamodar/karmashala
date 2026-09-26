@@ -3,9 +3,6 @@ import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/decision_tools.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
@@ -23,6 +20,7 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:agent_cli/process.dart';
 
 /// The write paths into a session's decision record, exercised as the acts that
 /// produce them rather than as a DAO call.
@@ -39,11 +37,13 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_decision_tools_');
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     fake = FakeDataServer()..mirrorInto(db);
+    fake.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    fake.installationRows.insert(agentInstallation());
     fake.sessionRows.insert(session(id: 's1', title: 'Work'));
     fake.sessionRows.insert(session(id: 's2', title: 'The verifier'));
 

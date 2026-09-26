@@ -10,8 +10,6 @@ import 'package:karmashala/src/features/verification/application/verification_pr
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala/src/features/verification/presentation/verification_pane.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -240,12 +238,12 @@ void main() {
   testWidgets('a renamed session is renamed in the run it verified', (
     tester,
   ) async {
-    ExecutionEnvironmentDao(h.db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(h.db);
+    server.environmentRows.upsert(windowsEnv());
     server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(h.db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     server.sessionRows
       ..insert(session(id: 's-1', title: 'Before the rename'))
       ..insert(session(id: 's-2', title: 'The verifier'));

@@ -7,9 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:path/path.dart' as p;
@@ -18,6 +15,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// The todo tools, over the endpoint.
 ///
@@ -33,7 +31,6 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_todo_tools_');
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     // The server files by the calling session: s1 is in r1, which is in p1.
     final data =
         FakeDataServer(
@@ -41,13 +38,16 @@ void main() {
             repositoryOfSession: {'s1': 'r1'},
             projectOfRepository: {'r1': 'p1'},
           ).mirrorInto(db)
+          ..environmentRows.upsert(localHostEnvironment(testTime))
           ..projectRows.insert(project())
           ..projectRows.insert(
             project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'),
           )
           ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login'));
+    data.installationRows.insert(agentInstallation());
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session(id: 's1', title: 'Fix login'));
     final workspace = await data.override();
     container = ProviderContainer(
       overrides: [

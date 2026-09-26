@@ -8,7 +8,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 import 'package:karmashala/src/features/todos/domain/project_scope.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
@@ -41,8 +40,8 @@ void main() {
   }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project())
       ..insert(project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'));
@@ -637,7 +636,7 @@ void main() {
         build: () {
           final db = AppDatabase.memory();
           addTearDown(db.close);
-          ExecutionEnvironmentDao(db).upsert(windowsEnv());
+          server.environmentRows.upsert(windowsEnv());
           final container = ProviderContainer(
             overrides: [
               databaseProvider.overrideWithValue(db),
@@ -681,7 +680,7 @@ void main() {
       build: () {
         final db = AppDatabase.memory();
         addTearDown(db.close);
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        server.environmentRows.upsert(windowsEnv());
         final container = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),

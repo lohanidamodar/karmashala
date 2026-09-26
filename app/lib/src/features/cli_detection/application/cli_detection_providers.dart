@@ -92,7 +92,7 @@ final sessionAutoImportServiceProvider = Provider<SessionAutoImportService>(
   (ref) => SessionAutoImportService(
     locator: ref.watch(cliStoreLocatorProvider),
     scan: ref.watch(storeScanRunnerProvider).scan,
-    environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    environmentDao: ref.watch(environmentsDataProvider),
     importedSessionDao: ref.watch(importedSessionsProvider),
     sessionDao: ref.watch(sessionsDataProvider),
     ids: ref.watch(idGeneratorProvider),
@@ -116,8 +116,8 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
     sessionDao: ref.watch(sessionsDataProvider),
     importedSessionDao: ref.watch(importedSessionsProvider),
     workspace: ref.watch(workspaceDataProvider),
-    environmentDao: ref.watch(executionEnvironmentDaoProvider),
-    installationDao: ref.watch(agentInstallationDaoProvider),
+    environmentDao: ref.watch(environmentsDataProvider),
+    installationDao: ref.watch(agentInstallationsDataProvider),
     agents: ref.watch(agentRegistryProvider),
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
@@ -151,12 +151,12 @@ final directoryConversationAttributionServiceProvider =
     Provider<DirectoryConversationAttributionService>((ref) {
       return DirectoryConversationAttributionService(
         sessionDao: ref.watch(sessionsDataProvider),
-        installationDao: ref.watch(agentInstallationDaoProvider),
+        installationDao: ref.watch(agentInstallationsDataProvider),
         workspace: ref.watch(workspaceDataProvider),
         agents: ref.watch(agentRegistryProvider),
         locateStores: () async => ref
             .read(cliStoreLocatorProvider)
-            .locate(ref.read(executionEnvironmentDaoProvider).getAll()),
+            .locate(ref.read(environmentsDataProvider).getAll()),
         // Not `adoptablePanes`' live-only rule: `agy` prints its resume hint
         // as it exits. `restored` is refused — that buffer is replayed history.
         readPaneTail: (paneId, lines) {
@@ -229,9 +229,9 @@ final launchedSessionAttributionServiceProvider =
     Provider<LaunchedSessionAttributionService>((ref) {
       return LaunchedSessionAttributionService(
         sessionDao: ref.watch(sessionsDataProvider),
-        installationDao: ref.watch(agentInstallationDaoProvider),
+        installationDao: ref.watch(agentInstallationsDataProvider),
         workspace: ref.watch(workspaceDataProvider),
-        environmentDao: ref.watch(executionEnvironmentDaoProvider),
+        environmentDao: ref.watch(environmentsDataProvider),
         agents: ref.watch(agentRegistryProvider),
         scanStores: () => ref.read(cliStoreScanPassProvider).read(),
         // A row that just took over a conversation supersedes its history
@@ -323,7 +323,7 @@ final adoptablePanesProvider = Provider<List<AdoptablePane> Function()>(
 /// One pass over every CLI store, flattened to the sessions it found. Walks on
 /// the worker isolate, and unnarrowed: callers have no path to narrow by.
 Future<List<DetectedSession>> scanCliStores(Ref ref) async {
-  final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+  final environments = ref.read(environmentsDataProvider).getAll();
   final stores = await ref.read(cliStoreLocatorProvider).locate(environments);
   final sessions = <DetectedSession>[];
   await for (final chunk
@@ -373,7 +373,7 @@ final conversationPresenceProvider = Provider<ConversationPresenceProbe>((ref) {
       return ConversationPresence.unknown;
     }
     try {
-      final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+      final environments = ref.read(environmentsDataProvider).getAll();
       final stores = await ref
           .read(cliStoreLocatorProvider)
           .locate(environments);
@@ -416,7 +416,7 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
   /// Reads every store, unnarrowed: this door's job is to find projects the
   /// workspace has never heard of, so it must not narrow to what it has.
   Future<List<DetectedProject>> _load() async {
-    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = ref.read(environmentsDataProvider).getAll();
     final sessions = await scanCliStores(ref);
     // Deliberately no freshness stamp: this listed the stores and imported
     // nothing, and the stamp means "brought up to date", not "somebody looked".

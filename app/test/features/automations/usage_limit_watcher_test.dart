@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala/src/features/automations/application/usage_limit_watcher.dart';
 import 'package:karmashala_automations/resumes.dart';
@@ -16,6 +15,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/usage_limit_settings.dart';
 
 import 'scheduled_resume_harness.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A turn that ended on a usage limit, per agent, and what the setting makes
 /// of it. The limit evidence is the agent's own: Codex's rollout record, and
@@ -428,7 +428,7 @@ void main() {
         startsWith('Claude Code hit its 5-hour limit.'),
       );
       expect(
-        AgentInstallationDao(h.db).getById('a1')!.agentId,
+        mirroredServer(h.db).installationRows.getById('a1')!.agentId,
         AgentIds.claudeCode,
       );
     });

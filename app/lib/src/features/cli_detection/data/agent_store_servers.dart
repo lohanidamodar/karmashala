@@ -1,9 +1,9 @@
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
-import '../../agents/data/agent_installation_dao.dart';
+import '../../agents/data/agents_data.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/data/environments_data.dart';
 
 /// Told of a name an agent's store server gave a conversation on its own.
 typedef ConversationNameListener =
@@ -25,8 +25,8 @@ class AgentStoreServers {
   }) : _log = logger ?? AppLogger.named('agents.storeServer');
 
   final CommandRunnerFactory runnerFactory;
-  final ExecutionEnvironmentDao environments;
-  final AgentInstallationDao installations;
+  final EnvironmentsData environments;
+  final AgentInstallationsData installations;
   final AgentRegistry registry;
   final PathTranslator translator;
   final String clientVersion;

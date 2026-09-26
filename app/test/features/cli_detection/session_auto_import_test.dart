@@ -4,7 +4,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_auto_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 
@@ -14,6 +13,7 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 /// **Which sessions a repository takes, and which the Claude store is asked
 /// for.**
@@ -23,6 +23,7 @@ import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 /// its own project, not the parent's, and this pins that it stays that way.
 void main() {
   late AppDatabase db;
+  late EnvironmentsData environments;
   late List<StoreScanRequest> asked;
   late FakeDataServer server;
   late SessionsData sessions;
@@ -51,7 +52,7 @@ void main() {
           ),
         );
       },
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: environments,
       importedSessionDao: imported,
       sessionDao: sessions,
       ids: SequentialIdGenerator('i-'),
@@ -69,8 +70,9 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
+    environments = EnvironmentsData(await server.connect());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows.insert(
       Repository(
@@ -106,10 +108,7 @@ void main() {
       1,
       reason: 'only the one that ran in the repository itself',
     );
-    expect(
-      imported.getByRepository('r1').map((s) => s.externalId),
-      ['s-root'],
-    );
+    expect(imported.getByRepository('r1').map((s) => s.externalId), ['s-root']);
   });
 
   test('the Claude store is asked only for the directories the repositories '
@@ -138,7 +137,7 @@ void main() {
           asked.add(request);
           return const Stream.empty();
         },
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentDao: environments,
         importedSessionDao: imported,
         sessionDao: sessions,
         ids: SequentialIdGenerator('i-'),

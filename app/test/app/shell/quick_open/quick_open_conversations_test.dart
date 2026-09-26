@@ -4,12 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -69,12 +66,12 @@ void main() {
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
     index = ConversationIndexDao(db);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
   });
   tearDown(() => db.close());
 

@@ -9,10 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
@@ -48,7 +46,7 @@ void main() {
   late FakeDataServer server;
 
   void seed({int extra = 0}) {
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     for (final (id, name) in [('w1', 'Client work'), ('w2', 'Game dev')]) {
       server.workspaceRows.insert(
         Workspace(id: id, name: name, createdAt: testTime),
@@ -91,7 +89,7 @@ void main() {
         path: r'C:\src\alpha',
       ),
     );
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     for (final (i, title) in ['Fix login', 'Add tests'].indexed) {
       mirroredServer(db).sessionRows.insert(
         Session(

@@ -68,7 +68,7 @@ class WorktreeControlTools {
     final branchName = _validBranch(branch);
 
     final environment = _container
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(repository.path.environmentId);
     if (environment == null) {
       throw StateError(

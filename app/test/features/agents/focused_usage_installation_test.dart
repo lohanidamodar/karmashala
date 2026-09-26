@@ -2,10 +2,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,15 +49,15 @@ void main() {
   test('answers per session across Claude, Codex, and Antigravity — all at '
       'once', () async {
     db = seedUsageDatabase();
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
+    mirroredServer(db).installationRows.insert(
+      agentInstallation(id: 'a2', agentId: AgentIds.codex),
+    );
     mirroredServer(
       db,
     ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a3', agentId: AgentIds.antigravity));
+    mirroredServer(db).installationRows.insert(
+      agentInstallation(id: 'a3', agentId: AgentIds.antigravity),
+    );
     mirroredServer(
       db,
     ).sessionRows.insert(session(id: 's3', agentInstallationId: 'a3'));
@@ -87,10 +85,10 @@ void main() {
     // environments, so they are different keys and different quotas — the
     // reason an app-level figure could not be right for both.
     db = seedUsageDatabase();
-    ExecutionEnvironmentDao(db).upsert(wslEnv());
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a2', environmentId: wslEnv().id));
+    mirroredServer(db).environmentRows.upsert(wslEnv());
+    mirroredServer(db).installationRows.insert(
+      agentInstallation(id: 'a2', environmentId: wslEnv().id),
+    );
     mirroredServer(
       db,
     ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));

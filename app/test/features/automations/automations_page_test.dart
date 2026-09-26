@@ -4,7 +4,6 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala_automations/persistence.dart';
@@ -14,7 +13,6 @@ import 'package:karmashala/src/features/automations/application/scheduled_resume
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala_ui/primitives.dart';
 
@@ -82,13 +80,11 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),

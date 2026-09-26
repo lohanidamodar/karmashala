@@ -77,7 +77,7 @@ class SessionExporter {
 
     final now = _ref.read(clockProvider).nowUtc();
     final agentId = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     final agentName = agentId == null

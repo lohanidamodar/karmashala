@@ -1,7 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/tools_page.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
@@ -9,9 +8,12 @@ import 'package:karmashala/src/features/environments/presentation/environment_he
     show healthIcon;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Whether the app admits, on screen, that it cannot see its agents properly.
 ///
@@ -22,15 +24,18 @@ import '../../support/fixtures.dart';
 /// ran a whole day on disk probes with nothing on screen saying so.
 void main() {
   late AppDatabase db;
+  late Override data;
 
   // The environments the ids in these reports refer to. Without them the page
   // can only fall back to the raw id, and the local host's raw id is the
   // literal `windows` on a Mac.
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
+    FakeDataServer().mirrorInto(db);
+    mirroredServer(db).environmentRows
       ..upsert(posixEnv())
       ..upsert(wslEnv());
+    data = await mirroredServer(db).override();
   });
   tearDown(() => db.close());
 
@@ -38,6 +43,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         agentHookInstallationReportProvider.overrideWith(
           () => _StubReport(report),
         ),

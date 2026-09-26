@@ -127,7 +127,7 @@ final sessionAgentPlanProvider = Provider.autoDispose
       // The capability answer comes first and costs nothing: an agent that
       // keeps no plan must never reach a transcript subscription to learn that.
       final agentId = ref
-          .read(agentInstallationDaoProvider)
+          .read(agentInstallationsDataProvider)
           .getById(row.agentInstallationId)
           ?.agentId;
       final support =

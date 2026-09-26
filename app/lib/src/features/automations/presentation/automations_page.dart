@@ -133,13 +133,13 @@ class AutomationCard extends ConsumerWidget {
     final environment = repository == null
         ? null
         : ref
-              .watch(executionEnvironmentDaoProvider)
+              .watch(environmentsDataProvider)
               .getById(repository.path.environmentId);
     final refusal = ref.watch(automationRefusalProvider(automation.id));
     final runs = ref.watch(automationRunsProvider(automation.id));
     final now = ref.watch(clockProvider).nowUtc();
     final installation = ref
-        .watch(agentInstallationDaoProvider)
+        .watch(agentInstallationsDataProvider)
         .getById(automation.agentInstallationId);
     final agentName = !automation.startsAgent
         ? 'the agent already running in that session'

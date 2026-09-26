@@ -2,11 +2,12 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// [GitFiles] that keeps everything in a map, so a test can assert on the two
 /// files the checkpoint machinery writes without going anywhere near a disk.
@@ -117,7 +118,9 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     dao = CheckpointDao(db);
-    ExecutionEnvironmentDao(db).upsert(
+    // The checkpoint rows' foreign key reaches the environment in the store.
+    final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'windows',
         kind: EnvironmentKind.windowsNative,
@@ -131,7 +134,7 @@ void main() {
     files = RecordingGitFiles();
     service = CheckpointService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentOf: ExecutionEnvironmentDao(db).getById,
+      environmentOf: server.environmentRows.getById,
       dao: dao,
       clock: FixedClock(DateTime.utc(2026, 8, 30, 12)),
       newId: () => 'ckpt${++ids}',

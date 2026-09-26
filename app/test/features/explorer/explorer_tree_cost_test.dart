@@ -7,12 +7,10 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -58,11 +56,11 @@ void main() {
   /// machines whatever the count, so the number below is about the projects.
   CountingDatabase seed(FakeDataServer server, int count) {
     final db = CountingDatabase();
-    final environments = ExecutionEnvironmentDao(db);
+    final environments = server.environmentRows;
     environments.upsert(windowsEnv());
     environments.upsert(wslEnv());
     environments.upsert(sshEnvFixture());
-    SshHostDao(db).upsert(_buildBox());
+    server.sshHostRows.upsert(_buildBox());
     const ids = ['windows', 'wsl:Ubuntu', 'ssh:h1'];
     server.workspaceRows.insert(
       Workspace(id: 'w1', name: 'Client work', createdAt: testTime),
@@ -176,23 +174,19 @@ void main() {
         for (final count in scale)
           count: on[count]!.statements - off[count]!.statements,
       };
-      // Ten times the projects, no more sweeps: the environment table is read
-      // once for the tree, never once per row. Fewer is allowed — rows are
-      // lazy, and a WSL project scrolled off screen asks nothing of it.
+      // Since slice 1d the environments are the server's, read from the data
+      // client's copy: the tree sweeps the table not once, let alone per row.
       expect(
-        on[100]!.sweeps,
-        lessThanOrEqualTo(on[10]!.sweeps),
-        reason:
-            'a sweep that grows with the workspace is the per-row read '
-            'this test exists to catch: $sweeps',
+        {for (final count in scale) on[count]!.sweeps + off[count]!.sweeps},
+        {0},
+        reason: 'no environment sweep, open or folded: $sweeps',
       );
-      // A folded group draws no project, so it pays for none of them.
+      // Nor does drawing the groups open cost more statements as the
+      // workspace grows.
       expect(
-        off[100]!.statements,
-        lessThan(on[100]!.statements),
-        reason:
-            'folding the group away must actually save the work: '
-            '${off[100]} against ${on[100]}',
+        on[100]!.statements - on[10]!.statements,
+        lessThan(10),
+        reason: 'opening the groups does not grow with the workspace: $extra',
       );
       expect(
         off[100]!.statements - off[10]!.statements,

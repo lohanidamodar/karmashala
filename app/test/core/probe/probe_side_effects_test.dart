@@ -15,8 +15,6 @@ import 'package:karmashala/src/features/agents/application/agent_hook_intake.dar
 import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
 import 'package:karmashala/src/features/agents/application/agent_skill_installation_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
@@ -39,6 +37,8 @@ import '../../features/system/fake_native_adapters.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/workspace_mirror.dart';
+import '../../support/fake_data_server.dart';
 
 /// Every store the locator would have found, pointed at a temporary home.
 class _StubLocator implements CliStoreLocator {
@@ -93,11 +93,17 @@ final _refProvider = Provider<Ref>((ref) => ref);
 /// same fixture *can* observe the write — so a pass is not an empty fixture.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late Directory home;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    data = await server.override();
     home = Directory.systemTemp.createTempSync('karmashala_probe_fx_');
   });
   tearDown(() {
@@ -105,9 +111,9 @@ void main() {
     removeTempDirectory(home);
   });
 
-  String localEnvironmentId() => ExecutionEnvironmentDao(
+  String localEnvironmentId() => mirroredServer(
     db,
-  ).getAll().firstWhere((e) => isLocalHost(e.kind)).id;
+  ).environmentRows.getAll().firstWhere((e) => isLocalHost(e.kind)).id;
 
   String claudeStore() => p.join(home.path, '.claude');
   File hookConfig() => File(p.join(claudeStore(), 'settings.json'));
@@ -129,6 +135,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         probeModeProvider.overrideWithValue(
           probe ? ProbeMode.on : ProbeMode.off,

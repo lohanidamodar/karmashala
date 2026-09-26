@@ -133,7 +133,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
       // reading, and no request is made faster than the refresh policy allows.
       reading = await service.fetch(
         installation,
-        _ref.read(executionEnvironmentDaoProvider).getAll(),
+        _ref.read(environmentsDataProvider).getAll(),
       );
     } on UsageException catch (error) {
       return 'Usage could not be re-read (${error.message}), so this went by '
@@ -281,7 +281,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
         .read(workspaceDataProvider)
         .repository(session.repositoryId);
     var installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     final externalId = session.externalSessionId;
     if (repository == null || installation == null) {

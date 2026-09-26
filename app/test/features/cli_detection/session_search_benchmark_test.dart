@@ -8,11 +8,9 @@ import 'dart:math';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_search.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
@@ -239,11 +237,11 @@ void main() {
       final dbDir = Directory('${dir.path}/db')..createSync();
       final db = AppDatabase.open(dbDir);
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final server = FakeDataServer()..mirrorInto(db);
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       final sessions = mirroredServer(db).sessionRows;
       db.transaction(() {
         for (var i = 0; i < count; i++) {

@@ -45,7 +45,7 @@ class DeliveryAttentionController
     final session = ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final agentId = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     return WatchedSession(

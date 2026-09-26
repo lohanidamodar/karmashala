@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_policy.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_providers.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
@@ -69,8 +68,8 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer(clock: () => testTime);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     final clock = FixedClock(testTime);
     service = _CannedService(

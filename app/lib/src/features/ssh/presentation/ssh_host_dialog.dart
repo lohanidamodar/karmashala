@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/primitives.dart';
@@ -177,18 +179,28 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
     }
     final controller = ref.read(sshHostsControllerProvider.notifier);
     final SshHost saved;
-    if (widget.existing == null) {
-      saved = await controller.add(
-        name: draft.name,
-        host: draft.host,
-        port: draft.port,
-        username: draft.username,
-        authMethod: draft.authMethod,
-        privateKey: draft.privateKey,
-        defaultDirectory: draft.defaultDirectory?.path,
-      );
-    } else {
-      saved = await controller.save(draft);
+    try {
+      if (widget.existing == null) {
+        saved = await controller.add(
+          name: draft.name,
+          host: draft.host,
+          port: draft.port,
+          username: draft.username,
+          authMethod: draft.authMethod,
+          privateKey: draft.privateKey,
+          defaultDirectory: draft.defaultDirectory?.path,
+        );
+      } else {
+        saved = await controller.save(draft);
+      }
+    } on DataRefused catch (refusal) {
+      // The server's words: what is wrong with the host, or that it is away.
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = refusal.message;
+      });
+      return;
     }
     if (!mounted) return;
     Navigator.of(context).pop(saved);

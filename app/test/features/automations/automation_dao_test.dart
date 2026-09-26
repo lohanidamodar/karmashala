@@ -5,7 +5,6 @@ import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/checks.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
@@ -37,8 +36,8 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     dao = AutomationDao(db);

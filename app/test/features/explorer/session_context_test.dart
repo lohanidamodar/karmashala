@@ -1,6 +1,4 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -33,12 +31,12 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     final server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(path: hub));
     server.repositoryRows
       ..insert(repository(id: 'hub', name: 'demo', path: hub))
       ..insert(repository(id: 'nested', name: 'app', path: nested));
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),

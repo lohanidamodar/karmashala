@@ -2,8 +2,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/permissions_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'package:agent_cli/process.dart';
 
 /// The human half of the consent gate.
 ///
@@ -24,10 +23,12 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     server = FakeDataServer(clock: () => testTime)
       ..projectRows.insert(project())
       ..projectRows.insert(project(id: 'p2', name: 'Other', path: r'C:\src\o'));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
   });
 
   tearDown(() => db.close());

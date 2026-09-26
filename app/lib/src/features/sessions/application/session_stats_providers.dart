@@ -80,7 +80,7 @@ class SessionStatsService {
     }
 
     final agentId = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     final adapter = agentId == null
@@ -181,7 +181,7 @@ class SessionStatsService {
   /// that has one — a session whose environment row went still has books.
   Future<String?> _storeHome(String agentId, Session session) async {
     try {
-      final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
+      final environments = _ref.read(environmentsDataProvider).getAll();
       final stores = await _ref
           .read(cliStoreLocatorProvider)
           .locate(environments);

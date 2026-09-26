@@ -8,8 +8,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/activity_by_day_view.dart';
@@ -42,8 +40,8 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.environmentRows.upsert(windowsEnv());
+    server.installationRows.insert(agentInstallation());
     // Enough projects that the tree scrolls.
     for (var i = 0; i < 40; i++) {
       final id = 'p$i';

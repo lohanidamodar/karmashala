@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_providers.dart';
@@ -37,10 +36,10 @@ void main() {
 
   Future<void> build() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    server = FakeDataServer()..mirrorInto(db);
     server.projectRows.insert(project());
     server.repositoryRows.insert(
       repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
@@ -147,7 +146,7 @@ void main() {
   );
 
   test('an SSH checkout is pointed at its host, not at this one', () async {
-    ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+    server.environmentRows.upsert(sshEnvFixture());
     server.repositoryRows.insert(
       repository(
         id: 'r2',

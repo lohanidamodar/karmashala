@@ -23,7 +23,7 @@ extension SessionExecutableGuard on SessionLauncher {
         .repairBrokenPaths();
 
     final repaired = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(installation.id);
     final after = repaired == null ? null : _localReading(repaired);
     if (repaired != null && (after == null || after.isUsable)) {
@@ -47,7 +47,7 @@ extension SessionExecutableGuard on SessionLauncher {
   /// is not ours to judge — a WSL or SSH path is spelled for its own disk.
   ExecutableReading? _localReading(AgentInstallation installation) {
     final environment = _ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(installation.environmentId);
     if (environment == null || !isLocalHost(environment.kind)) return null;
     return readExecutable(

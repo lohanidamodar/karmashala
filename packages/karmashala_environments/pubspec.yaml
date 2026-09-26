@@ -1,0 +1,36 @@
+name: karmashala_environments
+description: >-
+  Where agents run and who they run as: execution environments, saved SSH
+  hosts and the host keys trusted for them, agent installations, saved
+  Claude and Codex accounts and the usage history — the values' wire shape,
+  the rules every copy follows (validation, order, reconciling a probe with
+  the recorded installations, what the usage history keeps, which fields are
+  credentials) and, in `store.dart` (the server's alone), the DAOs over their
+  tables. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `ExecutionEnvironment`, `EnvironmentPath`, `AgentInstallation`, the saved
+  # accounts and `UsageSample`.
+  agent_cli:
+    path: ../agent_cli
+  # `environmentPathToJson`, one wire shape for a path in an environment.
+  karmashala_projects:
+    path: ../karmashala_projects
+  # The tables, in the app's one schema.
+  karmashala_store:
+    path: ../karmashala_store
+  # `SqliteException`, a unique path another row holds.
+  sqlite3: ^3.3.3
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

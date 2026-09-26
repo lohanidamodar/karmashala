@@ -9,10 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_agent_statuses.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
@@ -79,7 +77,7 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.connect();
-    ExecutionEnvironmentDao(db)
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(sshEnvFixture());
     server.projectRows.insert(project());
@@ -88,7 +86,7 @@ void main() {
       ..insert(
         repository(id: 'r-ssh', environmentId: 'ssh:h1', path: '/srv/app'),
       );
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     dao = server.sessionRows;
     // Also the daemon writing to the server's rows, as `serve` does: these
     // groups follow a row end to end, host write to app signal.

@@ -5,8 +5,13 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 
-import 'session_values.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:karmashala_environments/karmashala_environments.dart';
+
+import 'session_values.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -16,52 +21,66 @@ sealed class DataChange {
 
   /// Null for a change this client does not know — a newer server's domain,
   /// which it can safely ignore.
-  static DataChange? fromJson(Map<String, Object?> json) =>
-      switch (json['change']) {
-        'noteChanged' => NoteChanged(
-          Note.fromJson((json['note']! as Map).cast<String, Object?>()),
-        ),
-        'noteRemoved' => NoteRemoved(json['id']! as String),
-        'todoChanged' => TodoChanged(
-          Todo.fromJson((json['todo']! as Map).cast<String, Object?>()),
-        ),
-        'todoRemoved' => TodoRemoved(json['id']! as String),
-        'preferenceChanged' => PreferenceChanged(
-          json['key']! as String,
-          json['value'] as String?,
-        ),
-        'workspaceChanged' => WorkspaceChanged(Workspace.fromJson(_row(json))),
-        'workspaceRemoved' => WorkspaceRemoved(json['id']! as String),
-        'projectChanged' => ProjectChanged(Project.fromJson(_row(json))),
-        'projectRemoved' => ProjectRemoved(json['id']! as String),
-        'repositoryChanged' => RepositoryChanged(
-          repositoryFromJson(json['row']),
-        ),
-        'repositoryRemoved' => RepositoryRemoved(json['id']! as String),
-        'sectionChanged' => SectionChanged(StoredSection.fromJson(_row(json))),
-        'sectionRemoved' => SectionRemoved(json['id']! as String),
-        'sessionRowChanged' => SessionRowChanged(Session.fromJson(_row(json))),
-        'sessionRowRemoved' => SessionRowRemoved(json['id']! as String),
-        'sessionLinksChanged' => SessionLinksChanged(
-          json['id']! as String,
-          [
-            for (final link in json['links']! as List)
-              SessionRepositoryLink.fromJson(
-                (link as Map).cast<String, Object?>(),
-              ),
-          ],
-        ),
-        'importedChanged' => ImportedChanged(importedFromJson(_row(json))),
-        'importedRemoved' => ImportedRemoved(json['id']! as String),
-        'decisionRecorded' => DecisionRecorded(
-          DecisionRecord.fromJson(_row(json)),
-        ),
-        'decisionRemoved' => DecisionRemoved(json['id']! as int),
-        'recapChanged' => RecapChanged(SessionRecap.fromJson(_row(json))),
-        'recapRemoved' => RecapRemoved(json['id']! as String),
-        'followUpChanged' => FollowUpChanged(FollowUp.fromJson(_row(json))),
-        _ => null,
-      };
+  static DataChange? fromJson(
+    Map<String, Object?> json,
+  ) => switch (json['change']) {
+    'noteChanged' => NoteChanged(
+      Note.fromJson((json['note']! as Map).cast<String, Object?>()),
+    ),
+    'noteRemoved' => NoteRemoved(json['id']! as String),
+    'todoChanged' => TodoChanged(
+      Todo.fromJson((json['todo']! as Map).cast<String, Object?>()),
+    ),
+    'todoRemoved' => TodoRemoved(json['id']! as String),
+    'preferenceChanged' => PreferenceChanged(
+      json['key']! as String,
+      json['value'] as String?,
+    ),
+    'workspaceChanged' => WorkspaceChanged(Workspace.fromJson(_row(json))),
+    'workspaceRemoved' => WorkspaceRemoved(json['id']! as String),
+    'projectChanged' => ProjectChanged(Project.fromJson(_row(json))),
+    'projectRemoved' => ProjectRemoved(json['id']! as String),
+    'repositoryChanged' => RepositoryChanged(repositoryFromJson(json['row'])),
+    'repositoryRemoved' => RepositoryRemoved(json['id']! as String),
+    'sectionChanged' => SectionChanged(StoredSection.fromJson(_row(json))),
+    'sectionRemoved' => SectionRemoved(json['id']! as String),
+    'sessionRowChanged' => SessionRowChanged(Session.fromJson(_row(json))),
+    'sessionRowRemoved' => SessionRowRemoved(json['id']! as String),
+    'sessionLinksChanged' => SessionLinksChanged(json['id']! as String, [
+      for (final link in json['links']! as List)
+        SessionRepositoryLink.fromJson((link as Map).cast<String, Object?>()),
+    ]),
+    'importedChanged' => ImportedChanged(importedFromJson(_row(json))),
+    'importedRemoved' => ImportedRemoved(json['id']! as String),
+    'decisionRecorded' => DecisionRecorded(DecisionRecord.fromJson(_row(json))),
+    'decisionRemoved' => DecisionRemoved(json['id']! as int),
+    'recapChanged' => RecapChanged(SessionRecap.fromJson(_row(json))),
+    'recapRemoved' => RecapRemoved(json['id']! as String),
+    'followUpChanged' => FollowUpChanged(FollowUp.fromJson(_row(json))),
+    'environmentChanged' => EnvironmentChanged(environmentFromJson(_row(json))),
+    'environmentRemoved' => EnvironmentRemoved(json['id']! as String),
+    'sshHostTouched' => SshHostTouched(json['id']! as String),
+    'sshHostRemoved' => SshHostRemoved(json['id']! as String),
+    'knownHostChanged' => KnownHostChanged(knownHostFromJson(_row(json))),
+    'knownHostRemoved' => KnownHostRemoved(
+      json['host']! as String,
+      json['port']! as int,
+    ),
+    'installationChanged' => InstallationChanged(
+      installationFromJson(_row(json)),
+    ),
+    'installationRemoved' => InstallationRemoved(json['id']! as String),
+    'claudeAccountChanged' => ClaudeAccountChanged(
+      claudeAccountFromJson(_row(json)),
+    ),
+    'claudeAccountRemoved' => ClaudeAccountRemoved(json['id']! as String),
+    'codexAccountChanged' => CodexAccountChanged(
+      codexAccountFromJson(_row(json)),
+    ),
+    'codexAccountRemoved' => CodexAccountRemoved(json['id']! as String),
+    'usageRecorded' => UsageRecorded(json['accountKey']! as String),
+    _ => null,
+  };
 }
 
 /// A sessions-domain row as it now stands, or its key when it went. Each
@@ -185,6 +204,162 @@ final class FollowUpChanged extends SessionDomainChange {
   Map<String, Object?> toJson() => {
     'change': 'followUpChanged',
     'row': followUp.toJson(),
+  };
+}
+
+/// A change to where agents run — an environment, a saved SSH host, a
+/// trusted host key — or to the agents: an installation, a saved account,
+/// the usage history. **No change carries a credential or a key's
+/// location**: a saved account is told without its token bundle, and a
+/// saved SSH host only by id (a client asks for its hosts again).
+sealed class HostsDomainChange extends DataChange {
+  const HostsDomainChange();
+}
+
+final class EnvironmentChanged extends HostsDomainChange {
+  const EnvironmentChanged(this.environment);
+
+  final ExecutionEnvironment environment;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'environmentChanged',
+    'row': environmentToJson(environment),
+  };
+}
+
+final class EnvironmentRemoved extends HostsDomainChange {
+  const EnvironmentRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'environmentRemoved', 'id': id};
+}
+
+/// Saved SSH host [id] was written. Told by id alone: the row names where
+/// its private key is, which only a client that asks for its hosts is told.
+final class SshHostTouched extends HostsDomainChange {
+  const SshHostTouched(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'sshHostTouched', 'id': id};
+}
+
+final class SshHostRemoved extends HostsDomainChange {
+  const SshHostRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'sshHostRemoved', 'id': id};
+}
+
+/// A host key now trusted — a fingerprint, safe to show.
+final class KnownHostChanged extends HostsDomainChange {
+  const KnownHostChanged(this.key);
+
+  final KnownHostKey key;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'knownHostChanged',
+    'row': knownHostToJson(key),
+  };
+}
+
+final class KnownHostRemoved extends HostsDomainChange {
+  const KnownHostRemoved(this.host, this.port);
+
+  final String host;
+  final int port;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'knownHostRemoved',
+    'host': host,
+    'port': port,
+  };
+}
+
+final class InstallationChanged extends HostsDomainChange {
+  const InstallationChanged(this.installation);
+
+  final AgentInstallation installation;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'installationChanged',
+    'row': installationToJson(installation),
+  };
+}
+
+final class InstallationRemoved extends HostsDomainChange {
+  const InstallationRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'installationRemoved', 'id': id};
+}
+
+/// A saved Claude account as it now stands, **without its credentials**.
+final class ClaudeAccountChanged extends HostsDomainChange {
+  const ClaudeAccountChanged(this.account);
+
+  final ClaudeAccount account;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'claudeAccountChanged',
+    'row': claudeAccountToJson(account),
+  };
+}
+
+final class ClaudeAccountRemoved extends HostsDomainChange {
+  const ClaudeAccountRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'claudeAccountRemoved', 'id': id};
+}
+
+/// A saved Codex account as it now stands, **without its credentials**.
+final class CodexAccountChanged extends HostsDomainChange {
+  const CodexAccountChanged(this.account);
+
+  final CodexAccount account;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'codexAccountChanged',
+    'row': codexAccountToJson(account),
+  };
+}
+
+final class CodexAccountRemoved extends HostsDomainChange {
+  const CodexAccountRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'codexAccountRemoved', 'id': id};
+}
+
+/// The usage history of [accountKey] gained rows: a chart over it reads
+/// again.
+final class UsageRecorded extends HostsDomainChange {
+  const UsageRecorded(this.accountKey);
+
+  final String accountKey;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'usageRecorded',
+    'accountKey': accountKey,
   };
 }
 

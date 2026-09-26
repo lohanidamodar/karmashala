@@ -6,13 +6,13 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_cli_store_locator.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
 
@@ -151,20 +151,21 @@ void main() {
   });
 
   group('conversationPresenceProvider', () {
-    ProviderContainer containerOver(
+    Future<ProviderContainer> containerOver(
       List<CliStore> stores, {
       List<ExecutionEnvironment> environments = const [],
-    }) {
+    }) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      final dao = ExecutionEnvironmentDao(db);
+      final server = FakeDataServer();
       for (final env
           in environments.isEmpty ? [windowsEnv(), wslEnv()] : environments) {
-        dao.upsert(env);
+        server.environmentRows.upsert(env);
       }
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await server.override(),
           cliStoreLocatorProvider.overrideWithValue(FixedLocator(stores)),
           agentRegistryProvider.overrideWithValue(
             const AgentRegistry([
@@ -179,7 +180,7 @@ void main() {
     }
 
     test('an agent with no readable store is never asked', () async {
-      final container = containerOver(const []);
+      final container = await containerOver(const []);
 
       expect(
         await container.read(conversationPresenceProvider)(
@@ -195,7 +196,7 @@ void main() {
         'nothing', () async {
       // The WSL home is what `CliStoreLocator` drops when the distribution is
       // not running. The session runs there; nothing may be concluded.
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.claude')},
@@ -214,7 +215,7 @@ void main() {
     });
 
     test("only the session's own environment may say absent", () async {
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.claude')},
@@ -240,7 +241,7 @@ void main() {
     test('a conversation found in another environment is present', () async {
       // A repository that moved between WSL and Windows keeps its history, and
       // finding the transcript anywhere at all is proof it exists.
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.claude')},

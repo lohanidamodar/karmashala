@@ -99,7 +99,7 @@ final tokenTotalsProvider = FutureProvider.autoDispose<TokenTotals>((
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   final stats = ref.read(sessionStatsServiceProvider);
   final workspace = ref.read(workspaceDataProvider);
-  final installations = ref.read(agentInstallationDaoProvider);
+  final installations = ref.read(agentInstallationsDataProvider);
   final rows = <SessionTokens>[];
   for (final session in sessions.take(kTokenTotalsMaxSessions)) {
     final view = await stats.statsFor(session.id);

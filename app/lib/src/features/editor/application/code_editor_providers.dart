@@ -50,7 +50,7 @@ class EditorActions {
   /// The Windows-host form of [path], or `null` when it cannot be resolved —
   /// editors and `dart:io` run on the Windows host, so they need a host path.
   String? windowsPathFor(EnvironmentPath path) {
-    final dao = _ref.read(executionEnvironmentDaoProvider);
+    final dao = _ref.read(environmentsDataProvider);
     final env = dao.getById(path.environmentId);
     if (env == null) return null;
     // Already a path this process can open, on whichever OS it is running.

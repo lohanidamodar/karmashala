@@ -8,14 +8,18 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
+part 'fake_hosts.dart';
 part 'fake_sessions.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
@@ -23,7 +27,8 @@ part 'fake_sessions.dart';
 /// server does as far as a client can tell: numbered writes (revisions),
 /// changes told to every *other* subscribed link, refusals, and a server that
 /// can stop and come back. Its domain rules are the shared ones in
-/// `karmashala_notes`; the server's own validation is tested in
+/// `karmashala_notes`, `karmashala_projects`, `karmashala_session_engine` and
+/// `karmashala_environments`; the server's own validation is tested in
 /// `server/test/data/`, not here.
 ///
 /// ```dart
@@ -100,6 +105,69 @@ class FakeDataServer {
   /// client's status for one is ignored and the row told back, as
   /// `SessionsHandler` does.
   final runsSessions = <String>{};
+
+  /// Where agents run and who they run as, shaped like the server's DAOs:
+  /// environments, saved SSH hosts, trusted keys (by `host:port`),
+  /// installations, saved accounts (**with** their credentials, as the store
+  /// keeps them — a client is only ever told them stripped) and the usage
+  /// history.
+  late final environmentRows = FakeHostRows<ExecutionEnvironment>._(
+    this,
+    (row) => row.id,
+    EnvironmentChanged.new,
+    (row) => EnvironmentRemoved(row.id),
+    compareEnvironments,
+  );
+  late final sshHostRows = FakeHostRows<SshHost>._(
+    this,
+    (row) => row.id,
+    (row) => SshHostTouched(row.id),
+    (row) => SshHostRemoved(row.id),
+    compareSshHosts,
+  );
+  late final knownHostRows = FakeHostRows<KnownHostKey>._(
+    this,
+    (row) => DataClient.knownHostKey(row.host, row.port),
+    KnownHostChanged.new,
+    (row) => KnownHostRemoved(row.host, row.port),
+    compareKnownHosts,
+  );
+  late final installationRows = FakeHostRows<AgentInstallation>._(
+    this,
+    (row) => row.id,
+    InstallationChanged.new,
+    (row) => InstallationRemoved(row.id),
+    compareInstallations,
+  );
+  late final claudeAccountRows = FakeHostRows<ClaudeAccount>._(
+    this,
+    (row) => row.id,
+    (row) => ClaudeAccountChanged(claudeAccountWithoutCredentials(row)),
+    (row) => ClaudeAccountRemoved(row.id),
+    compareClaudeAccounts,
+  );
+  late final codexAccountRows = FakeHostRows<CodexAccount>._(
+    this,
+    (row) => row.id,
+    (row) => CodexAccountChanged(codexAccountWithoutCredentials(row)),
+    (row) => CodexAccountRemoved(row.id),
+    compareCodexAccounts,
+  );
+  late final usageRows = FakeUsageRows._(this);
+
+  /// Told every environment and installation row this server writes or
+  /// removes — the mirror's feed, for the foreign keys of the tables not
+  /// moved yet.
+  final hostRowListeners = <void Function(HostsDomainChange change)>[];
+
+  DataChange _hostTold(DataChange change) {
+    if (change is HostsDomainChange) {
+      for (final listener in hostRowListeners) {
+        listener(change);
+      }
+    }
+    return change;
+  }
 
   /// Told every workspace row this server writes, however it was written —
   /// what `workspace_mirror.dart` copies into a test's database for the
@@ -193,9 +261,44 @@ class FakeDataServer {
           _applyRow(row);
         case final SessionDomainChange change:
           _applySession(change);
+        case final HostsDomainChange change:
+          _applyHosts(change);
       }
     }
     _tell(null, changes);
+  }
+
+  void _applyHosts(HostsDomainChange change) {
+    switch (change) {
+      case EnvironmentChanged(:final environment):
+        environmentRows._put(environment);
+      case EnvironmentRemoved(:final id):
+        if (environmentRows.getById(id) case final row?) {
+          environmentRows._remove(row);
+        }
+      case InstallationChanged(:final installation):
+        installationRows._put(installation);
+      case InstallationRemoved(:final id):
+        if (installationRows.getById(id) case final row?) {
+          installationRows._remove(row);
+        }
+      case KnownHostChanged(:final key):
+        knownHostRows._put(key);
+      case KnownHostRemoved(:final host, :final port):
+        if (knownHostRows.find(host, port) case final key?) {
+          knownHostRows._remove(key);
+        }
+      case SshHostRemoved(:final id):
+        sshHostRows._rows.remove(id);
+      case SshHostTouched() ||
+          ClaudeAccountChanged() ||
+          ClaudeAccountRemoved() ||
+          CodexAccountChanged() ||
+          CodexAccountRemoved() ||
+          UsageRecorded():
+        // Seed these through their tables; a change alone says too little.
+        break;
+    }
   }
 
   void _applySession(SessionDomainChange change) {
@@ -362,6 +465,24 @@ class FakeDataServer {
       ImportedAdd() ||
       ImportedRename() ||
       ImportedDelete() => _handleSessions(request, changes),
+      EnvironmentsList() ||
+      EnvironmentPut() ||
+      SshHostPut() ||
+      SshHostDelete() ||
+      KnownHostTrust() ||
+      KnownHostForget() ||
+      AgentsList() ||
+      InstallationsReconcile() ||
+      InstallationVersion() ||
+      InstallationSetPath() ||
+      ClaudeAccountSave() ||
+      ClaudeAccountCredentials() ||
+      ClaudeAccountDelete() ||
+      CodexAccountSave() ||
+      CodexAccountCredentials() ||
+      CodexAccountDelete() ||
+      UsageRecord() ||
+      UsageHistory() => _handleHosts(request, changes),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

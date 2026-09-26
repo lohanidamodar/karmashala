@@ -8,12 +8,13 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/usage.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_usage_section.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Why there is no number, in words the user can act on.**
 ///
@@ -30,7 +31,8 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    FakeDataServer().mirrorInto(db);
+    mirroredServer(db).environmentRows.upsert(windowsEnv());
     clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);
   });
@@ -41,6 +43,7 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await mirroredServer(db).override(),
           clockProvider.overrideWithValue(clock),
           agentUsageServiceProvider.overrideWithValue(service),
         ],

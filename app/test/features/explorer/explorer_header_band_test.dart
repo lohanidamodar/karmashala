@@ -6,10 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/environment_rows.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
@@ -42,7 +40,7 @@ void main() {
   late FakeDataServer server;
 
   void seed() {
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     for (final (id, name) in [('w1', 'Client work'), ('w2', 'Game dev')]) {
       server.workspaceRows.insert(
         Workspace(id: id, name: name, createdAt: testTime),
@@ -69,7 +67,7 @@ void main() {
         ),
       )
       ..insert(project(id: 'p3', name: 'scratch', path: r'C:\src\scratch'));
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
   }
 
   setUp(() {

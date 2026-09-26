@@ -6,9 +6,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/frame_yield.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -72,10 +70,10 @@ final _clients = Expando<DataClient>();
 Future<AppDatabase> seededDatabase() async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: 'sharing'));
+  server.installationRows.insert(agentInstallation(agentId: 'sharing'));
   _clients[db] = await server.connect();
   return db;
 }

@@ -1,7 +1,5 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/delivery_attention.dart';
@@ -153,11 +151,11 @@ void main() {
 
     setUp(() {
       db = AppDatabase.memory();
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       server = FakeDataServer().mirrorInto(db)
+        ..environmentRows.upsert(windowsEnv())
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       mirroredServer(db).sessionRows.insert(
         Session(
           id: 's1',

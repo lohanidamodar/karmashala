@@ -1,6 +1,5 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
 import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
@@ -200,7 +199,7 @@ void main() {
     /// `resultsFor` returns nothing without one, and the button stays off.
     AppDatabase seedMergeable(String? producerSessionId) {
       final db = seedDatabase(merged: false, server: server);
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       mirroredServer(
         db,
       ).sessionRows.insert(session(id: 's-win', title: 'The winner'));

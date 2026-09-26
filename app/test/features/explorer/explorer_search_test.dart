@@ -1,7 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,8 +14,8 @@ void main() {
   testWidgets('filters the project tree by the search query', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'))
       ..insert(project(id: 'p2', name: 'Beta', path: r'C:\src\beta'));
@@ -52,8 +51,8 @@ void main() {
     (tester) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final server = FakeDataServer();
+      server.environmentRows.upsert(windowsEnv());
       for (var i = 0; i < 80; i++) {
         final n = '$i'.padLeft(2, '0');
         server.projectRows.insert(

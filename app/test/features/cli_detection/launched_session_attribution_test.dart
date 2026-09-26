@@ -1,9 +1,7 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/launched_session_attribution_service.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +11,8 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 
 /// Learning which Codex conversation a session **we launched** is on.
 ///
@@ -29,6 +29,8 @@ import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 /// store. This service is the something.
 void main() {
   late AppDatabase db;
+  late EnvironmentsData environments;
+  late AgentInstallationsData installations;
   late FakeSessionRows dao;
   late SessionsData sessions;
   late WorkspaceData workspace;
@@ -41,15 +43,17 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    environments = EnvironmentsData(await server.connect());
+    installations = AgentInstallationsData(await server.connect());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     workspace = await workspaceOf(server);
-    AgentInstallationDao(db).insert(agentInstallation(agentId: AgentIds.codex));
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
+    server.installationRows.insert(agentInstallation(agentId: AgentIds.codex));
+    server.installationRows.insert(
+      agentInstallation(id: 'a2', agentId: AgentIds.claudeCode),
+    );
     dao = server.sessionRows;
     sessions = await sessionsOf(server);
     addTearDown(db.close);
@@ -100,9 +104,9 @@ void main() {
   LaunchedSessionAttributionService service(List<DetectedSession> detected) =>
       LaunchedSessionAttributionService(
         sessionDao: sessions,
-        installationDao: AgentInstallationDao(db),
+        installationDao: installations,
         workspace: workspace,
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentDao: environments,
         agents: AgentRegistry.builtIn,
         scanStores: () async => detected,
       );
@@ -124,9 +128,9 @@ void main() {
     final seen = <String, String>{};
     final subject = LaunchedSessionAttributionService(
       sessionDao: sessions,
-      installationDao: AgentInstallationDao(db),
+      installationDao: installations,
       workspace: workspace,
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: environments,
       agents: AgentRegistry.builtIn,
       scanStores: () async => [codexSession(conversation)],
       onAttributed: (session, id) => seen[session.id] = id,
@@ -263,9 +267,9 @@ void main() {
     insert();
     final subject = LaunchedSessionAttributionService(
       sessionDao: sessions,
-      installationDao: AgentInstallationDao(db),
+      installationDao: installations,
       workspace: workspace,
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: environments,
       agents: AgentRegistry.builtIn,
       scanStores: () async => throw const FileSystemException$('unreadable'),
     );

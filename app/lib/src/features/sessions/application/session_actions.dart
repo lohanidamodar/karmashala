@@ -65,7 +65,7 @@ class SessionActions {
     final externalId = session?.externalSessionId;
     if (session == null || externalId == null) return 'no-conversation';
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return 'no-installation';
     final mutator = _ref.read(cliSessionMutatorProvider);
@@ -120,7 +120,7 @@ class SessionActions {
           .read(workspaceDataProvider)
           .repository(session.repositoryId);
       final installation = _ref
-          .read(agentInstallationDaoProvider)
+          .read(agentInstallationsDataProvider)
           .getById(session.agentInstallationId);
       if (repo == null || installation == null) {
         throw StateError('The session repository or agent is unavailable.');
@@ -162,7 +162,7 @@ class SessionActions {
   /// Where this session's CLI store would live: the directory it runs in, or
   /// failing that its repository's.
   ExecutionEnvironment? _environmentOf(Session session, Repository repo) => _ref
-      .read(executionEnvironmentDaoProvider)
+      .read(environmentsDataProvider)
       .getById(
         session.workingDirectory?.environmentId ?? repo.path.environmentId,
       );
@@ -246,7 +246,7 @@ class SessionActions {
     // Resolved before the first await: this may outlive the container that
     // started it, and a provider read afterwards would throw.
     final mutator = _ref.read(cliSessionMutatorProvider);
-    final installations = _ref.read(agentInstallationDaoProvider);
+    final installations = _ref.read(agentInstallationsDataProvider);
 
     final targets = <DetectedSession>[for (final s in imported) _toDetected(s)];
     final failures = <CliDeleteFailure>[];
@@ -340,7 +340,7 @@ class SessionActions {
       );
     }
     final installs = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(session.environmentId)
         .where((i) => i.agentId == session.cli)
         .toList();
@@ -424,7 +424,7 @@ class SessionActions {
         throw StateError('The session\'s repository is no longer available.');
       }
       final installation = _ref
-          .read(agentInstallationDaoProvider)
+          .read(agentInstallationsDataProvider)
           .getById(session.agentInstallationId);
       if (installation == null) {
         throw StateError(
@@ -536,7 +536,7 @@ class SessionActions {
       throw StateError('This session\'s repository is no longer available.');
     }
     final installs = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(session.environmentId)
         .where((i) => i.agentId == session.cli)
         .toList();
@@ -579,7 +579,7 @@ class SessionActions {
       throw StateError('This session\'s repository is no longer available.');
     }
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) {
       throw StateError('The agent for this session is not installed.');
@@ -621,7 +621,7 @@ class SessionActions {
             .read(projectsControllerProvider.notifier)
             .ensureRunLocation(projectId);
     final installs = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(repo.path.environmentId);
     if (installs.isEmpty) {
       throw StateError(
@@ -674,7 +674,7 @@ class SessionActions {
         .resolveFor(repo.path)
         .require;
     final installs = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(session.environmentId)
         .where((i) => i.agentId == session.cli)
         .toList();
@@ -711,7 +711,7 @@ class SessionActions {
       throw StateError('This session no longer exists.');
     }
     final installationForGuard = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     _ref
         .read(sessionLauncherProvider)
@@ -729,7 +729,7 @@ class SessionActions {
       throw StateError('The session\'s repository is no longer available.');
     }
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) {
       throw StateError(
@@ -849,7 +849,7 @@ class SessionActions {
           if (firstUserMessage.isNotEmpty) break;
         }
       }
-      final environmentDao = _ref.read(executionEnvironmentDaoProvider);
+      final environmentDao = _ref.read(environmentsDataProvider);
       final environments = environmentDao.getAll();
       final stores = await _ref
           .read(cliStoreLocatorProvider)
@@ -921,7 +921,7 @@ class SessionActions {
   Future<Map<(String, String), DetectedSession>> _detectedByKey(
     Set<(String, String)> wanted,
   ) async {
-    final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = _ref.read(environmentsDataProvider).getAll();
     final stores = await _ref
         .read(cliStoreLocatorProvider)
         .locate(environments);

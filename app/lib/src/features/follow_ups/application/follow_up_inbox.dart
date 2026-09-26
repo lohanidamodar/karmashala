@@ -54,7 +54,8 @@ List<InboxItem> _openFollowUpItems(Ref ref) {
       session.id: session,
   };
   final agentIdByInstallation = {
-    for (final installation in ref.read(agentInstallationDaoProvider).getAll())
+    for (final installation
+        in ref.read(agentInstallationsDataProvider).getAll())
       installation.id: installation.agentId,
   };
 

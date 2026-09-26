@@ -11,7 +11,7 @@ extension SessionStartVerbs on SessionLauncher {
       throw StateError('This session no longer exists.');
     }
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) {
       throw StateError(

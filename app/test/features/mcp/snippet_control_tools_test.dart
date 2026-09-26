@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
@@ -18,6 +16,8 @@ import 'package:path/path.dart' as p;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import 'package:agent_cli/process.dart';
 
 /// The snippet tools, called over the real MCP endpoint and checked against the
 /// pane they were supposed to have typed into.
@@ -38,10 +38,13 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_snippet_tools_');
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    final data =
+        await (FakeDataServer()
+              ..environmentRows.upsert(localHostEnvironment(testTime)))
+            .override();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(data: data, database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );

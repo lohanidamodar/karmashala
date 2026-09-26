@@ -3,8 +3,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
@@ -20,17 +19,17 @@ import '../../support/fake_data_server.dart';
 
 void main() {
   late AppDatabase db;
-  late ExecutionEnvironmentDao environments;
-  late SshHostDao hosts;
   late FakeDataServer server;
+  late FakeHostRows<ExecutionEnvironment> environments;
+  late FakeHostRows<SshHost> hosts;
 
   setUp(() {
     db = AppDatabase.memory();
     server = FakeDataServer();
-    environments = ExecutionEnvironmentDao(db);
+    environments = server.environmentRows;
     environments.upsert(windowsEnv());
     environments.upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
-    hosts = SshHostDao(db);
+    hosts = server.sshHostRows;
   });
   tearDown(() => db.close());
 

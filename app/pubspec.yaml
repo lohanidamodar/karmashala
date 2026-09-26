@@ -62,6 +62,11 @@ dependencies:
   # through — the server answers it; `lib/src/core/data/` is the client.
   karmashala_data_protocol:
     path: ../packages/karmashala_data_protocol
+  # Environments, SSH hosts, trusted host keys, agent installations, saved
+  # accounts and usage history: the values and the rules every copy follows.
+  # The tables are the server's (`store.dart`, never imported here).
+  karmashala_environments:
+    path: ../packages/karmashala_environments
   # Notes and the todo list: the values and the rules every copy follows. The
   # tables are the server's (`store.dart`, never imported here).
   karmashala_notes:

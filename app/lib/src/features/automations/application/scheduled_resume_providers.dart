@@ -131,7 +131,7 @@ class ResumeUsageAccess {
 
 ResumeUsageAccess resumeUsageAccess(Ref ref, Session session) {
   final installation = ref
-      .read(agentInstallationDaoProvider)
+      .read(agentInstallationsDataProvider)
       .getById(session.agentInstallationId);
   if (installation == null) {
     return const ResumeUsageAccess(
@@ -156,7 +156,7 @@ ResumeUsageAccess resumeUsageAccess(Ref ref, Session session) {
     );
   }
   final environment = ref
-      .read(executionEnvironmentDaoProvider)
+      .read(environmentsDataProvider)
       .getById(installation.environmentId);
   if (environment == null || !cliStoreIsReachable(environment.kind)) {
     return ResumeUsageAccess(

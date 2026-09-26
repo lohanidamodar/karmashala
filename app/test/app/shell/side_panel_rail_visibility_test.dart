@@ -7,8 +7,6 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
@@ -19,6 +17,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'package:agent_cli/process.dart';
 
 /// Hiding surfaces from the side panel's rail, the way VS Code's activity bar
 /// does it: a right-click lists every surface with a check, a hidden one stays
@@ -31,7 +30,9 @@ void main() {
     commandKeyIsMeta = false;
     server = FakeDataServer();
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
   });
   tearDown(() {
     commandKeyIsMeta = false;

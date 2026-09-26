@@ -2,10 +2,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
@@ -61,12 +59,12 @@ harness({
 }) async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db)
+  server.environmentRows
     ..upsert(windowsEnv())
     ..upsert(wslEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
+  server.installationRows.insert(agentInstallation(agentId: 'roverCli'));
 
   // The same process-free terminal the controller's own tests use, so the pane
   // behaviour exercised here is not a second, friendlier fake.
@@ -414,9 +412,9 @@ void main() {
     final claudeHarness = await harness(registry: AgentRegistry.builtIn);
     addTearDown(claudeHarness.db.close);
     addTearDown(claudeHarness.container.dispose);
-    AgentInstallationDao(
-      claudeHarness.db,
-    ).insert(agentInstallation(id: 'i2', agentId: AgentIds.claudeCode));
+    mirroredServer(claudeHarness.db).installationRows.insert(
+      agentInstallation(id: 'i2', agentId: AgentIds.claudeCode),
+    );
     final claudeLauncher = claudeHarness.container.read(
       sessionLauncherProvider,
     );
@@ -453,9 +451,9 @@ void main() {
     final h = await harness(registry: AgentRegistry.builtIn);
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    AgentInstallationDao(
-      h.db,
-    ).insert(agentInstallation(id: 'i2', agentId: AgentIds.claudeCode));
+    mirroredServer(h.db).installationRows.insert(
+      agentInstallation(id: 'i2', agentId: AgentIds.claudeCode),
+    );
 
     final launched = await h.container
         .read(sessionLauncherProvider)

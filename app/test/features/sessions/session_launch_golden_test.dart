@@ -54,12 +54,10 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/session_mcp.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -210,7 +208,7 @@ void main() {
         EnvironmentPath(environmentId: env.id, path: path);
 
     for (final env in environments) {
-      ExecutionEnvironmentDao(db).upsert(env.environment);
+      server.environmentRows.upsert(env.environment);
       server.projectRows.insert(
         Project(
           id: env.projectId,
@@ -229,7 +227,7 @@ void main() {
         ),
       );
       for (final agentId in AgentIds.builtIn) {
-        AgentInstallationDao(db).insert(
+        server.installationRows.insert(
           AgentInstallation(
             id: 'i-$agentId-${env.id}',
             agentId: agentId,
@@ -293,7 +291,7 @@ void main() {
     Repository repositoryIn(_Env env) =>
         server.repositoryRows.getById(env.repositoryId)!;
     AgentInstallation installationOf(String agentId, _Env env) =>
-        AgentInstallationDao(db).getById('i-$agentId-${env.id}')!;
+        server.installationRows.getById('i-$agentId-${env.id}')!;
 
     /// The row as it stands after a launch — every field a launch decides.
     Map<String, Object?> rowOf(String sessionId) {
@@ -667,7 +665,7 @@ void main() {
       ),
     );
     await refuses('an opening message the CLI cannot take', () {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         AgentInstallation(
           id: 'i-mute-windows',
           agentId: 'muteCli',
@@ -678,7 +676,7 @@ void main() {
       return launcher.launch(
         SessionLaunchRequest(
           repository: repositoryIn(windows),
-          installation: AgentInstallationDao(db).getById('i-mute-windows')!,
+          installation: server.installationRows.getById('i-mute-windows')!,
           title: 'Mute',
           purpose: SessionPurpose.newSession,
           firstMessage: 'this would be dropped',

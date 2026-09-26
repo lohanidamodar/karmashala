@@ -1,6 +1,4 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/repositories/application/checkout_retirement_service.dart';
@@ -44,9 +42,9 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windows);
     server = FakeDataServer()..projectRows.insert(project());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.environmentRows.upsert(windows);
+    server.installationRows.insert(agentInstallation());
   });
   tearDown(() => db.close());
 
@@ -158,7 +156,7 @@ void main() {
   test('leaves a same-path checkout in another environment alone', () async {
     // `/src/demo/app` inside a WSL distro is not `C:\src\demo\app`, however the
     // strings compare.
-    ExecutionEnvironmentDao(db).upsert(wslEnv());
+    server.environmentRows.upsert(wslEnv());
     server.repositoryRows.insert(
       repository(id: 'r8', environmentId: 'wsl:Ubuntu', path: '/src/demo/app'),
     );

@@ -30,7 +30,7 @@ final sessionDirectoryPresentProvider =
     Provider<bool Function(EnvironmentPath directory)>((ref) {
       return (directory) {
         try {
-          final environments = ref.read(executionEnvironmentDaoProvider);
+          final environments = ref.read(environmentsDataProvider);
           final env = environments.getById(directory.environmentId);
           if (env == null) return true;
           var resolved = directory.path;

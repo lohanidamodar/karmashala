@@ -85,7 +85,7 @@ class SessionHandoffService {
         .read(workspaceDataProvider)
         .repository(session.repositoryId);
     if (repo == null) return const [];
-    final installations = _ref.read(agentInstallationDaoProvider);
+    final installations = _ref.read(agentInstallationsDataProvider);
     final sourceAgentId = installations
         .getById(session.agentInstallationId)
         ?.agentId;
@@ -140,7 +140,7 @@ class SessionHandoffService {
       return SessionForkPlan.decide(descriptor: null, agentName: 'this agent');
     }
     final agentId = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     final registry = _ref.read(agentRegistryProvider);
@@ -171,7 +171,7 @@ class SessionHandoffService {
     if (session == null) throw StateError('This session no longer exists.');
     final registry = _ref.read(agentRegistryProvider);
     final agentId = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     final sourceName = agentId == null
@@ -411,7 +411,7 @@ class SessionHandoffService {
     final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     final agentId = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
 
@@ -740,7 +740,7 @@ class SessionHandoffService {
       throw StateError('This session\'s repository is no longer available.');
     }
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(installationId);
     if (installation == null) {
       throw StateError(

@@ -5,7 +5,7 @@ import 'dart:math' as math;
 
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
-import '../../agents/data/agent_installation_dao.dart';
+import '../../agents/data/agents_data.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -29,7 +29,7 @@ class WatchedSessionLoader {
 
   final SessionsData sessionDao;
   final ImportedSessionsData importedSessionDao;
-  final AgentInstallationDao installationDao;
+  final AgentInstallationsData installationDao;
   final AgentHookReports hookReports;
   final Clock clock;
 

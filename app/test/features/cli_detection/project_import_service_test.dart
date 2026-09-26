@@ -2,7 +2,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,8 +39,8 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     final client = await server.connect();
     importedDao = ImportedSessionsData(client, SessionsData(client));
     service = ProjectImportService(

@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/inventory_tools.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
@@ -25,13 +23,11 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     index = ConversationIndexDao(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final fake = FakeDataServer()..mirrorInto(db);
+    fake.environmentRows.upsert(windowsEnv());
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    fake.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

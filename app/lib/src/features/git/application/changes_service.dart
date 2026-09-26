@@ -1,6 +1,6 @@
 import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/data/environments_data.dart';
 import 'package:karmashala_git/git.dart';
 
 /// Notified with a repository whose working tree this service has just
@@ -18,7 +18,7 @@ class ChangesService {
   });
 
   final CommandRunnerFactory runnerFactory;
-  final ExecutionEnvironmentDao environmentDao;
+  final EnvironmentsData environmentDao;
 
   /// The filesystem [originFacts] reads `.git` through. A seam so a test can
   /// count the reads without a disk; see [GitFiles].

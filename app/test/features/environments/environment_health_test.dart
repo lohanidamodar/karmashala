@@ -1,15 +1,15 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 
 /// Whether an execution environment can actually be used: can we run git in it,
@@ -18,16 +18,16 @@ import '../../support/fixtures.dart';
 /// Untested until Loop 48, which matters because this is the screen a user
 /// reads when *nothing works* — its job is to be right about why.
 void main() {
-  late AppDatabase db;
-  late ExecutionEnvironmentDao environments;
-  late AgentInstallationDao installations;
+  late DataClient db;
+  late FakeHostRows<ExecutionEnvironment> environments;
+  late FakeHostRows<AgentInstallation> installations;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    environments = ExecutionEnvironmentDao(db);
-    installations = AgentInstallationDao(db);
+  setUp(() async {
+    final server = FakeDataServer();
+    db = await server.connect();
+    environments = server.environmentRows;
+    installations = server.installationRows;
   });
-  tearDown(() => db.close());
 
   EnvironmentHealthService serviceWith(ProviderContainer container) =>
       container.read(environmentHealthServiceProvider);
@@ -245,14 +245,14 @@ void main() {
   );
 }
 
-/// A container over the seeded database whose every environment runs commands
+/// A container over the seeded server whose every environment runs commands
 /// through [factory].
 ProviderContainer _container(
-  AppDatabase db,
+  DataClient data,
   FakeCommandRunnerFactory factory,
 ) => ProviderContainer(
   overrides: [
-    databaseProvider.overrideWithValue(db),
+    dataClientProvider.overrideWithValue(data),
     commandRunnerFactoryProvider.overrideWithValue(factory),
   ],
 );

@@ -1,5 +1,4 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/projects/application/project_service.dart';
@@ -28,11 +27,11 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
+    server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv(id: localHostEnvironmentId))
       ..upsert(wslEnv())
       ..upsert(sshEnvFixture());
-    server = FakeDataServer();
     workspace = await workspaceOf(server);
     discovery = FakeRepositoryDiscoveryService();
   });

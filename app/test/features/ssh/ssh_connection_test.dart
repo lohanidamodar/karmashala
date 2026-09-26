@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_hosts_data.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -28,10 +28,11 @@ SshHost host({
 );
 
 void main() {
-  late AppDatabase db;
+  late KnownHostsData knownHosts;
 
-  setUp(() => db = AppDatabase.memory());
-  tearDown(() => db.close());
+  setUp(() async {
+    knownHosts = KnownHostsData(await FakeDataServer().connect());
+  });
 
   SshConnection connection({
     SshHost? on,
@@ -43,7 +44,7 @@ void main() {
     return SshConnection(
       host: target,
       verifier: SshHostKeyVerifier(
-        knownHosts: KnownHostDao(db),
+        knownHosts: knownHosts,
         host: target.host,
         port: target.port,
         clock: FixedClock(testTime),

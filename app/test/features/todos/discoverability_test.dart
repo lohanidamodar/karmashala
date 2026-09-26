@@ -5,8 +5,6 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/note_drafts.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
@@ -14,9 +12,9 @@ import 'package:karmashala_ui/code.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:agent_cli/process.dart';
 
 /// **Can somebody who has never read the code find where to write one?**
 ///
@@ -49,12 +47,12 @@ void main() {
   Future<ProviderContainer> pumpApp(WidgetTester tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    final data =
+        await (FakeDataServer()
+              ..environmentRows.upsert(localHostEnvironment(testTime)))
+            .override();
     final container = ProviderContainer(
-      overrides: [
-        ...fakeTerminalOverrides(database: db),
-        await FakeDataServer().override(),
-      ],
+      overrides: [...fakeTerminalOverrides(data: data, database: db)],
     );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);

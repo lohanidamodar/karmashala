@@ -1,12 +1,9 @@
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,11 +87,13 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     server.sessionRows.insert(session(id: 's1'));
     trees = ['tree1', 'tree2', 'tree3', 'tree4'];
     ids = 0;
@@ -109,7 +108,7 @@ void main() {
             runnerFactory: FakeCommandRunnerFactory(
               fallback: FakeCommandRunner(responder: respond),
             ),
-            environmentOf: ExecutionEnvironmentDao(db).getById,
+            environmentOf: server.environmentRows.getById,
             dao: CheckpointDao(db),
             clock: FixedClock(testTime),
             newId: () => 'ckpt${++ids}',

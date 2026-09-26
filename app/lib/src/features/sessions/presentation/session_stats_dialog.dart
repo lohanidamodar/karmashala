@@ -435,7 +435,7 @@ class SessionStatsButton extends ConsumerWidget {
     final session = ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return false;
     final agentId = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     if (agentId == null) return false;

@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
@@ -22,10 +20,10 @@ void main() {
     final db = AppDatabase.memory();
     final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation(agentId: AgentIds.codex));
+    server.installationRows.insert(agentInstallation(agentId: AgentIds.codex));
     mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',

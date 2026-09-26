@@ -9,9 +9,7 @@ import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_path_repair_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -33,7 +31,7 @@ void main() {
   setUp(() {
     server = FakeDataServer();
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
   });
   tearDown(() => db.close());
 
@@ -75,9 +73,7 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
       final probe = FakePathProbe(
         files: const {_real},
         links: const {_storedDir: _release},
@@ -105,7 +101,7 @@ void main() {
 
       expect(probe.queries, isNotEmpty);
       expect(container.read(agentPathRepairProvider).hasChecked, isTrue);
-      expect(AgentInstallationDao(db).getAll().single.executable.path, _real);
+      expect(server.installationRows.getAll().single.executable.path, _real);
     });
 
     test('a gate that throws still gets the paths checked', () async {
@@ -116,9 +112,7 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
       final probe = FakePathProbe(
         files: const {_real},
         links: const {_storedDir: _release},
@@ -133,7 +127,7 @@ void main() {
       );
 
       expect(container.read(agentPathRepairProvider).hasChecked, isTrue);
-      expect(AgentInstallationDao(db).getAll().single.executable.path, _real);
+      expect(server.installationRows.getAll().single.executable.path, _real);
     });
 
     test(
@@ -141,9 +135,7 @@ void main() {
       () async {
         // That launch's own first-run scan is writing the rows this would be
         // checking; racing it would probe everything twice.
-        AgentInstallationDao(
-          db,
-        ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+        server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
         final probe = FakePathProbe();
         final runner = FakeCommandRunner();
         final container = await scoped(probe: probe, runner: runner);
@@ -161,9 +153,7 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
       final probe = FakePathProbe(files: const {_real});
       final container = await scoped(
         probe: probe,
@@ -194,9 +184,7 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
       final probe = FakePathProbe(files: const {_real});
       final runner = FakeCommandRunner(
         responder: (_) =>
@@ -220,7 +208,7 @@ void main() {
       // One process, for the executable already on record — the row's version
       // was undated, which is every row written before v40.
       expect(runner.requests.single.executable, _real);
-      expect(AgentInstallationDao(db).getById('a1')!.version, '0.153.4');
+      expect(server.installationRows.getById('a1')!.version, '0.153.4');
     });
 
     test('runs once per launch however many callers ask', () async {
@@ -228,9 +216,7 @@ void main() {
         MetadataKeys.agentsDiscoveredAt,
         '2026-07-28T00:00:00Z',
       );
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+      server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
       final runner = FakeCommandRunner(
         responder: (_) =>
             const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
@@ -254,9 +240,7 @@ void main() {
     test(
       'a workspace that has never discovered leaves it to the first run',
       () async {
-        AgentInstallationDao(
-          db,
-        ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+        server.installationRows.insert(agentInstallation(agentId: AgentIds.codex, path: _real));
         final runner = FakeCommandRunner(
           responder: (_) => fail('the first-run scan is writing these rows'),
         );

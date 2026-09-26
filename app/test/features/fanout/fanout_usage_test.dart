@@ -10,11 +10,9 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_usage_strip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -53,17 +51,14 @@ AgentUsage windowAt(
   fetchedAt: testTime,
 );
 
-/// The workspace the dialog reads: one project with its checkout `r1`.
-Future<Override> seededWorkspace() =>
-    (FakeDataServer()
-          ..projectRows.insert(project())
-          ..repositoryRows.insert(repository()))
-        .override();
-
-AppDatabase seeded() {
-  final db = AppDatabase.memory();
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  AgentInstallationDao(db)
+/// The workspace the dialog reads — one project with its checkout `r1` — and
+/// the two agents installed on this machine.
+Future<Override> seededWorkspace() {
+  final server = FakeDataServer()
+    ..environmentRows.upsert(windowsEnv())
+    ..projectRows.insert(project())
+    ..repositoryRows.insert(repository());
+  server.installationRows
     ..insert(agentInstallation(id: 'a1', agentId: AgentIds.claudeCode))
     ..insert(
       agentInstallation(
@@ -72,8 +67,10 @@ AppDatabase seeded() {
         path: r'C:\Users\me\.bin\codex.exe',
       ),
     );
-  return db;
+  return server.override();
 }
+
+AppDatabase seeded() => AppDatabase.memory();
 
 typedef UsageLookup = FutureOr<AgentUsage> Function(AgentInstallation);
 

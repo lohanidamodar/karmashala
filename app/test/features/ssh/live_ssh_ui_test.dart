@@ -3,17 +3,11 @@ library;
 
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_prompt_host.dart';
@@ -23,6 +17,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+
+import '../../support/fake_data_server.dart';
+import 'package:agent_cli/process.dart';
 
 /// The whole feature, driven through its actual widgets, against a **real**
 /// SSH server.
@@ -58,25 +56,26 @@ void main() {
     return;
   }
 
-  late AppDatabase db;
-  late KnownHostDao known;
-  late SshHostDao hosts;
-  late AgentInstallationDao installations;
+  late FakeDataServer server;
+  late Override data;
+  late FakeHostRows<KnownHostKey> known;
+  late FakeHostRows<SshHost> hosts;
+  late FakeHostRows<AgentInstallation> installations;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    known = KnownHostDao(db);
-    hosts = SshHostDao(db);
-    installations = AgentInstallationDao(db);
+  setUp(() async {
+    server = FakeDataServer()
+      ..environmentRows.upsert(localHostEnvironment(testTime));
+    data = await server.override();
+    known = server.knownHostRows;
+    hosts = server.sshHostRows;
+    installations = server.installationRows;
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester, Widget body) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         ],

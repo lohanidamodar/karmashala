@@ -11,10 +11,8 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,24 +91,15 @@ Harness harness({
   Set<String> paneFailsFor = const {},
   CommandResult Function(CommandRequest request)? git,
 
-  /// Where the project and repository are seeded (a fresh one when omitted);
-  /// mirrored into the database for the session rows' foreign keys.
-  FakeDataServer? server,
+  /// Where the project, repository, environment and installations are
+  /// seeded; mirrored into the database for the session rows' foreign keys.
+  required FakeDataServer server,
 
-  /// A client of [server] for the container to read the workspace through —
-  /// see [connectedHarness]. Without one the container's data client is the
-  /// unavailable default.
-  DataClient? client,
+  /// A client of [server] for the container to read through.
+  required DataClient client,
 }) {
   final db = AppDatabase.memory();
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  final data = (server ?? FakeDataServer()).mirrorInto(db)
-    ..projectRows.insert(project())
-    ..repositoryRows.insert(repository());
-  AgentInstallationDao(db)
-    ..insert(roverInstall)
-    ..insert(flakyInstall)
-    ..insert(secondRoverInstall);
+  final data = server.mirrorInto(db);
 
   final runner = FakeCommandRunner(
     responder:
@@ -122,7 +111,7 @@ Harness harness({
 
   final container = ProviderContainer(
     overrides: [
-      if (client != null) dataClientProvider.overrideWithValue(client),
+      dataClientProvider.overrideWithValue(client),
       ...fakeTerminalOverrides(
         database: db,
         instanceFactory: paneFailsFor.isEmpty
@@ -179,6 +168,13 @@ Future<Harness> connectedHarness({
   CommandResult Function(CommandRequest request)? git,
 }) async {
   final server = FakeDataServer(clock: () => testTime);
+  server.environmentRows.upsert(windowsEnv());
+  server.projectRows.insert(project());
+  server.repositoryRows.insert(repository());
+  server.installationRows
+    ..insert(roverInstall)
+    ..insert(flakyInstall)
+    ..insert(secondRoverInstall);
   return harness(
     paneFailsFor: paneFailsFor,
     git: git,

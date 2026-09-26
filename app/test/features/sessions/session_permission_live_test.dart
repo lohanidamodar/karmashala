@@ -7,9 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/pending_live_switches.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -45,7 +43,7 @@ void main() {
     idle = StreamController<String>.broadcast();
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
   });
@@ -57,7 +55,7 @@ void main() {
   });
 
   Future<ProviderContainer> build(String agentId) async {
-    AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+    server.installationRows.insert(agentInstallation(agentId: agentId));
     return container = ProviderContainer(
       overrides: [
         await server.override(),

@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'package:karmashala/src/features/mcp/mcp_session_token_reaper.dart';
@@ -37,11 +35,11 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final fake = FakeDataServer()..mirrorInto(db);
+    fake.environmentRows.upsert(windowsEnv());
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    fake.installationRows.insert(agentInstallation());
     sessions = fake.sessionRows;
     container = ProviderContainer(
       overrides: [

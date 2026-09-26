@@ -4,9 +4,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/general_pages.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_prompt_controller.dart';
@@ -28,6 +25,7 @@ import '../support/fixtures.dart';
 import '../support/window_matrix.dart';
 import '../support/fake_data_server.dart';
 import '../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// The six dialogs `minimum_window_matrix_test.dart` did not reach.
 ///
@@ -213,15 +211,17 @@ void main() {
   testWidgets('QuickOpen with results to show', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     // Sessions are still in the database, and their foreign keys reach the
     // workspace rows the server holds.
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     // A session row points at an agent installation; without one the insert
     // fails the foreign key rather than the layout.
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     final sessions = mirroredServer(db).sessionRows;
     for (var i = 0; i < 6; i++) {
       sessions.insert(

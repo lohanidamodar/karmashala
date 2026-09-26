@@ -41,7 +41,7 @@ class SystemHealthService {
   };
 
   Future<List<SystemCheck>> checkAll() async {
-    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = ref.read(environmentsDataProvider).getAll();
     final results = await Future.wait([
       _guard(SystemCheckId.mcpBridge, 'MCP bridge', _checkMcpBridge),
       _guard(

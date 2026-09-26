@@ -33,7 +33,7 @@ final agentUsageServiceProvider = Provider<AgentUsageService>((ref) {
 final agentUsageProvider = FutureProvider.autoDispose
     .family<AgentUsage, AgentInstallation>((ref, installation) {
       final service = ref.watch(agentUsageServiceProvider);
-      final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
+      final environments = ref.watch(environmentsDataProvider).getAll();
       return service.fetch(installation, environments);
     }, retry: (_, _) => null);
 

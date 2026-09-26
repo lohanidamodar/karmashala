@@ -1,7 +1,7 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
@@ -40,9 +40,10 @@ void main() {
       request.arguments.skip(2).toList(),
   ];
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    final envDao = ExecutionEnvironmentDao(db)..upsert(windowsEnv());
+    final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    final envDao = EnvironmentsData(await server.connect());
     streams = {};
     answers = {};
     runner = FakeCommandRunner(
@@ -354,6 +355,7 @@ void main() {
     test('defaults to starting at once, and a wait survives a save', () {
       final dao = WorktreeSetupDao(db);
       final server = FakeDataServer()..mirrorInto(db);
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       final now = DateTime.utc(2026, 9, 21);

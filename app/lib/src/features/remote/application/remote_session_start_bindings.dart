@@ -47,7 +47,7 @@ Future<RemoteSessionStarted> startRemoteSession(
     );
   }
   final installation = ref
-      .read(agentInstallationDaoProvider)
+      .read(agentInstallationsDataProvider)
       .getById(request.installationId);
   if (installation == null) {
     throw const RemoteApiRefusal(
@@ -133,7 +133,7 @@ Future<RemoteSessionStarted> resumeRemoteSession(
         .read(workspaceDataProvider)
         .repository(native.repositoryId);
     final installation = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(native.agentInstallationId);
     if (repository == null || installation == null) {
       throw const RemoteApiRefusal(

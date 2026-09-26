@@ -1,35 +1,35 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_core/testing.dart';
 import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_path_repair_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_path_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 
 const _stored = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe';
 const _claude = r'C:\Users\d\.local\bin\claude.exe';
 
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late ProviderContainer container;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  setUp(() async {
+    server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
+    client = await server.connect();
   });
   tearDown(() {
     container.dispose();
-    db.close();
   });
 
   Future<void> pumpSection(
@@ -40,7 +40,7 @@ void main() {
   }) async {
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         pathProbeProvider.overrideWithValue(FakePathProbe()),
         clockProvider.overrideWithValue(FixedClock(now ?? testTime)),
       ],
@@ -64,15 +64,15 @@ void main() {
 
   AgentPathReading readingFor(String path, ExecutableReachability level) =>
       AgentPathReading(
-        installation: AgentInstallationDao(db).getAll().single,
+        installation: server.installationRows.getAll().single,
         displayName: 'Codex CLI',
         reading: ExecutableReading(path: path, reachability: level),
       );
 
   testWidgets('says nothing has been checked before a check runs', (t) async {
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.codex, path: _stored),
+    );
     await pumpSection(t);
 
     // §19: an unobserved state is not a healthy one.
@@ -82,9 +82,9 @@ void main() {
   testWidgets('an unreachable path reads differently from a missing one', (
     t,
   ) async {
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.codex, path: _stored),
+    );
     await pumpSection(
       t,
       report: AgentPathRepairReport(
@@ -101,9 +101,9 @@ void main() {
   });
 
   testWidgets('a missing path says to install it or set the path', (t) async {
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.codex, path: _stored),
+    );
     await pumpSection(
       t,
       report: AgentPathRepairReport(
@@ -119,7 +119,7 @@ void main() {
   testWidgets('each row says whether it was detected or set by hand', (
     t,
   ) async {
-    final dao = AgentInstallationDao(db)
+    final dao = server.installationRows
       ..insert(
         agentInstallation(
           id: 'auto',
@@ -134,7 +134,7 @@ void main() {
           path: r'C:\mine\claude.exe',
         ),
       );
-    dao.updatePath('mine', r'C:\mine\claude.exe', byUser: true);
+    dao.upsert(dao.getById('mine')!.copyWith(executableByUser: true));
     await pumpSection(t);
 
     // Without this the user cannot tell why a repair did or did not touch a
@@ -146,7 +146,7 @@ void main() {
   testWidgets('typing a path stores it, marked as the user\'s choice', (
     t,
   ) async {
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       agentInstallation(
         id: 'codex-row',
         agentId: AgentIds.codex,
@@ -157,9 +157,9 @@ void main() {
 
     await t.enterText(find.byType(TextField), r'C:\chosen\codex.exe');
     await t.tap(find.widgetWithText(OutlinedButton, 'Save'));
-    await t.pump();
+    await t.pumpAndSettle();
 
-    final row = AgentInstallationDao(db).getById('codex-row')!;
+    final row = server.installationRows.getById('codex-row')!;
     expect(row.executable.path, r'C:\chosen\codex.exe');
     expect(row.executableByUser, isTrue);
     expect(find.text('set by you'), findsOneWidget);
@@ -168,7 +168,7 @@ void main() {
   testWidgets('a path another row already holds is refused, visibly', (
     t,
   ) async {
-    AgentInstallationDao(db)
+    server.installationRows
       ..insert(
         agentInstallation(
           id: 'a',
@@ -187,21 +187,21 @@ void main() {
 
     await t.enterText(find.byType(TextField).last, r'C:\a\codex.exe');
     await t.tap(find.widgetWithText(OutlinedButton, 'Save').last);
-    await t.pump();
+    await t.pumpAndSettle();
 
     // Silence would look like a save. The table forbids it, so the field says
     // so and the row keeps the path it had.
     expect(find.textContaining('already uses that path'), findsOneWidget);
     expect(
-      AgentInstallationDao(db).getById('b')!.executable.path,
+      server.installationRows.getById('b')!.executable.path,
       r'C:\b\codex.exe',
     );
   });
 
   testWidgets('the field and its buttons fit a phone width', (t) async {
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.codex, path: _stored),
+    );
     await pumpSection(t, size: const Size(390, 844));
 
     expect(t.takeException(), isNull);
@@ -213,7 +213,7 @@ void main() {
     testWidgets('a fresh reading renders the number with how old it is', (
       t,
     ) async {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           agentId: AgentIds.codex,
           path: _stored,
@@ -232,7 +232,7 @@ void main() {
     ) async {
       // The owner's row. A bare "2.1.252" beside a binary answering 2.1.263 is
       // a confident false statement; the same number wearing its age is not.
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           path: _claude,
           version: '2.1.252',
@@ -253,9 +253,9 @@ void main() {
     ) async {
       // Every row written before v40, including the one whose binary is gone:
       // its version is kept and its age is admitted to be unknown.
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(path: _claude, version: '2.1.245'));
+      server.installationRows.insert(
+        agentInstallation(path: _claude, version: '2.1.245'),
+      );
 
       await pumpSection(t);
 
@@ -266,7 +266,7 @@ void main() {
     });
 
     testWidgets('a row with no version at all claims nothing', (t) async {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           agentId: AgentIds.codex,
           path: _stored,

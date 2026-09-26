@@ -560,7 +560,7 @@ void main() {
       final server = await InProcessServer.start(
         root,
         serveArgs(),
-        agentsFor: (db) => ServerAgents(database: db, runner: runner),
+        agentsFor: (data) => ServerAgents(data: data, runner: runner),
       );
       addTearDown(server.stop);
       await server.out.saw('agents: ');
@@ -601,8 +601,8 @@ void main() {
       final server = await InProcessServer.start(
         root,
         serveArgs(),
-        agentsFor: (db) => ServerAgents(
-          database: db,
+        agentsFor: (data) => ServerAgents(
+          data: data,
           runner: FakeRunner({binary: '/opt/fake/$binary'}),
         ),
       );

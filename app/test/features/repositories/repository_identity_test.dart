@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -82,10 +81,10 @@ void main() {
     Future<String?> identityAfterReading(String? url) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final server = FakeDataServer()
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
+      server.environmentRows.upsert(windowsEnv());
 
       final container = ProviderContainer(
         overrides: [

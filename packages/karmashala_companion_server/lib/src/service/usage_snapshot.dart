@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -21,7 +23,10 @@ Future<RemoteUsageSnapshot> companionUsageSnapshot({
   required AgentRegistry registry,
   required AgentUsageService service,
   required List<ExecutionEnvironment> environments,
-  required List<UsageSample> Function(String accountKey, DateTime since)
+  required FutureOr<List<UsageSample>> Function(
+    String accountKey,
+    DateTime since,
+  )
   history,
   required String Function(String environmentId) environmentName,
   required DateTime now,
@@ -49,7 +54,7 @@ Future<RemoteUsageSnapshot> companionUsageSnapshot({
       failure = 'Could not read usage: $error';
       usage = service.remembered(installation);
     }
-    final samples = history(key, now.subtract(const Duration(hours: 24)));
+    final samples = await history(key, now.subtract(const Duration(hours: 24)));
     return RemoteUsageAccount(
       key: key,
       agentId: installation.agentId,

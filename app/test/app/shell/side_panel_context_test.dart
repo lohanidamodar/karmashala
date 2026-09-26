@@ -2,7 +2,6 @@ import 'package:karmashala/src/app/shell/side_panel_context.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
@@ -31,7 +30,7 @@ void main() {
     db = AppDatabase.memory();
     final server = FakeDataServer();
     data = await server.override();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(path: r'C:\src\demo'));
     server.repositoryRows
       ..insert(repository(id: 'hub', name: 'demo', path: r'C:\src\demo'))

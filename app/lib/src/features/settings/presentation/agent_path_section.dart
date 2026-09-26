@@ -108,13 +108,14 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
     );
     if (file == null) return;
     _path.text = file.path;
-    _save(file.path);
+    await _save(file.path);
   }
 
-  void _save(String path) {
-    final ok = ref
+  Future<void> _save(String path) async {
+    final ok = await ref
         .read(agentInstallationsControllerProvider.notifier)
         .setExecutablePath(widget.installation.id, path);
+    if (!mounted) return;
     setState(() {
       _error = ok
           ? null

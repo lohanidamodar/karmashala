@@ -8,10 +8,8 @@ library;
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
@@ -74,7 +72,7 @@ void main() {
       EnvironmentPath(environmentId: 'windows', path: p);
 
   void seedEnvironment() {
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'windows',
         kind: EnvironmentKind.windowsNative,
@@ -82,7 +80,7 @@ void main() {
         createdAt: now,
       ),
     );
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       AgentInstallation(
         id: 'i1',
         agentId: 'mystery',

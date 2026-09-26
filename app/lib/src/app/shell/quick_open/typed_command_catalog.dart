@@ -33,8 +33,8 @@ CommandCatalog readCommandCatalog(
   final read = container.read;
   final now = read(clockProvider).nowUtc();
   final registry = read(agentRegistryProvider);
-  final environments = read(executionEnvironmentDaoProvider).getAll();
-  final installations = read(agentInstallationDaoProvider).getAll();
+  final environments = read(environmentsDataProvider).getAll();
+  final installations = read(agentInstallationsDataProvider).getAll();
   final workspace = read(workspaceDataProvider);
   final sessionDao = read(sessionsDataProvider);
   final importedDao = read(importedSessionsProvider);

@@ -174,7 +174,7 @@ class AgentSkillInstallationService {
       _log.info('Probe: not touching agent skills (would $verb).');
       return const [];
     }
-    final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = _ref.read(environmentsDataProvider).getAll();
     if (environments.isEmpty) return const [];
 
     // The previous sweep's tokens are spent; a new one starts its own so

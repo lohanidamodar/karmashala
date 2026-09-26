@@ -5,7 +5,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -879,9 +878,9 @@ void main() {
     service.answer = usageSnapshot(percent: 62);
     final container = await containerFor(
       seed: (db) {
-        AgentInstallationDao(
-          db,
-        ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
+        mirroredServer(db).installationRows.insert(
+          agentInstallation(id: 'a2', agentId: AgentIds.codex),
+        );
         mirroredServer(db).sessionRows
           ..insert(session(id: 's2', agentInstallationId: 'a2'))
           ..insert(session(id: 's3'));

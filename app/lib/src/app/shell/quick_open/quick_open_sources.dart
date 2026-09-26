@@ -586,7 +586,7 @@ class QuickOpenSources {
     final sessionDao = ref.read(sessionsDataProvider);
     final importedDao = ref.read(importedSessionsProvider);
     final workspace = ref.read(workspaceDataProvider);
-    final installations = ref.read(agentInstallationDaoProvider);
+    final installations = ref.read(agentInstallationsDataProvider);
     final registry = ref.read(agentRegistryProvider);
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final selectedRepository = ref.read(selectedRepositoryIdProvider);

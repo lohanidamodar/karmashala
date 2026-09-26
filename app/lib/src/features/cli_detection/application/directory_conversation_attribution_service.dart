@@ -1,6 +1,6 @@
 import '../../workspaces/data/workspace_data.dart';
 import '../../../core/database/sqlite_row_reader.dart';
-import '../../agents/data/agent_installation_dao.dart';
+import '../../agents/data/agents_data.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
@@ -24,7 +24,7 @@ class DirectoryConversationAttributionService {
   });
 
   final SessionsData sessionDao;
-  final AgentInstallationDao installationDao;
+  final AgentInstallationsData installationDao;
   final WorkspaceData workspace;
   final AgentRegistry agents;
 

@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/automations/application/automation_timer
 import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -119,8 +118,8 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.repositoryRows.insert(repository(id: 'r2', name: 'other'));

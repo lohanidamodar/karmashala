@@ -1,15 +1,11 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_installations_controller.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -46,7 +42,6 @@ FakeCommandRunner agyInWslRunner() => FakeCommandRunner(
 );
 
 void main() {
-  late AppDatabase db;
   late FakeDataServer server;
   late ProviderContainer container;
   late FakeCommandRunner runner;
@@ -54,7 +49,7 @@ void main() {
   /// The four rows the owner's workspace actually held: two agents, two
   /// environments, all stamped long before `antigravity` joined the registry.
   void seedPreAntigravityInstallations() {
-    final dao = AgentInstallationDao(db);
+    final dao = server.installationRows;
     var n = 0;
     for (final agentId in [AgentIds.claudeCode, AgentIds.codex]) {
       for (final environmentId in ['windows', 'wsl:archlinux']) {
@@ -71,16 +66,14 @@ void main() {
   }
 
   setUp(() async {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
-      ..upsert(windowsEnv())
-      ..upsert(wslEnv(id: 'wsl:archlinux', distro: 'archlinux'));
     runner = agyInWslRunner();
     server = FakeDataServer();
+    server.environmentRows
+      ..upsert(windowsEnv())
+      ..upsert(wslEnv(id: 'wsl:archlinux', distro: 'archlinux'));
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
@@ -93,10 +86,7 @@ void main() {
       ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   /// Every executable name a locate request asked about, in order.
   List<String> located() => [
@@ -171,7 +161,7 @@ void main() {
   test(
     'a remote host is not dialled, and is not recorded as searched',
     () async {
-      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      server.environmentRows.upsert(sshEnvFixture());
       seedPreAntigravityInstallations();
 
       await container

@@ -5,10 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 
@@ -32,10 +30,9 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
-      ..upsert(windowsEnv())
-      ..upsert(wslEnv());
     server = FakeDataServer().mirrorInto(db)
+      ..environmentRows.upsert(windowsEnv())
+      ..environmentRows.upsert(wslEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     dir = Directory.systemTemp.createTempSync('media_providers');
@@ -202,9 +199,9 @@ void main() {
     test(
       'a native session takes its environment from its installation',
       () async {
-        AgentInstallationDao(
-          db,
-        ).insert(agentInstallation(environmentId: 'wsl:Ubuntu'));
+        server.installationRows.insert(
+          agentInstallation(environmentId: 'wsl:Ubuntu'),
+        );
         server.sessionRows.insert(session());
         final container = await containerFor();
 

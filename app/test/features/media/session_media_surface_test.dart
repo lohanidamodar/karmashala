@@ -5,13 +5,12 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/media/presentation/session_media_panel.dart';
 
-import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import 'package:agent_cli/process.dart';
 
 /// The Media surface, as the rail actually offers it.
 ///
@@ -21,15 +20,20 @@ import '../terminal/fake_instance.dart';
 /// the same complaint again.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer()
+      ..environmentRows.upsert(localHostEnvironment(testTime));
   });
   tearDown(() => db.close());
 
   Future<ProviderContainer> pumpApp(WidgetTester tester) async {
-    final container = fakeTerminalContainer(database: db);
+    final container = fakeTerminalContainer(
+      database: db,
+      data: await server.override(),
+    );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;

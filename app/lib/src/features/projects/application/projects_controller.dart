@@ -165,7 +165,7 @@ class ProjectsController extends Notifier<List<Project>> {
     required String targetEnvironmentId,
     String? workspaceId,
   }) async {
-    final dao = ref.read(executionEnvironmentDaoProvider);
+    final dao = ref.read(environmentsDataProvider);
     final windows = dao.getById(localHostEnvironmentId);
     final target = dao.getById(targetEnvironmentId) ?? windows;
     if (windows == null || target == null) {
@@ -227,7 +227,7 @@ class ProjectsController extends Notifier<List<Project>> {
       throw StateError('This project is no longer in the workspace.');
     }
 
-    final dao = ref.read(executionEnvironmentDaoProvider);
+    final dao = ref.read(environmentsDataProvider);
     final windows = dao.getById(localHostEnvironmentId);
     final environmentId = targetEnvironmentId ?? project.root.environmentId;
     final target = dao.getById(environmentId) ?? windows;
@@ -304,7 +304,7 @@ class ProjectsController extends Notifier<List<Project>> {
   /// those properly, and "we did not look" must not read as "it is gone".
   bool _rootProvablyMissing(Project project) {
     final env = ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(project.environmentId);
     if (env == null) return false;
     if (env.kind != EnvironmentKind.windowsNative &&
@@ -343,7 +343,7 @@ class ProjectsController extends Notifier<List<Project>> {
     // The same pair `createInEnvironment` resolves, and for the same reason:
     // the scan runs on the Windows host, the rows belong to the project's own
     // environment.
-    final dao = ref.read(executionEnvironmentDaoProvider);
+    final dao = ref.read(environmentsDataProvider);
     final windows = dao.getById(localHostEnvironmentId);
     final environment = dao.getById(project.root.environmentId) ?? windows;
     if (windows == null || environment == null) {
@@ -452,10 +452,7 @@ class ProjectsController extends Notifier<List<Project>> {
       imported:
           imported != null &&
           repoIds.contains(
-            ref
-                .read(importedSessionsProvider)
-                .getById(imported)
-                ?.repositoryId,
+            ref.read(importedSessionsProvider).getById(imported)?.repositoryId,
           ),
     );
   }
@@ -496,7 +493,7 @@ final projectsControllerProvider =
 /// stat over `\\wsl.localhost` (docs/windows-antivirus.md).
 final projectPathMissingProvider = FutureProvider.autoDispose
     .family<bool, Project>((ref, project) async {
-      final environmentDao = ref.read(executionEnvironmentDaoProvider);
+      final environmentDao = ref.read(environmentsDataProvider);
       final env = environmentDao.getById(project.environmentId);
       if (env == null) return false;
       if (env.kind == EnvironmentKind.ssh) return false;

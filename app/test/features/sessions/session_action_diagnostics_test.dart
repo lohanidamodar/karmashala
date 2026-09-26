@@ -8,11 +8,9 @@ import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/agent_store_server_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -21,6 +19,8 @@ import 'package:karmashala_session/launch.dart';
 import 'package:logging/logging.dart';
 
 import '../../support/fake_data_server.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 import '../../support/workspace_mirror.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
@@ -70,16 +70,16 @@ void main() {
       data = await dataServer.connect();
       server = FakeCodexAppServer();
       runner = FakeCommandRunner(processFactory: (_) => server);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      mirroredServer(db).environmentRows.upsert(windowsEnv());
       dataServer.projectRows.insert(project());
       dataServer.repositoryRows.insert(repository());
     });
     tearDown(() => db.close());
 
     void seed({String? externalId = 'u1'}) {
-      AgentInstallationDao(
+      mirroredServer(
         db,
-      ).insert(agentInstallation(agentId: AgentIds.codex));
+      ).installationRows.insert(agentInstallation(agentId: AgentIds.codex));
       mirroredServer(db).sessionRows.insert(
         session(title: 'Session 0').copyWith(externalSessionId: externalId),
       );
@@ -93,8 +93,8 @@ void main() {
           agentStoreServersProvider.overrideWithValue(
             AgentStoreServers(
               runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-              environments: ExecutionEnvironmentDao(db),
-              installations: AgentInstallationDao(db),
+              environments: EnvironmentsData(data),
+              installations: AgentInstallationsData(data),
             ),
           ),
         ],
@@ -141,10 +141,12 @@ void main() {
       final server = FakeDataServer()..mirrorInto(db);
       final data = await server.connect();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      mirroredServer(db).environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation(agentId: 'demo'));
+      mirroredServer(
+        db,
+      ).installationRows.insert(agentInstallation(agentId: 'demo'));
 
       final container = ProviderContainer(
         overrides: [
@@ -195,10 +197,10 @@ void main() {
       db = AppDatabase.memory();
       server = FakeDataServer()..mirrorInto(db);
       data = await server.connect();
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      mirroredServer(db).environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      mirroredServer(db).installationRows.insert(agentInstallation());
       git = FakeCommandRunner(
         responder: (request) => request.arguments.contains('status')
             ? CommandResult(exitCode: 0, stdout: statusOutput, stderr: '')
@@ -207,18 +209,19 @@ void main() {
     });
     tearDown(() => db.close());
 
-    void addSession({EnvironmentPath? at = worktree}) => mirroredServer(db).sessionRows.insert(
-      Session(
-        id: 's1',
-        repositoryId: 'r1',
-        agentInstallationId: 'a1',
-        title: 'Fix the login',
-        useWorktree: at != null,
-        worktree: at,
-        status: SessionStatus.completed,
-        createdAt: testTime,
-      ),
-    );
+    void addSession({EnvironmentPath? at = worktree}) =>
+        mirroredServer(db).sessionRows.insert(
+          Session(
+            id: 's1',
+            repositoryId: 'r1',
+            agentInstallationId: 'a1',
+            title: 'Fix the login',
+            useWorktree: at != null,
+            worktree: at,
+            status: SessionStatus.completed,
+            createdAt: testTime,
+          ),
+        );
 
     SessionArchiveService service() {
       final container = ProviderContainer(

@@ -1,8 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
@@ -10,22 +8,31 @@ import 'package:karmashala/src/features/terminal/application/terminal_theme_cont
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// The master-detail settings screen: section switching by mouse and by
 /// keyboard, the filter, deep links, and the compact drill-down — the whole
 /// information architecture Loop 79 replaced the single long column with.
 void main() {
   late AppDatabase db;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
+    FakeDataServer().mirrorInto(db);
     // The Terminal page resolves the default shell against the environments,
     // and an empty list has no shell to resolve to.
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    mirroredServer(db).environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    data = await mirroredServer(db).override();
   });
   tearDown(() => db.close());
 
@@ -33,6 +40,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         // The Terminal page reads the session host's status, and the one running
         // on this machine is not the test's to dial.
         localHostSessionAccessProvider.overrideWithValue(null),

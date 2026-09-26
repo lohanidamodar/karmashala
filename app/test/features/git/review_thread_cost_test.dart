@@ -24,11 +24,12 @@ import 'review_thread_harness.dart';
 ///   this replaces did (every diff row filtered the whole annotation list) —
 ///   the panel reads one index and every row does a map lookup in it.
 ///
-/// The number below is three, and it is the same three for ten threads and for
-/// five hundred: the environment row behind its runner (the repository row is
-/// the workspace copy's), the threads, and their comments. What is being
-/// asserted is that it does not grow, not that it is small.
-const _readsPerIndex = 3;
+/// The number below is two, and it is the same two for ten threads and for
+/// five hundred: the threads, and their comments (the repository row and the
+/// environment behind its runner are the server's, read from this app's
+/// copy). What is being asserted is that it does not grow, not that it is
+/// small.
+const _readsPerIndex = 2;
 
 void main() {
   for (final count in [10, 100, 500]) {
@@ -67,8 +68,7 @@ void main() {
       final index = await harness.service.indexFor('r1');
 
       expect(index.all, hasLength(count));
-      // Its environment, the threads, their comments — and
-      // nothing per thread.
+      // The threads, their comments — and nothing per thread.
       expect(db.queries, _readsPerIndex, reason: '$count threads');
       // One process, over the one distinct file — not one per thread.
       expect(harness.hashObjectCalls, 1, reason: '$count threads');

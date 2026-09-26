@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -40,10 +39,10 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    server = FakeDataServer()..mirrorInto(db);
     server.projectRows.insert(project());
     server.repositoryRows.insert(
       repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'),

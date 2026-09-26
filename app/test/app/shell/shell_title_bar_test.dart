@@ -5,8 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/detected_projects_view.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -15,14 +13,24 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late List<int> scans;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    data = await server.override();
     scans = [];
   });
   tearDown(() => db.close());
@@ -31,7 +39,7 @@ void main() {
   /// than run: a scan reads the real CLI stores.
   Widget titleBar() => ProviderScope(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(database: db, data: data),
       detectedProjectsControllerProvider.overrideWith(
         () => _CountingDetection(scans),
       ),

@@ -6,9 +6,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/session_mcp.dart';
@@ -48,12 +46,12 @@ void main() {
   AppDatabase seededDatabase() {
     final db = AppDatabase.memory();
     final server = serverOf[db] = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db)
+    mirroredServer(db).environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db)
+    mirroredServer(db).installationRows
       ..insert(agentInstallation(agentId: AgentIds.claudeCode))
       ..insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
     return db;

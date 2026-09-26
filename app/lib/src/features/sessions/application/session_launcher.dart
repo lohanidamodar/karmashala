@@ -112,7 +112,7 @@ class SessionLauncher {
   /// and only some of them consulted the user's configured default at all.
   AgentInstallation? defaultInstallationIn(String environmentId) {
     final installs = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(environmentId);
     if (installs.isEmpty) return null;
     final settings = _ref.read(settingsControllerProvider);

@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_export.dart';
 import 'package:karmashala_session/events.dart';
@@ -47,11 +45,11 @@ void main() {
     final opened = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(opened);
     db = opened;
-    ExecutionEnvironmentDao(opened).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     if (seedRow) {
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db!).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       server.sessionRows.insert(
         session(
           title: 'Port the importer',
@@ -169,7 +167,7 @@ void main() {
       container = await build(seedRow: false);
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db!).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       server.sessionRows.insert(session(title: 'Fresh'));
 
       final export = await container!.read(sessionExporterProvider).build('s1');

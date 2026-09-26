@@ -1,10 +1,8 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_adoption_service.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
@@ -16,6 +14,8 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 
 /// Adopting a session the user started by hand in one of our panes.
 ///
@@ -94,14 +94,16 @@ late WorkspaceData workspace;
 /// writes them — one client, as one app has.
 late SessionsData sessions;
 late ImportedSessionsData imported;
+late EnvironmentsData environments;
+late AgentInstallationsData installations;
 
 Harness harness({AppDatabase? database, bool installAgents = true}) {
   final db = database ?? AppDatabase.memory();
   if (database == null) {
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.mirrorInto(db);
     if (installAgents) {
-      AgentInstallationDao(db)
+      server.installationRows
         ..insert(agentInstallation(agentId: AgentIds.claudeCode))
         ..insert(
           agentInstallation(
@@ -129,8 +131,8 @@ Harness harness({AppDatabase? database, bool installAgents = true}) {
     sessionDao: sessions,
     importedSessionDao: imported,
     workspace: workspace,
-    environmentDao: ExecutionEnvironmentDao(db),
-    installationDao: AgentInstallationDao(db),
+    environmentDao: environments,
+    installationDao: installations,
     agents: AgentRegistry.builtIn,
     ids: SequentialIdGenerator('adopted-'),
     clock: clock,
@@ -192,6 +194,8 @@ void main() {
     final client = await server.connect();
     sessions = SessionsData(client);
     imported = ImportedSessionsData(client, sessions);
+    environments = EnvironmentsData(client);
+    installations = AgentInstallationsData(client);
   });
 
   group('a pane that starts an agent', () {
@@ -362,7 +366,7 @@ void main() {
 
     test('an agent with no installation in the repository\'s environment', () {
       final db = AppDatabase.memory();
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      server.environmentRows.upsert(windowsEnv());
       server.mirrorInto(db);
       final h = harness(database: db);
       typeCommand(h, 'pane-1', 'cmd-0', 'claude');

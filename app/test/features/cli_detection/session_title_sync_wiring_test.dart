@@ -3,10 +3,8 @@ import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,14 +40,14 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_wiring_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     client = await server.connect();
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.antigravity));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.antigravity),
+    );
     mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',

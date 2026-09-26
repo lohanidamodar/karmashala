@@ -3,9 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host/host_paths.dart';
@@ -13,11 +10,11 @@ import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 
-import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// This computer's host, holding what a test puts in it.
 class _LocalHost extends LocalHostSessionAccess {
@@ -57,11 +54,11 @@ void main() {
   late FakeDataServer server;
   setUp(() {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     server = FakeDataServer().mirrorInto(db)
+      ..environmentRows.upsert(localHostEnvironment(testTime))
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
   });
   tearDown(() => db.close());
 
@@ -83,7 +80,9 @@ void main() {
   testWidgets('lists what the host holds, agents by their session title', (
     tester,
   ) async {
-    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix the parser'));
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session(id: 's1', title: 'Fix the parser'));
     final host = _LocalHost([
       _summary('karmashala_s1', ['claude', '--resume', 'x']),
       _summary('karmashala_local_pane-1', ['/bin/zsh', '-l']),

@@ -86,7 +86,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
       final agentId = session == null
           ? null
           : ref
-                .read(agentInstallationDaoProvider)
+                .read(agentInstallationsDataProvider)
                 .getById(session.agentInstallationId)
                 ?.agentId;
       if (agentId != null) message = settings.resumeMessageFor(agentId);
@@ -474,7 +474,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
   Future<void> _scheduleSeveral(List<Session> sessions, String choice) async {
     final controller = ref.read(scheduledResumeControllerProvider);
     final usage = ref.read(agentUsageServiceProvider);
-    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = ref.read(environmentsDataProvider).getAll();
     final skipped = <String>[];
     for (final session in sessions) {
       if (controller.refusalFor(session.id) != null) continue;

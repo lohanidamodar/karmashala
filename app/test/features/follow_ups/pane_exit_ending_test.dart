@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -51,12 +49,12 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     data = await server.override();
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     server.sessionRows.insert(session(id: 's1', status: SessionStatus.running));
     followUps = server.followUpRows;
     reports = StreamController<AgentStatusReport>.broadcast();

@@ -2,21 +2,21 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/fake_data_server.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 /// **Where a Codex rename actually has to land.**
 ///
@@ -32,22 +32,21 @@ import '../../support/temp_directory.dart';
 /// half a scripted transport alone would not cover.
 void main() {
   late Directory tmp;
-  late AppDatabase db;
+  late FakeDataServer data;
+  late DataClient dataClient;
   late CliSessionMutator mutator;
   late FakeCodexAppServer server;
   late FakeCommandRunner runner;
 
-  setUp(() {
+  setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_codex_rename_');
-    db = AppDatabase(sqlite3.openInMemory());
+    data = FakeDataServer();
+    dataClient = await data.connect();
     mutator = CliSessionMutator();
     server = FakeCodexAppServer(codexHome: p.join(tmp.path, '.codex'));
     runner = FakeCommandRunner(processFactory: (_) => server);
   });
-  tearDown(() {
-    db.close();
-    removeTempDirectory(tmp);
-  });
+  tearDown(() => removeTempDirectory(tmp));
 
   /// A store with one already-named entry in its mirror, and the session for it.
   DetectedSession seedStore({String environmentId = 'windows'}) {
@@ -69,9 +68,9 @@ void main() {
   }
 
   AgentStoreServers servers({bool codexInstalled = true}) {
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    data.environmentRows.upsert(windowsEnv());
     if (codexInstalled) {
-      AgentInstallationDao(db).insert(
+      data.installationRows.insert(
         agentInstallation(
           agentId: AgentIds.codex,
           path:
@@ -81,8 +80,8 @@ void main() {
     }
     return AgentStoreServers(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environments: ExecutionEnvironmentDao(db),
-      installations: AgentInstallationDao(db),
+      environments: EnvironmentsData(dataClient),
+      installations: AgentInstallationsData(dataClient),
     );
   }
 
@@ -217,10 +216,10 @@ void main() {
   test('a WSL store is asked for in the distribution own spelling', () async {
     final windows = windowsEnv();
     final wsl = wslEnv();
-    ExecutionEnvironmentDao(db)
+    data.environmentRows
       ..upsert(windows)
       ..upsert(wsl);
-    AgentInstallationDao(db).insert(
+    data.installationRows.insert(
       agentInstallation(
         agentId: AgentIds.codex,
         environmentId: wsl.id,
@@ -236,8 +235,8 @@ void main() {
     );
     final pool = AgentStoreServers(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environments: ExecutionEnvironmentDao(db),
-      installations: AgentInstallationDao(db),
+      environments: EnvironmentsData(dataClient),
+      installations: AgentInstallationsData(dataClient),
     );
     addTearDown(pool.closeAll);
 

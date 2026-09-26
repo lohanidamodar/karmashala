@@ -27,6 +27,7 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:xterm2/xterm.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_profiles.dart';
 
@@ -290,12 +291,16 @@ void giveShellHistory(TerminalInstance instance) {
 
 /// A container whose terminals are fakes, optionally over a real in-memory
 /// database so persistence can be exercised.
+/// [data] is the fake server's client override (`await server.override()`),
+/// where the test reads anything the server keeps.
 ProviderContainer fakeTerminalContainer({
   AppDatabase? database,
+  Override? data,
   bool restoreLivePanes = true,
 }) => ProviderContainer(
   overrides: fakeTerminalOverrides(
     database: database,
+    data: data,
     restoreLivePanes: restoreLivePanes,
   ),
 );
@@ -308,6 +313,7 @@ ProviderContainer fakeTerminalContainer({
 // ignore: strict_top_level_inference
 fakeTerminalOverrides({
   AppDatabase? database,
+  Override? data,
   TerminalInstanceFactory? instanceFactory,
   AgentUsageService? usageService,
   bool shellIntegration = false,
@@ -343,6 +349,9 @@ fakeTerminalOverrides({
     // tidiness question.
     gitFilesProvider.overrideWithValue(gitFiles ?? noGitFiles),
     if (database != null) databaseProvider.overrideWithValue(database),
+    // The server's data (environments, installations, sessions, …): a fake
+    // server's client when the test seeds one.
+    ?data,
     // A real periodic timer would outlive the widget tree and trip
     // flutter_test's pending-timer check; tests drive saving explicitly.
     scrollbackAutosaveFactoryProvider.overrideWithValue(

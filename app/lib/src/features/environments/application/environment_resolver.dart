@@ -4,7 +4,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/git.dart' show GitException;
 import 'package:karmashala_git/worktrees.dart' show WorktreeEnvironmentOf;
 import '../../../core/process/command_runner_providers.dart';
-import '../data/execution_environment_dao.dart';
+import '../data/environments_data.dart';
 import 'environment_providers.dart';
 
 /// Why the environment a checkout's commands would run in could not be named.
@@ -67,7 +67,7 @@ class ExecutionEnvironmentResolver {
     required this.runners,
   });
 
-  final ExecutionEnvironmentDao environments;
+  final EnvironmentsData environments;
   final CommandRunnerFactory runners;
 
   /// The environment [path]'s commands run in, or why that cannot be said.
@@ -121,7 +121,7 @@ class ExecutionEnvironmentResolver {
 /// the resolver's own refusal as a [GitException], in its words so worktree
 /// creation cannot drift from the launch paths.
 WorktreeEnvironmentOf worktreeEnvironmentOf(
-  ExecutionEnvironmentDao environments, {
+  EnvironmentsData environments, {
   CommandRunnerFactory runners = const CommandRunnerFactory(),
 }) {
   final resolver = ExecutionEnvironmentResolver(
@@ -139,7 +139,7 @@ WorktreeEnvironmentOf worktreeEnvironmentOf(
 /// The resolver, wired to the workspace's environments and its runner factory.
 final environmentResolverProvider = Provider<ExecutionEnvironmentResolver>(
   (ref) => ExecutionEnvironmentResolver(
-    environments: ref.watch(executionEnvironmentDaoProvider),
+    environments: ref.watch(environmentsDataProvider),
     runners: ref.watch(commandRunnerFactoryProvider),
   ),
 );

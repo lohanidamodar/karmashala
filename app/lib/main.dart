@@ -31,11 +31,10 @@ import 'package:karmashala_ui/picking.dart';
 import 'src/features/environments/application/browse_sources.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/devices/application/device_bindings.dart';
-import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'src/features/env_secrets/application/env_secrets_controller.dart';
 import 'src/features/env_secrets/data/env_vault.dart';
-import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/environments/data/environments_data.dart';
 import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'src/features/sessions/application/session_liveness_reconciler.dart';
@@ -133,19 +132,29 @@ Future<void> _bootstrap(AppLogger logger) async {
     logger.warning('Verification artifact root unavailable.', error, stack);
   }
 
-  // Ensure the Windows environment exists, then discover and persist every
-  // execution environment; degrades to Windows-only if WSL is unavailable.
+  // Discover every execution environment — this machine and its WSL
+  // distributions (degrades to this machine alone without WSL) — and record
+  // them at the server, which already has this machine's row from its own
+  // start. Not awaited: a server that is not up yet takes them when it is.
   const clock = SystemClock();
-  final environmentDao = ExecutionEnvironmentDao(database);
-  ensureLocalEnvironment(environmentDao, clock);
   final discovered = await EnvironmentDiscoveryService(
     host: const LocalCommandRunner(),
     // The app keeps one clock; the package carries its own copy of the type so it
     // can be published with no local dependency (agent_cli_bridge.dart).
     clock: agentCliClock(clock),
   ).discover();
+  final environments = EnvironmentsData(data);
   for (final env in discovered) {
-    environmentDao.upsert(env);
+    unawaited(
+      environments
+          .put(env)
+          .then<void>(
+            (_) {},
+            onError: (Object error) => logger.warning(
+              'Could not record the environment ${env.id}: $error',
+            ),
+          ),
+    );
   }
   logger.info('Discovered ${discovered.length} execution environment(s).');
 

@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala_git/git.dart';
@@ -16,17 +16,19 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late FakeCommandRunner runner;
   late ChangesService service;
 
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\app');
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  setUp(() async {
+    server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    client = await server.connect();
     runner = FakeCommandRunner(
       responder: (req) {
         if (req.arguments.contains('status')) {
@@ -45,10 +47,9 @@ void main() {
     );
     service = ChangesService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: EnvironmentsData(client),
     );
   });
-  tearDown(() => db.close());
 
   test('changes runs git status and parses results', () async {
     final changes = await service.changes(repo);
@@ -84,7 +85,7 @@ void main() {
     );
     final stats = await ChangesService(
       runnerFactory: FakeCommandRunnerFactory(fallback: numstat),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: EnvironmentsData(client),
     ).fileDiffStats(repo);
 
     expect(numstat.requests.single.arguments, [
@@ -140,7 +141,7 @@ void main() {
       git = scriptedGit();
       scripted = ChangesService(
         runnerFactory: FakeCommandRunnerFactory(fallback: git),
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentDao: EnvironmentsData(client),
       );
     });
 
@@ -184,7 +185,7 @@ void main() {
     final changed = <EnvironmentPath>[];
     final notifying = ChangesService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: EnvironmentsData(client),
       onWorkingTreeChanged: changed.add,
     );
     await notifying.mergeBranch(repo, 'session/s1');
@@ -215,7 +216,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
         ),
@@ -251,7 +252,7 @@ void main() {
 
     ChangesService serviceOver(Map<String, String> disk) => ChangesService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentDao: EnvironmentsData(client),
       files: _FakeFiles(disk),
     );
 
@@ -332,12 +333,12 @@ void main() {
       // There is no local path for it, so the answer is "ask git over the
       // transport" — and a `File` opened on the remote's spelling would be a
       // path on *this* machine, which is the mistake constraint 8 exists for.
-      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      server.environmentRows.upsert(sshEnvFixture());
       final files = _FakeFiles(const {});
       final facts =
           await ChangesService(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-            environmentDao: ExecutionEnvironmentDao(db),
+            environmentDao: EnvironmentsData(client),
             files: files,
           ).originFacts(
             const EnvironmentPath(
@@ -360,22 +361,22 @@ void main() {
     late FakeCommandRunner windows;
     late FakeCommandRunner wsl;
 
-    ChangesService serviceOver(AppDatabase over) => ChangesService(
+    ChangesService serviceOver() => ChangesService(
       runnerFactory: FakeCommandRunnerFactory(
         byEnvironmentId: {'windows': windows, 'wsl:Ubuntu': wsl},
       ),
-      environmentDao: ExecutionEnvironmentDao(over),
+      environmentDao: EnvironmentsData(client),
     );
 
     setUp(() {
       windows = FakeCommandRunner(environmentId: 'windows');
       wsl = FakeCommandRunner(environmentId: 'wsl:Ubuntu');
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
+      server.environmentRows.upsert(wslEnv());
     });
 
     test('a Windows-hosted checkout in a WSL environment gets Windows '
         'git', () async {
-      await serviceOver(db).changes(
+      await serviceOver().changes(
         const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
       );
 
@@ -393,7 +394,7 @@ void main() {
         environmentId: 'wsl:Ubuntu',
         path: '/mnt/c/app',
       );
-      final service = serviceOver(db);
+      final service = serviceOver();
       await service.currentBranch(repo);
       await service.remoteUrl(repo);
       await service.log(repo);
@@ -405,7 +406,7 @@ void main() {
     });
 
     test('a WSL-native checkout stays in its distribution', () async {
-      await serviceOver(db).changes(
+      await serviceOver().changes(
         const EnvironmentPath(
           environmentId: 'wsl:Ubuntu',
           path: '/home/me/app',
@@ -423,7 +424,7 @@ void main() {
 
     test('a write stays in the environment the checkout is filed '
         'under', () async {
-      await serviceOver(db).mergeBranch(
+      await serviceOver().mergeBranch(
         const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
         'session/s1',
       );
@@ -440,9 +441,9 @@ void main() {
 
     test('no local host row falls back to the row the checkout '
         'names', () async {
-      ExecutionEnvironmentDao(db).delete('windows');
+      server.environmentRows.delete('windows');
 
-      await serviceOver(db).changes(
+      await serviceOver().changes(
         const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
       );
 
@@ -454,9 +455,9 @@ void main() {
       // `EnvironmentDiscoveryService` only writes `wsl:` rows on Windows, so
       // this is a database carried to another machine. The guard is the host
       // row's `EnvironmentKind`, never `Platform` — §18.
-      ExecutionEnvironmentDao(db).upsert(posixEnv());
+      server.environmentRows.upsert(posixEnv());
 
-      await serviceOver(db).changes(
+      await serviceOver().changes(
         const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
       );
 
@@ -465,9 +466,9 @@ void main() {
     });
 
     test('a macOS checkout reaches the same code and is unchanged', () async {
-      ExecutionEnvironmentDao(db).upsert(posixEnv());
+      server.environmentRows.upsert(posixEnv());
 
-      await serviceOver(db).changes(
+      await serviceOver().changes(
         const EnvironmentPath(environmentId: 'windows', path: '/Users/me/app'),
       );
 

@@ -7,8 +7,6 @@ import 'package:karmashala/src/app/shell/quick_open/quick_open_item.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
 import 'package:karmashala/src/features/snippets/data/command_snippet_dao.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
@@ -20,6 +18,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
+import 'package:agent_cli/process.dart';
 
 /// Snippets as a **group of quick open**, rather than a second palette.
 ///
@@ -34,10 +33,12 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     server = FakeDataServer()
       ..projectRows.insert(project(name: 'Karmashala'))
       ..repositoryRows.insert(repository(name: 'app'));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
   });
   tearDown(() => db.close());
 

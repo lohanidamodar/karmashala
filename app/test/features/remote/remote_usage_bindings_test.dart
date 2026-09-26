@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/application/usage_history.dart';
 import 'package:karmashala/src/features/remote/application/remote_usage_bindings.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show kRemoteUsageSamples, thinUsageSamples;
@@ -15,15 +14,17 @@ import 'package:karmashala_store/database.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
   late FakeAgentUsageService service;
 
-  ProviderContainer containerFor() {
+  Future<ProviderContainer> containerFor() async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await mirroredServer(db).override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -50,7 +51,7 @@ void main() {
     'one account per agent and machine, with its windows and pace',
     () async {
       service.answer = usageSnapshot(percent: 90);
-      final snapshot = await read(containerFor());
+      final snapshot = await read(await containerFor());
 
       final account = snapshot.accounts.single;
       expect(account.agentId, AgentIds.claudeCode);
@@ -71,7 +72,7 @@ void main() {
   test('a refused reading says why, and invents no windows', () async {
     service.failure = UsageException('Signed out of Claude Code.');
 
-    final account = (await read(containerFor())).accounts.single;
+    final account = (await read(await containerFor())).accounts.single;
 
     expect(account.failure, 'Signed out of Claude Code.');
     expect(account.windows, isEmpty);
@@ -79,10 +80,10 @@ void main() {
   });
 
   test('the last day of history rides along, thinned', () async {
-    final container = containerFor();
-    final dao = container.read(usageSampleDaoProvider);
+    final container = await containerFor();
+    final history = mirroredServer(db).usageRows;
     for (var i = 0; i < 100; i++) {
-      dao.insert(
+      history.insert(
         UsageSample(
           accountKey: usageAccountKeyOf(AgentIds.claudeCode, 'windows'),
           windowLabel: '5-hour',

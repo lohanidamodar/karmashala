@@ -106,9 +106,16 @@ class _UsageHistoryPanelState extends ConsumerState<UsageHistoryPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
-    final history = ref.watch(
-      usageHistoryProvider(usageHistoryQuery(widget.accountKey, widget.now)),
-    );
+    // Asked of the server; the last answer stays while a newer one comes.
+    final history =
+        ref
+            .watch(
+              usageHistoryProvider(
+                usageHistoryQuery(widget.accountKey, widget.now),
+              ),
+            )
+            .value ??
+        const <UsageSample>[];
     final measured = [
       for (final w in widget.usage.windows)
         if (w.percent != null) w,

@@ -2,14 +2,10 @@ import 'dart:io' show Platform;
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
-import '../data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 
-/// Repository-layer provider for agent-installation persistence.
-final agentInstallationDaoProvider = Provider<AgentInstallationDao>(
-  (ref) => AgentInstallationDao(ref.watch(databaseProvider)),
-);
+export '../data/agents_data.dart'
+    show AgentInstallationsData, agentInstallationsDataProvider;
 
 /// The agents the app knows about. Overridable in tests to probe a custom set.
 final agentRegistryProvider = Provider<AgentRegistry>(

@@ -1,23 +1,18 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../data/environment_key_reader.dart';
-import '../data/known_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
-import '../data/ssh_host_dao.dart';
+import '../data/ssh_hosts_data.dart';
 import 'ssh_prompt_controller.dart';
 
-/// Persistence for saved SSH hosts.
-final sshHostDaoProvider = Provider<SshHostDao>(
-  (ref) => SshHostDao(ref.watch(databaseProvider)),
-);
-
-/// Persistence for trusted host keys (our `known_hosts`).
-final knownHostDaoProvider = Provider<KnownHostDao>(
-  (ref) => KnownHostDao(ref.watch(databaseProvider)),
-);
+export '../data/ssh_hosts_data.dart'
+    show
+        KnownHostsData,
+        SshHostsData,
+        knownHostsDataProvider,
+        sshHostsDataProvider;
 
 /// How an unknown host key is decided: by asking the user through
 /// [SshPromptController], which refuses outright when no prompt UI is mounted.
@@ -48,15 +43,15 @@ final sshPassphrasePromptProvider = Provider<SshSecretPrompt?>(
 /// Reads a private key from the local environment its path is paired with.
 final sshPrivateKeyReaderProvider = Provider<EnvironmentPrivateKeyReader>(
   (ref) => EnvironmentPrivateKeyReader(
-    environments: ref.watch(executionEnvironmentDaoProvider),
+    environments: ref.watch(environmentsDataProvider),
   ),
 );
 
 /// The shared pool of SSH connections, one per host.
 final sshConnectionPoolProvider = Provider<SshConnectionPool>((ref) {
   final pool = SshConnectionPool(
-    hosts: ref.watch(sshHostDaoProvider),
-    knownHosts: ref.watch(knownHostDaoProvider),
+    hosts: ref.watch(sshHostsDataProvider),
+    knownHosts: ref.watch(knownHostsDataProvider),
     onUnknownHostKey: ref.watch(hostKeyTrustDecisionProvider),
     passwordPrompt: ref.watch(sshPasswordPromptProvider),
     passphrasePrompt: ref.watch(sshPassphrasePromptProvider),

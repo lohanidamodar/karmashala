@@ -2,7 +2,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/agent_cli_bridge.dart';
 import '../../../core/process/command_runner_providers.dart';
-import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../ssh/application/ssh_failure.dart';
@@ -58,16 +57,14 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
         hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover();
 
-      final dao = ref.read(agentInstallationDaoProvider);
-      for (final installation in found) {
-        final existing = dao.getByIdentity(
-          installation.agentId,
-          installation.environmentId,
-          installation.executable.path,
-        );
-        if (existing == null) dao.insert(installation);
-      }
-      ref.invalidate(agentInstallationsControllerProvider);
+      // Recorded by the one rule; no leftover row is judged by this scan.
+      await ref
+          .read(agentInstallationsDataProvider)
+          .reconcile(
+            environmentId: environment.id,
+            readAt: ref.read(agentCliClockProvider).nowUtc(),
+            found: found,
+          );
       _set(environment.id, EnvironmentScan(found: found.length));
     } on Object catch (e) {
       _set(environment.id, EnvironmentScan(error: describeSshFailure(e)));

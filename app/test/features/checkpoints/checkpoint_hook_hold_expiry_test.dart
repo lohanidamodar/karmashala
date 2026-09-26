@@ -7,14 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
@@ -143,11 +140,12 @@ void main() {
 
     db = AppDatabase.memory();
     final clock = FixedClock(testTime);
-    final envId = ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
+    const envId = localHostEnvironmentId;
     server.projectRows.insert(project(environmentId: envId, path: hub));
     server.repositoryRows.insert(repository(environmentId: envId, path: hub));
-    AgentInstallationDao(db).insert(agentInstallation(environmentId: envId));
+    server.installationRows.insert(agentInstallation(environmentId: envId));
     mirroredServer(db).sessionRows
       ..insert(
         session(
@@ -186,7 +184,7 @@ void main() {
         checkpointServiceProvider.overrideWithValue(
           _SlowCapture(
             runnerFactory: const CommandRunnerFactory(),
-            environmentOf: ExecutionEnvironmentDao(db).getById,
+            environmentOf: server.environmentRows.getById,
             dao: CheckpointDao(db),
             clock: clock,
             newId: () => 'ckpt${++ids}',

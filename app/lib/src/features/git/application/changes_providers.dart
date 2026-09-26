@@ -20,7 +20,7 @@ final gitFilesProvider = Provider<GitFiles>((ref) => const HostGitFiles());
 final changesServiceProvider = Provider<ChangesService>(
   (ref) => ChangesService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    environmentDao: ref.watch(environmentsDataProvider),
     files: ref.watch(gitFilesProvider),
     // The watcher sees a merge's in-place rewrites only where it is recursive
     // and the root is watched at all.

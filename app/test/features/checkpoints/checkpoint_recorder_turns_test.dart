@@ -5,14 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_settings.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -87,11 +84,13 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     clock = MovableClock(testTime);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+  localHostEnvironment(clock.nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(session(id: 's1', status: SessionStatus.running));
     tree = 1;
     fixedTree = null;
@@ -122,7 +121,7 @@ void main() {
             runnerFactory: FakeCommandRunnerFactory(
               fallback: FakeCommandRunner(responder: respond),
             ),
-            environmentOf: ExecutionEnvironmentDao(db).getById,
+            environmentOf: server.environmentRows.getById,
             dao: CheckpointDao(db),
             clock: clock,
             newId: () => 'ckpt${++ids}',
@@ -453,7 +452,7 @@ void main() {
   test(
     'a session on an SSH host is skipped, and the panel can say why',
     () async {
-      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      server.environmentRows.upsert(sshEnvFixture());
       server.repositoryRows.insert(
         repository(id: 'r2', environmentId: 'ssh:h1', path: '/srv/app'),
       );

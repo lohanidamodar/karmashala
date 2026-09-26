@@ -6,9 +6,6 @@ import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
@@ -88,12 +85,14 @@ void main() {
 
   setUp(() async {
     db = CountingDatabase();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     client = await server.connect();
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
   });
   tearDown(() => db.close());
 

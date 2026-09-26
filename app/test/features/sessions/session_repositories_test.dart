@@ -5,11 +5,9 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,7 +29,7 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project(id: 'p1'))
       ..insert(project(id: 'p2', name: 'Other'));
@@ -39,7 +37,7 @@ void main() {
       ..insert(repository(id: 'r1', projectId: 'p1', name: 'app'))
       ..insert(repository(id: 'r2', projectId: 'p1', name: 'api'))
       ..insert(repository(id: 'rX', projectId: 'p2', name: 'other'));
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     // The row and its primary checkout, as the server records a new session.
     server.sessionRows.insert(session(repositoryId: 'r1'));
     final client = await server.connect();

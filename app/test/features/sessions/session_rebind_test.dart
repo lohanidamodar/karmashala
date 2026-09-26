@@ -38,7 +38,11 @@ void main() {
     test('a pane that has never reported counts as quiet, not as fresh', () {
       final chosen = sessionToRebind(
         panes: [
-          BoundPane(sessionId: 'busy', conversationId: 'a', lastHeardFrom: _now),
+          BoundPane(
+            sessionId: 'busy',
+            conversationId: 'a',
+            lastHeardFrom: _now,
+          ),
           const BoundPane(sessionId: 'unheard', conversationId: 'b'),
         ],
         now: _now,

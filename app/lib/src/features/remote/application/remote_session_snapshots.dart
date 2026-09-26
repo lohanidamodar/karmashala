@@ -100,7 +100,7 @@ RemoteSessionSnapshot remoteSessionSnapshot(
       .read(workspaceDataProvider)
       .repository(session.repositoryId);
   final installation = ref
-      .read(agentInstallationDaoProvider)
+      .read(agentInstallationsDataProvider)
       .getById(session.agentInstallationId);
   final agentId = installation?.agentId;
   final presence = ref.read(remoteSessionPresenceProvider)(session.id);

@@ -1,25 +1,24 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/ssh/data/environment_key_reader.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 
 void main() {
-  late AppDatabase db;
-  late ExecutionEnvironmentDao environments;
+  late EnvironmentsData environments;
   late List<EnvironmentPath> read;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    environments = ExecutionEnvironmentDao(db);
-    environments.upsert(windowsEnv());
-    environments.upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
+  setUp(() async {
+    final server = FakeDataServer();
+    server.environmentRows
+      ..upsert(windowsEnv())
+      ..upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
+    environments = EnvironmentsData(await server.connect());
     read = [];
   });
-  tearDown(() => db.close());
 
   EnvironmentPrivateKeyReader reader() => EnvironmentPrivateKeyReader(
     environments: environments,

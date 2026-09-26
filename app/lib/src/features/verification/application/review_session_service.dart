@@ -105,7 +105,7 @@ class ReviewSessionService {
       return ReviewOffer(targets: const [], refusal: depth.refusal);
     }
 
-    final installations = _ref.read(agentInstallationDaoProvider);
+    final installations = _ref.read(agentInstallationsDataProvider);
     final registry = _ref.read(agentRegistryProvider);
     final own = installations.getById(session.agentInstallationId);
     final ownName = own == null
@@ -193,7 +193,7 @@ class ReviewSessionService {
     if (session == null) throw StateError('This session no longer exists.');
     final registry = _ref.read(agentRegistryProvider);
     final authorAgentId = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     final directory = _directoryOf(session);
@@ -250,7 +250,7 @@ class ReviewSessionService {
       throw StateError('This session\'s repository is no longer available.');
     }
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(targetInstallationId);
     if (installation == null) {
       throw StateError(

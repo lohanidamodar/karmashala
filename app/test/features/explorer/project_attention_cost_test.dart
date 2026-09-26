@@ -1,8 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -30,8 +28,8 @@ void main() {
         final db = _CountingDatabase();
         addTearDown(db.close);
         final server = FakeDataServer()..mirrorInto(db);
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
-        AgentInstallationDao(db).insert(agentInstallation());
+        server.environmentRows.upsert(windowsEnv());
+        server.installationRows.insert(agentInstallation());
         for (var i = 0; i < count; i++) {
           server.projectRows.insert(
             project(id: 'p$i', name: 'Project $i', path: 'C:\\workspace\\p$i'),

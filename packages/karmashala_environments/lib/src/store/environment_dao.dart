@@ -28,6 +28,14 @@ class ExecutionEnvironmentDao {
     );
   }
 
+  /// Records [env] unless a row with its id is there: the row already recorded
+  /// for this machine is kept as it was written. Whether it was new.
+  bool ensure(ExecutionEnvironment env) {
+    if (getById(env.id) != null) return false;
+    upsert(env);
+    return true;
+  }
+
   ExecutionEnvironment? getById(String id) {
     final rows = _db.query(
       'SELECT * FROM execution_environments WHERE id = ?;',

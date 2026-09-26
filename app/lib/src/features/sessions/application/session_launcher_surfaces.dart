@@ -230,7 +230,7 @@ extension SessionSurfaceStarters on SessionLauncher {
       return null;
     }
     final kind = _ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(directory.environmentId)
         ?.kind;
     final path = kind == null

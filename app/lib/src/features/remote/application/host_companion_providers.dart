@@ -4,7 +4,6 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_host/lifecycle_client.dart' show ServerMethod;
 import 'package:riverpod/riverpod.dart';
 
-import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/host_hook_endpoint.dart';
 import 'host_companion_link.dart';
 import 'remote_access_controller.dart';
@@ -41,13 +40,13 @@ final hostCompanionLinkProvider = Provider<HostCompanionLink>((ref) {
 final _log = AppLogger.named('remote.host');
 
 /// Asks the server to look for this machine's agent CLIs (`agents.refresh`,
-/// sharing the probe its start is already running) and re-reads the rows it
-/// wrote. The app's own sweep still reconciles every environment.
+/// sharing the probe its start is already running); the rows it writes reach
+/// the app's copy as changes. The app's own sweep still reconciles every
+/// environment.
 Future<void> _refreshAgents(Ref ref, HostCompanionLink link) async {
   try {
     final answer = await link.serverCall(ServerMethod.agentsRefresh);
     _log.info('Agent CLIs on this machine: ${answer['summary']}');
-    ref.read(agentInstallationsControllerProvider.notifier).reload();
   } on Object catch (error) {
     _log.info('The server did not refresh its agent CLIs: $error');
   }

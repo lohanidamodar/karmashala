@@ -1,10 +1,7 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +10,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// Which project a browser call belongs to — the question the consent gate
 /// cannot skip.
@@ -29,11 +27,14 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    server = FakeDataServer(clock: () => testTime).mirrorInto(db)
+    server = FakeDataServer(clock: () => testTime).mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(session(id: 's1'));
     container = ProviderContainer(
       overrides: [

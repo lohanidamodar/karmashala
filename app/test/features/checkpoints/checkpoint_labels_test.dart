@@ -4,13 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/checkpoint_tools.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
@@ -231,11 +228,13 @@ void main() {
 
     setUp(() async {
       db = AppDatabase.memory();
-      ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
       final server = FakeDataServer()..mirrorInto(db);
+      server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       mirroredServer(db).sessionRows.insert(session());
       container = ProviderContainer(
         overrides: [

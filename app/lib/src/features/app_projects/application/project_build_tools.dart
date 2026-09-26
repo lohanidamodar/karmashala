@@ -212,7 +212,7 @@ class ProjectBuildTools {
     if (relative.isEmpty) return repository.path;
 
     final environment = _container
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(repository.path.environmentId);
     final context = environment != null && usesWindowsPaths(environment.kind)
         ? p.windows

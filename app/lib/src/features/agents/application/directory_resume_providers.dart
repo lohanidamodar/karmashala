@@ -20,7 +20,7 @@ typedef DirectoryResumePlanner =
 final directoryResumePlannerProvider = Provider<DirectoryResumePlanner>((ref) {
   return (session) async {
     final agentId = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     final adapter = agentId == null
@@ -41,7 +41,7 @@ final directoryResumePlannerProvider = Provider<DirectoryResumePlanner>((ref) {
 
     String? latest;
     try {
-      final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+      final environments = ref.read(environmentsDataProvider).getAll();
       final stores = await ref
           .read(cliStoreLocatorProvider)
           .locate(environments);
@@ -92,7 +92,7 @@ String continueLatestNotice(
   String directory,
 ) {
   final agentId = ref
-      .read(agentInstallationDaoProvider)
+      .read(agentInstallationsDataProvider)
       .getById(session.agentInstallationId)
       ?.agentId;
   final conversations = agentId == null

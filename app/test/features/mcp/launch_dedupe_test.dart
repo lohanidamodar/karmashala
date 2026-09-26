@@ -5,8 +5,6 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -266,11 +264,11 @@ void main() {
       tmp = Directory.systemTemp.createTempSync('karmashala_launch_dedupe_');
       db = AppDatabase.memory();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final fake = FakeDataServer()..mirrorInto(db);
+      fake.environmentRows.upsert(windowsEnv());
       fake.projectRows.insert(project());
       fake.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      fake.installationRows.insert(agentInstallation());
       gate = Completer<void>();
       container = ProviderContainer(
         overrides: [

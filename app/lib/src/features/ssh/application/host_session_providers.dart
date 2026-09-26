@@ -51,7 +51,7 @@ HostSessionAccess? _hostSessionAccessFor(Ref ref, SshHost host) {
   // probe's SSH panes take the tmux path instead (§23).
   if (ref.read(probeModeProvider).enabled) return null;
 
-  final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+  final environments = ref.read(environmentsDataProvider).getAll();
   final match = environments
       .where((e) => e.kind == EnvironmentKind.ssh && e.sshHostId == host.id)
       .firstOrNull;

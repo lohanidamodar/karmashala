@@ -3,10 +3,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -64,13 +62,13 @@ typedef Harness = ({ProviderContainer container, AppDatabase db});
 
 Future<Harness> harness() async {
   final db = AppDatabase.memory();
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
   final server = FakeDataServer()..mirrorInto(db);
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(
-    db,
-  ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+  server.installationRows.insert(
+    agentInstallation(agentId: AgentIds.claudeCode),
+  );
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),

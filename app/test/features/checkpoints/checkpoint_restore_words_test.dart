@@ -4,17 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// [GitFiles] with no disk behind it.
 class _MemoryGitFiles implements GitFiles {
@@ -50,6 +53,8 @@ class _MemoryGitFiles implements GitFiles {
 void main() {
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\demo');
   late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late CheckpointDao dao;
   late CheckpointService service;
   late List<String> trees;
@@ -102,9 +107,11 @@ void main() {
     return const CommandResult(exitCode: 0, stdout: '', stderr: '');
   }
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(
+    server = FakeDataServer()..mirrorInto(db);
+    client = await server.connect();
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'windows',
         kind: EnvironmentKind.windowsNative,
@@ -119,7 +126,7 @@ void main() {
       runnerFactory: FakeCommandRunnerFactory(
         fallback: FakeCommandRunner(responder: respond),
       ),
-      environmentOf: ExecutionEnvironmentDao(db).getById,
+      environmentOf: server.environmentRows.getById,
       dao: dao,
       clock: FixedClock(testTime),
       newId: () => 'ckpt${ids + 100}',
@@ -146,6 +153,7 @@ void main() {
         overrides: [
           checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
           databaseProvider.overrideWithValue(db),
+          dataClientProvider.overrideWithValue(client),
           checkpointDaoProvider.overrideWithValue(dao),
           checkpointServiceProvider.overrideWithValue(service),
           clockProvider.overrideWithValue(FixedClock(testTime)),

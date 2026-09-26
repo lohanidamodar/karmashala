@@ -15,7 +15,7 @@ import 'session_signals.dart';
 /// The agent descriptor behind session [sessionId], or null.
 AgentDescriptor? sessionDescriptor(Ref ref, String agentInstallationId) {
   final agentId = ref
-      .read(agentInstallationDaoProvider)
+      .read(agentInstallationsDataProvider)
       .getById(agentInstallationId)
       ?.agentId;
   return agentId == null ? null : ref.read(agentRegistryProvider).byId(agentId);

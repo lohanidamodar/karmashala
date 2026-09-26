@@ -6,10 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 /// "Slice 1 — data through the server").
 ///
 /// Notes, todos, preferences, the workspace (contexts, projects, checkouts,
-/// saved sections) and sessions (their rows, checkouts, records and the
-/// imported history) go through the server's data API (`lib/src/core/data/`,
-/// `WorkspaceData`, `SessionsData`); nothing under `lib/` opens their tables
-/// or the `app_metadata` rows itself. The domains not moved yet still use the
+/// saved sections), sessions (their rows, checkouts, records and the imported
+/// history), and where agents run and who they run as (environments, SSH
+/// hosts, trusted host keys, agent installations, saved accounts, usage
+/// history) go through the server's data API (`lib/src/core/data/`,
+/// `WorkspaceData`, `SessionsData`, `EnvironmentsData`, `SshHostsData`,
+/// `AgentInstallationsData`, …); nothing under `lib/` opens their tables or the
+/// `app_metadata` rows itself. The domains not moved yet still use the
 /// database the app opens, from the files listed in [remaining] — a list that
 /// only shrinks: a new file fails here, and a listed file that stopped
 /// touching the database fails until it is taken off.
@@ -23,23 +26,6 @@ void main() {
       'main.dart',
       'src/core/database/database_providers.dart',
       'src/core/lifecycle/app_lifecycle.dart',
-    ],
-    'environments and SSH hosts': [
-      'src/features/environments/application/environment_providers.dart',
-      'src/features/environments/data/execution_environment_dao.dart',
-      'src/features/ssh/application/ssh_providers.dart',
-      'src/features/ssh/data/known_host_dao.dart',
-      'src/features/ssh/data/ssh_host_dao.dart',
-    ],
-    'agents, accounts and usage': [
-      'src/features/agents/application/agent_providers.dart',
-      'src/features/agents/application/claude_accounts_controller.dart',
-      'src/features/agents/application/codex_accounts_controller.dart',
-      'src/features/agents/application/usage_history.dart',
-      'src/features/agents/data/agent_installation_dao.dart',
-      'src/features/agents/data/claude_account_dao.dart',
-      'src/features/agents/data/codex_account_dao.dart',
-      'src/features/agents/data/usage_sample_dao.dart',
     ],
     'the conversation index': [
       'src/features/cli_detection/application/cli_detection_providers.dart',
@@ -137,6 +123,34 @@ void main() {
       reason: 'sessions go through SessionsData',
     );
     expect(
+      filesMatching(
+        RegExp(
+          r'\b(ExecutionEnvironmentDao|SshHostDao|KnownHostDao|'
+          r'AgentInstallationDao|AgentInstallationRows|ClaudeAccountDao|'
+          r'CodexAccountDao|UsageSampleDao)\b|karmashala_environments/store',
+        ),
+      ),
+      isEmpty,
+      reason:
+          'environments, SSH hosts, trusted keys, installations, saved '
+          'accounts and usage go through EnvironmentsData, SshHostsData, '
+          'KnownHostsData, AgentInstallationsData and the accounts and usage '
+          'data',
+    );
+    expect(
+      filesMatching(
+        RegExp(
+          r'\b(FROM|INTO|UPDATE|JOIN)\s+(execution_environments|'
+          r'agent_installations|ssh_hosts|ssh_known_hosts|claude_accounts|'
+          r'codex_accounts|usage_samples)\b',
+        ),
+      ),
+      // The index's search names the agent of each hit inside its own query;
+      // it moves with the conversation index (1f), reading only.
+      ['src/features/cli_detection/data/conversation_index_dao.dart'],
+      reason: 'environments and agents go through the server',
+    );
+    expect(
       filesMatching(RegExp(r'\.(readMetadata|writeMetadata)\(')),
       // The index's own write counter, a key the data API reserves for its
       // domain; it moves with the conversation index.
@@ -152,6 +166,9 @@ void main() {
       'src/features/repositories/',
       'src/features/sessions/',
       'src/features/follow_ups/',
+      'src/features/environments/',
+      'src/features/ssh/',
+      'src/features/agents/',
     ]) {
       expect(
         [
@@ -185,14 +202,14 @@ void main() {
   });
 
   test('no app test reaches the moved domains in a store', () {
-    // Notes, todos, preferences, the workspace and sessions are read and
-    // written through the fake server (test/support/fake_data_server.dart);
+    // Notes, todos, preferences, the workspace, sessions, environments, SSH
+    // hosts, trusted keys, installations, saved accounts and usage are read
+    // and written through the fake server (test/support/fake_data_server.dart);
     // their rules are tested in packages/karmashala_notes,
-    // karmashala_projects, karmashala_session(_engine), karmashala_store and
-    // server/test/data. The one exception is the transitional
-    // `workspace_mirror.dart`, which copies the fake's workspace and session
-    // rows into a test's database for the foreign keys of the tables not
-    // moved yet.
+    // karmashala_projects, karmashala_session(_engine), karmashala_environments,
+    // karmashala_store and server/test/data. The one exception is the
+    // transitional `workspace_mirror.dart`, which copies the fake's rows into
+    // a test's database for the foreign keys of the tables not moved yet.
     final reaching = <String>[];
     for (final file in Directory(
       'test',
@@ -205,7 +222,15 @@ void main() {
         r'\b(DataService|NoteDao|TodoDao|StoredPreferences|WorkspaceDao|'
         r'ProjectDao|RepositoryDao|SectionDao|SessionDao|SessionEventDao|'
         r'DecisionRecordDao|SessionRecapDao|SessionRelayDao|FollowUpDao|'
-        r'SessionRepositoryDao|ImportedSessionDao)\b|'
+        r'SessionRepositoryDao|ImportedSessionDao|ExecutionEnvironmentDao|'
+        r'SshHostDao|KnownHostDao|AgentInstallationDao|ClaudeAccountDao|'
+        r'CodexAccountDao|UsageSampleDao)\b|'
+        r'karmashala_environments/store|'
+        // Seeding them in a store; a cost test may still name them to count
+        // that the app issues no statement against them.
+        r'\b(INTO|UPDATE)\s+(execution_environments|'
+        r'agent_installations|ssh_hosts|ssh_known_hosts|claude_accounts|'
+        r'codex_accounts|usage_samples)\b|'
         r'karmashala_session_engine/store|'
         r'karmashala_host/data\.dart|karmashala_notes/store|'
         r'karmashala_projects/store|\.(readMetadata|writeMetadata)\(|'

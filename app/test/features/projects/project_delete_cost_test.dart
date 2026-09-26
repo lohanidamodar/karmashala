@@ -6,12 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/cli_store_purge.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
@@ -62,13 +60,13 @@ void main() {
   /// store work being counted is the work the app really does.
   _CountingDatabase seed(int count) {
     final db = _CountingDatabase();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     // Not mirrored: the rows are the server's, and every `DELETE` counted
     // below is one this app issued itself.
     server = FakeDataServer(clock: () => testTime);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
 
     final codexIndex = <String>[];
     for (var i = 0; i < count; i++) {

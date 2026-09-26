@@ -152,7 +152,7 @@ watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
   (ref) => WatchedSessionLoader(
     sessionDao: ref.watch(sessionsDataProvider),
     importedSessionDao: ref.watch(importedSessionsProvider),
-    installationDao: ref.watch(agentInstallationDaoProvider),
+    installationDao: ref.watch(agentInstallationsDataProvider),
     hookReports: ref.watch(agentHookReportsProvider),
     clock: ref.watch(clockProvider),
     // Asked through `exists`, never built: building the controller starts the

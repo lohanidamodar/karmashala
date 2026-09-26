@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
 import 'package:karmashala_store/database.dart';
@@ -22,6 +21,7 @@ import '../../support/system_health_fakes.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_host_box.dart';
+import '../../support/fake_data_server.dart';
 
 class _Access extends RemoteAccessController {
   _Access(super.ref);
@@ -35,20 +35,23 @@ class _Access extends RemoteAccessController {
 void main() {
   late AppDatabase db;
   late FakeHostBox box;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     box = FakeHostBox();
-    ExecutionEnvironmentDao(db)
+    final server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(sshEnvFixture(name: boxHost.name));
-    SshHostDao(db).upsert(boxHost);
+    server.sshHostRows.upsert(boxHost);
+    data = await server.override();
   });
   tearDown(() => db.close());
 
   Widget scope(Widget body) => ProviderScope(
     overrides: [
-      ...fakeTerminalOverrides(database: db),
+      ...fakeTerminalOverrides(database: db, data: data),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
       remoteAccessControllerProvider.overrideWith(_Access.new),

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
@@ -16,6 +15,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// **A WSL project's folder is asked about with `wsl.exe`, from inside the
 /// distribution — batched, kept, and never over `\\wsl.localhost`.**
@@ -225,13 +226,16 @@ void main() {
 
   group('projectPathMissingProvider', () {
     late AppDatabase db;
+    late Override data;
 
-    setUp(() {
+    setUp(() async {
       db = AppDatabase.memory();
-      final environments = ExecutionEnvironmentDao(db);
-      environments.upsert(windowsEnv());
-      environments.upsert(wslEnv());
-      environments.upsert(sshEnvFixture());
+      final server = FakeDataServer();
+      server.environmentRows
+        ..upsert(windowsEnv())
+        ..upsert(wslEnv())
+        ..upsert(sshEnvFixture());
+      data = await server.override();
     });
     tearDown(() => db.close());
 
@@ -239,6 +243,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           hostCommandRunnerProvider.overrideWithValue(host),
         ],
@@ -291,6 +296,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          data,
           clockProvider.overrideWithValue(clock),
           hostCommandRunnerProvider.overrideWithValue(host),
         ],

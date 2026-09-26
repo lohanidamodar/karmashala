@@ -57,7 +57,7 @@ extension SessionPolicyVerbs on SessionLauncher {
     final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return null;
     final defaults = _ref
@@ -112,7 +112,7 @@ extension SessionPolicyVerbs on SessionLauncher {
     final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return null;
     final defaultModelId = defaultModelFor(installation.agentId);

@@ -15,13 +15,13 @@ import '../data/agent_store_servers.dart';
 final agentStoreServersProvider = Provider<AgentStoreServers>((ref) {
   final servers = AgentStoreServers(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environments: ref.watch(executionEnvironmentDaoProvider),
-    installations: ref.watch(agentInstallationDaoProvider),
+    environments: ref.watch(environmentsDataProvider),
+    installations: ref.watch(agentInstallationsDataProvider),
     registry: ref.watch(agentRegistryProvider),
     clientVersion: appVersion.isEmpty ? '0.0.0' : appVersion,
     onNameUpdated: (agentId, update) {
       final sessions = ref.read(sessionsDataProvider);
-      final installations = ref.read(agentInstallationDaoProvider);
+      final installations = ref.read(agentInstallationsDataProvider);
       final agentIdsByInstallation = <String, String?>{};
       var changed = false;
       for (final row in sessions.getAllByExternalSessionId(

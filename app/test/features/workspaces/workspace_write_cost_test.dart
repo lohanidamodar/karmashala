@@ -8,8 +8,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -41,8 +39,8 @@ void main() {
 
   setUp(() async {
     db = _CountingDatabase();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer(clock: () => testTime);
+    server.environmentRows.upsert(windowsEnv());
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -209,7 +207,9 @@ void main() {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     for (var i = 0; i < projectCount; i++) {
       server.projectRows.insert(
         Project(

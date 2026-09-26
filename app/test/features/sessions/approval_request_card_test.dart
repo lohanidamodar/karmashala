@@ -1,9 +1,7 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -38,10 +36,10 @@ Future<({AppDatabase db, Widget app, ProviderContainer container})> harness({
 }) async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+  server.installationRows.insert(agentInstallation(agentId: agentId));
   final dao = mirroredServer(db).sessionRows
     ..insert(
       Session(

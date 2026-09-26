@@ -3,7 +3,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
@@ -63,7 +63,7 @@ void main() {
                   responder: (request) => _hashObject(request, harness.shas),
                 ),
               ),
-              environmentDao: ExecutionEnvironmentDao(harness.db),
+              environmentDao: EnvironmentsData(harness.client),
             ),
           ),
           repositoryChangesProvider.overrideWith(
@@ -234,7 +234,7 @@ void main() {
                         ),
                 ),
               ),
-              environmentDao: ExecutionEnvironmentDao(harness.db),
+              environmentDao: EnvironmentsData(harness.client),
             ),
           ),
           selectedRepositoryIdProvider.overrideWith(() => _Sidebar(sidebar)),

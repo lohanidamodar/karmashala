@@ -26,7 +26,7 @@ class AppDocumentSources implements DocumentSourceResolver {
     final cached = _remote[environmentId];
     if (cached != null) return cached;
     final environment = _ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(environmentId);
     if (environment == null) return null;
     final source = switch (environment.kind) {

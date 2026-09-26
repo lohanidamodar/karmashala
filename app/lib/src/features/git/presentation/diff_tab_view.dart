@@ -35,7 +35,7 @@ class DiffTabView extends ConsumerWidget {
         .windowsPathFor(target.checkout);
     if (root != null) return p.normalize(p.join(root, target.path));
     final environment = ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(target.checkout.environmentId);
     if (environment?.kind != EnvironmentKind.ssh) return null;
     return documentIdOf(

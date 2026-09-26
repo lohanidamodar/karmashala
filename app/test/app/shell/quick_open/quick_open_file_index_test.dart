@@ -5,9 +5,6 @@ import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +17,7 @@ import '../../../support/fixtures.dart';
 import '../../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// The dialog's side of the file index: that it draws what is cached, notices
 /// the index refreshing behind it, and lets go of a walk it no longer wants.
@@ -36,10 +34,12 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login redirect'));
     root = Directory.systemTemp.createTempSync('cg_qo_index');
   });

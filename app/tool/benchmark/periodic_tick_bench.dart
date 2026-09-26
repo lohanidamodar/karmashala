@@ -4,10 +4,9 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala/src/features/notifications/application/watched_session_loader.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,20 +71,21 @@ void main() {
   late FakeDataServer server;
   late SessionsData sessions;
   late ImportedSessionsData imported;
-  late AgentInstallationDao installations;
+  late AgentInstallationsData installations;
 
   setUp(() async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     // The workspace and the sessions are the server's: seeded at a fake one,
     // read through the app's copy, as the loader reads them.
     server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
+    server.installationRows.insert(agentInstallation());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     final client = await server.connect();
     sessions = SessionsData(client);
     imported = ImportedSessionsData(client, sessions);
-    installations = AgentInstallationDao(db)..insert(agentInstallation());
+    installations = AgentInstallationsData(client);
     temp = Directory.systemTemp.createTempSync('periodic-tick');
     addTearDown(() {
       db.close();

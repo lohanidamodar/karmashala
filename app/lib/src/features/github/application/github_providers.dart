@@ -5,7 +5,7 @@ import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/data/environments_data.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/github.dart';
 
@@ -18,7 +18,7 @@ class GitHubReviewService {
   });
 
   final CommandRunnerFactory runnerFactory;
-  final ExecutionEnvironmentDao environmentDao;
+  final EnvironmentsData environmentDao;
 
   GitHubService _ghFor(EnvironmentPath repo) {
     final resolved = ExecutionEnvironmentResolver(
@@ -82,7 +82,7 @@ class GitHubReviewService {
 final gitHubReviewServiceProvider = Provider<GitHubReviewService>(
   (ref) => GitHubReviewService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    environmentDao: ref.watch(environmentsDataProvider),
   ),
 );
 

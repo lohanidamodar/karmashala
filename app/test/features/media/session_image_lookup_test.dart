@@ -7,7 +7,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 
@@ -36,10 +35,9 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
-      ..upsert(windowsEnv())
-      ..upsert(wslEnv());
     server = FakeDataServer().mirrorInto(db)
+      ..environmentRows.upsert(windowsEnv())
+      ..environmentRows.upsert(wslEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     dir = Directory.systemTemp.createTempSync('image_lookup');

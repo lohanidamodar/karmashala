@@ -1,12 +1,12 @@
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala_git/github.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// **The environment row reaches the refusal.** `GitHubService` can only name
 /// where it looked if the app hands it the row it resolved; without that it
@@ -15,18 +15,14 @@ import '../../support/fixtures.dart';
 /// Mark ready, Open a pull request, the strip's own polls — goes through this
 /// one service.
 void main() {
-  late AppDatabase db;
-
-  setUp(() => db = AppDatabase.memory());
-  tearDown(() => db.close());
-
-  GitHubReviewService serviceFor(FakeCommandRunner runner) {
-    final dao = ExecutionEnvironmentDao(db)
+  Future<GitHubReviewService> serviceFor(FakeCommandRunner runner) async {
+    final server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     return GitHubReviewService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: dao,
+      environmentDao: EnvironmentsData(await server.connect()),
     );
   }
 
@@ -42,7 +38,7 @@ void main() {
       ),
     );
     await expectLater(
-      serviceFor(runner).pullRequests(
+      (await serviceFor(runner)).pullRequests(
         const EnvironmentPath(
           environmentId: 'wsl:Ubuntu',
           path: '/home/me/app',
@@ -63,23 +59,30 @@ void main() {
     );
   });
 
-  test('a Windows checkout whose gh will not start says so, and where', () async {
-    final runner = FakeCommandRunner(
-      throwError: CommandException('Failed to run "gh" on windows'),
-    );
-    await expectLater(
-      serviceFor(runner).issues(
-        const EnvironmentPath(environmentId: 'windows', path: r'C:\src\app'),
-      ),
-      throwsA(
-        isA<GitHubException>()
-            .having((e) => e.refusal, 'refusal', GitHubCliRefusal.notInstalled)
-            .having(
-              (e) => e.message,
-              'message',
-              contains('not installed in Windows'),
-            ),
-      ),
-    );
-  });
+  test(
+    'a Windows checkout whose gh will not start says so, and where',
+    () async {
+      final runner = FakeCommandRunner(
+        throwError: CommandException('Failed to run "gh" on windows'),
+      );
+      await expectLater(
+        (await serviceFor(runner)).issues(
+          const EnvironmentPath(environmentId: 'windows', path: r'C:\src\app'),
+        ),
+        throwsA(
+          isA<GitHubException>()
+              .having(
+                (e) => e.refusal,
+                'refusal',
+                GitHubCliRefusal.notInstalled,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('not installed in Windows'),
+              ),
+        ),
+      );
+    },
+  );
 }

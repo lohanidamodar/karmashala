@@ -1,12 +1,12 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
@@ -33,7 +33,8 @@ import '../../support/fake_data_server.dart';
 /// own business and unchanged: git throws a `GitException`, an adapter throws,
 /// a pool returns null, a probe answers `unknown`.
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late FakeCommandRunner runner;
 
   /// A checkout filed under an environment the workspace no longer has.
@@ -42,12 +43,11 @@ void main() {
   /// What every one of these sites must end up saying.
   const words = 'Unknown environment: wsl:Gone';
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  setUp(() async {
+    server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    client = await server.connect();
     runner = FakeCommandRunner();
   });
-  tearDown(() => db.close());
 
   FakeCommandRunnerFactory factory() =>
       FakeCommandRunnerFactory(fallback: runner);
@@ -58,7 +58,7 @@ void main() {
   RunnerResolver appRunnerResolver() {
     final c = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(factory()),
       ],
     );
@@ -73,7 +73,7 @@ void main() {
     test('WorktreeService.list refuses, and spawns nothing', () async {
       final service = WorktreeService(
         runnerFactory: factory(),
-        environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
+        environmentOf: worktreeEnvironmentOf(EnvironmentsData(client)),
       );
 
       // Synchronous: the refusal happens before any future is made.
@@ -84,7 +84,7 @@ void main() {
     test('WorktreeService.createForSession refuses before git runs', () async {
       final service = WorktreeService(
         runnerFactory: factory(),
-        environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
+        environmentOf: worktreeEnvironmentOf(EnvironmentsData(client)),
       );
 
       await expectLater(
@@ -101,7 +101,7 @@ void main() {
     test('ChangesService refuses', () async {
       final service = ChangesService(
         runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentDao: EnvironmentsData(client),
       );
 
       expect(() => service.changes(gone), saysSo<GitException>());
@@ -111,7 +111,7 @@ void main() {
     test('GitHubReviewService refuses', () async {
       final service = GitHubReviewService(
         runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentDao: EnvironmentsData(client),
       );
 
       expect(() => service.repository(gone), saysSo<GitHubException>());
@@ -155,8 +155,8 @@ void main() {
     () {
       final pool = AgentStoreServers(
         runnerFactory: factory(),
-        environments: ExecutionEnvironmentDao(db),
-        installations: AgentInstallationDao(db),
+        environments: EnvironmentsData(client),
+        installations: AgentInstallationsData(client),
       );
 
       expect(pool.forEnvironment(gone.environmentId, AgentIds.codex), isNull);
@@ -170,7 +170,7 @@ void main() {
     final service = EnvironmentAwareRepositoryDiscoveryService(
       localDiscovery: const LocalRepositoryDiscoveryService(),
       runnerFactory: factory(),
-      environments: ExecutionEnvironmentDao(db),
+      environments: EnvironmentsData(client),
     );
 
     // Unchanged behaviour: an environment it cannot name falls to the local
@@ -184,13 +184,9 @@ void main() {
   });
 
   group('through providers', () {
-    late FakeDataServer server;
-    setUp(() => server = FakeDataServer());
-
     Future<ProviderContainer> container() async {
       final c = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
           await server.override(),
           commandRunnerFactoryProvider.overrideWithValue(factory()),
         ],

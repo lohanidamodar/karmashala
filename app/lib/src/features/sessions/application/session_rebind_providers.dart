@@ -111,10 +111,9 @@ String? rebindSessionFromHook(
   ];
   if (live.isEmpty) return null;
 
-  final installations = container.read(agentInstallationDaoProvider);
+  final installations = container.read(agentInstallationsDataProvider);
   final environments = {
-    for (final environment
-        in container.read(executionEnvironmentDaoProvider).getAll())
+    for (final environment in container.read(environmentsDataProvider).getAll())
       environment.id: environment,
   };
   final translator = container.read(pathTranslatorProvider);

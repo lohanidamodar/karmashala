@@ -5,11 +5,9 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_agent_filter.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -58,7 +56,7 @@ void main() {
   CountingDatabase seed(FakeDataServer server, int count) {
     final db = CountingDatabase();
     server.mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     server.repositoryRows.insert(
       repository(id: 'r1', projectId: 'p1', name: 'hub', path: r'C:\hub'),
@@ -67,7 +65,7 @@ void main() {
     // narrowing and the "filter on" case is measuring work rather than a
     // shortcut past it.
     const agents = [AgentIds.codex, AgentIds.claudeCode, AgentIds.antigravity];
-    final installations = AgentInstallationDao(db);
+    final installations = server.installationRows;
     for (final agent in agents) {
       installations.insert(agentInstallation(id: 'a-$agent', agentId: agent));
     }
@@ -176,7 +174,7 @@ void main() {
       });
     }
 
-    test('costs one read of a table that does not grow with the workspace', () {
+    test('reads no table at all: the installations are the server\'s copy', () {
       expect(on.keys, containsAll(scale));
       expect(off.keys, containsAll(scale));
       // ignore: avoid_print
@@ -186,14 +184,16 @@ void main() {
         orderedEquals([0]),
         reason: 'the panel does not sweep installations to begin with: $off',
       );
+      // Since slice 1d the installations are read from the copy the data
+      // client keeps, so deciding which agent runs every session reads the
+      // database not even once.
       for (final count in scale) {
         expect(
-          on[count]! - off[count]!,
-          1,
+          on[count],
+          0,
           reason:
-              'deciding which agent runs every session in the workspace reads '
-              'the installations table once and no more, at $count sessions: '
-              '${on[count]} against ${off[count]}',
+              'deciding which agent runs every session in the workspace '
+              'sweeps no table, at $count sessions: ${on[count]}',
         );
       }
       // ignore: avoid_print

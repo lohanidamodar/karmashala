@@ -13,7 +13,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/agents_lens.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
@@ -59,7 +58,7 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     server = FakeDataServer();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows
       ..insert(project(id: 'p1', name: 'Alpha', path: r'C:\src\alpha'))
       ..insert(project(id: 'p2', name: 'Beta', path: r'C:\src\beta'));
@@ -174,7 +173,7 @@ void main() {
     testWidgets('a second machine adds its strip on a row of its own under '
         'the search field — never beside it, however wide the pane — and '
         'the row costs one control and its gap', (tester) async {
-      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      server.environmentRows.upsert(sshEnvFixture());
       // 520 is where `All · Windows · build-box` once fit beside the field
       // whole; it is a row of its own there too now.
       for (final paneWidth in [520.0, 304.0, 240.0]) {
@@ -214,7 +213,7 @@ void main() {
 
     testWidgets('a fourth machine folds the strip into a menu on the search '
         'row', (tester) async {
-      ExecutionEnvironmentDao(db)
+      server.environmentRows
         ..upsert(sshEnvFixture())
         ..upsert(wslEnv())
         ..upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
@@ -306,7 +305,7 @@ void main() {
 
     testWidgets('every segment wears the mark of what it is, and the one in '
         'scope is the one marked', (tester) async {
-      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      server.environmentRows.upsert(sshEnvFixture());
       final c = await container();
       // Wide enough that `build-box` — nine squares in the test font — fits
       // beside a glyph; narrower, the strip rightly drops the glyphs for
@@ -347,7 +346,7 @@ void main() {
 
     testWidgets('as a menu, the machine in scope wears the mark of what it '
         'is', (tester) async {
-      ExecutionEnvironmentDao(db)
+      server.environmentRows
         ..upsert(sshEnvFixture())
         ..upsert(wslEnv())
         ..upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));

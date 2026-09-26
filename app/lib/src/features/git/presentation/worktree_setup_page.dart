@@ -174,7 +174,7 @@ class _CheckoutCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final environment = ref
-        .watch(executionEnvironmentDaoProvider)
+        .watch(environmentsDataProvider)
         .getById(repository.path.environmentId);
     final runs = ref.watch(worktreeSetupRunsProvider(repository.id));
     final now = ref.watch(clockProvider).nowUtc();

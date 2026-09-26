@@ -4,9 +4,6 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -21,6 +18,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// Notes and the inbox, over the endpoint.
 ///
@@ -44,15 +42,17 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_attention_tools_');
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     final fake = FakeDataServer(
       clock: () => testTime,
       repositoryOfSession: {'s1': 'r1'},
       projectOfRepository: {'r1': 'p1'},
     )..mirrorInto(db);
+    fake.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    fake.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login'));
 
     final data = await fake.override();

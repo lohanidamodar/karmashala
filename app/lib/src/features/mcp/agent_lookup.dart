@@ -28,7 +28,8 @@ AgentInstallation? installFor(
   String agentId,
   String? environmentId,
 ) {
-  for (final install in container.read(agentInstallationDaoProvider).getAll()) {
+  for (final install
+      in container.read(agentInstallationsDataProvider).getAll()) {
     if (install.agentId != agentId) continue;
     if (environmentId != null && install.environmentId != environmentId) {
       continue;

@@ -28,7 +28,7 @@ class AppCheckoutFacts implements CheckoutFacts {
 
   @override
   AgentInstallation? installation(String id) =>
-      _ref.read(agentInstallationDaoProvider).getById(id);
+      _ref.read(agentInstallationsDataProvider).getById(id);
 
   @override
   AgentDescriptor? descriptor(String agentId) =>

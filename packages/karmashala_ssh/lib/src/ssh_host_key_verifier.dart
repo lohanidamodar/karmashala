@@ -85,7 +85,7 @@ class SshHostKeyVerifier {
           );
           return false;
         }
-        knownHosts.trust(
+        final recorded = await knownHosts.trust(
           KnownHostKey(
             host: host,
             port: port,
@@ -94,6 +94,15 @@ class SshHostKeyVerifier {
             trustedAt: clock.nowUtc(),
           ),
         );
+        if (!recorded) {
+          // Another key was trusted for this host meanwhile: the store keeps
+          // the first, and this connection is refused like a changed key.
+          _logger.error(
+            'Host key for $host:$port was not recorded as trusted; '
+            'connection refused.',
+          );
+          return false;
+        }
         _logger.info(
           'Trusted new $keyType host key for $host:$port ($fingerprint).',
         );

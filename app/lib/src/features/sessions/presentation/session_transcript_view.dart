@@ -157,7 +157,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     if (session == null) return null;
     final environmentId = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.environmentId;
     if (environmentId == null) return null;
@@ -211,7 +211,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       return;
     }
     final kind = ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(base.environmentId)
         ?.kind;
     final resolved = resolveTranscriptPath(

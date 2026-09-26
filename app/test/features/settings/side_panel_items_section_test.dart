@@ -6,8 +6,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
@@ -23,6 +21,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import 'package:agent_cli/process.dart';
 
 /// Settings › Appearance › Side panel: the rail's checklist where a person who
 /// never right-clicks the rail will look for it.
@@ -33,8 +32,10 @@ void main() {
   Future<ProviderContainer> prepared() async {
     db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     server = FakeDataServer(clock: () => testTime);
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [

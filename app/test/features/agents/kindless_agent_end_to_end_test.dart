@@ -1,11 +1,8 @@
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -16,8 +13,9 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
+
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// An agent that exists only as data: a registry entry with **no adapter code
@@ -65,14 +63,12 @@ void main() {
     expect(discovered.single.executable.path, r'C:\bin\rover.exe');
 
     // 2. PERSISTENCE + READ-BACK — the id is the stored key, unchanged.
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    final server = FakeDataServer()..mirrorInto(db);
+    final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
     server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    final installationDao = AgentInstallationDao(db)..insert(discovered.single);
+    final installationDao = server.installationRows..insert(discovered.single);
     final AgentInstallation stored = installationDao.getAll().single;
 
     expect(stored, discovered.single);
@@ -110,7 +106,7 @@ void main() {
       records: SessionRecordsData(client),
       worktreeService: WorktreeService(
         runnerFactory: FakeCommandRunnerFactory(),
-        environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
+        environmentOf: worktreeEnvironmentOf(EnvironmentsData(client)),
       ),
       resolveProtocol: (agentId) {
         resolved.add(agentId);

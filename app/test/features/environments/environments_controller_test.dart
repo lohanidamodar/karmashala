@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -10,24 +8,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
   _labelFallbackTests();
 
-  late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
 
-  setUp(() {
-    db = AppDatabase.memory();
+  setUp(() async {
+    server = FakeDataServer();
     final runner = FakeCommandRunner(
       responder: (_) =>
           const CommandResult(exitCode: 0, stdout: 'Ubuntu\n', stderr: ''),
     );
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         hostCommandRunnerProvider.overrideWithValue(runner),
         // These cases are about WSL, which only exists on Windows. Said out
@@ -43,10 +42,7 @@ void main() {
       ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   test('starts with no environments', () {
     expect(container.read(environmentsControllerProvider), isEmpty);
@@ -60,7 +56,11 @@ void main() {
           .discoverAndPersist();
 
       expect(result.map((e) => e.id), ['windows', 'wsl:Ubuntu']);
-      // State and persistence both reflect the discovery.
+      // State and the server both reflect the discovery.
+      expect(server.environmentRows.getAll().map((e) => e.id), [
+        'windows',
+        'wsl:Ubuntu',
+      ]);
       expect(container.read(environmentsControllerProvider).map((e) => e.id), [
         'windows',
         'wsl:Ubuntu',

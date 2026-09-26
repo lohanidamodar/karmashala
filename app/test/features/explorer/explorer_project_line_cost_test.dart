@@ -9,10 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
@@ -61,8 +59,8 @@ void main() {
   CountingDatabase seed(FakeDataServer server) {
     final db = CountingDatabase();
     server.mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(posixEnv());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.environmentRows.upsert(posixEnv());
+    server.installationRows.insert(agentInstallation());
     db.execute('BEGIN');
     for (var i = 0; i < _projects; i++) {
       // Padded: projects list by creation and then id, and these share a time.

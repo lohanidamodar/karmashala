@@ -9,10 +9,10 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/conversation_presence_sweep.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_cli_store_locator.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
 
@@ -77,20 +77,22 @@ void main() {
       ..writeAsStringSync('{"type":"session_meta"}\n');
   }
 
-  ProviderContainer containerOver(
+  Future<ProviderContainer> containerOver(
     List<CliStore> stores, {
     List<AgentAdapter> agents = const [
       ClaudeCodeAdapter(descriptor: _claudeish),
     ],
-  }) {
+  }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    final dao = ExecutionEnvironmentDao(db);
-    dao.upsert(windowsEnv());
-    dao.upsert(wslEnv());
+    final server = FakeDataServer();
+    server.environmentRows
+      ..upsert(windowsEnv())
+      ..upsert(wslEnv());
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         cliStoreLocatorProvider.overrideWithValue(FixedLocator(stores)),
         agentRegistryProvider.overrideWithValue(AgentRegistry(agents)),
       ],
@@ -171,7 +173,7 @@ void main() {
 
   group('the sweep', () {
     test('a conversation on disk is present', () async {
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.claude')},
@@ -191,7 +193,7 @@ void main() {
     });
 
     test("only the session's own environment may say absent", () async {
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.claude')},
@@ -221,7 +223,7 @@ void main() {
     });
 
     test('a conversation found in another environment is present', () async {
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.claude')},
@@ -250,7 +252,7 @@ void main() {
       // The WSL share is up but the store directory is gone. `idsIn` answers
       // null, so the environment's key exists with no set behind it — and every
       // row in it is `unknown`, not `absent`.
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.missing')},
@@ -271,7 +273,7 @@ void main() {
     });
 
     test('an agent with no store format is never judged', () async {
-      final container = containerOver(
+      final container = await containerOver(
         [
           CliStore(
             environmentId: 'windows',
@@ -294,7 +296,7 @@ void main() {
     });
 
     test('one agent\'s conversation is not another agent\'s', () async {
-      final container = containerOver(
+      final container = await containerOver(
         [
           CliStore(
             environmentId: 'windows',
@@ -332,7 +334,7 @@ void main() {
     });
 
     test('an empty conversation id is never answered', () async {
-      final container = containerOver([
+      final container = await containerOver([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {'claudeish': home('.claude')},
@@ -370,7 +372,7 @@ void main() {
       ];
       writeClaude(home('.claude'), '-c-src-demo', 'kept');
 
-      final container = containerOver(stores);
+      final container = await containerOver(stores);
       final sweep = await container.read(conversationPresenceSweepProvider)();
       final probe = container.read(conversationPresenceProvider);
 

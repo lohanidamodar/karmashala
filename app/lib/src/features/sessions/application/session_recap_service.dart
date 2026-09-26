@@ -38,7 +38,7 @@ class SessionRecapService {
       throw SessionRecapRefusal('This session no longer exists.');
     }
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) {
       throw SessionRecapRefusal(
@@ -75,7 +75,7 @@ class SessionRecapService {
     final blob = _blob(turns);
 
     final environment = _ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(installation.executable.environmentId);
     if (environment == null) {
       throw SessionRecapRefusal(
@@ -193,12 +193,11 @@ final sessionRecapServiceProvider = Provider<SessionRecapService>(
 
 /// The recap [sessionId] holds, or null when nobody has asked for one — read
 /// from the copy, and again whenever a recap changes here or elsewhere.
-final sessionRecapProvider = Provider.autoDispose.family<SessionRecap?, String>((
-  ref,
-  sessionId,
-) {
-  final records = ref.watch(sessionRecordsProvider);
-  final changed = records.recapChanges.listen((_) => ref.invalidateSelf());
-  ref.onDispose(changed.cancel);
-  return records.recapFor(sessionId);
-});
+final sessionRecapProvider = Provider.autoDispose.family<SessionRecap?, String>(
+  (ref, sessionId) {
+    final records = ref.watch(sessionRecordsProvider);
+    final changed = records.recapChanges.listen((_) => ref.invalidateSelf());
+    ref.onDispose(changed.cancel);
+    return records.recapFor(sessionId);
+  },
+);

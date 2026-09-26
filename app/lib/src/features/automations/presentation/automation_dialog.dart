@@ -99,7 +99,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
   List<AgentInstallation> get _installations {
     final repository = widget.repository!;
     return ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(repository.path.environmentId);
   }
 

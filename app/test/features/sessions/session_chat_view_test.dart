@@ -5,10 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_view_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -104,10 +102,10 @@ void main() {
     final db = AppDatabase.memory();
     final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+    server.installationRows.insert(agentInstallation(agentId: agentId));
     server.sessionRows.insert(
       Session(
         id: 's1',

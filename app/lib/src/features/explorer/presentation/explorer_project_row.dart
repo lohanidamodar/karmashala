@@ -170,7 +170,7 @@ class ExplorerProjectRow extends ConsumerWidget {
                 workspaces: ref.read(workspacesControllerProvider),
                 workspaceCounts: ref.read(workspaceProjectCountsProvider),
                 installations: ref
-                    .read(agentInstallationDaoProvider)
+                    .read(agentInstallationsDataProvider)
                     .getByEnvironment(project.root.environmentId),
                 canReveal: ref
                     .read(revealInFileManagerProvider)
@@ -434,7 +434,7 @@ class ProjectRowActions {
 
   void openTerminal() {
     final env = ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(project.environmentId);
     final controller = ref.read(terminalSessionsControllerProvider.notifier);
     final sshHostId = env?.sshHostId;
@@ -571,7 +571,7 @@ class ProjectRowActions {
     if (action.startsWith('new-with:')) {
       final id = action.substring('new-with:'.length);
       final installation = ref
-          .read(agentInstallationDaoProvider)
+          .read(agentInstallationsDataProvider)
           .getByEnvironment(project.root.environmentId)
           .where((installation) => installation.id == id)
           .firstOrNull;

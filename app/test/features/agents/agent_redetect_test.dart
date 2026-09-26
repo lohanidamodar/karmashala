@@ -7,7 +7,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_installations_controller.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -87,8 +86,8 @@ void main() {
     installed = {'claude': '2.1.0'};
     reachable = true;
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
@@ -185,7 +184,7 @@ void main() {
   );
 
   test('an unreachable environment keeps its installations', () async {
-    ExecutionEnvironmentDao(db).upsert(wslEnv());
+    server.environmentRows.upsert(wslEnv());
     installed['codex'] = '0.151.0';
     await notifier().discoverAll();
     final wslInstalls = container

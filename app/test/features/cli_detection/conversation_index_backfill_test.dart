@@ -4,13 +4,11 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/conversation_index_backfill.dart';
 import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 
@@ -41,13 +39,13 @@ void main() {
     db = AppDatabase.memory();
     dao = ConversationIndexDao(db);
     indexer = ConversationIndexer(dao: dao, clock: const _FixedClock());
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.mirrorInto(db);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
   });
   tearDown(() {
     db.close();

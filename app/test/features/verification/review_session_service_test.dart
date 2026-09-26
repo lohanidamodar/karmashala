@@ -1,5 +1,4 @@
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_session/launch.dart';
@@ -105,7 +104,7 @@ void main() {
 
     test('the only installed agent cannot review itself', () async {
       final sessionId = await work();
-      AgentInstallationDao(h.db)
+      mirroredServer(h.db).installationRows
         ..delete(flakyInstall.id)
         ..delete(secondRoverInstall.id);
       final offer = service().offerFor(sessionId);
@@ -162,7 +161,9 @@ void main() {
         sessionId: subject,
         targetInstallationId: flakyInstall.id,
       );
-      final row = mirroredServer(h.db).sessionRows.getById(launched.session.id)!;
+      final row = mirroredServer(
+        h.db,
+      ).sessionRows.getById(launched.session.id)!;
       expect(row.parentSessionId, subject);
       expect(row.parentLink, SessionLink.spawn);
       expect(row.agentInstallationId, flakyInstall.id);

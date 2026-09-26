@@ -1,5 +1,5 @@
 import 'package:agent_cli/process.dart';
-import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/data/environments_data.dart';
 import 'package:karmashala_ssh/connection.dart';
 
 /// Reads a private key from whichever **local** environment owns its path: the
@@ -11,7 +11,7 @@ class EnvironmentPrivateKeyReader {
     this.readLocal = readLocalPrivateKey,
   });
 
-  final ExecutionEnvironmentDao environments;
+  final EnvironmentsData environments;
   final PathTranslator translator;
 
   /// How a path that the Windows host can already open is read. Injected so

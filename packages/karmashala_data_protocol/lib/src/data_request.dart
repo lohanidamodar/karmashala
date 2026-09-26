@@ -1,4 +1,7 @@
+import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -7,6 +10,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 
+import 'environment_values.dart';
 import 'refusal.dart';
 import 'session_values.dart';
 import 'workspace_values.dart';
@@ -17,6 +21,7 @@ part 'requests/notes_requests.dart';
 part 'requests/todos_requests.dart';
 part 'requests/preferences_requests.dart';
 part 'requests/workspace_requests.dart';
+part 'requests/hosts_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -126,7 +131,9 @@ sealed class DataRequest<R> {
         repositoryId: args.string('repositoryId'),
       ),
       SessionEvents.name => SessionEvents(args.string('sessionId')),
-      SessionEventsLatest.name => SessionEventsLatest(args.strings('sessionIds')),
+      SessionEventsLatest.name => SessionEventsLatest(
+        args.strings('sessionIds'),
+      ),
       SessionEventsAppend.name => SessionEventsAppend(
         args.objects('events', SessionEvent.fromJson),
       ),
@@ -157,6 +164,51 @@ sealed class DataRequest<R> {
         title: args.string('title'),
       ),
       ImportedDelete.name => ImportedDelete(args.string('id')),
+      EnvironmentsList.name => const EnvironmentsList(),
+      EnvironmentPut.name => EnvironmentPut(
+        args.value('environment', environmentFromJson),
+      ),
+      SshHostPut.name => SshHostPut(args.value('host', sshHostFromJson)),
+      SshHostDelete.name => SshHostDelete(args.string('id')),
+      KnownHostTrust.name => KnownHostTrust(
+        args.value('key', knownHostFromJson),
+      ),
+      KnownHostForget.name => KnownHostForget(
+        args.string('host'),
+        args.integer('port'),
+      ),
+      AgentsList.name => const AgentsList(),
+      InstallationsReconcile.name => InstallationsReconcile._from(args),
+      InstallationVersion.name => InstallationVersion(
+        id: args.string('id'),
+        version: args.string('version'),
+        readAt: args.date('readAt'),
+      ),
+      InstallationSetPath.name => InstallationSetPath(
+        id: args.string('id'),
+        path: args.string('path'),
+      ),
+      ClaudeAccountSave.name => ClaudeAccountSave(
+        args.value('account', claudeAccountFromJson),
+      ),
+      ClaudeAccountCredentials.name => ClaudeAccountCredentials(
+        args.string('id'),
+      ),
+      ClaudeAccountDelete.name => ClaudeAccountDelete(args.string('id')),
+      CodexAccountSave.name => CodexAccountSave(
+        args.value('account', codexAccountFromJson),
+      ),
+      CodexAccountCredentials.name => CodexAccountCredentials(
+        args.string('id'),
+      ),
+      CodexAccountDelete.name => CodexAccountDelete(args.string('id')),
+      UsageRecord.name => UsageRecord(
+        args.objects('samples', usageSampleFromJson),
+      ),
+      UsageHistory.name => UsageHistory(
+        args.string('accountKey'),
+        args.date('since'),
+      ),
       _ => throw DataRefused.invalid('no data request is called "$kind"'),
     };
   }

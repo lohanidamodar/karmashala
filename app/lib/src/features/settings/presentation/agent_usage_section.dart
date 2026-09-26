@@ -153,7 +153,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     });
     final service = ref.read(agentUsageServiceProvider);
     try {
-      final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+      final environments = ref.read(environmentsDataProvider).getAll();
       final usage = await service.fetch(widget.installation, environments);
       if (mounted) setState(() => _usage = usage);
     } on UsageException catch (e) {

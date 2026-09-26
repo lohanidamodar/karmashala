@@ -31,7 +31,7 @@ final agentContextTargetProvider = Provider<AgentContextTarget?>((ref) {
   final session = ref.watch(sessionsDataProvider).getById(sessionId);
   if (session == null) return null;
   final agentId = ref
-      .watch(agentInstallationDaoProvider)
+      .watch(agentInstallationsDataProvider)
       .getById(session.agentInstallationId)
       ?.agentId;
   final directory = sessionWorkingDirectoryOf(ref, session);

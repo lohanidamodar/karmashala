@@ -3,30 +3,26 @@ import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_usage_strip.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// The fan-out strip's bar is the shared meter: status colours rather than the
 /// accent, and a tick where an even rate through the window would be.
 void main() {
   testWidgets('a comfortable account is drawn healthy, not in the accent, '
       'with its pace tick', (tester) async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           agentUsageProvider.overrideWith(
             (ref, install) async => AgentUsage(

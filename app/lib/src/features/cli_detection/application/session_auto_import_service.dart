@@ -1,6 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/data/environments_data.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
@@ -29,7 +29,7 @@ class SessionAutoImportService {
   /// worker isolate, and the one a test overrides.
   final Stream<StoreScanChunk> Function(StoreScanRequest) scan;
 
-  final ExecutionEnvironmentDao environmentDao;
+  final EnvironmentsData environmentDao;
   final ImportedSessionsData importedSessionDao;
   final SessionsData sessionDao;
   final IdGenerator ids;

@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/agent_state_providers.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/session_row_attention.dart';
@@ -47,8 +45,8 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(posixEnv());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.environmentRows.upsert(posixEnv());
+    server.installationRows.insert(agentInstallation());
     for (final (projectId, sessions) in [
       ('p1', ['s1', 's2']),
       ('p2', ['s3', 's4']),

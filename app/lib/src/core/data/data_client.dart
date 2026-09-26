@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/usage.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -14,7 +18,19 @@ import 'package:karmashala_session/transcript.dart';
 import 'keyed_replica.dart';
 
 /// The domains this app reads through the server.
-enum DataDomain { notes, todos, preferences, workspace, sessions }
+enum DataDomain {
+  notes,
+  todos,
+  preferences,
+  workspace,
+  sessions,
+
+  /// Execution environments, saved SSH hosts, trusted host keys.
+  environments,
+
+  /// Agent installations and the saved accounts (without credentials).
+  agents,
+}
 
 /// How this app reaches the server's data now.
 enum DataLinkState {
@@ -43,7 +59,8 @@ class DataConnection {
 
 /// This app's client of the server's data: one link, a copy of each domain
 /// the server keeps up to date ([notes], [todos], [preferences], the
-/// workspace, [sessions] and their records), and the
+/// workspace, [sessions] and their records, [environments] and SSH hosts,
+/// [installations] and saved accounts), and the
 /// writes, which land in the copy at once and at the server after. Reading
 /// never waits; before a server has answered, nothing is known (the copies
 /// are not primed) and the app says so rather than guessing.
@@ -121,6 +138,46 @@ class DataClient {
   final decisions = KeyedReplica<DecisionRecord>();
   final recaps = KeyedReplica<SessionRecap>();
   final followUps = KeyedReplica<FollowUp>();
+
+  /// Where agents run: the execution environments, the saved SSH hosts (each
+  /// with its key's location, which only this client's own read is told)
+  /// and the host keys trusted for them, by `host:port`.
+  final environments = KeyedReplica<ExecutionEnvironment>();
+  final sshHosts = KeyedReplica<SshHost>();
+  final knownHosts = KeyedReplica<KnownHostKey>();
+
+  /// The agents: every installation, and the saved accounts **without their
+  /// credentials** — a token bundle is asked for, right before a switch.
+  final installations = KeyedReplica<AgentInstallation>();
+  final claudeAccounts = KeyedReplica<ClaudeAccount>(_sameClaude);
+  final codexAccounts = KeyedReplica<CodexAccount>(_sameCodex);
+
+  /// The key [knownHosts] keeps a trusted key under.
+  static String knownHostKey(String host, int port) => '$host:$port';
+
+  static bool _sameClaude(ClaudeAccount a, ClaudeAccount b) =>
+      a.id == b.id &&
+      a.email == b.email &&
+      a.organizationUuid == b.organizationUuid &&
+      a.organizationName == b.organizationName &&
+      a.subscriptionType == b.subscriptionType &&
+      a.rateLimitTier == b.rateLimitTier &&
+      a.capturedEnvironmentId == b.capturedEnvironmentId &&
+      a.capturedAt == b.capturedAt;
+
+  static bool _sameCodex(CodexAccount a, CodexAccount b) =>
+      a.id == b.id &&
+      a.accountId == b.accountId &&
+      a.email == b.email &&
+      a.planType == b.planType &&
+      a.capturedEnvironmentId == b.capturedEnvironmentId &&
+      a.capturedAt == b.capturedAt;
+
+  final _usageRecorded = StreamController<String>.broadcast(sync: true);
+
+  /// The account whose usage history gained rows — written here or by
+  /// another client. Nothing of the history is copied: a chart asks for it.
+  Stream<String> get usageRecorded => _usageRecorded.stream;
 
   static bool _sameLinks(
     List<SessionRepositoryLink> a,
@@ -240,6 +297,10 @@ class DataClient {
         _replaceWorkspace(await send(const WorkspaceList()));
       case DataDomain.sessions:
         _replaceSessions(await send(const SessionsList()));
+      case DataDomain.environments:
+        _replaceEnvironments(await send(const EnvironmentsList()));
+      case DataDomain.agents:
+        _replaceAgents(await send(const AgentsList()));
     }
   }
 
@@ -284,6 +345,72 @@ class DataClient {
     repositories.replaceAll({for (final row in r) row.id: row}, reply.revision);
     sections.replaceAll({for (final row in s) row.id: row}, reply.revision);
     projects.replaceAll({for (final row in p) row.id: row}, reply.revision);
+  }
+
+  void _replaceEnvironments(DataReply<EnvironmentsSnapshot> reply) {
+    final snapshot = reply.value;
+    final revision = reply.revision;
+    sshHosts.replaceAll({for (final h in snapshot.sshHosts) h.id: h}, revision);
+    knownHosts.replaceAll({
+      for (final k in snapshot.knownHosts) knownHostKey(k.host, k.port): k,
+    }, revision);
+    environments.replaceAll({
+      for (final e in snapshot.environments) e.id: e,
+    }, revision);
+  }
+
+  void _replaceAgents(DataReply<AgentsSnapshot> reply) {
+    final snapshot = reply.value;
+    final revision = reply.revision;
+    claudeAccounts.replaceAll({
+      for (final a in snapshot.claudeAccounts) a.id: a,
+    }, revision);
+    codexAccounts.replaceAll({
+      for (final a in snapshot.codexAccounts) a.id: a,
+    }, revision);
+    installations.replaceAll({
+      for (final i in snapshot.installations) i.id: i,
+    }, revision);
+  }
+
+  /// Applies a change to where agents run, or to the agents, the server made
+  /// at [revision]. A saved SSH host is told by id alone (its row names where
+  /// its key is): one another client wrote is read again whole.
+  void applyHostsChange(HostsDomainChange change, int revision) {
+    switch (change) {
+      case EnvironmentChanged(:final environment):
+        environments.applyAt(environment.id, environment, revision);
+      case EnvironmentRemoved(:final id):
+        environments.applyAt(id, null, revision);
+      case SshHostTouched():
+        if (!_ownAnswer) {
+          unawaited(
+            resync(DataDomain.environments).catchError((Object error) {
+              _log.warning('Could not re-read the SSH hosts: $error');
+            }),
+          );
+        }
+      case SshHostRemoved(:final id):
+        sshHosts.applyAt(id, null, revision);
+      case KnownHostChanged(:final key):
+        knownHosts.applyAt(knownHostKey(key.host, key.port), key, revision);
+      case KnownHostRemoved(:final host, :final port):
+        knownHosts.applyAt(knownHostKey(host, port), null, revision);
+      case InstallationChanged(:final installation):
+        installations.applyAt(installation.id, installation, revision);
+      case InstallationRemoved(:final id):
+        installations.applyAt(id, null, revision);
+      case ClaudeAccountChanged(:final account):
+        claudeAccounts.applyAt(account.id, account, revision);
+      case ClaudeAccountRemoved(:final id):
+        claudeAccounts.applyAt(id, null, revision);
+      case CodexAccountChanged(:final account):
+        codexAccounts.applyAt(account.id, account, revision);
+      case CodexAccountRemoved(:final id):
+        codexAccounts.applyAt(id, null, revision);
+      case UsageRecorded(:final accountKey):
+        if (!_usageRecorded.isClosed) _usageRecorded.add(accountKey);
+    }
   }
 
   void _replaceSessions(DataReply<SessionsSnapshot> reply) =>
@@ -423,6 +550,8 @@ class DataClient {
           applyRow(row, batch.revision);
         case final SessionDomainChange change:
           applySessionChange(change, batch.revision);
+        case final HostsDomainChange change:
+          applyHostsChange(change, batch.revision);
       }
     }
   }
@@ -447,11 +576,16 @@ class DataClient {
       endpoint.send(const PreferencesGet()),
       endpoint.send(const WorkspaceList()),
       endpoint.send(const SessionsList()),
+      endpoint.send(const EnvironmentsList()),
+      endpoint.send(const AgentsList()),
     ]);
     _replaceNotes(snapshot[0] as DataReply<List<Note>>);
     _replaceTodos(snapshot[1] as DataReply<List<Todo>>);
     _replacePreferences(snapshot[2] as DataReply<Map<String, String>>);
     _replaceWorkspace(snapshot[3] as DataReply<WorkspaceSnapshot>);
+    // Where agents run and the agents before the sessions that name them.
+    _replaceEnvironments(snapshot[5] as DataReply<EnvironmentsSnapshot>);
+    _replaceAgents(snapshot[6] as DataReply<AgentsSnapshot>);
     _replaceSessions(snapshot[4] as DataReply<SessionsSnapshot>);
     _setConnection(const DataConnection(DataLinkState.connected));
   }
@@ -567,6 +701,7 @@ class DataClient {
     // would hold the done event, and close would never return.
     unawaited(_connectionChanges.close());
     unawaited(_batchEnds.close());
+    unawaited(_usageRecorded.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());
@@ -581,6 +716,12 @@ class DataClient {
       decisions,
       recaps,
       followUps,
+      environments,
+      sshHosts,
+      knownHosts,
+      installations,
+      claudeAccounts,
+      codexAccounts,
     ]) {
       unawaited(replica.dispose());
     }

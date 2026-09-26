@@ -213,7 +213,7 @@ class SessionLaunchTools {
     }
 
     final installs = _container
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getByEnvironment(repo.path.environmentId);
     if (installs.isEmpty) {
       throw StateError('No agent is installed in ${repo.path.environmentId}.');
@@ -626,9 +626,7 @@ class SessionLaunchTools {
     if (install == null) {
       throw StateError('No $agentId installation found.');
     }
-    final environments = _container
-        .read(executionEnvironmentDaoProvider)
-        .getAll();
+    final environments = _container.read(environmentsDataProvider).getAll();
     final usage = await _container
         .read(agentUsageServiceProvider)
         .fetch(install, environments);
@@ -675,7 +673,7 @@ class SessionLaunchTools {
         .read(workspaceDataProvider)
         .repository(session.repositoryId);
     final env = _container
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(session.environmentId);
     final install = installFor(_container, session.cli, session.environmentId);
     if (repo == null || env == null || install == null) {
@@ -737,7 +735,7 @@ class SessionLaunchTools {
         .read(workspaceDataProvider)
         .repository(session.repositoryId);
     final install = _container
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (repo == null || install == null) {
       throw StateError('Session repository or agent is missing.');

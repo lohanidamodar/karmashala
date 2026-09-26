@@ -9,8 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/terminal_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
@@ -20,6 +18,8 @@ import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../features/terminal/fake_instance.dart';
+import '../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// **Does a WSL pane report its own command boundaries?**
 ///
@@ -132,7 +132,9 @@ void main() {
 
   test('terminal_run gets a real exit code out of a WSL pane', () async {
     final db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), const SystemClock());
+    mirroredServer(db).environmentRows.upsert(
+  localHostEnvironment(const SystemClock().nowUtc()),
+);
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(

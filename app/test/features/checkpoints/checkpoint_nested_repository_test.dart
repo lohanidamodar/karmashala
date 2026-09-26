@@ -7,14 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_targets.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -89,11 +86,12 @@ void main() {
 
     db = AppDatabase.memory();
     final clock = FixedClock(testTime);
-    final envId = ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
+    const envId = localHostEnvironmentId;
     server.projectRows.insert(project(environmentId: envId, path: hub));
     server.repositoryRows.insert(repository(environmentId: envId, path: hub));
-    AgentInstallationDao(db).insert(agentInstallation(environmentId: envId));
+    server.installationRows.insert(agentInstallation(environmentId: envId));
     mirroredServer(db).sessionRows
       ..insert(
         session(
@@ -132,7 +130,7 @@ void main() {
         checkpointServiceProvider.overrideWithValue(
           CheckpointService(
             runnerFactory: const CommandRunnerFactory(),
-            environmentOf: ExecutionEnvironmentDao(db).getById,
+            environmentOf: server.environmentRows.getById,
             dao: CheckpointDao(db),
             clock: clock,
             newId: () => 'ckpt${++ids}',
@@ -357,7 +355,7 @@ void main() {
       git(worktree, ['init', '-q']);
       git(worktree, ['add', '-A']);
       git(worktree, ['commit', '-q', '-m', 'gone']);
-      final envId = ExecutionEnvironmentDao(db).getAll().first.id;
+      final envId = mirroredServer(db).environmentRows.getAll().first.id;
       final gone = EnvironmentPath(environmentId: envId, path: worktree);
       File(p.join(worktree, 'a.txt')).writeAsStringSync('b\n');
       expect(
@@ -401,7 +399,7 @@ void main() {
     final service = container.read(checkpointServiceProvider);
     final envId =
         CheckpointDao(db).latestFor('s1')?.repository.environmentId ??
-        ExecutionEnvironmentDao(db).getAll().first.id;
+        mirroredServer(db).environmentRows.getAll().first.id;
     final repo = EnvironmentPath(environmentId: envId, path: app);
     for (var i = 0; i < 3; i++) {
       File(p.join(app, 'main.txt')).writeAsStringSync('v$i\n');

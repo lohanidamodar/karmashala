@@ -13,8 +13,6 @@ import 'package:karmashala/src/core/apps/installed_applications_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
@@ -37,7 +35,6 @@ import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:karmashala_host/protocol.dart';
@@ -54,6 +51,7 @@ import '../support/fixtures.dart';
 import '../features/ssh/fake_host_box.dart';
 import '../support/window_matrix.dart';
 import '../support/fake_data_server.dart';
+import 'package:agent_cli/process.dart';
 
 /// The settings surfaces — pages, their cards and the dialogs they open — with
 /// user data of realistic length: host names, distro names, project names and
@@ -104,7 +102,9 @@ void main() {
   testWidgets('Environments section with a long SSH host name', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db)
+    // Seeded before a client connects: a saved host is told by id alone.
+    final server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(
         wslEnv(
@@ -112,7 +112,7 @@ void main() {
           distro: 'Ubuntu-22.04-with-a-long-name',
         ),
       );
-    SshHostDao(db).upsert(
+    server.sshHostRows.upsert(
       SshHost(
         id: 'h1',
         name: 'build-box-in-the-basement-with-a-long-name',
@@ -124,12 +124,13 @@ void main() {
       ),
     );
     // A project on the host draws the count pill beside the name.
-    ExecutionEnvironmentDao(
-      db,
-    ).upsert(sshEnvFixture(name: 'build-box-in-the-basement-with-a-long-name'));
+    server.environmentRows.upsert(
+      sshEnvFixture(name: 'build-box-in-the-basement-with-a-long-name'),
+    );
     server.projectRows.insert(
       project(environmentId: 'ssh:h1', path: '/home/dlohani/src/demo'),
     );
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -158,7 +159,9 @@ void main() {
       'failed install and the sudo step for a terminal', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    // Seeded before a client connects: a saved host is told by id alone.
+    final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
     final host = SshHost(
       id: 'h1',
       name: 'build-box-in-the-basement-with-a-long-name',
@@ -168,9 +171,10 @@ void main() {
       authMethod: SshAuthMethod.password,
       createdAt: testTime,
     );
-    SshHostDao(db).upsert(host);
-    ExecutionEnvironmentDao(db).upsert(sshEnvFixture(name: host.name));
+    server.sshHostRows.upsert(host);
+    server.environmentRows.upsert(sshEnvFixture(name: host.name));
     final box = FakeHostBox()..tools = 'missing=tar\npm=apt-get\nuid=1000\n';
+    final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -223,7 +227,7 @@ void main() {
     AppDatabase seeded() {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ExecutionEnvironmentDao(db)
+      server.environmentRows
         ..upsert(windowsEnv())
         ..upsert(wslEnv(id: 'wsl:$longDistro', distro: longDistro));
       server.workspaceRows.insert(
@@ -484,7 +488,9 @@ void main() {
   testWidgets('Remote access section with a long device name', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     PairedDeviceDao(db).insert(
       PairedDevice(
         id: 'a' * 32,
@@ -563,8 +569,10 @@ void main() {
         'paired through it', (tester) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-      SshHostDao(db).upsert(longHost);
+      server.environmentRows.upsert(
+        localHostEnvironment(FixedClock(testTime).nowUtc()),
+      );
+      server.sshHostRows.upsert(longHost);
       PairedDeviceDao(db).insert(
         PairedDevice(
           id: 'b' * 32,
@@ -602,7 +610,7 @@ void main() {
     ) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      SshHostDao(db).upsert(longHost);
+      server.sshHostRows.upsert(longHost);
       final container = containerFor(db, _RelayBox(url));
 
       await expectSurvivesWindowMatrix(
@@ -642,7 +650,9 @@ void main() {
   ) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

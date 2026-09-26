@@ -43,7 +43,7 @@ final sessionRunsOnThisMachineProvider = Provider<bool Function(Session)>((
   ref,
 ) {
   final workspace = ref.watch(workspaceDataProvider);
-  final environments = ref.watch(executionEnvironmentDaoProvider);
+  final environments = ref.watch(environmentsDataProvider);
   return (session) => runsOnThisMachine(
     session,
     environmentOfRepository: (id) =>

@@ -21,7 +21,7 @@ import 'remote_session_start_bindings.dart';
 /// What could be started here, in the Explorer's own order. A project with no
 /// checkout is omitted: there is nowhere in it to start anything.
 List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
-  final installations = ref.read(agentInstallationDaoProvider);
+  final installations = ref.read(agentInstallationsDataProvider);
   final byEnvironment = <String, List<RemoteAgentOption>>{};
   List<RemoteAgentOption> agentsIn(String environmentId) =>
       byEnvironment[environmentId] ??= [
@@ -34,8 +34,7 @@ List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
   // Read once and looked up per row: a workspace is mostly two or three
   // environments over many checkouts, and this runs on every `workspace.list`.
   final environments = {
-    for (final environment
-        in ref.read(executionEnvironmentDaoProvider).getAll())
+    for (final environment in ref.read(environmentsDataProvider).getAll())
       environment.id: environment,
   };
   // The desktop's own name for where a folder lives; null for an environment
@@ -130,7 +129,7 @@ Future<RemoteWorkspaceProject> addRemoteProject(
     );
   }
   final canonical = canonicalPathKey(trimmedPath);
-  final envDao = ref.read(executionEnvironmentDaoProvider);
+  final envDao = ref.read(environmentsDataProvider);
   for (final project in ref.read(workspaceDataProvider).projects) {
     if (project.root.environmentId == localHostEnvironmentId &&
         canonicalPathKey(project.root.path) == canonical) {

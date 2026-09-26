@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_observer.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_run_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -61,14 +60,14 @@ void main() {
     responder = healthy;
     artifacts = Directory.systemTemp.createTempSync('karmashala-tools-test');
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
-      ..upsert(windowsEnv())
-      ..upsert(wslEnv());
     final server = FakeDataServer()
       ..projectRows.insert(project())
       ..repositoryRows.insert(
         repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
       );
+    server.environmentRows
+      ..upsert(windowsEnv())
+      ..upsert(wslEnv());
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),

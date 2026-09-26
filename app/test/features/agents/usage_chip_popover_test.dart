@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/data/usage_sample_dao.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -46,7 +45,7 @@ void main() {
   ];
 
   void seedHistory() {
-    final dao = UsageSampleDao(db);
+    final dao = mirroredServer(db).usageRows;
     for (var i = 0; i < 6; i++) {
       dao.insert(
         UsageSample(
@@ -152,6 +151,8 @@ void main() {
       testTime,
     );
     await tester.pumpWidget(popover(view));
+    // The history is asked of the server; its answer is a frame later.
+    await tester.pump();
     final sparks = tester.widgetList<Sparkline>(find.byType(Sparkline));
     expect(sparks, hasLength(1), reason: 'only the 5-hour window has history');
     expect(sparks.single.values, [0, 10, 20, 30, 40, 50, 62]);

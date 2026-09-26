@@ -11,6 +11,6 @@ final repositoryDiscoveryServiceProvider = Provider<RepositoryDiscoveryService>(
   (ref) => EnvironmentAwareRepositoryDiscoveryService(
     localDiscovery: const LocalRepositoryDiscoveryService(),
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environments: ref.watch(executionEnvironmentDaoProvider),
+    environments: ref.watch(environmentsDataProvider),
   ),
 );

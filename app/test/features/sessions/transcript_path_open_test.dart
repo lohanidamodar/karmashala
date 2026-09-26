@@ -5,8 +5,6 @@ import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -45,11 +43,11 @@ void main() {
     EnvironmentPath? workingDirectory,
   }) {
     final env = environment ?? windowsEnv();
-    ExecutionEnvironmentDao(db).upsert(env);
-    if (env.id != 'windows') ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(env);
+    if (env.id != 'windows') server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',

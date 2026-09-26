@@ -33,7 +33,7 @@ RemoteAttachmentSupport remoteAttachmentSupportFor(
   if (support.refusal != null) return support;
   final environment = environmentId == null
       ? null
-      : ref.read(executionEnvironmentDaoProvider).getById(environmentId);
+      : ref.read(environmentsDataProvider).getById(environmentId);
   if (environment == null) {
     return const RemoteAttachmentSupport.refused(
       'This desktop cannot tell where that agent runs.',
@@ -54,7 +54,7 @@ RemoteAttachmentSupport remoteAttachmentSupportFor(
 /// The path an agent in [environmentId] would use for a file this host wrote.
 /// Getting it wrong hands it a path that silently does not exist.
 String _agentVisiblePath(Ref ref, String hostPath, String? environmentId) {
-  final environments = ref.read(executionEnvironmentDaoProvider);
+  final environments = ref.read(environmentsDataProvider);
   final target = environmentId == null
       ? null
       : environments.getById(environmentId);
@@ -96,7 +96,7 @@ Future<void> offerRemoteAttachment(
   final environmentId = session == null
       ? null
       : ref
-            .read(agentInstallationDaoProvider)
+            .read(agentInstallationsDataProvider)
             .getById(session.agentInstallationId)
             ?.executable
             .environmentId;

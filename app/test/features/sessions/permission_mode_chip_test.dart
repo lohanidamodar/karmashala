@@ -3,9 +3,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
@@ -62,10 +60,10 @@ Future<({AppDatabase db, ProviderScope app})> harness({
 }) async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+  server.installationRows.insert(agentInstallation(agentId: agentId));
   mirroredServer(db).sessionRows.insert(
     Session(
       id: 's1',
@@ -357,7 +355,10 @@ void main() {
     await tester.pump(kPermissionCycleSettle * 2);
     await tester.pumpAndSettle();
 
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _acceptEdits);
+    expect(
+      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
+      _acceptEdits,
+    );
     // Never claims the running agent changed: it was started with the old
     // flags and no CLI here can be re-governed mid-session.
     expect(find.textContaining('applies'), findsOneWidget);
@@ -446,7 +447,10 @@ void main() {
     // Clearing the row is the only way back: without it the first pick would
     // be irreversible, and "follow the default" would be a state the user
     // could leave but never re-enter.
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, isNull);
+    expect(
+      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
+      isNull,
+    );
     expect(find.text('Ask'), findsOneWidget);
     expect(find.text('· default'), findsOneWidget);
   });
@@ -478,7 +482,10 @@ void main() {
     // row first and offering to undo would be a weaker promise: the mode would
     // already be recorded, and any other surface resuming this session would
     // honour it.
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _ask);
+    expect(
+      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
+      _ask,
+    );
     expect(mirroredServer(h.db).sessionRows.getById('s1')!.paneId, pane);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
@@ -537,7 +544,10 @@ void main() {
     await tester.tap(find.text('Restart in $_bypassLabel'));
     await tester.pumpAndSettle();
 
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _bypass);
+    expect(
+      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
+      _bypass,
+    );
 
     // A second process, on the same conversation, carrying the flags the first
     // one could not be told about.
@@ -686,7 +696,10 @@ void main() {
       ).read(terminalSessionsControllerProvider.notifier).instanceFor(pane),
       isNotNull,
     );
-    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _acceptEdits);
+    expect(
+      mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode,
+      _acceptEdits,
+    );
     expect(find.textContaining('new conversation'), findsOneWidget);
     expect(find.textContaining('is saved'), findsOneWidget);
   });

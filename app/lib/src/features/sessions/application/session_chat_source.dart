@@ -74,14 +74,14 @@ class SessionTranscriptLocator {
 
   Future<List<CliStore>> _stores() => _ref
       .read(cliStoreLocatorProvider)
-      .locate(_ref.read(executionEnvironmentDaoProvider).getAll());
+      .locate(_ref.read(environmentsDataProvider).getAll());
 
   /// Every transcript one scan can find, keyed `'<agentId>/<sessionId>'`. The
   /// scan costs the same for one session or five hundred; empty is unreadable.
   Future<Map<String, String>> index() async {
     final found = <String, String>{};
     try {
-      final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
+      final environments = _ref.read(environmentsDataProvider).getAll();
       final stores = await _stores();
       final projects = await _ref.read(cliDetectionServiceProvider).detect(
         stores,
@@ -125,7 +125,7 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
         return;
       }
       final agentId = ref
-          .read(agentInstallationDaoProvider)
+          .read(agentInstallationsDataProvider)
           .getById(session.agentInstallationId)
           ?.agentId;
       // Taken before the first `await`, because `ref` may not be watched after

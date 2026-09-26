@@ -1,5 +1,4 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/data/review_thread_dao.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,8 +15,8 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     dao = ReviewThreadDao(db);

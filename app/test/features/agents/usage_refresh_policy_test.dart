@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
@@ -73,9 +72,9 @@ void main() {
       // until it grew one; a real agent that later gains a feature stops being
       // a stand-in for lacking it, and the test then asserts the opposite of
       // what it reads as.
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(id: 'a2', agentId: 'unknownAgent'));
+      mirroredServer(db).installationRows.insert(
+        agentInstallation(id: 'a2', agentId: 'unknownAgent'),
+      );
       dao.insert(session(id: 'other', agentInstallationId: 'a2'));
     }
     final container = ProviderContainer(
@@ -353,9 +352,9 @@ void main() {
     // Two quotas are two quotas: the whole reason the chip moved out of the
     // window's status bar, where one figure spoke for both.
     db = seedUsageDatabase();
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
+    mirroredServer(db).installationRows.insert(
+      agentInstallation(id: 'a2', agentId: AgentIds.codex),
+    );
     mirroredServer(
       db,
     ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));

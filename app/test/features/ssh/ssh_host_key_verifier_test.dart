@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_hosts_data.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -16,14 +16,13 @@ const _good = 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const _evil = 'SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
 void main() {
-  late AppDatabase db;
-  late KnownHostDao known;
+  late FakeDataServer server;
+  late KnownHostsData known;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    known = KnownHostDao(db);
+  setUp(() async {
+    server = FakeDataServer(clock: () => testTime);
+    known = KnownHostsData(await server.connect());
   });
-  tearDown(() => db.close());
 
   SshHostKeyVerifier verifier({HostKeyTrustDecision? onUnknown}) =>
       SshHostKeyVerifier(
@@ -85,7 +84,7 @@ void main() {
   });
 
   test('a changed key is refused and the user is never asked', () async {
-    known.trust(
+    server.knownHostRows.trust(
       KnownHostKey(
         host: 'build-box',
         port: 22,
@@ -112,7 +111,7 @@ void main() {
   test(
     'a different key algorithm for a pinned host also counts as changed',
     () async {
-      known.trust(
+      server.knownHostRows.trust(
         KnownHostKey(
           host: 'build-box',
           port: 22,
@@ -128,7 +127,7 @@ void main() {
   );
 
   test('the same host on another port is a separate identity', () async {
-    known.trust(
+    server.knownHostRows.trust(
       KnownHostKey(
         host: 'build-box',
         port: 22,
@@ -149,21 +148,46 @@ void main() {
     );
   });
 
-  test('forgetting a host makes the next connection a first connection', () {
-    known.trust(
-      KnownHostKey(
-        host: 'build-box',
-        port: 22,
-        keyType: 'ssh-ed25519',
-        fingerprint: _good,
-        trustedAt: testTime,
-      ),
+  test(
+    'forgetting a host makes the next connection a first connection',
+    () async {
+      server.knownHostRows.trust(
+        KnownHostKey(
+          host: 'build-box',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: _good,
+          trustedAt: testTime,
+        ),
+      );
+      await known.forget('build-box', 22);
+      expect(
+        verifier().classify('ssh-rsa', _evil).verdict,
+        HostKeyVerdict.unknown,
+      );
+    },
+  );
+
+  test('a key the server will not record is refused, not trusted', () async {
+    // Another client trusted a different key for this address while the
+    // person was deciding: the server keeps the first, and this connection
+    // is refused like a changed key.
+    final v = verifier(
+      onUnknown: (_) {
+        server.knownHostRows.trust(
+          KnownHostKey(
+            host: 'build-box',
+            port: 22,
+            keyType: 'ssh-ed25519',
+            fingerprint: _evil,
+            trustedAt: testTime,
+          ),
+        );
+        return true;
+      },
     );
-    known.forget('build-box', 22);
-    expect(
-      verifier().classify('ssh-rsa', _evil).verdict,
-      HostKeyVerdict.unknown,
-    );
+    expect(await v.verify('ssh-ed25519', fp(_good)), isFalse);
+    expect(server.knownHostRows.find('build-box', 22)!.fingerprint, _evil);
   });
 
   test('the changed-key message names both fingerprints', () {

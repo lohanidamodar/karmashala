@@ -39,7 +39,7 @@ class TmuxControlTools {
     if (ids.isEmpty) throw ArgumentError('No session ids given.');
     final importedDao = _container.read(importedSessionsProvider);
     final workspace = _container.read(workspaceDataProvider);
-    final envDao = _container.read(executionEnvironmentDaoProvider);
+    final envDao = _container.read(environmentsDataProvider);
 
     final windows = <TmuxWindow>[];
     ExecutionEnvironment? distroEnv;
@@ -141,8 +141,7 @@ class TmuxControlTools {
   }
 
   ExecutionEnvironment? _windowsEnv() {
-    for (final env
-        in _container.read(executionEnvironmentDaoProvider).getAll()) {
+    for (final env in _container.read(environmentsDataProvider).getAll()) {
       if (env.kind == EnvironmentKind.windowsNative) return env;
     }
     return null;

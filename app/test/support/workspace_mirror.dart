@@ -1,23 +1,25 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_environments/store.dart';
 import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 
 import 'fake_data_server.dart';
 
-/// **Transitional — goes when the last table that points at the workspace
-/// or at sessions moves to the server (slices 1d–1f).**
+/// **Transitional — goes when the last table that points at the workspace,
+/// sessions, environments or installations moves to the server (slices
+/// 1e–1f).**
 ///
-/// The app reads the workspace and sessions only from its data client (in
-/// tests, the [FakeDataServer]). But tables not moved yet are still in the
-/// test's database, and their foreign keys — and a few queries not moved yet
-/// (the conversation index's joins, scheduled resumes, automation origins,
-/// agent installations `ON DELETE RESTRICT`) — reach the workspace and
-/// session rows there. [mirrorInto] copies every workspace and session row
-/// the fake writes into [db], so those rows exist; nothing in the app reads
-/// them from [db].
+/// The app reads the workspace, sessions, environments and installations only
+/// from its data client (in tests, the [FakeDataServer]). But tables not moved
+/// yet are still in the test's database, and their foreign keys — and a few
+/// queries not moved yet (the conversation index's joins, scheduled resumes,
+/// automation origins, checkpoints' environments) — reach those rows there.
+/// [mirrorInto] copies every environment, installation, workspace and session
+/// row the fake writes into [db], so those rows exist; nothing in the app
+/// reads them from [db].
 ///
-/// The one file under `test/` that may name the workspace and sessions DAOs
+/// The one file under `test/` that may name the moved domains' DAOs
 /// (`direct_database_guard_test.dart` holds it there).
 /// The fake server whose rows are mirrored into [db] — the server a test that
 /// holds only its database seeds and reads (`mirroredServer(db).sessionRows`).
@@ -38,6 +40,43 @@ extension WorkspaceMirror on FakeDataServer {
     final sections = SectionDao(db);
     final sessions = SessionDao(db);
     final imported = ImportedSessionDao(db);
+    final environments = ExecutionEnvironmentDao(db);
+    final installations = AgentInstallationDao(db);
+    // Best-effort, like the sessions below: a row whose own foreign keys the
+    // test never seeded is simply not mirrored.
+    void applyHost(HostsDomainChange change) {
+      try {
+        switch (change) {
+          case EnvironmentChanged(:final environment):
+            environments.upsert(environment);
+          case EnvironmentRemoved(:final id):
+            environments.delete(id);
+          case InstallationChanged(:final installation):
+            if (installations.getById(installation.id) == null) {
+              installations.insert(installation);
+            } else {
+              installations
+                ..updatePath(
+                  installation.id,
+                  installation.executable.path,
+                  byUser: installation.executableByUser,
+                )
+                ..recordVersion(
+                  installation.id,
+                  installation.version,
+                  readAt: installation.versionReadAt ?? installation.createdAt,
+                );
+            }
+          case InstallationRemoved(:final id):
+            installations.deleteIfUnreferenced(id);
+          default:
+            break;
+        }
+      } on Object {
+        // Not mirrored; see above.
+      }
+    }
+
     void apply(RowChange change) {
       switch (change) {
         case WorkspaceChanged(:final workspace):
@@ -99,12 +138,15 @@ extension WorkspaceMirror on FakeDataServer {
       }
     }
 
+    environmentRows.getAll().map(EnvironmentChanged.new).forEach(applyHost);
+    installationRows.getAll().map(InstallationChanged.new).forEach(applyHost);
     workspaceRows.getAll().map(WorkspaceChanged.new).forEach(apply);
     projectRows.getAll().map(ProjectChanged.new).forEach(apply);
     repositoryRows.getAll().map(RepositoryChanged.new).forEach(apply);
     sectionRows.getAll().map(SectionChanged.new).forEach(apply);
     sessionRows.getAll().map(SessionRowChanged.new).forEach(applySession);
     importedRows.getAll().map(ImportedChanged.new).forEach(applySession);
+    hostRowListeners.add(applyHost);
     rowListeners.add(apply);
     sessionRowListeners.add(applySession);
     return this;

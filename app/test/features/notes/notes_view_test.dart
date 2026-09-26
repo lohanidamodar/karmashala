@@ -1,6 +1,4 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
@@ -40,10 +38,10 @@ void main() {
     addTearDown(db.close);
     server = FakeDataServer()..mirrorInto(db);
     if (withSession) {
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
     }
     final data = await server.override();
     // Faked terminals, because a Send with nothing selected resolves through

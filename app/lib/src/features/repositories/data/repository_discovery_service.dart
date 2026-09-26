@@ -4,7 +4,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/data/environments_data.dart';
 import 'package:karmashala_git/repositories.dart';
 
 /// A [RepositoryDiscoveryService] that uses the local filesystem for host
@@ -19,7 +19,7 @@ class EnvironmentAwareRepositoryDiscoveryService
 
   final RepositoryDiscoveryService localDiscovery;
   final CommandRunnerFactory runnerFactory;
-  final ExecutionEnvironmentDao environments;
+  final EnvironmentsData environments;
 
   @override
   Future<List<DiscoveredRepository>> discover(

@@ -65,6 +65,11 @@ dependencies:
   # `src/data/` answers from the store.
   karmashala_data_protocol:
     path: ../packages/karmashala_data_protocol
+  # Environments, SSH hosts, trusted host keys, agent installations, saved
+  # accounts and usage history: the rules `src/data/` applies and the tables
+  # it writes.
+  karmashala_environments:
+    path: ../packages/karmashala_environments
   # The notes and todos a phone's `notes.get` reads.
   karmashala_notes:
     path: ../packages/karmashala_notes
@@ -95,6 +100,9 @@ dependencies:
   karmashala_store:
     path: ../packages/karmashala_store
   path: ^1.9.1
+  # `SqliteException`: a refusal quotes its message, never the statement's
+  # values (a saved account's credentials are one).
+  sqlite3: ^3.3.3
   # `karmashala_host pair` draws the pairing QR in the terminal. Pure Dart,
   # BSD-3-Clause, and already the app's encoder (karmashala_ui's QrPainter).
   qr: ^4.0.0

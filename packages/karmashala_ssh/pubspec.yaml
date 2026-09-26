@@ -21,6 +21,9 @@ dependencies:
   # `ExecutionEnvironment` and `EnvironmentPath`.
   agent_cli:
     path: ../agent_cli
+  # `SshHost` and `KnownHostKey`, values the server's data API carries too.
+  karmashala_environments:
+    path: ../karmashala_environments
   # The SSH client, its socket and channel types.
   dartssh2: ^4.1.0
   # Logging and `Clock`.

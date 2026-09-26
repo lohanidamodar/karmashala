@@ -9,8 +9,6 @@ import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter/material.dart';
@@ -20,20 +18,30 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    data = await server.override();
   });
   tearDown(() => db.close());
 
   /// The shell hosts real terminals, so it needs the fake instance factory as
   /// well as a database — otherwise the workbench's first frame spawns a PTY.
   ProviderContainer shellContainer() {
-    final container = fakeTerminalContainer(database: db);
+    final container = fakeTerminalContainer(database: db, data: data);
     addTearDown(container.dispose);
     return container;
   }

@@ -6,10 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
 import 'package:karmashala/src/features/explorer/application/project_head.dart';
@@ -18,7 +16,6 @@ import 'package:karmashala/src/features/notifications/application/notification_p
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_git/git.dart';
@@ -78,11 +75,11 @@ void main() {
   late FakeCommandRunner git;
 
   void seed() {
-    ExecutionEnvironmentDao(db)
+    server.environmentRows
       ..upsert(posixEnv())
       ..upsert(wslEnv())
       ..upsert(sshEnvFixture());
-    SshHostDao(db).upsert(
+    server.sshHostRows.upsert(
       SshHost(
         id: 'h1',
         name: 'build-box',
@@ -93,7 +90,7 @@ void main() {
         createdAt: testTime,
       ),
     );
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     void add(
       String id,
       String name,

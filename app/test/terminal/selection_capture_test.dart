@@ -9,8 +9,6 @@ import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -36,8 +34,6 @@ void main() {
   Future<String> pump(WidgetTester tester, {bool notesEnabled = true}) async {
     db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    AgentInstallationDao(db).insert(agentInstallation());
 
     // The server files by where the text came from: s1 is in r1, in p1.
     final server = FakeDataServer(
@@ -45,6 +41,8 @@ void main() {
       repositoryOfSession: {'s1': 'r1'},
       projectOfRepository: {'r1': 'p1'},
     )..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
+    server.installationRows.insert(agentInstallation());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     final data = await server.override();

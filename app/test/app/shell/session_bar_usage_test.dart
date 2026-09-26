@@ -4,12 +4,9 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -31,6 +28,7 @@ import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// **The quota in its new home: the bar that belongs to the session.**
 ///
@@ -98,10 +96,12 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);
     delivery = fullBar;
@@ -232,9 +232,7 @@ void main() {
     // Two tabs, two accounts. This is the whole of *"each session might be
     // different one"*: activating the other tab must change which quota is
     // reported, because it is a different account's.
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
+    server.installationRows.insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
     container = containerFor();
     seedPane();
     seedPane(id: 's2', installation: 'a2');
@@ -265,9 +263,7 @@ void main() {
   ) async {
     // Nothing, not a dash: a dash in a line of facts reads as a reading. The
     // service's own allowlist decides, one step earlier.
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a2', agentId: 'unknownAgent'));
+    server.installationRows.insert(agentInstallation(id: 'a2', agentId: 'unknownAgent'));
     container = containerFor();
     seedPane(id: 's1', installation: 'a2');
     container.read(selectedSessionIdProvider.notifier).select('s1');

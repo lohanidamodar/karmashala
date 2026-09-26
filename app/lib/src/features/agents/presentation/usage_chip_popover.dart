@@ -55,9 +55,12 @@ class UsageChipPopover extends ConsumerWidget {
     if (reading == null || reading.windows.every((w) => w.percent == null)) {
       body.add(Text(view.tooltip, style: small));
     } else {
-      final history = ref.watch(
-        usageHistoryProvider(usageHistoryQuery(accountKey, now)),
-      );
+      // Asked of the server; the last answer stays while a newer one comes.
+      final history =
+          ref
+              .watch(usageHistoryProvider(usageHistoryQuery(accountKey, now)))
+              .value ??
+          const <UsageSample>[];
       for (final window in reading.windows) {
         body.add(
           UsageWindowMeter(

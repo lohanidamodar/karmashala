@@ -8,15 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/editor/application/editor_language.dart';
 import 'package:karmashala/src/features/editor/application/editor_tab_actions.dart';
 import 'package:karmashala/src/features/editor/application/open_documents.dart';
 import 'package:karmashala/src/features/editor/data/document_store.dart';
 import 'package:karmashala/src/features/editor/domain/source_document.dart';
 import 'package:karmashala/src/features/editor/presentation/editor_tab_view.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
@@ -130,10 +127,12 @@ void main() {
     db = CountingDatabase();
     server = FakeDataServer();
     data = await server.override();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     store = _FakeStore({
       _path: _initial,
       _binary: 'ELF\u0000\u0001',

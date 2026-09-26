@@ -1,16 +1,11 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
 import '../../../core/util/agent_cli_bridge.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../data/codex_account_dao.dart';
+import '../data/agents_data.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/discovery.dart';
-
-final codexAccountDaoProvider = Provider<CodexAccountDao>(
-  (ref) => CodexAccountDao(ref.watch(databaseProvider)),
-);
 
 final codexAuthLocatorProvider = Provider<CodexAuthLocator>(
   (ref) => CodexAuthLocator(ref.watch(cliStoreLocatorProvider)),
@@ -28,7 +23,7 @@ final codexAuthSnapshotProvider =
       ref,
       installation,
     ) async {
-      final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
+      final environments = ref.watch(environmentsDataProvider).getAll();
       final location = await ref
           .watch(codexAuthLocatorProvider)
           .locationFor(installation, environments);
@@ -44,18 +39,28 @@ final codexAuthSnapshotProvider =
           );
     });
 
+/// The saved Codex accounts — the server's, **without their credentials**,
+/// followed as they change — and capture/switch. The `auth.json` bundle is
+/// only ever asked for right before a switch writes it.
 class CodexAccountsController extends Notifier<List<CodexAccount>> {
+  CodexAccountsData get _data => ref.read(codexAccountsDataProvider);
+
   @override
-  List<CodexAccount> build() => ref.watch(codexAccountDaoProvider).getAll();
+  List<CodexAccount> build() {
+    final data = ref.watch(codexAccountsDataProvider);
+    final accounts = data.getAll();
+    final listening = data.changes.listen((_) => state = data.getAll());
+    ref.onDispose(listening.cancel);
+    return accounts;
+  }
 
   Future<CodexAccount> captureCurrent(AgentInstallation installation) async {
     final location = await _locationFor(installation);
     final account = await ref
         .read(codexAuthServiceProvider)
         .capture(location.path, installation.environmentId, io: location.io);
-    final dao = ref.read(codexAccountDaoProvider);
-    final saved = dao.upsert(account);
-    state = dao.getAll();
+    final saved = await _data.save(account);
+    state = _data.getAll();
     return saved;
   }
 
@@ -65,10 +70,17 @@ class CodexAccountsController extends Notifier<List<CodexAccount>> {
     CodexAccount account,
   ) async {
     final service = ref.read(codexAuthServiceProvider);
-    final dao = ref.read(codexAccountDaoProvider);
     final location = await _locationFor(installation);
+    // The saved sign-in, asked for now and held only for this switch.
+    final saved = await _data.credentials(account.id);
+    if (saved.auth.isEmpty) {
+      throw CodexAuthException(
+        'The saved account ${account.email ?? account.accountId} has no '
+        'sign-in to switch to.',
+      );
+    }
     try {
-      dao.upsert(
+      await _data.save(
         await service.capture(
           location.path,
           installation.environmentId,
@@ -79,19 +91,18 @@ class CodexAccountsController extends Notifier<List<CodexAccount>> {
       // A missing outgoing login is valid: the saved account can still be
       // restored into this installation.
     }
-    await service.switchTo(account, location.path, io: location.io);
-    state = dao.getAll();
+    await service.switchTo(saved, location.path, io: location.io);
+    state = _data.getAll();
     ref.invalidate(codexAuthSnapshotProvider(installation));
   }
 
-  void forget(CodexAccount account) {
-    final dao = ref.read(codexAccountDaoProvider);
-    dao.delete(account.id);
-    state = dao.getAll();
+  Future<void> forget(CodexAccount account) async {
+    await _data.delete(account.id);
+    state = _data.getAll();
   }
 
   Future<CodexAuthLocation> _locationFor(AgentInstallation installation) async {
-    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = ref.read(environmentsDataProvider).getAll();
     final location = await ref
         .read(codexAuthLocatorProvider)
         .locationFor(installation, environments);

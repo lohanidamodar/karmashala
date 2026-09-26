@@ -30,8 +30,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -84,14 +82,13 @@ Future<Harness> harness({
 }) async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db)
+  server.environmentRows
     ..upsert(windowsEnv())
     ..upsert(wslEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  final dao = AgentInstallationDao(db);
   for (final installation in installations) {
-    dao.insert(installation);
+    server.installationRows.insert(installation);
   }
 
   final runner = FakeCommandRunner(responder: responder);
@@ -161,14 +158,17 @@ void main() {
 
       final result = await _launch(h, row);
 
-      expect(mirroredServer(h.db).sessionRows.getById(result.session.id), isNotNull);
+      expect(
+        mirroredServer(h.db).sessionRows.getById(result.session.id),
+        isNotNull,
+      );
       // Counted, not timed: the whole claim to running on every launch is that
       // a workspace with nothing wrong costs one stat and no processes.
       expect(h.runner.requests, isEmpty);
       expect(h.runner.startRequests, isEmpty);
       // And the row was left exactly as it was found.
       expect(
-        AgentInstallationDao(h.db).getById(row.id)!.executable.path,
+        mirroredServer(h.db).installationRows.getById(row.id)!.executable.path,
         _claude,
       );
     });
@@ -219,7 +219,9 @@ void main() {
       // The row moved and kept its id, and the pane runs the binary that is
       // actually there rather than the spelling the request carried.
       expect(
-        AgentInstallationDao(h.db).getById('codex-row')!.executable.path,
+        mirroredServer(
+          h.db,
+        ).installationRows.getById('codex-row')!.executable.path,
         _real,
       );
       final instance = h.container
@@ -304,7 +306,10 @@ void main() {
 
       expect(mirroredServer(h.db).sessionRows.getAll(), isEmpty);
       // §20's first rule: an unreachable row is never deleted.
-      expect(AgentInstallationDao(h.db).getById('codex-row'), isNotNull);
+      expect(
+        mirroredServer(h.db).installationRows.getById('codex-row'),
+        isNotNull,
+      );
     });
 
     test(

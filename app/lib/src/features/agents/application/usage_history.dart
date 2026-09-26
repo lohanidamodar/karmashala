@@ -1,101 +1,30 @@
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
-import '../data/usage_sample_dao.dart';
+import '../data/agents_data.dart';
 
-/// How long usage history is kept.
-const Duration kUsageHistoryKeep = Duration(days: 30);
-
-/// How long history stays at full resolution before it is thinned to hours.
-const Duration kUsageHistoryFullResolution = Duration(hours: 48);
-
-/// An unchanged window is still written this often, so a flat stretch reads as
-/// measured-and-flat rather than as a gap.
-const Duration kUsageHistoryHeartbeat = Duration(minutes: 30);
-
-/// How often the writer prunes, at most.
-const Duration kUsageHistoryPruneEvery = Duration(hours: 1);
-
-/// Two resets closer than this are the same reset: Codex derives its reset
-/// from "seconds from now", which drifts between readings.
-const Duration _sameReset = Duration(minutes: 2);
-
-/// Writes fresh usage readings into the history, one row per measured window,
-/// skipping repeats and pruning as it goes.
+/// Sends fresh usage readings to the server's history, which keeps one row
+/// per measured window worth keeping (`usageSampleWorthKeeping`) and prunes
+/// as it goes. Nothing here decides what is kept.
 class UsageHistoryRecorder {
-  UsageHistoryRecorder(this._dao, {this.onRecorded});
+  UsageHistoryRecorder(this._history);
 
-  final UsageSampleDao _dao;
+  final UsageHistoryData _history;
+  static final _log = AppLogger.named('usage.history');
 
-  /// Told which account gained rows, so a chart can re-read.
-  final void Function(String accountKey)? onRecorded;
-
-  DateTime? _prunedAt;
-
-  /// Records [usage] for [accountKey]. Returns how many rows were written.
-  int record(String accountKey, AgentUsage usage) {
-    final at = _toSecond(usage.fetchedAt);
-    var written = 0;
-    for (final window in usage.windows) {
-      final percent = window.percent;
-      // A window nothing measured has no place on a chart of numbers.
-      if (percent == null || !percent.isFinite) continue;
-      final resetsAt = window.resetsAt == null
-          ? null
-          : _toSecond(window.resetsAt!);
-      final last = _dao.latest(accountKey, window.label);
-      if (last != null) {
-        if (!at.isAfter(last.recordedAt)) continue;
-        final unchanged =
-            last.percent == percent && _sameMoment(last.resetsAt, resetsAt);
-        if (unchanged &&
-            at.difference(last.recordedAt) < kUsageHistoryHeartbeat) {
-          continue;
-        }
-      }
-      _dao.insert(
-        UsageSample(
-          accountKey: accountKey,
-          windowLabel: window.label,
-          span: window.span,
-          percent: percent,
-          resetsAt: resetsAt,
-          recordedAt: at,
-        ),
-      );
-      written++;
+  /// Records [usage] for [accountKey]. Completes with how many rows the
+  /// server wrote — its change tells the charts — and a server that is away
+  /// writes none, which the log says.
+  Future<int> record(String accountKey, AgentUsage usage) async {
+    try {
+      return await _history.record(accountKey, usage);
+    } on Object catch (error) {
+      _log.info('Usage reading for $accountKey not recorded: $error');
+      return 0;
     }
-    final pruned = _prunedAt;
-    if (pruned == null || at.difference(pruned) >= kUsageHistoryPruneEvery) {
-      _dao.prune(
-        now: at,
-        keep: kUsageHistoryKeep,
-        fullResolution: kUsageHistoryFullResolution,
-      );
-      _prunedAt = at;
-    }
-    if (written > 0) onRecorded?.call(accountKey);
-    return written;
-  }
-
-  static bool _sameMoment(DateTime? a, DateTime? b) {
-    if (a == null || b == null) return a == b;
-    return a.difference(b).abs() < _sameReset;
-  }
-
-  static DateTime _toSecond(DateTime value) {
-    final utc = value.toUtc();
-    return DateTime.fromMillisecondsSinceEpoch(
-      utc.millisecondsSinceEpoch ~/ 1000 * 1000,
-      isUtc: true,
-    );
   }
 }
-
-final usageSampleDaoProvider = Provider<UsageSampleDao>(
-  (ref) => UsageSampleDao(ref.watch(databaseProvider)),
-);
 
 /// Bumped whenever the history gains rows, so the charts over it re-read.
 class UsageHistoryRevision extends Notifier<int> {
@@ -108,17 +37,24 @@ class UsageHistoryRevision extends Notifier<int> {
 final usageHistoryRevisionProvider =
     NotifierProvider<UsageHistoryRevision, int>(UsageHistoryRevision.new);
 
-final usageHistoryRecorderProvider = Provider<UsageHistoryRecorder>(
-  (ref) => UsageHistoryRecorder(
-    ref.watch(usageSampleDaoProvider),
-    onRecorded: (_) => ref.read(usageHistoryRevisionProvider.notifier).bump(),
-  ),
-);
+final usageHistoryRecorderProvider = Provider<UsageHistoryRecorder>((ref) {
+  final history = ref.watch(usageHistoryDataProvider);
+  // Rows another client recorded move the charts too.
+  final listening = history.recorded.listen(
+    (_) => ref.read(usageHistoryRevisionProvider.notifier).bump(),
+  );
+  ref.onDispose(listening.cancel);
+  return UsageHistoryRecorder(history);
+});
 
-/// An account's history since `from`, oldest first. Callers round `from` (to
-/// the minute, say) so a ticking clock does not mint a family member per build.
-final usageHistoryProvider = Provider.autoDispose
+/// An account's history since `from`, oldest first, asked of the server.
+/// Callers round `from` (to the minute, say) so a ticking clock does not mint
+/// a family member per build.
+final usageHistoryProvider = FutureProvider.autoDispose
     .family<List<UsageSample>, ({String account, DateTime from})>((ref, query) {
       ref.watch(usageHistoryRevisionProvider);
-      return ref.watch(usageSampleDaoProvider).since(query.account, query.from);
+      ref.watch(usageHistoryRecorderProvider);
+      return ref
+          .watch(usageHistoryDataProvider)
+          .since(query.account, query.from);
     });

@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_host/data.dart';
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_store/database.dart';
 
 /// An [IOSink] that keeps what it was given and completes [seen] for each
 /// phrase once it has been written.
@@ -99,7 +99,7 @@ class InProcessServer {
   static Future<InProcessServer> start(
     Directory root,
     List<String> args, {
-    ServerAgents Function(AppDatabase database)? agentsFor,
+    ServerAgents Function(DataService data)? agentsFor,
   }) async {
     final paths = HostPaths(Directory('${root.path}/host'));
     final out = CapturingSink();
@@ -115,7 +115,7 @@ class InProcessServer {
       err: err,
       paths: paths,
       until: stop.future,
-      agentsFor: agentsFor ?? (database) => noAgents(database),
+      agentsFor: agentsFor ?? noAgents,
     );
     await Future.any([
       out.saw('restored '),
@@ -152,8 +152,8 @@ Map<String, String> scratchEnvironment(Directory root) => {
 };
 
 /// A [ServerAgents] whose probe finds nothing and spawns nothing.
-ServerAgents noAgents(AppDatabase database) =>
-    ServerAgents(database: database, runner: FakeRunner(const {}));
+ServerAgents noAgents(DataService data) =>
+    ServerAgents(data: data, runner: FakeRunner(const {}));
 
 /// Answers `command -v <name>` for each name in [located] with its path,
 /// `<path> <version arguments>` with `9.9.9`, and everything else with a

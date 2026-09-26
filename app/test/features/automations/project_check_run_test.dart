@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/application/automation_check_runner.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
@@ -14,7 +13,6 @@ import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
@@ -106,13 +104,11 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     artifacts = Directory.systemTemp.createTempSync('automation-checks');
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
+    server.installationRows.insert(agentInstallation(agentId: AgentIds.claudeCode));
     AutomationDao(db).insert(automation());
     mirroredServer(db).sessionRows.insert(session(status: SessionStatus.running));
     AutomationDao(db).insertRun(
@@ -244,7 +240,7 @@ void main() {
     addCheck('the test suite', const ['flutter', 'test']);
     // A WSL row that no longer carries the distribution it is for: nothing can
     // say where this checkout's commands would run.
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'wsl:gone',
         kind: EnvironmentKind.wsl,

@@ -6,8 +6,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_tab.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
@@ -21,17 +19,21 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/fake_data_server.dart';
+import 'package:agent_cli/process.dart';
 
 /// The settings screen as the catalogue draws it: every page and section,
 /// search that lands on a section, deep links that do, and the narrow layout.
 void main() {
-  ProviderContainer prepared() {
+  Future<ProviderContainer> prepared() async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    final server = FakeDataServer()
+      ..environmentRows.upsert(localHostEnvironment(testTime));
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         // The Terminal page reads the session host's status, and the one running
         // on this machine is not the test's to dial.
         localHostSessionAccessProvider.overrideWithValue(null),
@@ -65,7 +67,7 @@ void main() {
       ..physicalSize = size
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final container = prepared();
+    final container = await prepared();
     await tester.pumpWidget(app(container, home));
     await tester.pumpAndSettle();
     return container;
@@ -254,7 +256,7 @@ void main() {
   group('window matrix', () {
     for (final page in SettingsSectionId.values) {
       testWidgets(page.label, (tester) async {
-        final container = prepared();
+        final container = await prepared();
         await expectSurvivesWindowMatrix(
           tester,
           build: () => app(container, SettingsScreen(initialSection: page)),

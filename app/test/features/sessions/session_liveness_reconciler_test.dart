@@ -2,9 +2,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
@@ -52,10 +50,10 @@ Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
 harness() async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: 'demo'));
+  server.installationRows.insert(agentInstallation(agentId: 'demo'));
 
   final container = ProviderContainer(
     overrides: [
@@ -87,7 +85,9 @@ void main() {
     });
 
     test('a row left running by a previous run is no longer running', () {
-      server.sessionRows.insert(session(id: 'old', status: SessionStatus.running));
+      server.sessionRows.insert(
+        session(id: 'old', status: SessionStatus.running),
+      );
 
       expect(markSessionsLostOnLaunch(dao), 1);
 

@@ -13,10 +13,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
@@ -201,10 +198,10 @@ void main() {
       db = AppDatabase.memory();
       final server = FakeDataServer();
       data = await server.override();
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
     });
     tearDown(() => db.close());
 
@@ -245,8 +242,14 @@ void main() {
       'none of its own', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    final container = fakeTerminalContainer(database: db);
+    final server = FakeDataServer()
+      ..environmentRows.upsert(
+        localHostEnvironment(FixedClock(testTime).nowUtc()),
+      );
+    final container = fakeTerminalContainer(
+      database: db,
+      data: await server.override(),
+    );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;

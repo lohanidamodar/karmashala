@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
 import 'package:karmashala/src/features/remote/presentation/ssh_relays_panel.dart';
 import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
@@ -92,7 +91,7 @@ void main() {
   });
   tearDown(() => db.close());
 
-  void addHost() => SshHostDao(db).upsert(
+  void addHost() => server.sshHostRows.upsert(
     SshHost(
       id: 'h1',
       name: 'do-box',

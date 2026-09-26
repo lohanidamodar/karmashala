@@ -170,7 +170,6 @@ final revealInFileManagerProvider = Provider<RevealInFileManager>(
   (ref) => RevealInFileManager(
     host: ref.watch(hostCommandRunnerProvider),
     translator: ref.watch(pathTranslatorProvider),
-    environmentFor: (id) =>
-        ref.read(executionEnvironmentDaoProvider).getById(id),
+    environmentFor: (id) => ref.read(environmentsDataProvider).getById(id),
   ),
 );

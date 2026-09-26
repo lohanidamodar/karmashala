@@ -18,7 +18,7 @@ final checkpointDaoProvider = Provider<CheckpointDao>(
 final checkpointServiceProvider = Provider<CheckpointService>(
   (ref) => CheckpointService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environmentOf: ref.watch(executionEnvironmentDaoProvider).getById,
+    environmentOf: ref.watch(environmentsDataProvider).getById,
     dao: ref.watch(checkpointDaoProvider),
     clock: ref.watch(clockProvider),
     newId: () => ref.read(idGeneratorProvider).newId(),

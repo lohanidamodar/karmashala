@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -8,15 +9,15 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/application/agent_skill_installation_service.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
 import 'package:agent_cli/read.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Every store the locator would have found, without touching a real home.
 class _StubLocator implements CliStoreLocator {
@@ -46,21 +47,27 @@ void main() {
   ];
 
   late AppDatabase db;
+
+  late Override data;
   late Directory home;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    FakeDataServer().mirrorInto(db);
+    mirroredServer(db).environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
     home = Directory.systemTemp.createTempSync('karmashala_skillsvc_');
+    data = await mirroredServer(db).override();
   });
   tearDown(() {
     db.close();
     removeTempDirectory(home);
   });
 
-  String localEnvironmentId() => ExecutionEnvironmentDao(
+  String localEnvironmentId() => mirroredServer(
     db,
-  ).getAll().firstWhere((e) => isLocalHost(e.kind)).id;
+  ).environmentRows.getAll().firstWhere((e) => isLocalHost(e.kind)).id;
 
   String claudeStore() => p.join(home.path, '.claude');
   File skillFile() => File(
@@ -74,6 +81,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         cliStoreLocatorProvider.overrideWithValue(locator),
         if (registry != null) agentRegistryProvider.overrideWithValue(registry),
       ],

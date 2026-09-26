@@ -52,7 +52,7 @@ extension SessionHostedVerbs on SessionLauncher {
         .read(workspaceDataProvider)
         .repository(session.repositoryId);
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (repository == null || installation == null) {
       _log.warning(

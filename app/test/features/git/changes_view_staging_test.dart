@@ -10,20 +10,22 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
   const checkout = EnvironmentPath(environmentId: 'windows', path: r'C:\app');
-  late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late FakeCommandRunner runner;
 
   /// Every git command the pane ran, as argv after `-C <path>`.
@@ -32,12 +34,11 @@ void main() {
       if (request.executable == 'git') request.arguments.sublist(2),
   ];
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  setUp(() async {
+    server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    client = await server.connect();
     runner = FakeCommandRunner();
   });
-  tearDown(() => db.close());
 
   Future<void> pump(
     WidgetTester tester, {
@@ -54,7 +55,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          dataClientProvider.overrideWithValue(client),
           repoWorktreesProvider.overrideWith((ref) async => const []),
           repositoryChangesProvider.overrideWith((ref) async => files),
           repositoryFileDiffStatsProvider.overrideWith((ref) async => const {}),
@@ -64,7 +65,7 @@ void main() {
           changesServiceProvider.overrideWithValue(
             ChangesService(
               runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-              environmentDao: ExecutionEnvironmentDao(db),
+              environmentDao: EnvironmentsData(client),
             ),
           ),
         ],

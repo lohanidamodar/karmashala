@@ -101,7 +101,7 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
     final installs = repo == null
         ? const <AgentInstallation>[]
         : ref
-              .watch(agentInstallationDaoProvider)
+              .watch(agentInstallationsDataProvider)
               .getByEnvironment(repo.path.environmentId);
     return LayoutBuilder(
       builder: (context, constraints) {

@@ -1,15 +1,16 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/runner.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_hosts_data.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
+  late SshHostsData hosts;
+  late KnownHostsData knownHosts;
 
   final remote = ExecutionEnvironment(
     id: 'ssh:h1',
@@ -29,20 +30,29 @@ void main() {
     createdAt: testTime,
   );
 
-  setUp(() => db = AppDatabase.memory());
-  tearDown(() => db.close());
+  setUp(() async {
+    server = FakeDataServer();
+    final client = await server.connect();
+    hosts = SshHostsData(client);
+    knownHosts = KnownHostsData(client);
+  });
 
   SshConnectionPool pool() =>
-      SshConnectionPool(hosts: SshHostDao(db), knownHosts: KnownHostDao(db));
+      SshConnectionPool(hosts: hosts, knownHosts: knownHosts);
 
-  test('the factory builds an SshCommandRunner for an ssh environment', () {
-    SshHostDao(db).upsert(saved);
-    final runner = SshCommandRunnerFactory(
-      sshConnections: pool,
-    ).forEnvironment(remote);
-    expect(runner, isA<SshCommandRunner>());
-    expect(runner.environmentId, 'ssh:h1');
-  });
+  test(
+    'the factory builds an SshCommandRunner for an ssh environment',
+    () async {
+      server.sshHostRows.upsert(saved);
+      // A host another client saved is told by id and read again.
+      await pumpEventQueue();
+      final runner = SshCommandRunnerFactory(
+        sshConnections: pool,
+      ).forEnvironment(remote);
+      expect(runner, isA<SshCommandRunner>());
+      expect(runner.environmentId, 'ssh:h1');
+    },
+  );
 
   test('an ssh environment without a connection pool fails loudly', () {
     expect(
@@ -59,8 +69,10 @@ void main() {
     );
   });
 
-  test('an ssh environment with no host id is rejected', () {
-    SshHostDao(db).upsert(saved);
+  test('an ssh environment with no host id is rejected', () async {
+    server.sshHostRows.upsert(saved);
+    // A host another client saved is told by id and read again.
+    await pumpEventQueue();
     final orphan = ExecutionEnvironment(
       id: 'ssh:orphan',
       kind: EnvironmentKind.ssh,
@@ -75,7 +87,9 @@ void main() {
   });
 
   test('an SSH command creates no process, here or on a worker', () async {
-    SshHostDao(db).upsert(saved);
+    server.sshHostRows.upsert(saved);
+    // A host another client saved is told by id and read again.
+    await pumpEventQueue();
     final runner = SshCommandRunnerFactory(
       sshConnections: pool,
     ).forEnvironment(remote);
@@ -106,13 +120,18 @@ void main() {
     );
   });
 
-  test('the pool hands the same connection to every runner for a host', () {
-    SshHostDao(db).upsert(saved);
-    final shared = pool();
-    expect(
-      identical(shared.forHostId('h1'), shared.forHostId('h1')),
-      isTrue,
-      reason: 'a connection per command would make remote work unusable',
-    );
-  });
+  test(
+    'the pool hands the same connection to every runner for a host',
+    () async {
+      server.sshHostRows.upsert(saved);
+      // A host another client saved is told by id and read again.
+      await pumpEventQueue();
+      final shared = pool();
+      expect(
+        identical(shared.forHostId('h1'), shared.forHostId('h1')),
+        isTrue,
+        reason: 'a connection per command would make remote work unusable',
+      );
+    },
+  );
 }

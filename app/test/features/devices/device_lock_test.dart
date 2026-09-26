@@ -6,11 +6,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -61,11 +58,12 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_device_lock_');
     db = AppDatabase.memory();
     clock = MovableClock(testTime);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
-    final data = FakeDataServer().mirrorInto(db)
+    final data = FakeDataServer().mirrorInto(db);
+    data.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
+    data
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    data.installationRows.insert(agentInstallation());
     mirroredServer(db).sessionRows
       ..insert(session(id: 's1', title: 'Fix the login flow'))
       ..insert(session(id: 's2', title: 'Check the release build'));
@@ -264,7 +262,9 @@ void main() {
   group('a holder that goes away', () {
     test('a session that ended does not keep the device', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
-      mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.completed);
+      mirroredServer(
+        db,
+      ).sessionRows.updateStatus('s1', SessionStatus.completed);
 
       final second = await callAs('s2', 'device_tap', {'x': 100, 'y': 100});
       expect(second.isError, isFalse, reason: second.text);
@@ -290,7 +290,9 @@ void main() {
 
     test('the ending the app does see frees the device at once', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
-      mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.completed);
+      mirroredServer(
+        db,
+      ).sessionRows.updateStatus('s1', SessionStatus.completed);
 
       // The same event that retires the session's MCP token — a change to the
       // session list, not a timer. Nothing polls for this.

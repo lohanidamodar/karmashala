@@ -21,7 +21,7 @@ final worktreeServiceProvider = Provider<WorktreeService>(
   (ref) => WorktreeService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     environmentOf: worktreeEnvironmentOf(
-      ref.watch(executionEnvironmentDaoProvider),
+      ref.watch(environmentsDataProvider),
       runners: ref.watch(commandRunnerFactoryProvider),
     ),
     setup: ref.watch(worktreeSetupServiceProvider),

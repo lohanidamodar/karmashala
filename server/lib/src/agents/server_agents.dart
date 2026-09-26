@@ -1,9 +1,8 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_store/database.dart';
 
-import 'agent_installation_rows.dart';
+import '../data/data_service.dart';
 
 /// One installation as a server reports it: the row, and what the registry
 /// calls its agent.
@@ -42,25 +41,27 @@ class ServerAgentScan {
 
 /// The server finds the agent CLIs on its own machine — at every start, and
 /// on `agents.refresh` — and records them where every agent launch looks them up
-/// (`agent_installations`, under this machine's environment row). Which
-/// agents, under which names, and how to read a version all come from the
-/// registry's adapters: nothing here names an agent.
+/// (`agent_installations`, under this machine's environment row), through its
+/// data API: by the same reconciliation rule as a client's sweep
+/// (`planReconcile`), and told to every client. Which agents, under which
+/// names, and how to read a version all come from the registry's adapters:
+/// nothing here names an agent.
 class ServerAgents {
   ServerAgents({
-    required AppDatabase database,
+    required DataService data,
     this.registry = AgentRegistry.builtIn,
     CommandRunner? runner,
     Clock? clock,
     IdGenerator? ids,
     Map<String, String>? hostEnvironment,
-  }) : _rows = AgentInstallationRows(database),
+  }) : _data = data,
        _runner = runner ?? const LocalCommandRunner(),
        _clock = clock ?? const SystemClock(),
        _ids = ids ?? RandomIdGenerator(),
        _hostEnvironment = hostEnvironment;
 
   final AgentRegistry registry;
-  final AgentInstallationRows _rows;
+  final DataService _data;
   final CommandRunner _runner;
   final Clock _clock;
   final IdGenerator _ids;
@@ -73,7 +74,7 @@ class ServerAgents {
 
   /// What is recorded for this machine now, without probing.
   List<ServerAgent> recorded() => [
-    for (final installation in _rows.inEnvironment(localHostEnvironmentId))
+    for (final installation in _data.installationsIn(localHostEnvironmentId))
       (installation: installation, added: false),
   ];
 
@@ -103,11 +104,9 @@ class ServerAgents {
         error: '$error',
       );
     }
-    _rows.ensureEnvironment(here);
     final now = _clock.nowUtc();
-    final addedIds = <String>{};
-    for (final agent in found) {
-      final recorded = _rows.record(
+    final written = _data.recordAgentsFound(here, [
+      for (final agent in found)
         AgentInstallation(
           id: _ids.newId(),
           agentId: agent.descriptor.id,
@@ -116,15 +115,14 @@ class ServerAgents {
           versionReadAt: agent.version == null ? null : now,
           createdAt: now,
         ),
-      );
-      if (recorded != null && recorded.added) {
-        addedIds.add(recorded.installation.id);
-      }
-    }
+    ], now);
+    final addedIds = {for (final row in written.added) row.id};
     final foundIds = {for (final agent in found) agent.descriptor.id};
     return ServerAgentScan(
       agents: [
-        for (final installation in _rows.inEnvironment(localHostEnvironmentId))
+        for (final installation in _data.installationsIn(
+          localHostEnvironmentId,
+        ))
           (
             installation: installation,
             added: addedIds.contains(installation.id),

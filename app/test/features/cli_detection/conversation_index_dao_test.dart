@@ -2,6 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/read.dart' show TranscriptResumePoint;
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
+import 'package:agent_cli/process.dart';
+
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late AppDatabase db;
@@ -252,9 +256,15 @@ void main() {
     );
 
     setUp(() {
-      db.execute(
-        "INSERT INTO execution_environments (id, kind, name, created_at) "
-        "VALUES ('windows', 'windows', 'Windows', '2026-09-01T00:00:00Z');",
+      // The environment is the server's; the mirror puts it where the
+      // index's own joins (still in this database) look.
+      (FakeDataServer()..mirrorInto(db)).environmentRows.upsert(
+        ExecutionEnvironment(
+          id: 'windows',
+          kind: EnvironmentKind.windowsNative,
+          name: 'Windows',
+          createdAt: DateTime.utc(2026, 9),
+        ),
       );
       db.execute(
         "INSERT INTO projects (id, name, root_environment_id, root_path, "

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_observer.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
@@ -17,6 +16,8 @@ import 'package:karmashala_verification/verification.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 const String _appPubspec = '''
 name: demo
@@ -62,15 +63,16 @@ void main() {
     return const CommandResult(exitCode: 0, stdout: '', stderr: '');
   }
 
-  setUp(() {
+  setUp(() async {
     artifacts = Directory.systemTemp.createTempSync('karmashala-gate-test');
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
+    final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(database: db, data: await server.override()),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
             fallback: FakeCommandRunner(

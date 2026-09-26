@@ -51,7 +51,6 @@ export 'src/store/store_probe.dart';
 export 'src/transport/socket_transport.dart';
 export 'src/transport/transport.dart';
 export 'src/serve/host_build.dart';
-export 'src/agents/agent_installation_rows.dart';
 export 'src/agents/server_agents.dart';
 export 'src/server/admin_commands.dart';
 export 'src/server/init_command.dart';

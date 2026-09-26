@@ -7,11 +7,11 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/schedules.dart';
 import 'package:karmashala_automations/resumes.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_session/launch.dart';
 
 import 'scheduled_resume_harness.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Scheduled resumes end to end over fakes. Nothing here waits: the clock is
 /// moved, the one timer is fired by hand and readiness is an emitted report.
@@ -475,7 +475,7 @@ void main() {
         resetsIn: const Duration(hours: 5),
       );
       // Any surface's fetch: the observer only listens.
-      await h.usage.fetch(AgentInstallationDao(h.db).getById('a1')!, const []);
+      await h.usage.fetch(mirroredServer(h.db).installationRows.getById('a1')!, const []);
       await h.settle();
       expect(h.dao.getById(resume.id)!.reason, contains('reset early'));
       h.timer.fire();
@@ -487,14 +487,14 @@ void main() {
       h.scheduler();
       h.observe();
       h.usage.answer = h.reading();
-      await h.usage.fetch(AgentInstallationDao(h.db).getById('a1')!, const []);
+      await h.usage.fetch(mirroredServer(h.db).installationRows.getById('a1')!, const []);
       final resume = arm();
       expect(resume.accountEmail, 'owner@example.com');
       await h.settle();
 
       h.clock.advance(const Duration(minutes: 10));
       h.usage.answer = h.reading(percent: 4, email: 'other@example.com');
-      await h.usage.fetch(AgentInstallationDao(h.db).getById('a1')!, const []);
+      await h.usage.fetch(mirroredServer(h.db).installationRows.getById('a1')!, const []);
       await h.settle();
       h.timer.fire();
       await h.settle();

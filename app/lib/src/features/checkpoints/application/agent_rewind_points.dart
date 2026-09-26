@@ -15,7 +15,7 @@ final sessionAgentRewindProvider = Provider.autoDispose
       final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) return const AgentRewind.unknown();
       final agentId = ref
-          .read(agentInstallationDaoProvider)
+          .read(agentInstallationsDataProvider)
           .getById(session.agentInstallationId)
           ?.agentId;
       if (agentId == null) return const AgentRewind.unknown();
@@ -33,7 +33,7 @@ final agentRewindPointsProvider = FutureProvider.autoDispose
         return null;
       }
       final agentId = ref
-          .read(agentInstallationDaoProvider)
+          .read(agentInstallationsDataProvider)
           .getById(session.agentInstallationId)
           ?.agentId;
       if (agentId == null) return null;

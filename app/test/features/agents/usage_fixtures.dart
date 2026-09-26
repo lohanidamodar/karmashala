@@ -1,9 +1,7 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 
 import '../../support/fake_cli_store_locator.dart';
@@ -131,11 +129,13 @@ AppDatabase seedUsageDatabase({
   FakeDataServer? server,
 }) {
   final db = AppDatabase.memory();
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
   (server ?? FakeDataServer()).mirrorInto(db)
+    ..environmentRows.upsert(windowsEnv())
     ..projectRows.insert(project())
     ..repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+  mirroredServer(
+    db,
+  ).installationRows.insert(agentInstallation(agentId: agentId));
   mirroredServer(db).sessionRows.insert(session());
   return db;
 }

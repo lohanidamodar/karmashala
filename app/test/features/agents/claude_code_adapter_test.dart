@@ -1,9 +1,7 @@
 import 'dart:async';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -99,9 +97,6 @@ void main() {
 
   group('ClaudeCodeChatProtocol', () {
     test('starts claude with stream-json in/out', () async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final runner = FakeCommandRunner();
       final adapter = ClaudeCodeChatProtocol(runnerFor: (_) => runner);
 

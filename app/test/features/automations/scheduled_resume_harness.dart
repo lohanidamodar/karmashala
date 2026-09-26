@@ -8,14 +8,12 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/automations/application/automation_scheduler.dart';
 import 'package:karmashala/src/features/automations/application/automation_timer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_observer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/resumes.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -82,9 +80,9 @@ class ResumeHarness {
     required List<Override> extra,
   }) {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.mirrorInto(db);
-    AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+    server.installationRows.insert(agentInstallation(agentId: agentId));
     clock = MovableClock(DateTime.utc(2026, 9, 17, 12));
     usage = FakeAgentUsageService(clock: clock);
     container = ProviderContainer(

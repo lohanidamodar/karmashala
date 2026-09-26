@@ -1,12 +1,10 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/runner.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'package:karmashala/src/core/util/agent_cli_bridge.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -75,8 +73,7 @@ void main() {
     createdAt: testTime,
   );
 
-  late AppDatabase db;
-  late KnownHostDao known;
+  late _MemoryKnownHosts known;
   final opened = <SshConnection>[];
 
   SshConnection connect() {
@@ -96,8 +93,7 @@ void main() {
   }
 
   setUp(() {
-    db = AppDatabase.memory();
-    known = KnownHostDao(db);
+    known = _MemoryKnownHosts();
   });
 
   tearDown(() async {
@@ -105,7 +101,6 @@ void main() {
       await connection.close();
     }
     opened.clear();
-    db.close();
   });
 
   test('SSH round trips versus the same work locally', () async {
@@ -247,4 +242,18 @@ void main() {
       '(${(parallel / 10).toStringAsFixed(1)} ms each)',
     );
   }, timeout: const Timeout(Duration(minutes: 3)));
+}
+
+/// Trusted keys held for one run: the benchmark trusts what it meets.
+class _MemoryKnownHosts implements KnownHostStore {
+  final _keys = <String, KnownHostKey>{};
+
+  @override
+  KnownHostKey? find(String host, int port) => _keys['$host:$port'];
+
+  @override
+  bool trust(KnownHostKey key) {
+    _keys['${key.host}:${key.port}'] = key;
+    return true;
+  }
 }

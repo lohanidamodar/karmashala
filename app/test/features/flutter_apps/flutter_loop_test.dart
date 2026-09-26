@@ -7,12 +7,10 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/flutter_apps/application/attached_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 
@@ -95,13 +93,14 @@ void main() {
     CommandResult Function(CommandRequest)? responder,
   }) async {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
+    final server = FakeDataServer().mirrorInto(db);
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    final server = FakeDataServer().mirrorInto(db)
+    server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     runner = FakeCommandRunner(
       environmentId: 'wsl:Ubuntu',
       responder: responder ?? healthy,
@@ -512,8 +511,12 @@ void main() {
     test(
       "another session's claim refuses the launch in the claim's words",
       () async {
-        mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fixing the list'));
-        mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Something else'));
+        mirroredServer(
+          db,
+        ).sessionRows.insert(session(id: 's1', title: 'Fixing the list'));
+        mirroredServer(
+          db,
+        ).sessionRows.insert(session(id: 's2', title: 'Something else'));
         final held = await loop().run(
           project: _wslProject,
           deviceId: 'emulator-5554',

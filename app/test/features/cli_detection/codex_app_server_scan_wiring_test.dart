@@ -1,20 +1,18 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/fake_data_server.dart';
 
 /// **How the app-server reaches the worker isolate.**
 ///
@@ -49,15 +47,13 @@ void main() {
   }
 
   group('CliStoreLocator', () {
-    late AppDatabase db;
+    late FakeDataServer server;
     setUp(() {
-      db = AppDatabase.memory();
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      addTearDown(db.close);
+      server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     });
 
     test('a located store carries the Codex it can ask', () async {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           agentId: AgentIds.codex,
           path: r'C:\Users\me\.bin\codex.exe',
@@ -66,7 +62,7 @@ void main() {
 
       final store = (await CliStoreLocator(
         runnerFor: homeIs('/home/me'),
-        installations: AgentInstallationDao(db).getAll(),
+        installations: server.installationRows.getAll(),
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 
@@ -78,11 +74,11 @@ void main() {
     });
 
     test('no Codex installed means no app-server to carry', () async {
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
 
       final store = (await CliStoreLocator(
         runnerFor: homeIs('/home/me'),
-        installations: AgentInstallationDao(db).getAll(),
+        installations: server.installationRows.getAll(),
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 

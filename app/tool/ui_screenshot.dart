@@ -14,15 +14,13 @@ import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:agent_cli/process.dart' show localHostEnvironment;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -47,7 +45,6 @@ import 'package:path/path.dart' as p;
 
 import '../test/features/terminal/fake_instance.dart';
 import '../test/support/fake_command_runner.dart';
-import '../test/support/fakes.dart';
 import '../test/support/fake_data_server.dart';
 import '../test/support/fixtures.dart';
 import '../test/support/workspace_mirror.dart';
@@ -265,9 +262,10 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    // The workspace and the sessions are the server's: seeded at a fake one.
+    // The workspace, environments, installations and sessions are the
+    // server's: seeded at a fake one.
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(localHostEnvironment(testTime));
     server.projectRows
       ..insert(
         project(id: 'p1', name: 'karmashala', path: r'C:\src\karmashala'),
@@ -279,7 +277,7 @@ void main() {
       ..insert(repository(id: 'r1', projectId: 'p1', name: 'karmashala-app'))
       ..insert(repository(id: 'r2', projectId: 'p1', name: 'mcp_bridge'))
       ..insert(repository(id: 'r3', projectId: 'p2', name: 'app'));
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     server.sessionRows
       ..insert(
         session(

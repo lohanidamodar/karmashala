@@ -5,10 +5,8 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -77,10 +75,12 @@ final _serverOf = Expando<FakeDataServer>();
 AppDatabase seededDatabase() {
   final db = AppDatabase.memory();
   final server = _serverOf[db] = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  mirroredServer(db).environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
+  mirroredServer(
+    db,
+  ).installationRows.insert(agentInstallation(agentId: 'claudeish'));
   return db;
 }
 
@@ -307,7 +307,10 @@ void main() {
       emptyStore();
       final first = await containerOver(db);
       final sessionId = await startSession(first);
-      final paneId = first.read(sessionsDataProvider).getById(sessionId)!.paneId!;
+      final paneId = first
+          .read(sessionsDataProvider)
+          .getById(sessionId)!
+          .paneId!;
       if (ownWritten) writeConversation(sessionId);
       first
           .read(sessionsDataProvider)

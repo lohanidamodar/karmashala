@@ -7,22 +7,30 @@ import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/discovery.dart';
-import '../data/agent_installation_dao.dart';
 import '../data/agent_probe_log.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
+import 'package:karmashala_environments/karmashala_environments.dart'
+    show InstallationsReconciled;
 import 'agent_providers.dart';
-import '../../sessions/application/session_providers.dart';
 
-/// Holds the known agent installations and can (re)discover them across every
-/// known execution environment.
+/// Holds the known agent installations — the server's, followed as they
+/// change — and can (re)discover them across every known execution
+/// environment. This app probes (it reaches WSL, SSH and this machine's
+/// junctions); the server reconciles what it found with the rows by the one
+/// rule (`planReconcile`) and writes them.
 class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
-  @override
-  List<AgentInstallation> build() =>
-      ref.watch(agentInstallationDaoProvider).getAll();
+  AgentInstallationsData get _data => ref.read(agentInstallationsDataProvider);
 
-  /// Reads the rows again: the server wrote some (its agent discovery on this
-  /// machine, at start or on `agents.refresh`).
-  void reload() => state = ref.read(agentInstallationDaoProvider).getAll();
+  @override
+  List<AgentInstallation> build() {
+    final data = ref.watch(agentInstallationsDataProvider);
+    final installations = data.getAll();
+    final listening = data.changes.listen((_) => state = data.getAll());
+    ref.onDispose(listening.cancel);
+    return installations;
+  }
 
   /// Re-probes and reconciles every environment — the **recovery path**, which
   /// ignores [AgentProbeLog]; an unreachable one reconciles against nothing.
@@ -31,9 +39,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   /// One reconciling sweep; [only] narrows it to `environmentId -> agentIds`.
   /// The startup repair and "Detect agents" are this code at two scopes.
   Future<AgentDiscoveryReport> _sweep({Map<String, Set<String>>? only}) async {
-    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = ref.read(environmentsDataProvider).getAll();
     final factory = ref.read(commandRunnerFactoryProvider);
-    final dao = ref.read(agentInstallationDaoProvider);
     final ids = ref.read(agentCliIdsProvider);
     final clock = ref.read(agentCliClockProvider);
     final registry = ref.read(agentRegistryProvider);
@@ -82,31 +89,44 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         continue;
       }
 
-      reports.add(
-        _reconcile(
-          environment: environment,
-          probe: probe,
-          dao: dao,
-          ids: ids,
-          clock: clock,
-          registry: registry,
-          readings: _readingsFor(environment, dao, pathProbe),
-          probedIds: wanted,
-        ),
-      );
+      final probed =
+          wanted ??
+          {for (final descriptor in registry.descriptors) descriptor.id};
+      final InstallationsReconciled written;
+      try {
+        written = await _data.reconcile(
+          environmentId: environment.id,
+          readAt: clock.nowUtc(),
+          found: _candidates(probe, ids, clock),
+          probed: probed,
+          readings: {
+            for (final entry in _readingsFor(environment, pathProbe).entries)
+              entry.key: entry.value.reachability,
+          },
+        );
+      } on DataRefused catch (refusal) {
+        reports.add(
+          EnvironmentScanReport.unreachable(
+            environmentId: environment.id,
+            environmentName: environment.name,
+            error: 'The server did not record it: ${refusal.message}',
+          ),
+        );
+        continue;
+      }
+      reports.add(_report(environment, probe, written, registry));
 
       // Only for an environment that answered, and only the agents actually
       // asked about: a probe we did not perform becomes a permanent state.
       if (environment.kind != EnvironmentKind.ssh) {
-        for (final id
-            in wanted ?? {for (final d in registry.descriptors) d.id}) {
+        for (final id in probed) {
           log.record(id, environment.id, clock.nowUtc());
         }
       }
     }
     _failures.clear();
 
-    state = dao.getAll();
+    state = _data.getAll();
     return AgentDiscoveryReport(reports);
   }
 
@@ -142,205 +162,80 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     }
   }
 
-  /// Reconciles one environment's rows against [probe]: an **unreachable**
-  /// executable is never deleted, and a working human-set path is never moved.
-  EnvironmentScanReport _reconcile({
-    required ExecutionEnvironment environment,
-    required EnvironmentProbe probe,
-    required AgentInstallationDao dao,
-    required IdGenerator ids,
-    required Clock clock,
-    required AgentRegistry registry,
-    required Map<String, ExecutableReading> readings,
-    Set<String>? probedIds,
-  }) {
-    final stored = dao.getByEnvironment(environment.id);
-    final added = <AgentInstallation>[];
-    final updated = <AgentVersionChange>[];
-    final movedPaths = <AgentPathChange>[];
-    final pinnedPaths = <AgentInstallation>[];
-    final unreachablePaths = <AgentInstallation>[];
-    final present = <AgentInstallation>[];
-    // Stored rows this sweep has already accounted for, so the leftover pass
-    // below does not judge a row that was just moved or deliberately kept.
-    final consumed = <String>{};
-
-    // A hand-set path not *observed* broken is the user's answer, and a sweep
-    // does not overrule it. Unchecked counts as working: WSL cannot be stat-ed.
-    bool isPinned(AgentInstallation row) =>
-        row.executableByUser && (readings[row.id]?.isUsable ?? true);
-
-    for (final agent in probe.found) {
-      final agentId = agent.descriptor.id;
-      final path = agent.executable.path;
-
-      final atThisPath = dao.getByIdentity(agentId, environment.id, path);
-      if (atThisPath != null) {
-        consumed.add(atThisPath.id);
-        // Recorded whether or not the number moved: a reading with a stale
-        // timestamp is indistinguishable from one nobody has taken since.
-        dao.recordVersion(atThisPath.id, agent.version, readAt: clock.nowUtc());
-        if (agent.version != null && atThisPath.version != agent.version) {
-          updated.add(
-            AgentVersionChange(
-              displayName: agent.descriptor.displayName,
-              from: atThisPath.version,
-              to: agent.version,
-            ),
-          );
-        }
-        present.add(_asRead(atThisPath, agent.version, clock));
-        continue;
-      }
-
-      // The same agent in the same environment at a different path. Either the
-      // user pinned it there, or it moved and this row follows it.
-      final elsewhere = [
-        for (final row in stored)
-          if (row.agentId == agentId &&
-              !consumed.contains(row.id) &&
-              row.executable.path != path)
-            row,
-      ];
-      final pinned = elsewhere.where(isPinned).toList();
-      if (pinned.isNotEmpty) {
-        // Not a second row for the same agent here: the user already answered,
-        // and asking again is how an explicit decision gets undone.
-        consumed.add(pinned.first.id);
-        pinnedPaths.add(pinned.first);
-        present.add(pinned.first);
-        continue;
-      }
-
-      final moved = elsewhere.isEmpty ? null : elsewhere.first;
-      if (moved != null && dao.updatePath(moved.id, path, byUser: false)) {
-        // **In place, keeping the id.** Settings pin the default agent by id,
-        // so delete-and-insert silently unpicked the user's choice.
-        consumed.add(moved.id);
-        movedPaths.add(
-          AgentPathChange(
-            displayName: agent.descriptor.displayName,
-            from: moved.executable.path,
-            to: path,
-          ),
-        );
-        dao.recordVersion(moved.id, agent.version, readAt: clock.nowUtc());
-        if (agent.version != null && moved.version != agent.version) {
-          updated.add(
-            AgentVersionChange(
-              displayName: agent.descriptor.displayName,
-              from: moved.version,
-              to: agent.version,
-            ),
-          );
-        }
-        present.add(
-          _asRead(
-            moved,
-            agent.version,
-            clock,
-          ).copyWith(executable: agent.executable, executableByUser: false),
-        );
-        continue;
-      }
-
-      final installation = AgentInstallation(
+  /// What [probe] found, as the rows it would be if new.
+  static List<AgentInstallation> _candidates(
+    EnvironmentProbe probe,
+    IdGenerator ids,
+    Clock clock,
+  ) => [
+    for (final agent in probe.found)
+      AgentInstallation(
         id: ids.newId(),
-        agentId: agentId,
+        agentId: agent.descriptor.id,
         executable: agent.executable,
         version: agent.version,
         versionReadAt: agent.version == null ? null : clock.nowUtc(),
         createdAt: clock.nowUtc(),
-      );
-      dao.insert(installation);
-      added.add(installation);
-      present.add(installation);
-    }
+      ),
+  ];
 
-    // Only rows for agents this sweep actually asked about — a row it did not
-    // probe was not searched for, so nothing here is evidence about it.
-    final probed =
-        probedIds ??
-        {for (final descriptor in registry.descriptors) descriptor.id};
-    final removed = <AgentInstallation>[];
-    final retained = <AgentInstallation>[];
-    for (final row in stored) {
-      if (consumed.contains(row.id)) continue;
-      if (!probed.contains(row.agentId)) {
-        present.add(row);
-        continue;
-      }
-      if (isPinned(row)) {
-        pinnedPaths.add(row);
-        present.add(row);
-        continue;
-      }
-      if (readings[row.id]?.reachability ==
-          ExecutableReachability.unreachable) {
-        // Not evidence of absence — see the doc above. Counted among neither
-        // `found` nor `missing`.
-        unreachablePaths.add(row);
-        continue;
-      }
-
-      // Genuinely uninstalled. It goes only if nothing depends on it: that
-      // `ON DELETE RESTRICT` raise used to abort the entire sweep.
-      final sessionsName = ref
-          .read(sessionsDataProvider)
-          .getAll()
-          .any((session) => session.agentInstallationId == row.id);
-      if (!sessionsName && dao.deleteIfUnreferenced(row.id)) {
-        removed.add(row);
-      } else {
-        retained.add(row);
-      }
-    }
-
+  /// What the server wrote for one environment, named for a person: an
+  /// **unreachable** executable is never "not installed", and a working
+  /// human-set path is reported as kept.
+  static EnvironmentScanReport _report(
+    ExecutionEnvironment environment,
+    EnvironmentProbe probe,
+    InstallationsReconciled written,
+    AgentRegistry registry,
+  ) {
     // An agent with an unreachable row is not "not installed": the sweep could
     // not complete the observation, so it does not get to state the outcome.
     final unreachableAgentIds = {
-      for (final row in unreachablePaths) row.agentId,
+      for (final row in written.unreachable) row.agentId,
     };
     return EnvironmentScanReport(
       environmentId: environment.id,
       environmentName: environment.name,
       reachable: true,
-      found: present,
+      found: written.present,
       missing: [
         for (final id in probe.missingAgentIds)
           if (!unreachableAgentIds.contains(id)) registry.displayNameFor(id),
       ],
-      added: added,
-      removed: removed,
-      retained: retained,
-      updated: updated,
-      movedPaths: movedPaths,
-      unreachablePaths: unreachablePaths,
-      pinnedPaths: pinnedPaths,
+      added: written.added,
+      removed: written.removed,
+      retained: written.retained,
+      updated: [
+        for (final change in written.versionChanges)
+          AgentVersionChange(
+            displayName: registry.displayNameFor(change.agentId),
+            from: change.from,
+            to: change.to,
+          ),
+      ],
+      movedPaths: [
+        for (final change in written.pathChanges)
+          AgentPathChange(
+            displayName: registry.displayNameFor(change.agentId),
+            from: change.from,
+            to: change.to,
+          ),
+      ],
+      unreachablePaths: written.unreachable,
+      pinnedPaths: written.pinned,
     );
   }
-
-  /// [row] as [recordVersion] just stored it. A null [version] leaves the row
-  /// untouched: a probe that could not answer is not a reading.
-  AgentInstallation _asRead(
-    AgentInstallation row,
-    String? version,
-    Clock clock,
-  ) => version == null
-      ? row
-      : row.copyWith(version: version, versionReadAt: clock.nowUtc());
 
   /// What the local filesystem says about each stored installation here, keyed
   /// by id. Empty off this machine: a WSL path is spelled for *its* disk.
   Map<String, ExecutableReading> _readingsFor(
     ExecutionEnvironment environment,
-    AgentInstallationDao dao,
     PathProbe probe,
   ) {
     if (!isLocalHost(environment.kind)) return const {};
     final context = usesWindowsPaths(environment.kind) ? p.windows : p.posix;
     return {
-      for (final row in dao.getByEnvironment(environment.id))
+      for (final row in _data.getByEnvironment(environment.id))
         row.id: readExecutable(row.executable.path, probe, context: context),
     };
   }
@@ -348,16 +243,14 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   /// Reads every stored installation's executable, newest reading wins. One
   /// stat per local row and no subprocess, which is why a launch can afford it.
   List<AgentPathReading> readStoredPaths() {
-    final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
     final probe = ref.read(agentCliPathProbeProvider);
     final byId = <String, ExecutableReading>{};
-    for (final environment
-        in ref.read(executionEnvironmentDaoProvider).getAll()) {
-      byId.addAll(_readingsFor(environment, dao, probe));
+    for (final environment in ref.read(environmentsDataProvider).getAll()) {
+      byId.addAll(_readingsFor(environment, probe));
     }
     return [
-      for (final row in dao.getAll())
+      for (final row in _data.getAll())
         AgentPathReading(
           installation: row,
           displayName: registry.displayNameFor(row.agentId),
@@ -416,19 +309,18 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   /// Re-reads the version of every row aged out of [kVersionReadingFreshFor],
   /// in its own environment; SSH is never asked, a failed read writes nothing.
   Future<List<AgentVersionChange>> refreshStaleVersions() async {
-    final dao = ref.read(agentInstallationDaoProvider);
+    final data = _data;
     final registry = ref.read(agentRegistryProvider);
     final clock = ref.read(agentCliClockProvider);
     final factory = ref.read(commandRunnerFactoryProvider);
     final now = clock.nowUtc();
 
     final changes = <AgentVersionChange>[];
-    for (final environment
-        in ref.read(executionEnvironmentDaoProvider).getAll()) {
+    for (final environment in ref.read(environmentsDataProvider).getAll()) {
       if (environment.kind == EnvironmentKind.ssh) continue;
 
       final candidates = [
-        for (final row in dao.getByEnvironment(environment.id))
+        for (final row in data.getByEnvironment(environment.id))
           if ((registry.byId(row.agentId)?.discovery.probeVersion ?? false) &&
               versionFreshness(row, now: now) != VersionFreshness.fresh)
             row,
@@ -441,7 +333,6 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       // ungated — a path spelled for its disk is not ours to judge.
       final readings = _readingsFor(
         environment,
-        dao,
         ref.read(agentCliPathProbeProvider),
       );
 
@@ -462,7 +353,11 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
           registry.byId(row.agentId)!.discovery.versionArguments,
         );
         if (version == null) continue;
-        dao.recordVersion(row.id, version, readAt: clock.nowUtc());
+        try {
+          await data.recordVersion(row.id, version, readAt: clock.nowUtc());
+        } on DataRefused {
+          continue;
+        }
         if (version != row.version) {
           changes.add(
             AgentVersionChange(
@@ -475,7 +370,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       }
     }
 
-    state = dao.getAll();
+    state = data.getAll();
     return changes;
   }
 
@@ -501,19 +396,22 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
 
   /// Points one installation at [path] and records that a human chose it, so a
   /// sweep will not move it. False when another row already holds [path].
-  bool setExecutablePath(String installationId, String path) {
-    final dao = ref.read(agentInstallationDaoProvider);
+  Future<bool> setExecutablePath(String installationId, String path) async {
     final trimmed = path.trim();
     if (trimmed.isEmpty) return false;
-    final ok = dao.updatePath(installationId, trimmed, byUser: true);
-    if (ok) state = dao.getAll();
-    return ok;
+    try {
+      await _data.setPath(installationId, trimmed);
+    } on DataRefused {
+      return false;
+    }
+    state = _data.getAll();
+    return true;
   }
 
   /// Probes only the pairs nobody has ever searched for, which is what makes an
   /// agent added by an app upgrade visible. SSH is skipped and not recorded.
   Future<List<AgentInstallation>> discoverUnprobed() async {
-    final dao = ref.read(agentInstallationDaoProvider);
+    final data = _data;
     final registry = ref.read(agentRegistryProvider);
     final log = AgentProbeLog(ref.read(appPreferencesProvider));
     final clock = ref.read(agentCliClockProvider);
@@ -521,11 +419,10 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final ids = ref.read(agentCliIdsProvider);
 
     final discovered = <AgentInstallation>[];
-    for (final environment
-        in ref.read(executionEnvironmentDaoProvider).getAll()) {
+    for (final environment in ref.read(environmentsDataProvider).getAll()) {
       if (environment.kind == EnvironmentKind.ssh) continue;
       final known = {
-        for (final install in dao.getByEnvironment(environment.id))
+        for (final install in data.getByEnvironment(environment.id))
           install.agentId,
       };
       final missing = {
@@ -548,24 +445,28 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover(agentIds: missing);
 
-      for (final installation in found) {
-        if (dao.getByIdentity(
-              installation.agentId,
-              installation.environmentId,
-              installation.executable.path,
-            ) ==
-            null) {
-          dao.insert(installation);
+      if (found.isNotEmpty) {
+        try {
+          await data.reconcile(
+            environmentId: environment.id,
+            readAt: clock.nowUtc(),
+            found: found,
+            // Nothing to judge: none of these agents had a row here.
+            probed: const {},
+          );
+        } on DataRefused {
+          // Not recorded, so not probed either: the next launch asks again.
+          continue;
         }
-        discovered.add(installation);
       }
+      discovered.addAll(found);
       // Every pair that was actually asked about, found or not.
       for (final agentId in missing) {
         log.record(agentId, environment.id, clock.nowUtc());
       }
     }
 
-    state = dao.getAll();
+    state = data.getAll();
     return discovered;
   }
 }

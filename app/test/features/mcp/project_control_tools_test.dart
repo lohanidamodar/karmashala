@@ -8,8 +8,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -38,8 +36,10 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_project_tools_');
     work = Directory.systemTemp.createTempSync('karmashala_project_work_');
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     fake = FakeDataServer(clock: () => testTime);
+    fake.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
 
     container = ProviderContainer(
       overrides: [

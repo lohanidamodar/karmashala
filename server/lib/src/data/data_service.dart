@@ -1,8 +1,13 @@
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
 import 'filing_lookup.dart';
+import 'hosts_handler.dart';
 import 'notes_handler.dart';
 import 'preferences_handler.dart';
 import 'sessions_handler.dart';
@@ -10,8 +15,9 @@ import 'todos_handler.dart';
 import 'workspace_handler.dart';
 
 /// The server's data API over its store: every client's reads and writes of
-/// notes, todos, preferences, the workspace and sessions, whatever link
-/// carries them. The only writer of those tables for a client; each write is
+/// notes, todos, preferences, the workspace, sessions, and where agents run
+/// and who they run as (environments, SSH hosts, trusted host keys, agent
+/// installations, saved accounts, usage history), whatever link carries them. The only writer of those tables for a client; each write is
 /// numbered ([revision]) and told to every other subscribed [DataSession] —
 /// and so is each write the server makes itself ([announce]): a status it
 /// recorded, a session a phone or an automation started.
@@ -21,12 +27,14 @@ class DataService {
     DateTime Function()? clock,
     String Function()? newId,
     bool Function(String sessionId)? runsSession,
+    bool Function(String path)? opens,
   }) : _now = clock ?? _utcNow {
     final filing = FilingLookup(database);
     _notes = NotesHandler(database, filing, _now);
     _todos = TodosHandler(database, filing, _now);
     _preferences = PreferencesHandler(database);
     _sessions = SessionsHandler(database, _now, runs: runsSession);
+    _hosts = HostsHandler(database, _now, opens: opens);
     _workspace = WorkspaceHandler(
       database,
       _now,
@@ -43,6 +51,7 @@ class DataService {
   late final PreferencesHandler _preferences;
   late final WorkspaceHandler _workspace;
   late final SessionsHandler _sessions;
+  late final HostsHandler _hosts;
   final _links = <DataSession>{};
   var _revision = 0;
 
@@ -69,6 +78,31 @@ class DataService {
   /// chose. A row that is gone is told removed.
   void announceSessions(Iterable<String> sessionIds) =>
       announce(_sessions.sessionsNow(sessionIds));
+
+  /// Records the agent CLIs the server found on this machine ([here]) by
+  /// the one reconciliation rule, and tells every client what it wrote.
+  InstallationsReconciled recordAgentsFound(
+    ExecutionEnvironment here,
+    List<AgentInstallation> found,
+    DateTime readAt,
+  ) {
+    final changes = <DataChange>[];
+    final result = _hosts.recordFound(here, found, readAt, changes);
+    announce(changes);
+    return result;
+  }
+
+  /// Records [environment] unless it is there — this machine's, at start —
+  /// and tells every client when it was new.
+  void ensureEnvironment(ExecutionEnvironment environment) {
+    final changes = <DataChange>[];
+    _hosts.ensureEnvironment(environment, changes);
+    announce(changes);
+  }
+
+  /// The installations recorded in [environmentId], oldest first.
+  List<AgentInstallation> installationsIn(String environmentId) =>
+      _hosts.installationsIn(environmentId);
 
   void _tell(DataSession? origin, DataChanges batch) {
     for (final link in _links) {
@@ -133,13 +167,34 @@ class DataService {
         final ImportedAdd r => _sessions.addImported(r, changes),
         final ImportedRename r => _sessions.renameImported(r, changes),
         final ImportedDelete r => _sessions.deleteImported(r, changes),
+        EnvironmentsList() => _hosts.environments(),
+        final EnvironmentPut r => _hosts.putEnvironment(r, changes),
+        final SshHostPut r => _hosts.putSshHost(r, changes),
+        final SshHostDelete r => _hosts.deleteSshHost(r, changes),
+        final KnownHostTrust r => _hosts.trustKey(r, changes),
+        final KnownHostForget r => _hosts.forgetKey(r, changes),
+        AgentsList() => _hosts.agents(),
+        final InstallationsReconcile r => _hosts.reconcile(r, changes),
+        final InstallationVersion r => _hosts.recordVersion(r, changes),
+        final InstallationSetPath r => _hosts.setPath(r, changes),
+        final ClaudeAccountSave r => _hosts.saveClaudeAccount(r, changes),
+        final ClaudeAccountCredentials r => _hosts.claudeCredentials(r),
+        final ClaudeAccountDelete r => _hosts.deleteClaudeAccount(r, changes),
+        final CodexAccountSave r => _hosts.saveCodexAccount(r, changes),
+        final CodexAccountCredentials r => _hosts.codexCredentials(r),
+        final CodexAccountDelete r => _hosts.deleteCodexAccount(r, changes),
+        final UsageRecord r => _hosts.recordUsage(r, changes),
+        final UsageHistory r => _hosts.usageHistory(r),
       };
     } on DataRefused {
       rethrow;
     } on Object catch (error) {
+      // A store error in its own words, without the statement's values: a
+      // save carries credentials, and SQLite's full text lists them.
       throw DataRefused(
         DataRefusalCode.failed,
-        '${request.kind} failed: $error',
+        '${request.kind} failed: '
+        '${error is SqliteException ? error.message : error}',
       );
     }
     if (changes.isEmpty) return DataReply(result as R, _revision);

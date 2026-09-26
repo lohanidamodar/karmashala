@@ -2,9 +2,7 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -32,11 +30,11 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer().mirrorInto(db)
+      ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
   });
   tearDown(() => db.close());
 
@@ -150,7 +148,10 @@ void main() {
     // Opened, and nothing else: the offer is a way in, never a relaunch.
     expect(container.read(selectedSessionIdProvider), 's1');
     expect(container.read(attentionInboxProvider).items.single.seen, isTrue);
-    expect(mirroredServer(db).sessionRows.getById('s1')!.status, SessionStatus.failed);
+    expect(
+      mirroredServer(db).sessionRows.getById('s1')!.status,
+      SessionStatus.failed,
+    );
   });
 
   /// The same rule the Todos and Notes panes keep, on the pane whose rows

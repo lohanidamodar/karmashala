@@ -5,7 +5,7 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala/src/features/git/application/review_threads.dart';
@@ -34,7 +34,6 @@ class ReviewThreadHarness {
     Map<String, String>? shas,
   }) : db = database ?? AppDatabase.memory(),
        shas = shas ?? <String, String>{} {
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server.mirrorInto(db);
 
     runner = FakeCommandRunner(
@@ -77,7 +76,7 @@ class ReviewThreadHarness {
         changesServiceProvider.overrideWithValue(
           ChangesService(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-            environmentDao: ExecutionEnvironmentDao(db),
+            environmentDao: EnvironmentsData(client),
           ),
         ),
       ],
@@ -91,6 +90,7 @@ class ReviewThreadHarness {
     Map<String, String>? shas,
   }) async {
     final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     return ReviewThreadHarness._(

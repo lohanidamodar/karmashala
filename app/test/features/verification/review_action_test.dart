@@ -1,6 +1,5 @@
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:karmashala/src/features/verification/presentation/review_action.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 import '../fanout/fanout_harness.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The control is pumped over the fan-out harness — a real `SessionLauncher`
 /// over fake terminals — so pressing it starts a session the same way the app
@@ -45,7 +45,7 @@ void main() {
   testWidgets('one other installation is one press, and it names the agent', (
     tester,
   ) async {
-    AgentInstallationDao(h.db).delete(secondRoverInstall.id);
+    mirroredServer(h.db).installationRows.delete(secondRoverInstall.id);
     await pump(tester);
 
     expect(find.text('Have Flaky CLI check this'), findsOneWidget);
@@ -105,7 +105,7 @@ void main() {
   testWidgets('with nothing else installed it says why, and starts nothing', (
     tester,
   ) async {
-    AgentInstallationDao(h.db)
+    mirroredServer(h.db).installationRows
       ..delete(flakyInstall.id)
       ..delete(secondRoverInstall.id);
     await pump(tester);
@@ -125,7 +125,7 @@ void main() {
   testWidgets('the tooltip says the review is capped before it is pressed', (
     tester,
   ) async {
-    AgentInstallationDao(h.db).delete(secondRoverInstall.id);
+    mirroredServer(h.db).installationRows.delete(secondRoverInstall.id);
     await pump(tester);
 
     final tooltip = tester.widget<Tooltip>(find.byType(Tooltip));

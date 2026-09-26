@@ -3,11 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/app_projects/application/project_build_loop.dart';
 import 'package:karmashala/src/features/app_projects/application/project_build_tools.dart';
 import 'package:karmashala_flutter_apps/projects.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -102,7 +100,7 @@ void main() {
   Future<void> make({CommandResult Function(CommandRequest)? responder}) async {
     db = AppDatabase.memory();
     final server = FakeDataServer();
-    ExecutionEnvironmentDao(db)
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     server.projectRows.insert(project());
@@ -113,7 +111,7 @@ void main() {
         path: '/home/me/android',
       ),
     );
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     runner = FakeCommandRunner(
       environmentId: 'wsl:Ubuntu',
       responder: responder ?? native,

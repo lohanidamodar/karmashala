@@ -163,7 +163,7 @@ class InventoryTools {
 
     final sessionDao = _container.read(sessionsDataProvider);
     final registry = _container.read(agentRegistryProvider);
-    final installDao = _container.read(agentInstallationDaoProvider);
+    final installDao = _container.read(agentInstallationsDataProvider);
 
     // Read-only: an agent can see a resume is waiting, never arm one.
     final resumes = {
@@ -249,7 +249,7 @@ class InventoryTools {
   List<Map<String, dynamic>> _listAgents() {
     return [
       for (final install
-          in _container.read(agentInstallationDaoProvider).getAll())
+          in _container.read(agentInstallationsDataProvider).getAll())
         {
           'agentInstallationId': install.id,
           'cli': install.agentId,

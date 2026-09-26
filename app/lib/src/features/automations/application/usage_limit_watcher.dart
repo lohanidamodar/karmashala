@@ -130,7 +130,9 @@ class UsageLimitWatcher extends Notifier<int> {
     if (_disposed) return;
     final behavior = ref.read(settingsControllerProvider).usageLimitBehavior;
     if (behavior == UsageLimitBehavior.nothing) return;
-    final session = ref.read(sessionsDataProvider).getById(entry.session.openId);
+    final session = ref
+        .read(sessionsDataProvider)
+        .getById(entry.session.openId);
     if (session == null || session.isArchived) return;
 
     final hit = await detect(session, entry);
@@ -208,7 +210,7 @@ class UsageLimitWatcher extends Notifier<int> {
     SessionStatusEntry entry,
   ) async {
     final installation = ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return null;
     final registry = ref.read(agentRegistryProvider);
@@ -230,10 +232,7 @@ class UsageLimitWatcher extends Notifier<int> {
         try {
           reading = await ref
               .read(agentUsageServiceProvider)
-              .fetch(
-                installation,
-                ref.read(executionEnvironmentDaoProvider).getAll(),
-              );
+              .fetch(installation, ref.read(environmentsDataProvider).getAll());
         } on UsageException {
           return null;
         }
@@ -330,7 +329,7 @@ class UsageLimitWatcher extends Notifier<int> {
     final agentId = session == null
         ? null
         : ref
-              .read(agentInstallationDaoProvider)
+              .read(agentInstallationsDataProvider)
               .getById(session.agentInstallationId)
               ?.agentId;
     final settings = ref.read(settingsControllerProvider);

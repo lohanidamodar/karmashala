@@ -3,18 +3,23 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
-import '../../environments/application/environment_providers.dart';
-import '../../environments/application/environments_controller.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_providers.dart';
 
-/// The saved remote hosts and the environments they own. Adding a host is what
-/// *creates* an SSH environment — the two rows are written together.
+/// The saved remote hosts and the environments they own — the server's,
+/// followed as they change. Adding a host is what *creates* an SSH
+/// environment: the server writes the two rows together.
 class SshHostsController extends Notifier<List<SshHost>> {
   @override
-  List<SshHost> build() => ref.watch(sshHostDaoProvider).getAll();
+  List<SshHost> build() {
+    final data = ref.watch(sshHostsDataProvider);
+    final hosts = data.getAll();
+    final listening = data.changes.listen((_) => state = data.getAll());
+    ref.onDispose(listening.cancel);
+    return hosts;
+  }
 
   /// Saves a new host and its `ssh:<id>` execution environment.
   Future<SshHost> add({
@@ -46,17 +51,14 @@ class SshHostsController extends Notifier<List<SshHost>> {
     return save(record);
   }
 
-  /// Inserts or updates [host] with its environment row, dropping any open
+  /// Saves [host] with its environment row at the server, dropping any open
   /// connection: a pooled session under the old settings would keep answering.
+  /// Throws [DataRefused] for a host out of shape, in words to show.
   Future<SshHost> save(SshHost host) async {
     await ref.read(sshConnectionPoolProvider).evict(host.id);
-    ref.read(sshHostDaoProvider).upsert(host);
-    ref.read(executionEnvironmentDaoProvider).upsert(sshEnvironment(host));
-    // The environments list is built from the same table: an environment you
-    // have just created but cannot see is not created, as far as the user goes.
-    ref.invalidate(environmentsControllerProvider);
-    state = ref.read(sshHostDaoProvider).getAll();
-    return host;
+    final saved = await ref.read(sshHostsDataProvider).put(host);
+    state = ref.read(sshHostsDataProvider).getAll();
+    return saved;
   }
 
   /// The projects that have to go before [hostId] can: its environment row is
@@ -68,15 +70,14 @@ class SshHostsController extends Notifier<List<SshHost>> {
   /// Removes a host, its environment and any open connection. The trusted host
   /// key is kept: dropping it would make a later re-add a silent re-trust.
   ///
-  /// Throws [SshHostInUse], and changes nothing, while projects still use it.
+  /// Throws [SshHostInUse], and changes nothing, while projects still use it
+  /// (the server refuses it too, whoever asks).
   Future<void> remove(String hostId) async {
     final holding = await projectsHolding(hostId);
     if (holding.isNotEmpty) throw SshHostInUse(holding);
     await ref.read(sshConnectionPoolProvider).evict(hostId);
-    ref.read(executionEnvironmentDaoProvider).delete(sshEnvironmentId(hostId));
-    ref.read(sshHostDaoProvider).delete(hostId);
-    ref.invalidate(environmentsControllerProvider);
-    state = ref.read(sshHostDaoProvider).getAll();
+    await ref.read(sshHostsDataProvider).delete(hostId);
+    state = ref.read(sshHostsDataProvider).getAll();
   }
 }
 

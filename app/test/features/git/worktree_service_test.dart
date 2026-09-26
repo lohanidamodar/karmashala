@@ -1,12 +1,13 @@
 import 'dart:async';
 
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
+import '../../support/fake_data_server.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
@@ -18,16 +19,17 @@ import '../../support/fixtures.dart';
 import 'worktree_processes.dart';
 
 void main() {
-  late AppDatabase db;
-  late ExecutionEnvironmentDao envDao;
+  late DataClient client;
+  late EnvironmentsData envDao;
   late FakeCommandRunner runner;
   late WorktreeService service;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    envDao = ExecutionEnvironmentDao(db)
-      ..upsert(windowsEnv())
-      ..upsert(wslEnv());
+  setUp(() async {
+    final server = FakeDataServer()
+      ..environmentRows.upsert(windowsEnv())
+      ..environmentRows.upsert(wslEnv());
+    client = await server.connect();
+    envDao = EnvironmentsData(client);
     runner = FakeCommandRunner(
       responder: (_) =>
           const CommandResult(exitCode: 0, stdout: '', stderr: ''),
@@ -38,7 +40,6 @@ void main() {
       environmentOf: worktreeEnvironmentOf(envDao),
     );
   });
-  tearDown(() => db.close());
 
   test(
     'createForSession computes an environment-aware path and adds it',
@@ -202,7 +203,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
         ),

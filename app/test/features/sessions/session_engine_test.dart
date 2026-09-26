@@ -3,10 +3,8 @@ import 'package:karmashala/src/features/environments/application/environment_res
 import 'dart:convert';
 
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -19,9 +17,11 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 void main() {
   late AppDatabase db;
+  late EnvironmentsData environments;
   late FakeDataServer server;
   // The app's copy, where the engine's writes land at once.
   late SessionsData sessionDao;
@@ -32,10 +32,11 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    environments = EnvironmentsData(await server.connect());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     final client = await server.connect();
     sessionDao = SessionsData(client);
     records = SessionRecordsData(client);
@@ -48,7 +49,7 @@ void main() {
     records: records,
     worktreeService: WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(),
-      environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
+      environmentOf: worktreeEnvironmentOf(environments),
     ),
     resolveProtocol:
         resolver ?? (agentId) => FakeChatProtocol(agentId: agentId),

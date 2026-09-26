@@ -8,10 +8,8 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/unresumable_sessions.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -125,14 +123,12 @@ void main() {
   AppDatabase seededDatabase({bool withCodex = false}) {
     final db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
+    server.installationRows.insert(agentInstallation(agentId: 'claudeish'));
     if (withCodex) {
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(id: 'a2', agentId: 'codexish'));
+      server.installationRows.insert(agentInstallation(id: 'a2', agentId: 'codexish'));
     }
     return db;
   }
@@ -408,7 +404,7 @@ void main() {
       addTearDown(db.close);
       // Two rows, one store: readable so the first is `absent`, and a second
       // row in an environment the sweep never read so it stays `unknown`.
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
+      server.environmentRows.upsert(wslEnv());
       emptyStore();
       final container = await containerOver(db);
       final dead = seedDeadRow(container, id: 'dead-1');

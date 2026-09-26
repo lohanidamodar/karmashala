@@ -7,10 +7,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -95,10 +93,10 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.connect();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       agentInstallation(agentId: AgentIds.antigravity, path: r'C:\bin\agy.exe'),
     );
     terminals = _RecordingTerminals();
@@ -199,7 +197,10 @@ void main() {
         expect(result.outcome, ExplorerOutcome.selected);
         expect(result.message, contains(_repoPath));
         expect(result.message, isNot(contains('No resumable CLI session id')));
-        expect(mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId, isNull);
+        expect(
+          mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
+          isNull,
+        );
       },
     );
 
@@ -216,16 +217,19 @@ void main() {
 
         expect(result.outcome, ExplorerOutcome.selected);
         expect(result.message, contains('another session'));
-        expect(mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId, isNull);
+        expect(
+          mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
+          isNull,
+        );
       },
     );
 
     test('an agent whose store says nothing keeps the old words', () async {
       // Claude Code has no "latest conversation here" notion to fall back on,
       // and inventing one would be the recency guess this registry refuses.
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
+      server.installationRows.insert(
+        agentInstallation(id: 'a2', agentId: AgentIds.claudeCode),
+      );
       mirroredServer(db).sessionRows.insert(
         Session(
           id: 'claude-phantom',

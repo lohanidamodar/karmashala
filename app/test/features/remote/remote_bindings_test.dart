@@ -9,13 +9,11 @@ import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -81,7 +79,7 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: localHostEnvironmentId,
         kind: EnvironmentKind.windowsNative,
@@ -123,7 +121,7 @@ void main() {
       EnvironmentPath(environmentId: 'windows', path: p);
 
   void seedWorkspace() {
-    ExecutionEnvironmentDao(db).upsert(
+    server.environmentRows.upsert(
       ExecutionEnvironment(
         id: 'windows',
         kind: EnvironmentKind.windowsNative,
@@ -143,7 +141,7 @@ void main() {
         createdAt: now,
       ),
     );
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       AgentInstallation(
         id: 'i1',
         agentId: 'mystery',
@@ -243,7 +241,7 @@ void main() {
         executable: path(r'C:\bin\codex.exe'),
         createdAt: now,
       );
-      AgentInstallationDao(db).insert(resumableInstallation);
+      server.installationRows.insert(resumableInstallation);
       final result = await launcher.launch(
         SessionLaunchRequest(
           repository: server.repositoryRows.getById('r1')!,
@@ -369,8 +367,8 @@ void main() {
     /// the thing that has to be able to open the path.
     void installAgent(String agentId, {String environmentId = 'windows'}) {
       // `seedWorkspace` already put `mystery` under this id.
-      AgentInstallationDao(db).delete('i1');
-      AgentInstallationDao(db).insert(
+      server.installationRows.delete('i1');
+      server.installationRows.insert(
         AgentInstallation(
           id: 'i1',
           agentId: agentId,
@@ -403,7 +401,7 @@ void main() {
 
     test('the same agent over SSH does not, and the row says why', () {
       seedWorkspace();
-      ExecutionEnvironmentDao(db).upsert(
+      server.environmentRows.upsert(
         ExecutionEnvironment(
           id: 'buildbox',
           kind: EnvironmentKind.ssh,
@@ -585,7 +583,7 @@ void main() {
   // reachable for the same agent and the wire has to carry the right one.
   group('a transcript page says why it is empty', () {
     void seedPaneSession(String id, {required String agentId}) {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         AgentInstallation(
           id: 'i-$agentId',
           agentId: agentId,
@@ -945,7 +943,7 @@ void main() {
     /// A session on an agent that HAS named its keys, so a missing label can
     /// only mean this code withheld it.
     void seedClaudeSession(String id) {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         AgentInstallation(
           id: 'i2',
           agentId: 'claudeCode',
@@ -1303,7 +1301,7 @@ void main() {
     }
 
     void seedClaude(String id) {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         AgentInstallation(
           id: 'i2',
           agentId: 'claudeCode',
@@ -1520,7 +1518,7 @@ void main() {
     }
 
     void seedClaude(String id) {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         AgentInstallation(
           id: 'i2',
           agentId: 'claudeCode',
@@ -1671,7 +1669,7 @@ void main() {
   test('an open question is read from the transcript even when the status '
       'registry never resolved it', () async {
     seedWorkspace();
-    AgentInstallationDao(db).insert(
+    server.installationRows.insert(
       AgentInstallation(
         id: 'i2',
         agentId: 'claudeCode',
@@ -1795,7 +1793,7 @@ void main() {
       );
 
       seedWorkspace();
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         AgentInstallation(
           id: 'i-claude',
           agentId: 'claudeCode',

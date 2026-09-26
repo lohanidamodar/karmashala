@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
@@ -48,7 +46,7 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(id: 'p1'));
     server.repositoryRows
       ..insert(repository(id: 'r-app', projectId: 'p1', name: 'app'))
@@ -68,7 +66,7 @@ void main() {
           path: r'C:\src\demo\docs',
         ),
       );
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     links = server.sessionLinks;
     final client = await server.connect();
     service = SessionRepositoriesService(
@@ -218,7 +216,7 @@ void main() {
     });
 
     test('a row in another environment is not the same directory', () {
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
+      server.environmentRows.upsert(wslEnv());
       server.sessionRows.insert(
         Session(
           id: 's6',

@@ -2,12 +2,9 @@ import 'package:karmashala/src/app/shell/shell_shortcuts.dart'
     show shellCommandLabel;
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -110,14 +107,16 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server.environmentRows.upsert(
+  localHostEnvironment(FixedClock(testTime).nowUtc()),
+);
     server.projectRows.insert(project());
     server.repositoryRows
       ..insert(repository())
       // A clone nested inside the first checkout: the shape behind "the sidebar
       // shows the hub, not the repository I am actually working in".
       ..insert(repository(id: 'r2', name: 'nested', path: nestedPath.path));
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     agentStatus = AgentActivityStatus.idle;
     agentEvidence = const [];
     agentWaiting = AgentWaitKind.unrecorded;

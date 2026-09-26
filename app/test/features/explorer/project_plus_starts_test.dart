@@ -2,8 +2,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
@@ -39,12 +37,12 @@ void main() {
   AppDatabase seed({bool withAgent = true}) {
     final database = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(database);
-    ExecutionEnvironmentDao(database).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project(name: 'Alpha', path: r'C:\src\alpha'));
     server.repositoryRows.insert(
       repository(name: 'alpha-app', path: r'C:\src\alpha\app'),
     );
-    if (withAgent) AgentInstallationDao(database).insert(agentInstallation());
+    if (withAgent) server.installationRows.insert(agentInstallation());
     return database;
   }
 

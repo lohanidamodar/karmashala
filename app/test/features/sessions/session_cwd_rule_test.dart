@@ -7,10 +7,8 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -402,10 +400,10 @@ void main() {
     }) async {
       final db = AppDatabase.memory();
       final server = FakeDataServer()..mirrorInto(db);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
+      server.installationRows.insert(agentInstallation(agentId: 'roverCli'));
       final container = ProviderContainer(
         overrides: [
           await server.override(),
@@ -582,7 +580,10 @@ void main() {
         expect(result.workingDirectoryNotice, isNull);
         // A fork is a create: the source conversation is left where it is, and
         // the row that named it is untouched.
-        expect(mirroredServer(h.db).sessionRows.getById('src-1')!.worktree!.path, worktreePath);
+        expect(
+          mirroredServer(h.db).sessionRows.getById('src-1')!.worktree!.path,
+          worktreePath,
+        );
       },
     );
 

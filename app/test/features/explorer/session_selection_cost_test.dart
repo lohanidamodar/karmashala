@@ -9,14 +9,12 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/bulk_session_delete.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
@@ -71,14 +69,14 @@ void main() {
     setUp(() {
       db = AppDatabase.memory();
       server = FakeDataServer()..mirrorInto(db);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      server.environmentRows.upsert(windowsEnv());
       server.projectRows.insert(
         project(id: 'p1', name: 'Hub', path: r'C:\hub'),
       );
       server.repositoryRows.insert(
         repository(id: 'r1', name: 'hub', path: r'C:\hub'),
       );
-      AgentInstallationDao(db).insert(agentInstallation());
+      server.installationRows.insert(agentInstallation());
       for (var i = 0; i < rows; i++) {
         mirroredServer(db).sessionRows.insert(
           Session(
@@ -235,10 +233,10 @@ void main() {
         final db = _CountingDatabase();
         addTearDown(db.close);
         final server = FakeDataServer()..mirrorInto(db);
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        server.environmentRows.upsert(windowsEnv());
         server.projectRows.insert(project());
         server.repositoryRows.insert(repository());
-        AgentInstallationDao(db).insert(agentInstallation());
+        server.installationRows.insert(agentInstallation());
 
         // Half native and half imported, half Claude and half Codex, so the
         // batch has to group two stores *and* resolve native rows out of a

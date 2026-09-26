@@ -11,9 +11,7 @@ import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
@@ -24,7 +22,6 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -140,12 +137,12 @@ void main() {
 
   AppDatabase seeded({bool third = false}) {
     final db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     // A third: the strip is at its widest, and has a WSL mark in it.
-    if (third) ExecutionEnvironmentDao(db).upsert(wslEnv());
+    if (third) server.environmentRows.upsert(wslEnv());
     // A second machine: the switcher joins the search row, and every project
     // names its machine on line two — both with a name too long to fit.
-    SshHostDao(db).upsert(
+    server.sshHostRows.upsert(
       SshHost(
         id: 'h1',
         name: _longHost,
@@ -156,9 +153,9 @@ void main() {
         createdAt: testTime,
       ),
     );
-    ExecutionEnvironmentDao(db).upsert(sshEnvFixture(name: _longHost));
+    server.environmentRows.upsert(sshEnvFixture(name: _longHost));
     server.mirrorInto(db);
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
     for (var i = 0; i < 4; i++) {
       mirroredServer(db).sessionRows.insert(
         session(

@@ -1,27 +1,30 @@
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
-  late AppDatabase db;
-  late ExecutionEnvironmentDao dao;
+  late FakeHostRows<ExecutionEnvironment> dao;
+  late EnvironmentsData environments;
 
   ExecutionEnvironmentResolver resolverWith(CommandRunnerFactory runners) =>
-      ExecutionEnvironmentResolver(environments: dao, runners: runners);
+      ExecutionEnvironmentResolver(
+        environments: environments,
+        runners: runners,
+      );
 
-  setUp(() {
-    db = AppDatabase.memory();
-    dao = ExecutionEnvironmentDao(db)
+  setUp(() async {
+    final server = FakeDataServer();
+    dao = server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv())
       ..upsert(sshEnvFixture());
+    environments = EnvironmentsData(await server.connect());
   });
-  tearDown(() => db.close());
 
   group('resolves', () {
     test('a checkout to the environment its row names', () {

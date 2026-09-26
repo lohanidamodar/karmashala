@@ -1,8 +1,8 @@
 import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
-import '../../agents/data/agent_installation_dao.dart';
+import '../../agents/data/agents_data.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/data/environments_data.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
@@ -33,9 +33,9 @@ class LaunchedSessionAttributionService {
   });
 
   final SessionsData sessionDao;
-  final AgentInstallationDao installationDao;
+  final AgentInstallationsData installationDao;
   final WorkspaceData workspace;
-  final ExecutionEnvironmentDao environmentDao;
+  final EnvironmentsData environmentDao;
   final AgentRegistry agents;
 
   /// One pass over every CLI store — the same scan adoption and the title sync

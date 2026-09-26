@@ -42,7 +42,7 @@ class SessionChangedFilesService {
     }
 
     final installation = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId);
     final agentId = installation?.agentId;
     final agentName =
@@ -54,7 +54,7 @@ class SessionChangedFilesService {
     final environment = installation == null
         ? null
         : _ref
-              .read(executionEnvironmentDaoProvider)
+              .read(environmentsDataProvider)
               .getById(installation.executable.environmentId);
 
     final fromAgent = await _fromAgentRecord(session, agentId, environment);
@@ -279,7 +279,7 @@ class SessionChangedFilesService {
         return null;
       case EnvironmentKind.wsl:
         final windows = _ref
-            .read(executionEnvironmentDaoProvider)
+            .read(environmentsDataProvider)
             .getAll()
             .where((e) => e.kind == EnvironmentKind.windowsNative)
             .firstOrNull;

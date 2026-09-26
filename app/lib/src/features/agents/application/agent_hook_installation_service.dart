@@ -215,7 +215,7 @@ class AgentHookInstallationService {
       _log.info('Probe: not touching agent hooks (would $verb).');
       return const [];
     }
-    final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
+    final environments = _ref.read(environmentsDataProvider).getAll();
     if (environments.isEmpty) return const [];
 
     final stores = await _ref

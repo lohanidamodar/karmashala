@@ -4,7 +4,6 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/notes/presentation/note_edit_dialog.dart';
 import 'package:karmashala_store/database.dart';
@@ -19,9 +18,9 @@ void main() {
   ) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final at = DateTime.utc(2026, 9, 16);
-    final data = await FakeDataServer().override();
+    final data = await (FakeDataServer()..environmentRows.upsert(windowsEnv()))
+        .override();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(db), data],
@@ -55,7 +54,7 @@ void main() {
       build: () {
         final db = AppDatabase.memory();
         addTearDown(db.close);
-        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        server.environmentRows.upsert(windowsEnv());
         final container = ProviderContainer(
           overrides: [
             databaseProvider.overrideWithValue(db),

@@ -9,12 +9,10 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/cli_detection/application/agent_store_server_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/read.dart' show FileEditKind;
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/sessions/application/session_changed_files_providers.dart';
@@ -28,6 +26,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 
 /// A transcript locator that answers from a variable, so nothing here walks the
 /// owner's real `~/.claude`.
@@ -59,6 +59,8 @@ class _FixedLocator implements SessionTranscriptLocator {
 /// git fallback is the checkpoint chain, which is already in the database.
 void main() {
   late AppDatabase db;
+  late EnvironmentsData environments;
+  late AgentInstallationsData installations;
   late FakeDataServer server;
   late DataClient data;
   late Directory tmp;
@@ -76,8 +78,8 @@ void main() {
         },
       ),
     ),
-    environments: ExecutionEnvironmentDao(db),
-    installations: AgentInstallationDao(db),
+    environments: environments,
+    installations: installations,
   );
 
   ProviderContainer containerFor() => ProviderContainer(
@@ -109,9 +111,9 @@ void main() {
   );
 
   void installAgent(String agentId, {String environmentId = 'windows'}) {
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: agentId, environmentId: environmentId));
+    server.installationRows.insert(
+      agentInstallation(agentId: agentId, environmentId: environmentId),
+    );
   }
 
   void checkpoint(List<FileChange> files, {int sequence = 1}) {
@@ -142,12 +144,14 @@ void main() {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     data = await server.connect();
+    environments = EnvironmentsData(data);
+    installations = AgentInstallationsData(data);
     tmp = Directory.systemTemp.createTempSync('karmashala_changed_');
     started = [];
     locator = _FixedLocator(null);
     codex = codexAnswering(<String, Object?>{'data': <Object?>[]});
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ExecutionEnvironmentDao(db).upsert(wslEnv());
+    server.environmentRows.upsert(windowsEnv());
+    server.environmentRows.upsert(wslEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
   });
@@ -161,7 +165,9 @@ void main() {
   /// filed under.
   void codexSession({String environmentId = 'windows'}) {
     installAgent(AgentIds.codex, environmentId: environmentId);
-    mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
   }
 
   group('Codex answers out of its own turns', () {
@@ -334,7 +340,9 @@ void main() {
   group('Claude Code answers out of its own transcript', () {
     setUp(() {
       installAgent(AgentIds.claudeCode);
-      mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'conv-1'));
+      mirroredServer(
+        db,
+      ).sessionRows.insert(session().copyWith(externalSessionId: 'conv-1'));
     });
 
     String transcript(List<Map<String, Object?>> lines) {
@@ -418,7 +426,9 @@ void main() {
   group('an agent that keeps no record falls back to git', () {
     setUp(() {
       installAgent(AgentIds.antigravity);
-      mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'ag-1'));
+      mirroredServer(
+        db,
+      ).sessionRows.insert(session().copyWith(externalSessionId: 'ag-1'));
     });
 
     test(
@@ -530,7 +540,9 @@ void main() {
   group('when the agent record fails, git still answers, and says why', () {
     test('Codex could not be read, so the checkpoints did', () async {
       installAgent(AgentIds.codex);
-      mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
+      mirroredServer(
+        db,
+      ).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
       codex = FakeCodexAppServer(
         reply: (_, id, method, params) => jsonEncode({
           'error': {'code': -32600, 'message': 'thread not loaded'},

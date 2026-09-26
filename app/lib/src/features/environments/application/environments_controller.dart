@@ -4,24 +4,29 @@ import 'package:agent_cli/process.dart';
 import 'environment_discovery_provider.dart';
 import 'environment_providers.dart';
 
-/// Holds the list of known execution environments and can refresh it by running
-/// discovery (Windows host + installed WSL distributions).
+/// Holds the list of known execution environments — the server's, followed as
+/// it changes — and can refresh it by running discovery (this machine and the
+/// WSL distributions installed on it) and recording what it found there.
 class EnvironmentsController extends Notifier<List<ExecutionEnvironment>> {
   @override
-  List<ExecutionEnvironment> build() =>
-      ref.watch(executionEnvironmentDaoProvider).getAll();
+  List<ExecutionEnvironment> build() {
+    final data = ref.watch(environmentsDataProvider);
+    final environments = data.getAll();
+    final listening = data.changes.listen((_) => state = data.getAll());
+    ref.onDispose(listening.cancel);
+    return environments;
+  }
 
-  /// Runs discovery and upserts every found environment, then refreshes state.
+  /// Runs discovery and records every found environment at the server.
   Future<List<ExecutionEnvironment>> discoverAndPersist() async {
     final discovered = await ref
         .read(environmentDiscoveryServiceProvider)
         .discover();
-    final dao = ref.read(executionEnvironmentDaoProvider);
+    final data = ref.read(environmentsDataProvider);
     for (final env in discovered) {
-      dao.upsert(env);
+      await data.put(env);
     }
-    state = dao.getAll();
-    return state;
+    return state = data.getAll();
   }
 }
 

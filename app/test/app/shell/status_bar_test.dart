@@ -8,7 +8,6 @@ import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -71,7 +70,7 @@ void main() {
     final server = FakeDataServer();
     final db = seedUsageDatabase(server: server);
     addTearDown(db.close);
-    if (onWsl) ExecutionEnvironmentDao(db).upsert(wslEnv());
+    if (onWsl) server.environmentRows.upsert(wslEnv());
     server.repositoryRows.insert(
       repository(
         id: 'r2',

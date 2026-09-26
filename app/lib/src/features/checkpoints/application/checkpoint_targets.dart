@@ -54,7 +54,7 @@ Future<List<EnvironmentPath>> checkpointTargetsFor(
   }
   if (environmentId == null) return targets;
 
-  final env = ref.read(executionEnvironmentDaoProvider).getById(environmentId);
+  final env = ref.read(environmentsDataProvider).getById(environmentId);
   if (env == null) return targets;
   final context = usesWindowsPaths(env.kind) ? p.windows : p.posix;
   final cwd = ref.read(agentWorkingDirectoriesProvider)[sessionId];

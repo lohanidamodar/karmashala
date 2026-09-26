@@ -1,5 +1,3 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -7,8 +5,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_installations_controller.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,10 +14,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 void main() {
-  late AppDatabase db;
   late ProviderContainer container;
 
   // Both environments report only Claude installed.
@@ -54,14 +48,15 @@ void main() {
     },
   );
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db)
+  setUp(() async {
+    final server = FakeDataServer();
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
+    final data = await server.override();
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         // No host variables, so the descriptors' declared Windows install
@@ -73,10 +68,7 @@ void main() {
       ],
     );
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   test('discovers the same agent independently per environment', () async {
     final report = await container
@@ -118,14 +110,13 @@ void main() {
       inner: claudeOnlyRunner(),
       hold: (req) => req.executable == 'where' ? gate.future : null,
     );
-    final second = AppDatabase.memory();
-    addTearDown(second.close);
-    ExecutionEnvironmentDao(second)
+    final second = FakeDataServer();
+    second.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     final concurrent = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(second),
+        await second.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         hostEnvironmentProvider.overrideWithValue(const {}),
@@ -171,23 +162,24 @@ void main() {
   // at hand needs it. The local host has no reachability probe — it is the
   // machine running the code — so whatever this says is taken as evidence.
   group('an installation that ran sessions', () {
-    late AppDatabase db;
+    late FakeDataServer server;
     late ProviderContainer container;
 
-    ProviderContainer containerFinding(Map<String, String> onPath) {
-      db = AppDatabase.memory();
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      FakeDataServer().mirrorInto(db)
+    Future<ProviderContainer> containerFinding(
+      Map<String, String> onPath,
+    ) async {
+      server = FakeDataServer()
+        ..environmentRows.upsert(windowsEnv())
         ..projectRows.insert(project())
-        ..repositoryRows.insert(repository());
-      AgentInstallationDao(
-        db,
-      ).insert(agentInstallation(id: 'old', path: r'C:\old\claude.exe'));
-      mirroredServer(db).sessionRows.insert(session(agentInstallationId: 'old'));
+        ..repositoryRows.insert(repository())
+        ..installationRows.insert(
+          agentInstallation(id: 'old', path: r'C:\old\claude.exe'),
+        )
+        ..sessionRows.insert(session(agentInstallationId: 'old'));
 
       return ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
           hostEnvironmentProvider.overrideWithValue(const {}),
@@ -214,16 +206,10 @@ void main() {
       );
     }
 
-    tearDown(() {
-      container.dispose();
-      db.close();
-    });
+    tearDown(() => container.dispose());
 
     String installationOfTheSession() =>
-        db
-                .query('SELECT agent_installation_id FROM sessions;')
-                .single['agent_installation_id']
-            as String;
+        server.sessionRows.getAll().single.agentInstallationId;
 
     test(
       'survives a sweep that finds nothing, rather than blinding the app',
@@ -233,7 +219,7 @@ void main() {
         // longer on PATH raised SqliteException(1811) out of the middle of the
         // sweep. The whole run died with it, and the app — which had two agents
         // installed and working — reported "Detection failed" and listed none.
-        container = containerFinding(const {});
+        container = await containerFinding(const {});
 
         final report = await container
             .read(agentInstallationsControllerProvider.notifier)
@@ -254,7 +240,7 @@ void main() {
     test(
       'follows its agent to a new path, keeping its id and its sessions',
       () async {
-        container = containerFinding(const {
+        container = await containerFinding(const {
           'claude': 'C:\\new\\claude.exe\r\n',
         });
 

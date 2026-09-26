@@ -322,7 +322,7 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
   final externalId = session.externalSessionId;
   if (externalId == null || externalId.isEmpty) return _nothingKnown;
   final agentId = ref
-      .read(agentInstallationDaoProvider)
+      .read(agentInstallationsDataProvider)
       .getById(session.agentInstallationId)
       ?.agentId;
   if (agentId == null) return _nothingKnown;

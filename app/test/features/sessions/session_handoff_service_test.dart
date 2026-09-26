@@ -8,9 +8,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/handoff_packet_files.dart';
@@ -259,17 +257,17 @@ Future<Harness> harness({
 }) async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db)
+  server.installationRows
     ..insert(agentInstallation(id: 'a1', agentId: 'forker'))
     ..insert(agentInstallation(id: 'a2', agentId: 'mute'));
   // Only when a test asks: the target list is asserted by name elsewhere.
   if (packetDirectory != null) {
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a3', agentId: 'briefed'));
+    server.installationRows.insert(
+      agentInstallation(id: 'a3', agentId: 'briefed'),
+    );
   }
 
   final git = FakeCommandRunner(
@@ -719,7 +717,10 @@ void main() {
       expect(child.parentSessionId, 'src');
       expect(child.parentLink, link);
       // The old session is untouched — not ended, not detached, not marked.
-      expect(mirroredServer(h.db).sessionRows.getById('src')!.status, session().status);
+      expect(
+        mirroredServer(h.db).sessionRows.getById('src')!.status,
+        session().status,
+      );
     }
 
     test('starts the target through the launcher and links the two', () async {
@@ -779,7 +780,9 @@ void main() {
       expect(launch.arguments, isNot(contains('--careful')));
       // And it is stamped on the row, so the next resume runs under it too.
       expect(
-        mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
+        mirroredServer(
+          h.db,
+        ).sessionRows.getById(result.session.id)!.permissionMode,
         bypassStored,
       );
     });
@@ -813,7 +816,9 @@ void main() {
             .agentLaunch!;
         expect(launch.arguments, contains('--trust-me'));
         expect(
-          mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
+          mirroredServer(
+            h.db,
+          ).sessionRows.getById(result.session.id)!.permissionMode,
           isNull,
         );
       },
@@ -845,7 +850,9 @@ void main() {
       expect(launch.arguments, contains('--careful'));
       expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
-        mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
+        mirroredServer(
+          h.db,
+        ).sessionRows.getById(result.session.id)!.permissionMode,
         askStored,
       );
     });
@@ -917,7 +924,9 @@ void main() {
         expect(service.forkPlanFor('src').kind, SessionForkKind.native);
 
         final result = await service.forkSession(sessionId: 'src');
-        final child = mirroredServer(h.db).sessionRows.getById(result.session.id)!;
+        final child = mirroredServer(
+          h.db,
+        ).sessionRows.getById(result.session.id)!;
         expect(child.parentLink, SessionLink.fork);
         expect(child.title, 'Work (fork)');
 
@@ -953,7 +962,10 @@ void main() {
       expect(launch.arguments, isNot(contains('--careful')));
       // The branch runs under the picked mode; the session it came from is
       // left on its own.
-      expect(mirroredServer(h.db).sessionRows.getById('src')!.permissionMode, askStored);
+      expect(
+        mirroredServer(h.db).sessionRows.getById('src')!.permissionMode,
+        askStored,
+      );
     });
 
     test(
@@ -982,7 +994,9 @@ void main() {
         // parent follows the setting, so the branch does too. Stamping what the
         // default said today would freeze the branch the moment it was made.
         expect(
-          mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
+          mirroredServer(
+            h.db,
+          ).sessionRows.getById(result.session.id)!.permissionMode,
           isNull,
         );
       },
@@ -1018,7 +1032,9 @@ void main() {
       expect(launch.arguments, contains('--careful'));
       expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
-        mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
+        mirroredServer(
+          h.db,
+        ).sessionRows.getById(result.session.id)!.permissionMode,
         askStored,
       );
     });
@@ -1052,7 +1068,9 @@ void main() {
         expect(plan.explanation, contains('never learned its id for this one'));
 
         final result = await service.forkSession(sessionId: 'src');
-        final child = mirroredServer(h.db).sessionRows.getById(result.session.id)!;
+        final child = mirroredServer(
+          h.db,
+        ).sessionRows.getById(result.session.id)!;
         // Still a fork in the lineage — that is what the user asked for and got.
         expect(child.parentLink, SessionLink.fork);
 
@@ -1142,11 +1160,15 @@ void main() {
             instruction: 'Take over.',
           );
 
-      final child = mirroredServer(h.db).sessionRows.getById(handed.session.id)!;
+      final child = mirroredServer(
+        h.db,
+      ).sessionRows.getById(handed.session.id)!;
       expect(child.parentSessionId, 'src');
       expect(child.parentLink, SessionLink.handoff);
       expect(
-        AgentInstallationDao(h.db).getById(child.agentInstallationId)!.agentId,
+        mirroredServer(
+          h.db,
+        ).installationRows.getById(child.agentInstallationId)!.agentId,
         'forker',
       );
       // Phrased child-first so a sidebar can render it as a sentence without
@@ -1179,7 +1201,9 @@ void main() {
       expect(launch.workingDirectory, subdirectory);
       // A fork of a session that has no worktree still has none: the directory
       // is where the work is, not a claim about how it is checked out.
-      final child = mirroredServer(h.db).sessionRows.getById(forked.session.id)!;
+      final child = mirroredServer(
+        h.db,
+      ).sessionRows.getById(forked.session.id)!;
       expect(child.worktree, isNull);
       expect(child.useWorktree, isFalse);
       expect(child.workingDirectory, elsewhere);
@@ -1224,7 +1248,12 @@ void main() {
           .instanceFor(forked.paneId!)!
           .agentLaunch!;
       expect(launch.workingDirectory, isNot(subdirectory));
-      expect(mirroredServer(h.db).sessionRows.getById(forked.session.id)!.useWorktree, isTrue);
+      expect(
+        mirroredServer(
+          h.db,
+        ).sessionRows.getById(forked.session.id)!.useWorktree,
+        isTrue,
+      );
     });
 
     test('the packet names the directory the work is actually in', () async {

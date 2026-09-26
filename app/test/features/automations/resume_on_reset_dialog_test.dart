@@ -3,15 +3,14 @@ import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'scheduled_resume_harness.dart';
+import '../../support/workspace_mirror.dart';
 
 void main() {
   late ResumeHarness h;
@@ -152,8 +151,8 @@ void main() {
   testWidgets('an SSH session offers a chosen time only, and says why', (
     tester,
   ) async {
-    ExecutionEnvironmentDao(h.db).upsert(sshEnvFixture());
-    AgentInstallationDao(h.db).insert(
+    mirroredServer(h.db).environmentRows.upsert(sshEnvFixture());
+    mirroredServer(h.db).installationRows.insert(
       agentInstallation(
         id: 'a-ssh',
         agentId: AgentIds.codex,

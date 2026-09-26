@@ -54,7 +54,7 @@ ModelListContext _contextFor(Ref ref, String agentId) {
     runLocalCli:
         (arguments, {stdinText, timeout = const Duration(seconds: 30)}) async {
           final installation = ref
-              .read(agentInstallationDaoProvider)
+              .read(agentInstallationsDataProvider)
               .getAll()
               .where(
                 (i) =>

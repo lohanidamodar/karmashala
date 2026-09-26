@@ -28,7 +28,7 @@ final remoteFolderMissingProvider =
     Provider<bool Function(EnvironmentPath path)>((ref) {
       return (path) {
         try {
-          final environments = ref.read(executionEnvironmentDaoProvider);
+          final environments = ref.read(environmentsDataProvider);
           final env = environments.getById(path.environmentId);
           if (env == null) return false;
           var resolved = path.path;
@@ -91,9 +91,7 @@ final remoteCheckoutBranchProvider =
 /// and for an environment row the desktop no longer holds.
 String? environmentBadgeFor(Ref ref, String? environmentId) {
   if (environmentId == null) return null;
-  final environment = ref
-      .read(executionEnvironmentDaoProvider)
-      .getById(environmentId);
+  final environment = ref.read(environmentsDataProvider).getById(environmentId);
   return environment == null ? null : environmentBadge(environment);
 }
 
@@ -102,20 +100,14 @@ String? environmentBadgeFor(Ref ref, String? environmentId) {
 /// because it is what the project says and the phone can still group by it.
 String? environmentKindFor(Ref ref, String? environmentId) {
   if (environmentId == null) return null;
-  return ref
-      .read(executionEnvironmentDaoProvider)
-      .getById(environmentId)
-      ?.kind
-      .name;
+  return ref.read(environmentsDataProvider).getById(environmentId)?.kind.name;
 }
 
 /// The desktop's own name for where a folder lives, by environment id — the
 /// same lookup as [environmentBadgeFor], and null for the same two reasons.
 String? environmentNameFor(Ref ref, String? environmentId) {
   if (environmentId == null) return null;
-  final environment = ref
-      .read(executionEnvironmentDaoProvider)
-      .getById(environmentId);
+  final environment = ref.read(environmentsDataProvider).getById(environmentId);
   return environment == null ? null : environmentLabel(environment);
 }
 

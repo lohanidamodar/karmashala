@@ -4,9 +4,7 @@ import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -112,11 +110,12 @@ Future<ProviderContainer> harness(AppDatabase db, FakeDataServer server) async {
 (AppDatabase, FakeDataServer) workspace() {
   final db = AppDatabase.memory();
   addTearDown(db.close);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  final server = FakeDataServer().mirrorInto(db)
+  final server = FakeDataServer().mirrorInto(db);
+  server.environmentRows.upsert(windowsEnv());
+  server
     ..projectRows.insert(project())
     ..repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation());
+  server.installationRows.insert(agentInstallation());
   return (db, server);
 }
 

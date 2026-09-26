@@ -2,10 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/directory_conversation_attribution_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +15,7 @@ import '../../support/workspace_mirror.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
+import 'package:karmashala/src/features/agents/data/agents_data.dart';
 
 /// Learning which Antigravity conversation a session we launched is on.
 ///
@@ -38,6 +37,7 @@ void main() {
   late FakeSessionRows dao;
   late SessionsData sessions;
   late WorkspaceData workspace;
+  late AgentInstallationsData installations;
 
   const conversation = 'df3c0708-1111-4222-8333-444455556666';
   const other = 'e921cb55-1111-4222-8333-444455556666';
@@ -49,19 +49,20 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_agy_attr_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     workspace = await workspaceOf(server);
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(agentId: AgentIds.antigravity));
-    AgentInstallationDao(
-      db,
-    ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.antigravity),
+    );
+    server.installationRows.insert(
+      agentInstallation(id: 'a2', agentId: AgentIds.claudeCode),
+    );
     dao = server.sessionRows;
     sessions = await sessionsOf(server);
+    installations = AgentInstallationsData(await server.connect());
   });
   tearDown(() {
     db.close();
@@ -116,7 +117,7 @@ void main() {
     Map<String, List<String>> paneTails = const {},
   }) => DirectoryConversationAttributionService(
     sessionDao: sessions,
-    installationDao: AgentInstallationDao(db),
+    installationDao: installations,
     workspace: workspace,
     agents: AgentRegistry.builtIn,
     locateStores: () async => [

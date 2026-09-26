@@ -1,9 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
@@ -60,7 +58,7 @@ SshTerminalInstance _paneWith({
   connection: SshConnection(
     host: _host,
     verifier: SshHostKeyVerifier(
-      knownHosts: KnownHostDao(_UnusedDatabase()),
+      knownHosts: _UnusedKnownHosts(),
       host: _host.host,
       port: _host.port,
       clock: const SystemClock(),
@@ -87,10 +85,10 @@ Future<void> settle() async {
   }
 }
 
-class _UnusedDatabase implements AppDatabase {
+class _UnusedKnownHosts implements KnownHostStore {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
-      throw StateError('the pane tests never reach the database');
+      throw StateError('the pane tests never check a host key');
 }
 
 void main() {

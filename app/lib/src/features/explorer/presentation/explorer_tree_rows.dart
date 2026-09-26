@@ -259,12 +259,12 @@ class ExplorerTerminalRow extends ConsumerWidget {
       return;
     }
     final hostId = ref
-        .read(executionEnvironmentDaoProvider)
+        .read(environmentsDataProvider)
         .getById(node.environmentId)
         ?.sshHostId;
     final host = hostId == null
         ? null
-        : ref.read(sshHostDaoProvider).getById(hostId);
+        : ref.read(sshHostsDataProvider).getById(hostId);
     if (host == null) return;
     controller.openTab(
       TerminalProfile.ssh(host.id, hostName: host.name),

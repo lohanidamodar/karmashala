@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
+import '../../support/fake_data_server.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_create_dialog.dart';
@@ -23,13 +23,12 @@ const _repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
 /// backwards for the case the tool exists for, somewhere to try something
 /// without disturbing the checkout an agent is already editing.
 void main() {
-  late AppDatabase db;
   late FakeCommandRunner runner;
   late WorktreeService service;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    final envDao = ExecutionEnvironmentDao(db)..upsert(windowsEnv());
+  setUp(() async {
+    final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    final envDao = EnvironmentsData(await server.connect());
     runner = FakeCommandRunner(
       responder: (_) =>
           const CommandResult(exitCode: 0, stdout: '', stderr: ''),
@@ -40,7 +39,6 @@ void main() {
       environmentOf: worktreeEnvironmentOf(envDao),
     );
   });
-  tearDown(() => db.close());
 
   Future<void> open(WidgetTester tester) async {
     await tester.pumpWidget(

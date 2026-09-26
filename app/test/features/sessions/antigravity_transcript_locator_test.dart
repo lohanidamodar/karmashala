@@ -8,12 +8,12 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// **Finding an Antigravity conversation the store scan does not list.**
 ///
@@ -42,15 +42,16 @@ void main() {
     return file.path;
   }
 
-  SessionTranscriptLocator locatorWith({
+  Future<SessionTranscriptLocator> locatorWith({
     List<DetectedSession> scanned = const [],
-  }) {
+  }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         cliStoreLocatorProvider.overrideWithValue(
           FixedLocator([
             CliStore(
@@ -69,7 +70,7 @@ void main() {
   test('a conversation the scan never listed is found by its id', () async {
     final record = writeRecord('conv-1');
 
-    final found = await locatorWith().locate(
+    final found = await (await locatorWith()).locate(
       agentId: AgentIds.antigravity,
       externalSessionId: 'conv-1',
     );
@@ -80,7 +81,7 @@ void main() {
   test('the older .pb record is found too', () async {
     final record = writeRecord('conv-2', extension: '.pb');
 
-    final found = await locatorWith().locate(
+    final found = await (await locatorWith()).locate(
       agentId: AgentIds.antigravity,
       externalSessionId: 'conv-2',
     );
@@ -89,7 +90,7 @@ void main() {
   });
 
   test('a conversation with no record at all is not invented', () async {
-    final found = await locatorWith().locate(
+    final found = await (await locatorWith()).locate(
       agentId: AgentIds.antigravity,
       externalSessionId: 'conv-missing',
     );
@@ -100,7 +101,7 @@ void main() {
   test('another agent never takes this route', () async {
     writeRecord('conv-1');
 
-    final found = await locatorWith().locate(
+    final found = await (await locatorWith()).locate(
       agentId: AgentIds.claudeCode,
       externalSessionId: 'conv-1',
     );
@@ -118,9 +119,9 @@ void main() {
       storeHome: store.path,
     );
 
-    final found = await locatorWith(
+    final found = await (await locatorWith(
       scanned: [scanned],
-    ).locate(agentId: AgentIds.antigravity, externalSessionId: 'conv-1');
+    )).locate(agentId: AgentIds.antigravity, externalSessionId: 'conv-1');
 
     expect(found, isNot(record));
     expect(found, scanned.filePath);

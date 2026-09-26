@@ -13,10 +13,8 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_provider.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
@@ -30,7 +28,6 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -77,14 +74,14 @@ void main() {
     bool fourth = false,
     bool wsl = true,
   }) {
-    final environments = ExecutionEnvironmentDao(db)..upsert(windowsEnv());
+    final environments = server.environmentRows..upsert(windowsEnv());
     if (machines) {
       environments.upsert(sshEnvFixture());
       if (wsl) environments.upsert(wslEnv());
       if (fourth) {
         environments.upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
       }
-      SshHostDao(db).upsert(
+      server.sshHostRows.upsert(
         SshHost(
           id: 'h1',
           name: 'build-box',
@@ -138,7 +135,7 @@ void main() {
         ),
       );
     }
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
   }
 
   setUp(() async {
@@ -188,6 +185,9 @@ void main() {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    // A saved SSH host is told by id and read again over the client's link,
+    // which runs on the real event loop: let it answer before the first frame.
+    await tester.runAsync(() => pumpEventQueue());
     final scope = container ?? newContainer();
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -327,17 +327,17 @@ void main() {
       expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
       expect(find.byType(ExplorerEnvironmentSwitcher), findsNothing);
 
-      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      server.environmentRows.upsert(sshEnvFixture());
       await pump(tester);
       expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
       expect(segment('build-box'), findsOneWidget);
 
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
+      server.environmentRows.upsert(wslEnv());
       await pump(tester);
       expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
       expect(find.byType(ExplorerEnvironmentSwitcher), findsNothing);
 
-      ExecutionEnvironmentDao(db).upsert(wslEnv(id: 'wsl:arch', distro: 'a'));
+      server.environmentRows.upsert(wslEnv(id: 'wsl:arch', distro: 'a'));
       await pump(tester);
       expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
       expect(find.byType(ExplorerEnvironmentSwitcher), findsOneWidget);

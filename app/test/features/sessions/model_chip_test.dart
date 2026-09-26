@@ -5,10 +5,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/model_picker.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
@@ -102,10 +100,10 @@ Future<Harness> harness(
 }) async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+  server.installationRows.insert(agentInstallation(agentId: agentId));
   final container = ProviderContainer(
     overrides: [
       await server.override(),
@@ -143,7 +141,9 @@ Future<Harness> harness(
           .terminal
           .onOutput =
       written.add;
-  if (model != null) mirroredServer(db).sessionRows.updateModel(launched.session.id, model);
+  if (model != null) {
+    mirroredServer(db).sessionRows.updateModel(launched.session.id, model);
+  }
   return Harness(db, container, launched.session.id, written);
 }
 
@@ -343,7 +343,10 @@ void main() {
     await tester.tap(find.text('Follow the Settings default'));
     await tester.pumpAndSettle();
 
-    expect(mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId, isNull);
+    expect(
+      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
+      isNull,
+    );
     expect(find.text('default'), findsOneWidget);
   });
 
@@ -365,7 +368,10 @@ void main() {
     expect(h.written, ['/model opus', kEndOfLineKey, '\r']);
     expect(find.textContaining('switched now'), findsOneWidget);
     expect(find.textContaining('/model opus'), findsOneWidget);
-    expect(mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId, 'opus');
+    expect(
+      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
+      'opus',
+    );
     expect(find.text('Opus'), findsOneWidget);
   });
 
@@ -387,7 +393,10 @@ void main() {
     expect(h.written, isEmpty);
     expect(find.textContaining('finishes this turn'), findsOneWidget);
     // The override is still recorded, so the next launch runs on it.
-    expect(mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId, 'opus');
+    expect(
+      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
+      'opus',
+    );
   });
 
   testWidgets('Codex, idle: its own picker opens, and the chip says so', (
@@ -404,7 +413,10 @@ void main() {
 
     expect(h.written.join(), contains('/model'));
     expect(find.textContaining('opened its own model picker'), findsOneWidget);
-    expect(mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId, 'gpt-5.5');
+    expect(
+      mirroredServer(h.db).sessionRows.getById(h.sessionId)!.modelId,
+      'gpt-5.5',
+    );
   });
 
   testWidgets('the menu draws the house two-line row, checked once', (

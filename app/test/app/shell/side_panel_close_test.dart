@@ -6,12 +6,13 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
 
 /// **Every side-panel surface closes the same way.**
 ///
@@ -97,8 +98,14 @@ void main() {
   ) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    final container = fakeTerminalContainer(database: db);
+    final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    final container = fakeTerminalContainer(
+      database: db,
+      data: await server.override(),
+    );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;

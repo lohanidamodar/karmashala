@@ -53,7 +53,10 @@ final sessionIsHostedLiveProvider = Provider<bool Function(String)>(
 final sessionHostedPaneProvider =
     Provider<HostedTerminalInstance? Function(String)>(
       (ref) => (sessionId) {
-        final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
+        final paneId = ref
+            .read(sessionsDataProvider)
+            .getById(sessionId)
+            ?.paneId;
         if (paneId == null) return null;
         final instance = ref
             .read(terminalSessionsControllerProvider.notifier)
@@ -139,7 +142,7 @@ class QuitResumeService {
     final isLive = _ref.read(sessionIsHostedLiveProvider);
     final hosted = _ref.read(sessionHostedPaneProvider);
     final status = _ref.read(sessionStatusLookupProvider);
-    final installations = _ref.read(agentInstallationDaoProvider);
+    final installations = _ref.read(agentInstallationsDataProvider);
     final registry = _ref.read(agentRegistryProvider);
 
     final live = <InterruptedSession>[];

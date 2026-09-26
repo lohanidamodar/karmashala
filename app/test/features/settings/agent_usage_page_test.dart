@@ -7,13 +7,11 @@ import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/data/usage_sample_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_usage_section.dart';
-import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -22,12 +20,14 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../agents/usage_fixtures.dart';
+import '../../support/fake_data_server.dart';
 
 /// Settings › Accounts & usage › Usage & limits, redesigned: meters in status
 /// colours with a pace tick, the recorded history as a chart, spend per day,
 /// and a comparison across accounts — at every window size the app supports.
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late MovableClock clock;
   late _PerAgentUsageService service;
 
@@ -38,16 +38,15 @@ void main() {
     path: r'C:\Users\me\.bin\codex.exe',
   );
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  setUp(() async {
+    server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    client = await server.connect();
     clock = MovableClock(testTime);
     service = _PerAgentUsageService(clock: clock);
   });
-  tearDown(() => db.close());
 
   void seedHistory(String account) {
-    final dao = UsageSampleDao(db);
+    final dao = server.usageRows;
     for (var i = 0; i <= 12; i++) {
       final at = testTime.subtract(Duration(minutes: 20 * (12 - i)));
       dao.insert(
@@ -76,7 +75,7 @@ void main() {
 
   Widget page(List<AgentInstallation> installations) => ProviderScope(
     overrides: [
-      databaseProvider.overrideWithValue(db),
+      dataClientProvider.overrideWithValue(client),
       clockProvider.overrideWithValue(clock),
       agentUsageServiceProvider.overrideWithValue(service),
     ],
@@ -178,6 +177,8 @@ void main() {
     seedHistory(usageAccountKey(claude));
     await service.fetch(claude, const []);
     await tester.pumpWidget(page([claude]));
+    // The history is asked of the server; its answer is a frame later.
+    await tester.pump();
 
     expect(find.byType(TimeSeriesChart), findsOneWidget);
     expect(find.byType(BarChart), findsOneWidget);

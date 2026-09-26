@@ -27,7 +27,7 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
       }) {
         final sshHostId = profile.sshHostId ?? agentLaunch?.sshHostId;
         if (sshHostId != null) {
-          final host = ref.read(sshHostDaoProvider).getById(sshHostId);
+          final host = ref.read(sshHostsDataProvider).getById(sshHostId);
           if (host != null) {
             final pool = ref.read(sshConnectionPoolProvider);
             return SshTerminalInstance(

@@ -2,8 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/terminal_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -13,6 +11,8 @@ import 'package:xterm2/xterm.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import 'package:agent_cli/process.dart';
 
 /// `terminal_run` waiting for the command it typed.
 ///
@@ -30,12 +30,16 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
 
-  void open({required bool shellIntegration}) {
+  Future<void> open({required bool shellIntegration}) async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    final data =
+        await (FakeDataServer()
+              ..environmentRows.upsert(localHostEnvironment(testTime)))
+            .override();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(
+          data: data,
           database: db,
           shellIntegration: shellIntegration,
         ),

@@ -6,7 +6,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
-import '../../agents/application/usage_history.dart';
+import '../../agents/data/agents_data.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 
@@ -18,8 +18,8 @@ Future<RemoteUsageSnapshot> remoteUsageSnapshot(Ref ref) =>
       installations: ref.read(agentInstallationsControllerProvider),
       registry: ref.read(agentRegistryProvider),
       service: ref.read(agentUsageServiceProvider),
-      environments: ref.read(executionEnvironmentDaoProvider).getAll(),
-      history: ref.read(usageSampleDaoProvider).since,
+      environments: ref.read(environmentsDataProvider).getAll(),
+      history: ref.read(usageHistoryDataProvider).since,
       environmentName: (id) => ref.read(environmentLabelForIdProvider(id)),
       now: ref.read(clockProvider).nowUtc(),
     );

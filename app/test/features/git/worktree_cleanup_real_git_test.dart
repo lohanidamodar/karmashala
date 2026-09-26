@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
+import '../../support/fake_data_server.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_policy.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
 import 'package:karmashala_git/worktrees.dart';
@@ -17,6 +17,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/workspace_mirror.dart';
 
 /// Automatic worktree cleanup against **real git in a temporary repository**:
 /// each refusal is proven by a worktree a rule matches and that is still on
@@ -69,7 +70,7 @@ void main() {
       ]).exitCode ==
       0;
 
-  setUp(() {
+  setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_cleanup_');
     root = tmp.resolveSymbolicLinksSync();
     main = p.join(root, 'app');
@@ -86,10 +87,14 @@ void main() {
     db = AppDatabase.memory();
     // Well past the one-day grace, unless a case winds it back.
     clock = MovableClock(DateTime.now().toUtc().add(const Duration(days: 3)));
-    envId = ensureLocalEnvironment(ExecutionEnvironmentDao(db), clock);
+    final server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(localHostEnvironment(clock.nowUtc()));
+    envId = localHostEnvironmentId;
     worktrees = WorktreeService(
       runnerFactory: const CommandRunnerFactory(),
-      environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
+      environmentOf: worktreeEnvironmentOf(
+        EnvironmentsData(await server.connect()),
+      ),
     );
     sessions = [];
     live = {};

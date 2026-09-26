@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_providers.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_key_changed_alert.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_prompt_host.dart';
@@ -13,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -23,21 +22,22 @@ const _good = 'SHA256:v0AsHkTEsTfInGeRpRiNtOnEoNeOnE1234567890a';
 const _evil = 'SHA256:iMpOsToRiMpOsToRiMpOsToRiMpOsToR0987654321b';
 
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
-  late KnownHostDao known;
+  late KnownHostsData known;
 
-  setUp(() {
-    db = AppDatabase.memory();
-    known = KnownHostDao(db);
+  setUp(() async {
+    server = FakeDataServer(clock: () => testTime);
+    final client = await server.connect();
+    known = KnownHostsData(client);
     container = ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
+    addTearDown(container.dispose);
   });
-  tearDown(() => db.close());
 
   /// The verifier as the connection builds it, with the app's real wiring.
   SshHostKeyVerifier verifier() => SshHostKeyVerifier(
@@ -124,7 +124,7 @@ void main() {
   testWidgets('a second connection with the pinned key never prompts', (
     tester,
   ) async {
-    known.trust(
+    server.knownHostRows.trust(
       KnownHostKey(
         host: 'build-box',
         port: 2222,
@@ -143,7 +143,7 @@ void main() {
   testWidgets('a changed key is refused with no dialog and no overwrite', (
     tester,
   ) async {
-    known.trust(
+    server.knownHostRows.trust(
       KnownHostKey(
         host: 'build-box',
         port: 2222,
@@ -168,7 +168,7 @@ void main() {
   testWidgets('the changed-key alert says so plainly and can forget the key', (
     tester,
   ) async {
-    known.trust(
+    server.knownHostRows.trust(
       KnownHostKey(
         host: 'build-box',
         port: 2222,

@@ -1,12 +1,11 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_policy.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
@@ -245,13 +244,12 @@ void main() {
   });
 
   test('removeIfClean runs `git worktree remove` without --force', () async {
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
+    final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     final runner = FakeCommandRunner();
     final service = WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
       environmentOf: worktreeEnvironmentOf(
-        ExecutionEnvironmentDao(db)..upsert(windowsEnv()),
+        EnvironmentsData(await server.connect()),
       ),
     );
     await service.removeIfClean(

@@ -2,9 +2,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session/launch.dart';
@@ -54,10 +52,10 @@ harness({AppDatabase? reopen, FakeDataServer? server}) async {
   server ??= FakeDataServer();
   if (reopen == null) {
     server.mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
+    server.installationRows.insert(agentInstallation(agentId: 'roverCli'));
   }
   final container = ProviderContainer(
     overrides: [
@@ -163,7 +161,10 @@ void main() {
       expect(h.container.argumentsOf(launched.paneId!), ['--model', 'deep']);
       // And nothing was written on the row: following the default is the absence
       // of a choice, not a copy of one.
-      expect(mirroredServer(h.db).sessionRows.getById(launched.session.id)!.modelId, isNull);
+      expect(
+        mirroredServer(h.db).sessionRows.getById(launched.session.id)!.modelId,
+        isNull,
+      );
     },
   );
 

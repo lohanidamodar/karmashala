@@ -1,28 +1,25 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
-  late AppDatabase db;
-  late ExecutionEnvironmentDao environments;
-  late AgentInstallationDao installations;
-  late SshHostDao hosts;
+  late FakeDataServer server;
+  late FakeHostRows<ExecutionEnvironment> environments;
+  late FakeHostRows<AgentInstallation> installations;
+  late FakeHostRows<SshHost> hosts;
   late FakeCommandRunnerFactory runners;
 
   SshHost remoteHost({String keyPath = r'C:\keys\missing_id_ed25519'}) =>
@@ -38,20 +35,21 @@ void main() {
       );
 
   setUp(() {
-    db = AppDatabase.memory();
-    environments = ExecutionEnvironmentDao(db);
-    installations = AgentInstallationDao(db);
-    hosts = SshHostDao(db);
+    server = FakeDataServer();
+    environments = server.environmentRows;
+    installations = server.installationRows;
+    hosts = server.sshHostRows;
     runners = FakeCommandRunnerFactory();
     environments.upsert(windowsEnv());
   });
-  tearDown(() => db.close());
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(db),
+          // Connected once the case has seeded the server, so it is read in
+          // the first snapshot.
+          await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
           commandRunnerFactoryProvider.overrideWithValue(runners),
@@ -167,7 +165,7 @@ void main() {
     // `localHostEnvironmentId` is the literal `windows` on every platform and
     // is documented as never being shown to anyone. This card printed it as a
     // mono subtitle, so a Mac read "macOS" with "windows" underneath it.
-    db.execute('DELETE FROM execution_environments;');
+    environments.delete(windowsEnv().id);
     environments.upsert(posixEnv());
     await pump(tester);
 

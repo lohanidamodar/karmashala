@@ -2,9 +2,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala_session/launch.dart';
@@ -97,10 +95,10 @@ Future<({ProviderContainer container, AppDatabase db, FakeDataServer server})>
 harness() async {
   final db = AppDatabase.memory();
   final server = FakeDataServer()..mirrorInto(db);
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  server.environmentRows.upsert(windowsEnv());
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: 'exclusive'));
+  server.installationRows.insert(agentInstallation(agentId: 'exclusive'));
 
   final container = ProviderContainer(
     overrides: [
@@ -266,10 +264,10 @@ void main() {
     );
     final db = AppDatabase.memory();
     final server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation(agentId: 'exclusive'));
+    server.installationRows.insert(agentInstallation(agentId: 'exclusive'));
     final container = ProviderContainer(
       overrides: [
         await server.override(),
@@ -339,10 +337,10 @@ void main() {
     );
     final db = AppDatabase.memory();
     final server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation(agentId: 'exclusive'));
+    server.installationRows.insert(agentInstallation(agentId: 'exclusive'));
     final container = ProviderContainer(
       overrides: [
         await server.override(),

@@ -7,8 +7,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -37,11 +35,11 @@ void main() {
   Future<void> pump(WidgetTester tester) async {
     db = AppDatabase.memory();
     addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer(clock: () => testTime).mirrorInto(db)
+      ..environmentRows.upsert(windowsEnv())
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    server.installationRows.insert(agentInstallation());
 
     final data = await server.override();
     container = ProviderContainer(
@@ -202,7 +200,9 @@ void main() {
   ) async {
     await pump(tester);
     runSessionInATab('s1', title: 'Toolbar rework');
-    mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Second look'));
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session(id: 's2', title: 'Second look'));
     container.read(selectedSessionIdProvider.notifier).select('s2');
     container.read(todosProvider.notifier).add(body: 'Fix the resize');
     await tester.pumpAndSettle();

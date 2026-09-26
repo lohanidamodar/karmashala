@@ -230,7 +230,7 @@ class DecisionRecorder {
     final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final agentId = _ref
-        .read(agentInstallationDaoProvider)
+        .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
     return agentId == null

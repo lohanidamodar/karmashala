@@ -1,5 +1,5 @@
-import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:agent_cli/discovery.dart' show ExecutableReachability;
 import 'package:karmashala_core/paths.dart' show PathProbe;
 import 'package:karmashala_core/testing.dart';
@@ -10,9 +10,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_installations_controller.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,7 +18,6 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 
 /// The failure this file exists for, described rather than depended on.
 ///
@@ -44,7 +41,8 @@ const _notOnPath = CommandResult(
 );
 
 void main() {
-  late AppDatabase db;
+  late FakeDataServer server;
+  late DataClient client;
   late ProviderContainer container;
   late FakeCommandRunner runner;
 
@@ -58,7 +56,7 @@ void main() {
     runner = FakeCommandRunner(responder: responder);
     return ProviderContainer(
       overrides: [
-        databaseProvider.overrideWithValue(db),
+        dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         hostEnvironmentProvider.overrideWithValue(hostEnvironment),
@@ -70,14 +68,11 @@ void main() {
     );
   }
 
-  setUp(() {
-    db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  setUp(() async {
+    server = FakeDataServer()..environmentRows.upsert(windowsEnv());
+    client = await server.connect();
   });
-  tearDown(() {
-    container.dispose();
-    db.close();
-  });
+  tearDown(() => container.dispose());
 
   AgentInstallationsController controllerOf(ProviderContainer c) =>
       c.read(agentInstallationsControllerProvider.notifier);
@@ -86,9 +81,9 @@ void main() {
     test(
       'a workspace whose paths all open repairs nothing and spawns nothing',
       () async {
-        AgentInstallationDao(
-          db,
-        ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+        server.installationRows.insert(
+          agentInstallation(agentId: AgentIds.codex, path: _real),
+        );
         container = workspaceWith(
           probe: FakePathProbe(files: const {_real}),
           responder: (_) => fail('nothing should have been spawned'),
@@ -110,7 +105,7 @@ void main() {
     );
 
     test('a stored path that no longer exists triggers a repair', () async {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           agentId: AgentIds.codex,
           path: r'C:\gone\codex.exe',
@@ -143,7 +138,7 @@ void main() {
     });
 
     test('a successful repair updates the path and the version', () async {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           id: 'codex-row',
           agentId: AgentIds.codex,
@@ -170,7 +165,7 @@ void main() {
 
       final report = await controllerOf(container).repairBrokenPaths();
 
-      final row = AgentInstallationDao(db).getById('codex-row')!;
+      final row = server.installationRows.getById('codex-row')!;
       expect(row.executable.path, _real);
       // The version comes from the binary that actually ran, not from the row.
       expect(row.version, '0.153.4');
@@ -185,7 +180,7 @@ void main() {
       // The rule the whole feature turns on: replacing a broken row with no
       // row is worse than a wrong path, because a wrong path can be corrected
       // and a missing agent cannot even be seen.
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           id: 'codex-row',
           agentId: AgentIds.codex,
@@ -203,7 +198,7 @@ void main() {
 
       final report = await controllerOf(container).repairBrokenPaths();
 
-      expect(AgentInstallationDao(db).getById('codex-row'), isNotNull);
+      expect(server.installationRows.getById('codex-row'), isNotNull);
       expect(report.repaired, isEmpty);
       expect(report.unresolved, hasLength(1));
       expect(
@@ -221,9 +216,9 @@ void main() {
       () async {
         // "Codex is not installed" and "Codex is installed somewhere I cannot
         // reach" imply opposite actions, so the report must not merge them.
-        AgentInstallationDao(
-          db,
-        ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+        server.installationRows.insert(
+          agentInstallation(agentId: AgentIds.codex, path: _stored),
+        );
         container = workspaceWith(
           probe: _UnreadableJunction(),
           responder: (req) => req.executable == 'where'
@@ -248,7 +243,7 @@ void main() {
     test('a row whose agent is genuinely gone is still removed', () async {
       // The guard must not cost the app its ability to notice an uninstall: a
       // path whose whole route was walked and found empty is evidence.
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(agentId: AgentIds.codex, path: r'C:\gone\codex.exe'),
       );
       container = workspaceWith(
@@ -268,7 +263,7 @@ void main() {
       // The report is keyed by installation id, which a repair preserves.
       // Keying by (agent, environment) collapsed these into one row and lost
       // the fact that only one of them was put right.
-      AgentInstallationDao(db)
+      server.installationRows
         ..insert(
           agentInstallation(
             id: 'shim',
@@ -299,8 +294,8 @@ void main() {
     test('a WSL path is never judged by this host\'s filesystem', () async {
       // A WSL path is spelled for *its* disk. Stat-ing it here would report
       // every WSL agent missing and repair them all into nothing.
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
-      AgentInstallationDao(db).insert(
+      server.environmentRows.upsert(wslEnv());
+      server.installationRows.insert(
         agentInstallation(
           agentId: AgentIds.codex,
           environmentId: 'wsl:Ubuntu',
@@ -323,17 +318,17 @@ void main() {
     });
 
     test('a repaired row keeps the sessions that ran on it', () async {
-      FakeDataServer().mirrorInto(db)
+      server
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           id: 'codex-row',
           agentId: AgentIds.codex,
           path: _stored,
         ),
       );
-      mirroredServer(db).sessionRows.insert(session(agentInstallationId: 'codex-row'));
+      server.sessionRows.insert(session(agentInstallationId: 'codex-row'));
       container = workspaceWith(
         probe: FakePathProbe(
           files: const {_real},
@@ -348,11 +343,11 @@ void main() {
 
       // Still the same installation, so the session is still resumable.
       expect(
-        db.query('SELECT agent_installation_id FROM sessions;').single.values,
-        ['codex-row'],
+        server.sessionRows.getAll().single.agentInstallationId,
+        'codex-row',
       );
       expect(
-        AgentInstallationDao(db).getById('codex-row')!.executable.path,
+        server.installationRows.getById('codex-row')!.executable.path,
         _real,
       );
     });
@@ -360,7 +355,7 @@ void main() {
 
   group('a path the user set by hand', () {
     test('is not replaced by a sweep while it still works', () async {
-      final dao = AgentInstallationDao(db)
+      final dao = server.installationRows
         ..insert(
           agentInstallation(
             id: 'mine',
@@ -368,7 +363,7 @@ void main() {
             path: r'C:\mine\codex.exe',
           ),
         );
-      dao.updatePath('mine', r'C:\mine\codex.exe', byUser: true);
+      dao.upsert(dao.getById('mine')!.copyWith(executableByUser: true));
       container = workspaceWith(
         probe: FakePathProbe(
           files: const {r'C:\mine\codex.exe', r'C:\other\codex.exe'},
@@ -399,7 +394,7 @@ void main() {
 
     test('is repaired like any other once it stops working', () async {
       // A stale path helps nobody, whoever set it.
-      final dao = AgentInstallationDao(db)
+      final dao = server.installationRows
         ..insert(
           agentInstallation(
             id: 'mine',
@@ -407,7 +402,7 @@ void main() {
             path: r'C:\mine\codex.exe',
           ),
         );
-      dao.updatePath('mine', r'C:\mine\codex.exe', byUser: true);
+      dao.upsert(dao.getById('mine')!.copyWith(executableByUser: true));
       container = workspaceWith(
         probe: FakePathProbe(files: const {_real}),
         responder: (req) => req.executable == 'where'
@@ -417,7 +412,7 @@ void main() {
 
       final report = await controllerOf(container).repairBrokenPaths();
 
-      final row = AgentInstallationDao(db).getById('mine')!;
+      final row = server.installationRows.getById('mine')!;
       expect(row.executable.path, _real);
       // And it is detected again: discovery is what chose this path, so a
       // later sweep may move it. Ownership is recorded, never inferred.
@@ -428,7 +423,7 @@ void main() {
     test(
       'setExecutablePath records the choice and refuses a duplicate',
       () async {
-        AgentInstallationDao(db)
+        server.installationRows
           ..insert(
             agentInstallation(
               id: 'a',
@@ -450,20 +445,20 @@ void main() {
         final controller = controllerOf(container);
 
         expect(
-          controller.setExecutablePath('a', r'  C:\chosen\codex.exe  '),
+          await controller.setExecutablePath('a', r'  C:\chosen\codex.exe  '),
           isTrue,
         );
-        final row = AgentInstallationDao(db).getById('a')!;
+        final row = server.installationRows.getById('a')!;
         expect(row.executable.path, r'C:\chosen\codex.exe', reason: 'trimmed');
         expect(row.executableByUser, isTrue);
 
         expect(
-          controller.setExecutablePath('b', r'C:\chosen\codex.exe'),
+          await controller.setExecutablePath('b', r'C:\chosen\codex.exe'),
           isFalse,
         );
-        expect(controller.setExecutablePath('b', '   '), isFalse);
+        expect(await controller.setExecutablePath('b', '   '), isFalse);
         expect(
-          AgentInstallationDao(db).getById('b')!.executable.path,
+          server.installationRows.getById('b')!.executable.path,
           r'C:\b\codex.exe',
         );
       },

@@ -6,8 +6,6 @@ import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_decision_providers.dart';
 import 'package:karmashala_session/events.dart';
@@ -19,6 +17,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
+import 'package:agent_cli/process.dart';
 
 /// The records, counting the decision reads the panel costs.
 ///
@@ -51,8 +50,10 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     server = FakeDataServer()..sessionRows.insert(session());
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
   });
   tearDown(() => db.close());
 

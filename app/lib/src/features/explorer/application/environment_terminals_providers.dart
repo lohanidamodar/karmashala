@@ -115,16 +115,14 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
     );
   }
 
-  String? get _hostId => ref
-      .read(executionEnvironmentDaoProvider)
-      .getById(_environmentId)
-      ?.sshHostId;
+  String? get _hostId =>
+      ref.read(environmentsDataProvider).getById(_environmentId)?.sshHostId;
 
   /// Asks the machine again. Local and WSL have nothing to ask.
   Future<void> refresh() async {
     final hostId = _hostId;
     if (hostId == null) return;
-    final host = ref.read(sshHostDaoProvider).getById(hostId);
+    final host = ref.read(sshHostsDataProvider).getById(hostId);
     if (host == null) {
       state = EnvironmentTerminals(
         terminals: const [],
@@ -174,7 +172,7 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
   Future<void> end(String hostSessionId) async {
     final hostId = _hostId;
     if (hostId == null) return;
-    final host = ref.read(sshHostDaoProvider).getById(hostId);
+    final host = ref.read(sshHostsDataProvider).getById(hostId);
     if (host == null) return;
     await ref.read(hostSessionsServiceProvider).end(host, hostSessionId);
     if (!ref.mounted) return;

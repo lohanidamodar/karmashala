@@ -8,9 +8,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
@@ -52,12 +50,12 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db)
+    server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
+    server.installationRows.insert(agentInstallation(agentId: 'roverCli'));
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
@@ -125,7 +123,7 @@ void main() {
     });
 
     test('an agent installed elsewhere is not offered here', () async {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           id: 'a2',
           agentId: 'roverCli',
@@ -173,9 +171,7 @@ void main() {
       () async {
         // Installed, but nothing in the registry declares what it can be put
         // into. The phone gets one unselectable row rather than an empty menu.
-        AgentInstallationDao(
-          db,
-        ).insert(agentInstallation(id: 'a2', agentId: 'mysteryCli'));
+        server.installationRows.insert(agentInstallation(id: 'a2', agentId: 'mysteryCli'));
 
         final agents = (await workspace()).single.checkouts.single.agents;
         final mystery = agents.firstWhere((a) => a.installationId == 'a2');
@@ -222,7 +218,7 @@ void main() {
     test('an environment with nothing to call it is left unnamed', () async {
       // A WSL row whose distribution was never recorded and whose name is
       // blank: there is no honest word for it, and "WSL · " is not one.
-      ExecutionEnvironmentDao(db).upsert(
+      server.environmentRows.upsert(
         ExecutionEnvironment(
           id: 'wsl:',
           kind: EnvironmentKind.wsl,
@@ -347,7 +343,7 @@ void main() {
     });
 
     test('refuses an agent installed somewhere else', () async {
-      AgentInstallationDao(db).insert(
+      server.installationRows.insert(
         agentInstallation(
           id: 'a2',
           agentId: 'roverCli',

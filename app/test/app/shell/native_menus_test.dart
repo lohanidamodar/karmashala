@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_state.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_ssh/host.dart'
     show HostDeployment, HostDeploymentStatus;
@@ -18,6 +16,10 @@ import 'package:karmashala_terminal_runtime/host_link.dart'
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/workspace_mirror.dart';
+import 'package:agent_cli/process.dart';
+import '../../support/fake_data_server.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 /// What the app hands the macOS menu bar, caught before the platform channel.
 class _CapturedMenus extends PlatformMenuDelegate {
@@ -46,12 +48,18 @@ Iterable<PlatformMenuItem> _all(Iterable<PlatformMenuItem> items) sync* {
 
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
+  late Override data;
   late _CapturedMenus captured;
   late PlatformMenuDelegate original;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    server = FakeDataServer()..mirrorInto(db);
+    server.environmentRows.upsert(
+      localHostEnvironment(FixedClock(testTime).nowUtc()),
+    );
+    data = await server.override();
     captured = _CapturedMenus();
     original = WidgetsBinding.instance.platformMenuDelegate;
     WidgetsBinding.instance.platformMenuDelegate = captured;
@@ -62,7 +70,7 @@ void main() {
   });
 
   Future<ProviderContainer> pumpMac(WidgetTester tester) async {
-    final container = fakeTerminalContainer(database: db);
+    final container = fakeTerminalContainer(database: db, data: data);
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -121,7 +129,7 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets('elsewhere the window keeps its own menu bar', (tester) async {
-    final container = fakeTerminalContainer(database: db);
+    final container = fakeTerminalContainer(database: db, data: data);
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -167,7 +175,7 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(database: db, data: data),
         localHostSupervisionProvider.overrideWith((ref) => supervision.stream),
       ],
     );

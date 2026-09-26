@@ -40,9 +40,7 @@ class ProjectControlTools {
 
     final environmentId =
         _text(args['environmentId']) ?? localHostEnvironmentId;
-    if (_container
-            .read(executionEnvironmentDaoProvider)
-            .getById(environmentId) ==
+    if (_container.read(environmentsDataProvider).getById(environmentId) ==
         null) {
       throw ArgumentError(
         'No environment with id $environmentId. list_agents names the ones '

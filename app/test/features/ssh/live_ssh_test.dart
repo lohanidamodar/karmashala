@@ -3,7 +3,7 @@ library;
 
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_hosts_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/runner.dart';
 import 'package:karmashala_core/util.dart';
@@ -13,11 +13,11 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_host/protocol.dart';
-import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_ssh/files.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -78,8 +78,8 @@ void main() {
     createdAt: testTime,
   );
 
-  late AppDatabase db;
-  late KnownHostDao known;
+  late FakeDataServer server;
+  late KnownHostsData known;
   final opened = <SshConnection>[];
 
   SshConnection connect({
@@ -110,9 +110,9 @@ void main() {
     return connection;
   }
 
-  setUp(() {
-    db = AppDatabase.memory();
-    known = KnownHostDao(db);
+  setUp(() async {
+    server = FakeDataServer();
+    known = KnownHostsData(await server.connect());
   });
 
   tearDown(() async {
@@ -120,7 +120,6 @@ void main() {
       await connection.close();
     }
     opened.clear();
-    db.close();
   });
 
   group('host key verification', () {
@@ -161,7 +160,7 @@ void main() {
 
     test('a changed key is refused, and never offered to the user', () async {
       // Pin a fingerprint the server cannot possibly present.
-      known.trust(
+      server.knownHostRows.trust(
         KnownHostKey(
           host: host.host,
           port: host.port,

@@ -77,7 +77,7 @@ final sessionMediaSourceProvider = Provider.autoDispose
       final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session != null) {
         final installation = ref
-            .read(agentInstallationDaoProvider)
+            .read(agentInstallationsDataProvider)
             .getById(session.agentInstallationId);
         if (installation == null) return null;
         return SessionMediaSource(

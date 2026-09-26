@@ -1,8 +1,7 @@
 import 'dart:io';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +10,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
+import '../../support/fake_data_server.dart';
 
 void main() {
   late Directory tmp;
@@ -84,16 +84,20 @@ void main() {
   });
 
   group('environment-aware discovery', () {
-    late AppDatabase db;
+    /// The environments a fake server holds, [rows] among them.
+    Future<EnvironmentsData> environmentsWith(
+      List<ExecutionEnvironment> rows,
+    ) async {
+      final server = FakeDataServer();
+      rows.forEach(server.environmentRows.upsert);
+      return EnvironmentsData(await server.connect());
+    }
 
-    setUp(() => db = AppDatabase.memory());
-    tearDown(() => db.close());
-
-    EnvironmentAwareRepositoryDiscoveryService remoteService(
+    Future<EnvironmentAwareRepositoryDiscoveryService> remoteService(
       FakeCommandRunner runner,
-    ) {
+    ) async {
       final remote = sshEnvFixture();
-      final environments = ExecutionEnvironmentDao(db)..upsert(remote);
+      final environments = await environmentsWith([remote]);
       return EnvironmentAwareRepositoryDiscoveryService(
         localDiscovery: const LocalRepositoryDiscoveryService(),
         runnerFactory: FakeCommandRunnerFactory(
@@ -116,7 +120,7 @@ void main() {
         ),
       );
 
-      final found = await remoteService(runner).discover(
+      final found = await (await remoteService(runner)).discover(
         const EnvironmentPath(environmentId: 'ssh:h1', path: '/srv/work'),
         maxDepth: 2,
       );
@@ -143,7 +147,7 @@ void main() {
       );
 
       await expectLater(
-        remoteService(runner).discover(
+        (await remoteService(runner)).discover(
           const EnvironmentPath(environmentId: 'ssh:h1', path: '/missing'),
         ),
         throwsA(isA<RepositoryDiscoveryException>()),
@@ -153,7 +157,7 @@ void main() {
 
     test('WSL paths are scanned inside their distribution', () async {
       final environment = wslEnv();
-      final environments = ExecutionEnvironmentDao(db)..upsert(environment);
+      final environments = await environmentsWith([environment]);
       final runner = FakeCommandRunner(environmentId: environment.id);
       final service = EnvironmentAwareRepositoryDiscoveryService(
         localDiscovery: const LocalRepositoryDiscoveryService(),
