@@ -85,9 +85,10 @@ Future<RemoteSessionStarted> startRemoteSession(
           SessionLaunchRequest(
             repository: repository,
             installation: installation,
-            // Empty becomes "Session" in the launcher, which is the same name
-            // the desktop's own dialog falls back to.
+            // Typed on the phone, so the person's own; empty becomes
+            // "Session" in the launcher and the agent still names it.
             title: request.title ?? '',
+            titleTyped: true,
             purpose: SessionPurpose.newSession,
             firstMessage: request.message,
             permissionOverride: mode,

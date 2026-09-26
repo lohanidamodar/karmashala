@@ -4,11 +4,22 @@ import 'dart:collection';
 /// One row the server's word moved in a [KeyedReplica]: what it was, and
 /// what it is now — null for absent.
 class ReplicaChange<V> {
-  const ReplicaChange(this.key, this.before, this.after);
+  const ReplicaChange(
+    this.key,
+    this.before,
+    this.after, {
+    this.overridesLocal = false,
+  });
 
   final String key;
   final V? before;
   final V? after;
+
+  /// Whether this app had written [key] locally and not yet heard back: the
+  /// server's word differs from what it asked — a rule it applied, a value
+  /// it ignored — so what the writer announced is no longer what the copy
+  /// holds, even when this is the answer to that very write.
+  final bool overridesLocal;
 }
 
 /// This app's copy of one domain's rows at the server, keyed by id, kept by
@@ -23,6 +34,9 @@ class KeyedReplica<V> {
   final _rows = <String, V>{};
   late final _view = UnmodifiableMapView(_rows);
   final _revisions = <String, int>{};
+
+  /// Local writes per key the server has not yet said anything on.
+  final _unanswered = <String, int>{};
   final _changes = StreamController<void>.broadcast(sync: true);
   final _serverChanges = StreamController<ReplicaChange<V>>.broadcast(
     sync: true,
@@ -64,6 +78,7 @@ class KeyedReplica<V> {
     _revisions
       ..clear()
       ..addEntries(rows.keys.map((key) => MapEntry(key, revision)));
+    _unanswered.clear();
     final wasPrimed = _primed;
     _primed = true;
     if (!wasPrimed || !_sameRows(before)) {
@@ -89,19 +104,36 @@ class KeyedReplica<V> {
   /// first snapshot.
   void applyAt(String key, V? value, int revision) {
     if (!_primed) return;
+    final overridesLocal = _heardOn(key);
     final known = _revisions[key];
     if (known != null && known > revision) return;
     _revisions[key] = revision;
     final before = _rows[key];
     if (_set(key, value) && _serverChanges.hasListener) {
-      _serverChanges.add(ReplicaChange(key, before, value));
+      _serverChanges.add(
+        ReplicaChange(key, before, value, overridesLocal: overridesLocal),
+      );
     }
   }
 
   /// A write this app just made, before the server has answered it.
   void setLocal(String key, V? value) {
     if (!_primed) return;
+    _unanswered.update(key, (count) => count + 1, ifAbsent: () => 1);
     _set(key, value);
+  }
+
+  /// Whether a local write to [key] was waiting for the server's word, which
+  /// this is: one fewer is now.
+  bool _heardOn(String key) {
+    final count = _unanswered[key];
+    if (count == null) return false;
+    if (count <= 1) {
+      _unanswered.remove(key);
+    } else {
+      _unanswered[key] = count - 1;
+    }
+    return true;
   }
 
   /// Whether [key] changed.

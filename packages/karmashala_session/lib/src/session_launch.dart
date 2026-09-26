@@ -55,6 +55,7 @@ class SessionLaunchRequest {
     required this.installation,
     required this.title,
     required this.purpose,
+    this.titleTyped = false,
     this.surface = SessionSurface.pane,
     this.useWorktree = false,
     this.existingWorktree,
@@ -76,6 +77,12 @@ class SessionLaunchRequest {
   final Repository repository;
   final AgentInstallation installation;
   final String title;
+
+  /// Whether a person typed [title] — the New-session dialog, a phone's
+  /// start. Recorded on the row as theirs (`newSessionTitle`), so an agent's
+  /// own name for the conversation never replaces it; blank or a placeholder
+  /// still leaves the naming to the agent.
+  final bool titleTyped;
 
   /// New or existing — the *only* input to permission-mode resolution.
   final SessionPurpose purpose;
@@ -154,6 +161,7 @@ class SessionLaunchRequest {
     installation: installation ?? this.installation,
     title: title,
     purpose: purpose,
+    titleTyped: titleTyped,
     surface: surface,
     useWorktree: useWorktree,
     existingWorktree: existingWorktree,

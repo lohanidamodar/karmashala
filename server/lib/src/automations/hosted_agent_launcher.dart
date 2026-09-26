@@ -26,6 +26,7 @@ class HostedLaunch {
     required this.repository,
     required this.installation,
     required this.title,
+    this.titleTyped = false,
     this.permissionMode,
     this.prompt,
     this.worktree = false,
@@ -37,6 +38,11 @@ class HostedLaunch {
 
   /// Empty becomes "Session", as the desktop's own dialog names one.
   final String title;
+
+  /// Whether a person typed [title] (a phone's start), so the row records it
+  /// as theirs and no agent title replaces it — `newSessionTitle`'s rule,
+  /// the one the app's launcher follows. An automation's name is not.
+  final bool titleTyped;
 
   /// The mode chosen, canonically; null is the agent's declared default.
   final String? permissionMode;
@@ -155,12 +161,13 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       sessions.updateStatus(id, SessionStatus.running);
       onRowWritten?.call(id);
     } else {
-      final title = launch.title.trim();
+      final named = newSessionTitle(launch.title, typed: launch.titleTyped);
       session = Session(
         id: id,
         repositoryId: launch.repository.id,
         agentInstallationId: installation.id,
-        title: title.isEmpty ? 'Session' : title,
+        title: named.title,
+        titleByUser: named.byUser,
         useWorktree: worktree != null,
         worktree: worktree,
         workingDirectory: directory,

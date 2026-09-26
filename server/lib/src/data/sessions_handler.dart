@@ -60,7 +60,11 @@ class SessionsHandler {
   // Rows.
 
   Session create(SessionCreate request, List<DataChange> changes) {
-    final session = request.session;
+    var session = request.session;
+    // A placeholder is nobody's name: the agent may still give it one.
+    if (session.titleByUser && isPlaceholderSessionTitle(session.title)) {
+      session = session.copyWith(titleByUser: false);
+    }
     final problem = recordIdProblem(session.id);
     if (problem != null) throw DataRefused.invalid('sessions.create: $problem');
     if (_sessions.getById(session.id) != null) {
@@ -110,10 +114,13 @@ class SessionsHandler {
       final problem = sessionTitleProblem(title);
       if (problem != null) throw DataRefused.invalid(problem);
     }
-    if (patch.status != null && _runs(row.id)) patch = patch.withoutStatus();
+    // Ignored, and the row told back even when nothing else moved: the
+    // asking copy already shows the status it asked for, and is corrected.
+    final overridden = patch.status != null && _runs(row.id);
+    if (overridden) patch = patch.withoutStatus();
     final edited = patch.applyTo(row);
-    if (edited != row) {
-      _sessions.write(edited);
+    if (edited != row) _sessions.write(edited);
+    if (edited != row || overridden) {
       changes.add(SessionRowChanged(_session(row.id)));
     }
     return _session(row.id);

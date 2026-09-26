@@ -150,6 +150,29 @@ void main() {
       );
     });
 
+    test('a title a person typed is theirs; blank or a placeholder is '
+        'never, so the agent may still name it', () {
+      final typed = app
+          .handle(
+            SessionCreate(row(title: 'phone 1c').copyWith(titleByUser: true)),
+          )
+          .value;
+      expect(typed.titleByUser, isTrue);
+      expect(snapshot().sessions.single.titleByUser, isTrue);
+      for (final (id, title) in [('s2', 'New session'), ('s3', ' Session ')]) {
+        final placeholder = app
+            .handle(
+              SessionCreate(
+                row(id: id, title: title).copyWith(titleByUser: true),
+              ),
+            )
+            .value;
+        expect(placeholder.titleByUser, isFalse, reason: title);
+      }
+      final machine = app.handle(SessionCreate(row(id: 's4'))).value;
+      expect(machine.titleByUser, isFalse);
+    });
+
     test('an edit writes only the columns it names, and is told', () {
       app.handle(
         SessionCreate(row().copyWith(paneId: 'pane-1', permissionMode: 'plan')),
@@ -200,6 +223,27 @@ void main() {
       expect(edited.status, SessionStatus.running);
       expect(edited.view, SessionView.chat);
     });
+
+    test(
+      'a status ignored with nothing else in the edit still tells the row '
+      'back: the asking copy already shows what it asked, and rolls back',
+      () {
+        app.handle(SessionCreate(row(status: SessionStatus.running)));
+        running.add('s1');
+        final before = told.length;
+        final reply = app.handle(
+          SessionEdit('s1', SessionPatch.status(SessionStatus.cancelled)),
+        );
+        expect(reply.value.status, SessionStatus.running);
+        final back = reply.changes.whereType<SessionRowChanged>().single;
+        expect(back.session.status, SessionStatus.running);
+        expect(told, hasLength(before + 1));
+        expect(
+          (lastTold().single as SessionRowChanged).session.status,
+          SessionStatus.running,
+        );
+      },
+    );
 
     test('a blank title and an unknown session are refused', () {
       app.handle(SessionCreate(row()));

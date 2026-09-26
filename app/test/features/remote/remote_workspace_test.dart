@@ -282,6 +282,11 @@ void main() {
       final session = mirroredServer(db).sessionRows.getById(started.sessionId);
       expect(session, isNotNull);
       expect(session!.title, 'From the phone');
+      expect(
+        session.titleByUser,
+        isTrue,
+        reason: 'typed on the phone: no agent title may replace it',
+      );
       expect(session.repositoryId, 'r1');
       expect(session.agentInstallationId, 'a1');
       expect(
@@ -292,12 +297,25 @@ void main() {
       expect(started.permissionMode, askStored);
     });
 
+    test('with no title the agent still names it', () async {
+      await start(message: 'begin');
+
+      final started = RemoteSessionStarted.fromJson(sent.last.payload);
+      final session = mirroredServer(
+        db,
+      ).sessionRows.getById(started.sessionId)!;
+      expect(session.title, 'Session');
+      expect(session.titleByUser, isFalse);
+    });
+
     test('starts under the mode the phone was told to pick', () async {
       await start(permissionMode: bypassStored);
 
       final started = RemoteSessionStarted.fromJson(sent.last.payload);
       expect(
-        mirroredServer(db).sessionRows.getById(started.sessionId)!.permissionMode,
+        mirroredServer(
+          db,
+        ).sessionRows.getById(started.sessionId)!.permissionMode,
         bypassStored,
       );
     });

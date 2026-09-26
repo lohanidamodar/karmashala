@@ -11,3 +11,4 @@ export 'src/session_naming.dart';
 export 'src/session_patch.dart';
 export 'src/session_repository_link.dart';
 export 'src/session_status.dart';
+export 'src/session_title.dart';

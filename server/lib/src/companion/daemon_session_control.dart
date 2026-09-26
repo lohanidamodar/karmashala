@@ -116,6 +116,7 @@ class DaemonSessionControl implements HostedSessionControl {
           repository: repository,
           installation: installation,
           title: request.title ?? '',
+          titleTyped: true,
           permissionMode: mode.canonical,
           prompt: request.message,
           worktree: request.worktree,

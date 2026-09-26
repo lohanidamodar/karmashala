@@ -209,6 +209,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               repository: repo,
               installation: installation,
               title: _titleController.text,
+              titleTyped: true,
               purpose: SessionPurpose.newSession,
               surface: _external
                   ? SessionSurface.external

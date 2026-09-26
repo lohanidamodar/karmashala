@@ -24,9 +24,12 @@ final sessionsDataProvider = Provider<SessionsData>((ref) {
   // Held while a batch is taken in, then published as one: a project deleted
   // elsewhere, with its hundred sessions, wakes each watcher once.
   final held = <SessionChange>[];
-  void publish(SessionChange? change) {
-    // This app's own write: its writer announced it, as it always did.
-    if (change == null || client.applyingOwnAnswer) return;
+  void publish(SessionChange? change, {bool overridesLocal = false}) {
+    if (change == null) return;
+    // This app's own write: its writer announced it, as it always did —
+    // unless the server's answer is not what it wrote (a status it records
+    // itself, ignored), and the copy rolled back under the writer's signal.
+    if (client.applyingOwnAnswer && !overridesLocal) return;
     client.applyingBatch ? held.add(change) : notify(change);
   }
 
@@ -38,7 +41,10 @@ final sessionsDataProvider = Provider<SessionsData>((ref) {
       notify(merged);
     }),
     client.sessions.serverChanges.listen(
-      (change) => publish(sessionChangeOf(change)),
+      (change) => publish(
+        sessionChangeOf(change),
+        overridesLocal: change.overridesLocal,
+      ),
     ),
     client.imported.serverChanges.listen(
       (change) => publish(importedChangeOf(change)),

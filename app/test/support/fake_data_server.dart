@@ -96,6 +96,11 @@ class FakeDataServer {
   late final relayRows = FakeRelayRows._(sessionRecords);
   late final followUpRows = FakeFollowUpRows._(sessionRecords);
 
+  /// The sessions this server runs, so records the status of itself: a
+  /// client's status for one is ignored and the row told back, as
+  /// `SessionsHandler` does.
+  final runsSessions = <String>{};
+
   /// Told every workspace row this server writes, however it was written —
   /// what `workspace_mirror.dart` copies into a test's database for the
   /// domains that still read those tables there.

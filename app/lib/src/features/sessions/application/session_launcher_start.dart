@@ -238,6 +238,7 @@ extension SessionStartVerbs on SessionLauncher {
 
     // Reusing keeps the row's own identity, so "continue this session" cannot
     // quietly rename or re-date it.
+    final named = newSessionTitle(request.title, typed: request.titleTyped);
     final session =
         reused?.copyWith(
           status: SessionStatus.running,
@@ -251,9 +252,8 @@ extension SessionStartVerbs on SessionLauncher {
           id: id,
           repositoryId: request.repository.id,
           agentInstallationId: request.installation.id,
-          title: request.title.trim().isEmpty
-              ? 'Session'
-              : request.title.trim(),
+          title: named.title,
+          titleByUser: named.byUser,
           // True for a joined worktree as well as a created one: the row says
           // where this session runs, and it does run in a worktree.
           useWorktree: request.useWorktree || worktree != null,

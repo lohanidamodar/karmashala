@@ -517,6 +517,11 @@ void main() {
 
       final row = SessionDao(database).getById(started.sessionId)!;
       expect(row.title, 'Fix the cart');
+      expect(
+        row.titleByUser,
+        isTrue,
+        reason: 'typed on the phone: no agent title may replace it',
+      );
       expect(row.status, SessionStatus.running);
       expect(row.permissionMode, agent.defaultMode);
       expect(started.permissionMode, agent.defaultMode);
@@ -537,6 +542,23 @@ void main() {
             .status,
         'running',
       );
+    });
+
+    test('a start with no title leaves the naming to the agent', () async {
+      final client = await dial();
+      final agent = await claudeHere(client);
+      serveSessions();
+
+      final started = await client.startSession(
+        requestId: 'start-untitled',
+        repositoryId: 'r1',
+        installationId: 'a1',
+        permissionMode: agent.defaultMode,
+      );
+
+      final row = SessionDao(database).getById(started.sessionId)!;
+      expect(row.title, 'Session');
+      expect(row.titleByUser, isFalse);
     });
 
     test('a start the agent or the checkout cannot take is refused', () async {
@@ -830,6 +852,33 @@ void main() {
 
       final sessions = await listing;
       expect(sessions.single.attention, kAttentionNeedsApproval);
+    });
+
+    test('a phone\'s start reaches the app with the title typed', () async {
+      final client = await dial();
+      final starting = client.startSession(
+        requestId: 'start-app',
+        repositoryId: 'r1',
+        installationId: 'a1',
+        permissionMode: 'default',
+        title: 'phone 1c',
+        message: 'Reply with just PHONE-1C-O',
+      );
+      while (calls.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final call = calls.single;
+      expect(call.method, CompanionMethod.startSession.wire);
+      expect(call.arguments['title'], 'phone 1c');
+      expect(call.arguments['message'], 'Reply with just PHONE-1C-O');
+      companion.answer(
+        app,
+        CompanionResultMessage.success(call.callId, {
+          'sessionId': 's9',
+          'title': 'phone 1c',
+        }),
+      );
+      expect((await starting).title, 'phone 1c');
     });
 
     test('an app refusal reaches the phone in the app\'s words', () async {

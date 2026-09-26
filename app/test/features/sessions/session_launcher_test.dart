@@ -140,6 +140,42 @@ void main() {
     });
   });
 
+  test('a title a person typed is recorded as theirs; a placeholder, a blank '
+      'or a program\'s title leaves the naming to the agent', () async {
+    final h = await harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    Future<Session> launch(String title, {required bool typed}) async {
+      final launched = await launcher.launch(
+        SessionLaunchRequest(
+          repository: repository(),
+          installation: agentInstallation(agentId: 'roverCli'),
+          title: title,
+          titleTyped: typed,
+          purpose: SessionPurpose.newSession,
+        ),
+      );
+      // The server's row, not only the launcher's copy of it.
+      return h.server.sessionRows.getById(launched.session.id)!;
+    }
+
+    final typed = await launch(' phone 1c ', typed: true);
+    expect(typed.title, 'phone 1c');
+    expect(typed.titleByUser, isTrue);
+
+    final placeholder = await launch('New session', typed: true);
+    expect(placeholder.titleByUser, isFalse);
+
+    final blank = await launch('  ', typed: true);
+    expect(blank.title, 'Session');
+    expect(blank.titleByUser, isFalse);
+
+    final program = await launch('Rover run', typed: false);
+    expect(program.titleByUser, isFalse);
+  });
+
   test('permission mode comes from the purpose, in one place', () async {
     const settings = Settings();
     final h = await harness(

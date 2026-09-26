@@ -155,7 +155,11 @@ class FakeSessionLinks {
     changes.add(SessionLinksChanged(sessionId, linksFor(sessionId)));
   }
 
-  void _unlink(String sessionId, String repositoryId, List<DataChange> changes) {
+  void _unlink(
+    String sessionId,
+    String repositoryId,
+    List<DataChange> changes,
+  ) {
     final links = _links[sessionId];
     if (links == null) return;
     final before = links.length;
@@ -476,8 +480,7 @@ extension _FakeSessionsHandling on FakeDataServer {
     sessions: sessionRows.getAll(),
     links: {
       for (final id in sessionLinks._links.keys)
-        if (sessionLinks.linksFor(id).isNotEmpty)
-          id: sessionLinks.linksFor(id),
+        if (sessionLinks.linksFor(id).isNotEmpty) id: sessionLinks.linksFor(id),
     },
     imported: [...importedRows._rows.values],
     decisions: [...sessionRecords.decisions.values],
@@ -490,7 +493,10 @@ extension _FakeSessionsHandling on FakeDataServer {
       (throw DataRefused.notFound('no session with id $id'));
 
   Session _createSession(SessionCreate r, List<DataChange> changes) {
-    final session = r.session;
+    var session = r.session;
+    if (session.titleByUser && isPlaceholderSessionTitle(session.title)) {
+      session = session.copyWith(titleByUser: false);
+    }
     if (sessionRows.getById(session.id) != null) {
       throw DataRefused.invalid('a session with id ${session.id} exists');
     }
@@ -520,8 +526,15 @@ extension _FakeSessionsHandling on FakeDataServer {
       final problem = sessionTitleProblem(title);
       if (problem != null) throw DataRefused.invalid(problem);
     }
-    final edited = r.patch.applyTo(row);
-    if (edited != row) sessionRows._put(edited, changes);
+    final overridden = r.patch.status != null && runsSessions.contains(row.id);
+    final edited = (overridden ? r.patch.withoutStatus() : r.patch).applyTo(
+      row,
+    );
+    if (edited != row) {
+      sessionRows._put(edited, changes);
+    } else if (overridden) {
+      changes.add(SessionRowChanged(row));
+    }
     return edited;
   }
 
@@ -630,8 +643,8 @@ extension _FakeSessionsHandling on FakeDataServer {
           ),
           c,
         ),
-        FollowUpResolve(:final id, :final resolution) => sessionRecords
-            ._resolve(id, resolution, _now(), c),
+        FollowUpResolve(:final id, :final resolution) =>
+          sessionRecords._resolve(id, resolution, _now(), c),
         ImportedAdd(:final session) => importedRows._add(session, c),
         ImportedRename(:final id, :final title) => () {
           final row =

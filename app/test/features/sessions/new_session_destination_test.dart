@@ -269,6 +269,35 @@ void main() {
       expect(container.read(selectedSessionIdProvider), started.single.id);
     });
 
+    testWidgets('a title typed here is the person\'s; the one it opens with '
+        'leaves the naming to the agent', (tester) async {
+      final container = containerFor(selected: 'r1');
+      container.read(selectedProjectIdProvider.notifier).select('p1');
+      await open(tester, container);
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      final untouched = mirroredServer(db).sessionRows.getByRepository('r1');
+      expect(untouched.single.title, 'New session');
+      expect(untouched.single.titleByUser, isFalse);
+
+      await open(tester, container);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'desktop 1c',
+      );
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      final typed = mirroredServer(db).sessionRows
+          .getByRepository('r1')
+          .singleWhere((s) => s.title != 'New session');
+      expect(typed.title, 'desktop 1c');
+      expect(
+        typed.titleByUser,
+        isTrue,
+        reason: 'no agent title may replace a name the person typed',
+      );
+    });
+
     testWidgets('and a worktree of the chosen checkout is a destination', (
       tester,
     ) async {
@@ -286,7 +315,10 @@ void main() {
       await tester.tap(startButton());
       await tester.pumpAndSettle();
 
-      expect(mirroredServer(db).sessionRows.getByRepository('wt1'), hasLength(1));
+      expect(
+        mirroredServer(db).sessionRows.getByRepository('wt1'),
+        hasLength(1),
+      );
     });
   });
 
@@ -318,7 +350,10 @@ void main() {
       (paneId) => paneId != shellPane,
     );
     expect(terminals.instanceFor(agentPane)?.agentLaunch, isNotNull);
-    expect(mirroredServer(db).sessionRows.getByRepository('r1').single.paneId, agentPane);
+    expect(
+      mirroredServer(db).sessionRows.getByRepository('r1').single.paneId,
+      agentPane,
+    );
   });
 
   testWidgets('an external session opens in the first terminal found', (

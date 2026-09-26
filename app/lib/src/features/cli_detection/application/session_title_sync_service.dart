@@ -3,10 +3,6 @@ import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
-/// The titles the app writes itself, and therefore the ones a CLI may replace.
-/// All of them mean "nobody has named this yet".
-const Set<String> kAppGeneratedSessionTitles = {'New session', 'Session'};
-
 /// Copies a CLI's own name into the session row running it, but only while the
 /// row carries a name the app generated. A user's own rename stops it for good.
 class SessionTitleSyncService {
@@ -89,8 +85,7 @@ class SessionTitleSyncService {
     // or a restart makes every title look user-set.
     if (row.titleByUser) return false;
     final title = row.title.trim();
-    if (title.isEmpty) return true;
-    if (kAppGeneratedSessionTitles.contains(title)) return true;
+    if (isPlaceholderSessionTitle(title)) return true;
     for (final descriptor in agents.descriptors) {
       if (title == descriptor.displayName) return true;
     }
