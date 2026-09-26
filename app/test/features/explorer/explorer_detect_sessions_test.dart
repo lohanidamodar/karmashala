@@ -7,8 +7,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/detected_projects_view.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 

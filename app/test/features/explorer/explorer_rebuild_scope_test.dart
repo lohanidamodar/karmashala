@@ -8,8 +8,6 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/panes.dart';

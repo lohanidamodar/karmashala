@@ -11,7 +11,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/presentation/usage_chip.dart' show formatResetClock;
-import '../../environments/application/environment_providers.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import '../../sessions/application/decision_recorder.dart';
@@ -125,15 +124,12 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
     if (!access.readable || installation == null) {
       return 'Usage could not be re-read here, so this went by the time alone.';
     }
-    final service = _ref.read(agentUsageServiceProvider);
+    final service = _ref.read(usageReadingsProvider);
     AgentUsage reading;
     try {
-      // Through the throttle: inside the ask floor this is the remembered
-      // reading, and no request is made faster than the refresh policy allows.
-      reading = await service.fetch(
-        installation,
-        _ref.read(environmentsDataProvider).getAll(),
-      );
+      // Asked of the server, through its throttle: inside the ask floor this
+      // is the remembered reading, and no request is made faster than that.
+      reading = await service.fetch(installation);
     } on UsageException catch (error) {
       return 'Usage could not be re-read (${error.message}), so this went by '
           'the reset time the provider gave.';

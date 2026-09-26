@@ -852,6 +852,18 @@ void main() {
       });
     });
 
+    test(
+      'usage is the server\'s own: nothing is forwarded to the app',
+      () async {
+        final client = await dial();
+        final snapshot = await client.usage();
+
+        expect(snapshot.accounts.single.windows.single.percent, 42);
+        expect(usage.asked, ['a1']);
+        expect(calls, isEmpty, reason: 'usage is read here, app or no app');
+      },
+    );
+
     test('the session list is the app\'s', () async {
       insertRow('s1');
       final client = await dial();

@@ -35,6 +35,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 
+import 'agent_work_values.dart';
 import 'automation_values.dart';
 import 'environment_values.dart';
 import 'refusal.dart';
@@ -55,6 +56,7 @@ part 'requests/worktrees_requests.dart';
 part 'requests/snippets_requests.dart';
 part 'requests/pairings_requests.dart';
 part 'requests/conversations_requests.dart';
+part 'requests/agent_work_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -211,33 +213,12 @@ sealed class DataRequest<R> {
         args.integer('port'),
       ),
       AgentsList.name => const AgentsList(),
-      InstallationsReconcile.name => InstallationsReconcile._from(args),
-      InstallationVersion.name => InstallationVersion(
-        id: args.string('id'),
-        version: args.string('version'),
-        readAt: args.date('readAt'),
-      ),
       InstallationSetPath.name => InstallationSetPath(
         id: args.string('id'),
         path: args.string('path'),
       ),
-      ClaudeAccountSave.name => ClaudeAccountSave(
-        args.value('account', claudeAccountFromJson),
-      ),
-      ClaudeAccountCredentials.name => ClaudeAccountCredentials(
-        args.string('id'),
-      ),
       ClaudeAccountDelete.name => ClaudeAccountDelete(args.string('id')),
-      CodexAccountSave.name => CodexAccountSave(
-        args.value('account', codexAccountFromJson),
-      ),
-      CodexAccountCredentials.name => CodexAccountCredentials(
-        args.string('id'),
-      ),
       CodexAccountDelete.name => CodexAccountDelete(args.string('id')),
-      UsageRecord.name => UsageRecord(
-        args.objects('samples', usageSampleFromJson),
-      ),
       UsageHistory.name => UsageHistory(
         args.string('accountKey'),
         args.date('since'),
@@ -259,6 +240,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _snippetsRequestFromJson(kind, args) ??
     _pairingsRequestFromJson(kind, args) ??
     _conversationsRequestFromJson(kind, args) ??
+    _agentWorkRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.

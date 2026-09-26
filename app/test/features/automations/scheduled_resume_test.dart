@@ -267,7 +267,7 @@ void main() {
 
   group('still limited', () {
     test(
-      'the row moves to the new reset, and no request beats the floor',
+      'the row moves to the new reset, after one ask of the server',
       () async {
         final resume = arm();
         h.usage.answer = h.reading(resetsIn: const Duration(hours: 2));
@@ -357,7 +357,7 @@ void main() {
         resetsIn: const Duration(hours: 5),
       );
       // Any surface's fetch: the observer only listens.
-      await h.usage.fetch(h.server.installationRows.getById('a1')!, const []);
+      h.usage.serverRead(h.server.installationRows.getById('a1')!);
       await h.settle();
       expect(h.dao.getById(resume.id)!.reason, contains('reset early'));
       await h.fire(resume.id);
@@ -367,14 +367,14 @@ void main() {
     test('a switched account is looked at again at once', () async {
       h.observe();
       h.usage.answer = h.reading();
-      await h.usage.fetch(h.server.installationRows.getById('a1')!, const []);
+      h.usage.serverRead(h.server.installationRows.getById('a1')!);
       final resume = arm();
       expect(resume.accountEmail, 'owner@example.com');
       await h.settle();
 
       h.clock.advance(const Duration(minutes: 10));
       h.usage.answer = h.reading(percent: 4, email: 'other@example.com');
-      await h.usage.fetch(h.server.installationRows.getById('a1')!, const []);
+      h.usage.serverRead(h.server.installationRows.getById('a1')!);
       await h.settle();
       await h.fire(resume.id);
       expect(h.launcher.requests, hasLength(1));

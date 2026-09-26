@@ -1,10 +1,9 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/detected_project_merger.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
-import '../../support/fixtures.dart';
+import '../support/fixtures.dart';
 
 void main() {
   final envById = {'windows': windowsEnv(), 'wsl:Ubuntu': wslEnv()};

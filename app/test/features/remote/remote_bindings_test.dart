@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/sessions/application/session_prompt_answ
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';

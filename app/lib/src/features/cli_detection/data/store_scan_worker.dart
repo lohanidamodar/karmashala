@@ -1,8 +1,8 @@
+import '../../../core/database/sqlite_row_reader.dart';
 import 'dart:async';
 import 'dart:isolate';
 
 import 'package:karmashala_core/logging.dart';
-import '../application/cli_detection_service.dart';
 import 'package:agent_cli/read.dart';
 
 /// What to scan, in a form that crosses to a worker isolate.
@@ -52,7 +52,7 @@ abstract interface class StoreScanRunner {
 /// what runs *inside* the worker, and the fallback when a host refuses one.
 class InlineStoreScanRunner implements StoreScanRunner {
   InlineStoreScanRunner({CliDetectionService? detection})
-    : _detection = detection ?? CliDetectionService();
+    : _detection = detection ?? CliDetectionService(readRows: readSqliteRows);
 
   final CliDetectionService _detection;
 
@@ -243,7 +243,7 @@ void _storeScanWorkerMain(SendPort replies) {
   replies.send(jobs.sendPort);
   // One detection service for the worker's life, so the readers' caches — the
   // whole reason a second scan costs what changed — outlive a single request.
-  final detection = CliDetectionService();
+  final detection = CliDetectionService(readRows: readSqliteRows);
   jobs.listen((Object? message) {
     if (message is! _ScanRequest) return;
     unawaited(_serve(message, detection, replies));

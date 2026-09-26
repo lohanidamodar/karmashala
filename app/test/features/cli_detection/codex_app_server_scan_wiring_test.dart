@@ -1,9 +1,9 @@
+import 'package:karmashala/src/core/database/sqlite_row_reader.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:path/path.dart' as p;
@@ -128,7 +128,10 @@ void main() {
         expectedCodexHome: expectedCodexHome,
       ),
     );
-    final detection = CliDetectionService(readers: {AgentIds.codex: reader});
+    final detection = CliDetectionService(
+      readRows: readSqliteRows,
+      readers: {AgentIds.codex: reader},
+    );
     addTearDown(reader.close);
 
     final chunks = await InlineStoreScanRunner(detection: detection)
@@ -171,7 +174,10 @@ void main() {
         );
       },
     );
-    final detection = CliDetectionService(readers: {AgentIds.codex: reader});
+    final detection = CliDetectionService(
+      readRows: readSqliteRows,
+      readers: {AgentIds.codex: reader},
+    );
     addTearDown(reader.close);
 
     final sessions = await detection.readStores([

@@ -15,10 +15,11 @@ part 'status_messages.dart';
 part 'server_messages.dart';
 part 'data_messages.dart';
 part 'pane_messages.dart';
+part 'run_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 17;
+const int kProtocolVersion = 18;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -913,4 +914,7 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.dataChanges => DataChangesMessage.decode(frame),
   MessageType.paneFacts => PaneFactsMessage.decode(frame),
   MessageType.paneTailsWanted => PaneTailsWantedMessage.decode(frame),
+  MessageType.runOffer => RunOfferMessage.decode(frame),
+  MessageType.runCall => RunCallMessage.decode(frame),
+  MessageType.runResult => RunResultMessage.decode(frame),
 };

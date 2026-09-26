@@ -1,4 +1,5 @@
-import 'package:agent_cli/discovery.dart' show AgentInstallation;
+import 'package:agent_cli/discovery.dart'
+    show AgentDiscoveryReport, AgentInstallation, EnvironmentScanReport;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -139,26 +140,53 @@ void main() {
     expect(find.textContaining('No agents found here'), findsNothing);
   });
 
-  testWidgets('a local scan records what it finds', (tester) async {
-    runners = FakeCommandRunnerFactory(
-      fallback: FakeCommandRunner(
-        responder: (request) => switch (request.executable) {
-          'where' => const CommandResult(
-            exitCode: 0,
-            stdout: r'C:\bin\claude.exe',
-            stderr: '',
-          ),
-          _ => const CommandResult(exitCode: 0, stdout: '9.9.9', stderr: ''),
-        },
-      ),
-    );
+  testWidgets('a local scan asks the server and shows what it recorded', (
+    tester,
+  ) async {
+    // The server probes and records; the card asks for this environment
+    // alone and draws the row the server's change brings.
+    final asked = <String?>[];
+    server.agentWork.onDetect = (environmentId) {
+      asked.add(environmentId);
+      final row = agentInstallation(
+        path: r'C:\bin\claude.exe',
+        version: '9.9.9',
+      );
+      installations.insert(row);
+      return AgentDiscoveryReport([
+        EnvironmentScanReport(
+          environmentId: 'windows',
+          environmentName: 'Windows',
+          reachable: true,
+          found: [row],
+          added: [row],
+        ),
+      ]);
+    };
     await pump(tester);
 
     await tester.tap(find.text('Find agents'));
     await tester.pumpAndSettle();
 
+    expect(asked, ['windows']);
     expect(installations.getByEnvironment('windows'), isNotEmpty);
     expect(find.textContaining(r'v9.9.9 · C:\bin\claude.exe'), findsWidgets);
+  });
+
+  testWidgets('a scan the server could not complete says why', (tester) async {
+    server.agentWork.onDetect = (environmentId) => AgentDiscoveryReport([
+      EnvironmentScanReport.unreachable(
+        environmentId: environmentId!,
+        environmentName: 'Windows',
+        error: 'The machine did not answer.',
+      ),
+    ]);
+    await pump(tester);
+
+    await tester.tap(find.text('Find agents'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('The machine did not answer.'), findsWidgets);
   });
 
   testWidgets('the local host card shows no database key', (tester) async {

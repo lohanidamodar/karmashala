@@ -6,7 +6,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';

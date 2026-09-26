@@ -8,7 +8,9 @@ import 'package:karmashala_host/lifecycle_client.dart'
         CompanionNoticeMessage,
         PaneFacts,
         PaneTailsWantedMessage,
-        PairedMessage;
+        PairedMessage,
+        RunCallMessage,
+        RunResultMessage;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
@@ -44,7 +46,13 @@ class HostLifecycleFeed {
     ServerCall? serverCall,
     void Function(List<PaneFacts> panes)? reportPanes,
     Stream<PaneTailsWantedMessage>? paneTailsWanted,
-  }) : hooks = hooks ?? const Stream.empty(),
+    Stream<RunCallMessage>? runCalls,
+    void Function()? offerRuns,
+    void Function(RunResultMessage result)? answerRunCall,
+  }) : runCalls = runCalls ?? const Stream.empty(),
+       offerRuns = offerRuns ?? _noRunOffer,
+       answerRunCall = answerRunCall ?? _noRunAnswer,
+       hooks = hooks ?? const Stream.empty(),
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
        forwardHook = forwardHook ?? _noForward,
@@ -90,6 +98,19 @@ class HostLifecycleFeed {
   /// [SessionPromptRefusal] with the host's reason.
   final Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)
   answerPrompt;
+
+  static void _noRunOffer() {}
+  static void _noRunAnswer(RunResultMessage result) {}
+
+  /// Commands the server runs through this app (an SSH box's), once it has
+  /// offered with [offerRuns].
+  final Stream<RunCallMessage> runCalls;
+
+  /// "Run your SSH commands through me."
+  final void Function() offerRuns;
+
+  /// How one forwarded command ended.
+  final void Function(RunResultMessage result) answerRunCall;
 
   static void _noAutomationNotice(AutomationNoticeKind kind) {}
   static void _noAutomationAnswer(int callId, {String? error}) {}

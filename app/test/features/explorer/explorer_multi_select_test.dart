@@ -9,7 +9,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';

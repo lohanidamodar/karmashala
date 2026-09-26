@@ -14,7 +14,6 @@ import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/presentation/usage_chip.dart' show formatResetClock;
 import '../../agents/presentation/usage_window_meter.dart'
     show usageWindowFacts;
-import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../settings/application/settings_controller.dart';
@@ -473,8 +472,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
 
   Future<void> _scheduleSeveral(List<Session> sessions, String choice) async {
     final controller = ref.read(scheduledResumeControllerProvider);
-    final usage = ref.read(agentUsageServiceProvider);
-    final environments = ref.read(environmentsDataProvider).getAll();
+    final usage = ref.read(usageReadingsProvider);
     final skipped = <String>[];
     for (final session in sessions) {
       if (controller.refusalFor(session.id) != null) continue;
@@ -500,7 +498,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
         BlockingWindow? blocking;
         try {
           // Throttled: several sessions on one account share one reading.
-          final reading = await usage.fetch(installation, environments);
+          final reading = await usage.fetch(installation);
           blocking = blockingWindow(reading.windows, now: _now);
         } on UsageException catch (error) {
           skipped.add('${session.title} — ${error.message}');

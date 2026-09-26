@@ -1,3 +1,4 @@
+import 'package:karmashala/src/core/database/sqlite_row_reader.dart';
 import 'dart:io';
 
 import 'package:agent_cli/ask.dart';
@@ -9,7 +10,6 @@ import 'package:agent_cli/usage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
@@ -190,7 +190,10 @@ void main() {
         environmentId: 'windows',
         homesByAgentId: {'piAgent': home},
       );
-      final detection = CliDetectionService(registry: _registry);
+      final detection = CliDetectionService(
+        readRows: readSqliteRows,
+        registry: _registry,
+      );
 
       expect(detection.jobsFor([store]), isEmpty);
       expect(

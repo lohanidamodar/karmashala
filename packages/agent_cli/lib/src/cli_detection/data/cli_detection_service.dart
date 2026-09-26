@@ -1,8 +1,14 @@
-import '../../../core/database/sqlite_row_reader.dart';
-import 'package:agent_cli/process.dart';
-import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/read.dart';
-import 'detected_project_merger.dart';
+import '../../agents/adapter/store_server_launch.dart';
+import '../../agents/domain/agent_registry.dart';
+import '../../process/path_translator.dart';
+import '../../environments/execution_environment.dart';
+import '../../util/sqlite_rows.dart';
+import '../domain/detected_project.dart';
+import '../domain/detected_project_merger.dart';
+import '../domain/detected_session.dart';
+import 'cli_store.dart';
+import 'store_scan_slots.dart';
+import 'store_session_reader.dart';
 
 /// Reads CLI stores and merges their sessions into projects.
 ///
@@ -11,6 +17,7 @@ import 'detected_project_merger.dart';
 /// agent is read without a line here.
 class CliDetectionService {
   CliDetectionService({
+    required this.readRows,
     this.translator = const PathTranslator(),
     this.registry = AgentRegistry.builtIn,
     Map<String, StoreSessionReader>? readers,
@@ -18,6 +25,10 @@ class CliDetectionService {
 
   final PathTranslator translator;
   final AgentRegistry registry;
+
+  /// The host's SQLite binding, handed to each agent's reader: it turns a
+  /// database-backed store from "not recorded" into step counts and titles.
+  final SqliteRowReader readRows;
 
   /// One reader per agent for this service's life, so the caches behind them —
   /// the whole reason a second scan costs what changed rather than the whole
@@ -31,9 +42,7 @@ class CliDetectionService {
     if (cached != null) return cached;
     final store = registry.adapterFor(agentId)?.store;
     if (store == null) return null;
-    // The app's SQLite binding, handed to the package's reader: it turns a
-    // database-backed store from "not recorded" into step counts and titles.
-    return _readers[agentId] = store.sessionReader(readRows: readSqliteRows);
+    return _readers[agentId] = store.sessionReader(readRows: readRows);
   }
 
   /// The store reads [stores] needs, agent-major and in registry order: Claude's

@@ -25,6 +25,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../features/agents/usage_fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/test_machine.dart';
@@ -87,6 +88,9 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
+    // The server's reading of that account, which the session bar's chip
+    // draws.
+    seedUsage(server, agentInstallation(), usage: usageSnapshot());
     container = ProviderContainer(
       overrides: [
         data,

@@ -336,33 +336,11 @@ class AppLifecycle {
           .read(MetadataKeys.agentsDiscoveredAt) !=
       null;
 
-  /// Looks in the background for agents this workspace has never searched for.
-  /// Skipped on a never-discovered workspace: its first-run scan is doing this.
-  void startAgentDiscovery() {
-    if (!_agentsDiscovered) return;
-    unawaited(
-      _container
-          .read(agentInstallationsControllerProvider.notifier)
-          .discoverUnprobed()
-          .then(
-            (found) {
-              if (found.isEmpty) return;
-              _logger.info(
-                'Agent discovery found ${found.length} agent(s) nobody had '
-                'looked for yet.',
-              );
-            },
-            onError: (Object error, StackTrace stack) => _logger.warning(
-              'Discovery of never-probed agents failed.',
-              error,
-              stack,
-            ),
-          ),
-    );
-  }
-
-  /// Verifies the stored agent executables and repairs the rows whose path has
-  /// rotted. Every launch: a path is state, whether it resolves is a measurement.
+  /// Asks the server to verify the stored agent executables and repair the
+  /// rows whose path has rotted, and publishes what it found. Every launch: a
+  /// path is state, whether it resolves is a measurement. (The server also
+  /// checks at its own start, and looks for agents nobody has searched for and
+  /// re-reads aged versions there.)
   Future<void> repairAgentPaths({Future<void> Function()? afterFirstFrame}) =>
       _pathRepair ??= _repairAgentPaths(afterFirstFrame);
 
@@ -395,33 +373,6 @@ class AppLifecycle {
       // A check that could not run leaves the rows exactly as they were, which
       // is the same state the app was in before this existed.
       _logger.warning('Checking the stored agent paths failed.', error, stack);
-    }
-  }
-
-  /// Re-reads the recorded agent versions whose reading has aged out, after the
-  /// path check. The launch is the occasion; the row's recorded age is the gate.
-  Future<void> refreshAgentVersions({
-    Future<void> Function()? afterFirstFrame,
-  }) => _versionRefresh ??= _refreshAgentVersions(afterFirstFrame);
-
-  Future<void>? _versionRefresh;
-
-  Future<void> _refreshAgentVersions(Future<void> Function()? gate) async {
-    await repairAgentPaths(afterFirstFrame: gate);
-    // Same rule as [startAgentDiscovery] and the path check: a workspace that
-    // has never discovered anything has its own first-run scan writing these
-    // very rows, and racing it would probe everything twice.
-    if (!_agentsDiscovered) return;
-    try {
-      final changed = await _container
-          .read(agentInstallationsControllerProvider.notifier)
-          .refreshStaleVersions();
-      if (changed.isEmpty) return;
-      _logger.info('Agent versions: ${changed.join(', ')}.');
-    } on Object catch (error, stack) {
-      // A reading that could not be taken leaves every row exactly as it was,
-      // wearing the age it already had.
-      _logger.warning('Re-reading the agent versions failed.', error, stack);
     }
   }
 

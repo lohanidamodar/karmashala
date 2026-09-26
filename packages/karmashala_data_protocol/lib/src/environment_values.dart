@@ -3,6 +3,8 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 
+import 'agent_work_values.dart';
+
 /// Where agents run, as one snapshot: the execution environments, the saved
 /// SSH hosts (each with its key's location — the asking client's alone) and
 /// the host keys trusted for them.
@@ -39,22 +41,30 @@ final class AgentsSnapshot {
     this.installations = const [],
     this.claudeAccounts = const [],
     this.codexAccounts = const [],
+    this.usage = const [],
   });
 
   final List<AgentInstallation> installations;
   final List<ClaudeAccount> claudeAccounts;
   final List<CodexAccount> codexAccounts;
 
+  /// Every account's usage as the server last read it (`usage.current`).
+  final List<AccountUsageState> usage;
+
   Map<String, Object?> toJson() => {
     'installations': [for (final i in installations) installationToJson(i)],
     'claudeAccounts': [for (final a in claudeAccounts) claudeAccountToJson(a)],
     'codexAccounts': [for (final a in codexAccounts) codexAccountToJson(a)],
+    'usage': [for (final u in usage) u.toJson()],
   };
 
   static AgentsSnapshot fromJson(Map<String, Object?> json) => AgentsSnapshot(
     installations: _list(json['installations'], installationFromJson),
     claudeAccounts: _list(json['claudeAccounts'], claudeAccountFromJson),
     codexAccounts: _list(json['codexAccounts'], codexAccountFromJson),
+    usage: json['usage'] == null
+        ? const []
+        : _list(json['usage'], AccountUsageState.fromJson),
   );
 }
 

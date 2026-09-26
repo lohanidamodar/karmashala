@@ -1,4 +1,5 @@
 import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/read.dart' show DetectedProject;
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
@@ -6,13 +7,11 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_client.dart';
 import '../../../core/data/data_providers.dart';
+import '../../../core/data/keyed_replica.dart';
 
 /// The agent installations as the server keeps them: read at once from this
-/// app's copy, in the table's order; written through the server, which
-/// applies the one reconciliation of a probe with the rows (`planReconcile`
-/// — a pinned path stands, a moved CLI keeps its id, a row something points
-/// at is kept). This app still probes the environments only it can reach
-/// (WSL, SSH, this machine's junctions) and reports what it found.
+/// app's copy, in the table's order. The server finds them ([AgentWorkData])
+/// and writes them; this app only sets a path a person chose.
 class AgentInstallationsData {
   AgentInstallationsData(this._client);
 
@@ -59,36 +58,6 @@ class AgentInstallationsData {
     return null;
   }
 
-  /// Reconciles what a probe of [environmentId] [found] with its rows at the
-  /// server. Its answer is in the copy when this completes. Throws
-  /// [DataRefused].
-  Future<InstallationsReconciled> reconcile({
-    required String environmentId,
-    required DateTime readAt,
-    List<AgentInstallation> found = const [],
-    Set<String> probed = const {},
-    Map<String, ExecutableReachability> readings = const {},
-  }) => _client.write(
-    InstallationsReconcile(
-      environmentId: environmentId,
-      readAt: readAt,
-      found: found,
-      probed: probed,
-      readings: readings,
-    ),
-    domain: DataDomain.agents,
-  );
-
-  /// Records what installation [id]'s CLI answered, read at [readAt].
-  Future<AgentInstallation> recordVersion(
-    String id,
-    String version, {
-    required DateTime readAt,
-  }) => _client.write(
-    InstallationVersion(id: id, version: version, readAt: readAt),
-    domain: DataDomain.agents,
-  );
-
   /// Points installation [id] at [path], as a person chose it. Throws
   /// [DataRefused] when another row of that agent there holds [path].
   Future<AgentInstallation> setPath(String id, String path) => _client.write(
@@ -98,8 +67,8 @@ class AgentInstallationsData {
 }
 
 /// The saved Claude accounts, **without their credentials**: the copy and
-/// every change carry none. [credentials] asks the server for one account's
-/// token bundle, right before an installation is switched to it.
+/// every change carry none. The server captures and switches them
+/// ([AgentWorkData]); a token never reaches this app.
 class ClaudeAccountsData {
   ClaudeAccountsData(this._client);
 
@@ -109,14 +78,6 @@ class ClaudeAccountsData {
 
   List<ClaudeAccount> getAll() =>
       [..._client.claudeAccounts.values]..sort(compareClaudeAccounts);
-
-  /// Saves a captured account (the same email and organization keeps its
-  /// id); answers it without its credentials.
-  Future<ClaudeAccount> save(ClaudeAccount account) =>
-      _client.write(ClaudeAccountSave(account), domain: DataDomain.agents);
-
-  Future<ClaudeAccount> credentials(String id) async =>
-      (await _client.send(ClaudeAccountCredentials(id))).value;
 
   Future<void> delete(String id) =>
       _client.write(ClaudeAccountDelete(id), domain: DataDomain.agents);
@@ -134,19 +95,13 @@ class CodexAccountsData {
   List<CodexAccount> getAll() =>
       [..._client.codexAccounts.values]..sort(compareCodexAccounts);
 
-  Future<CodexAccount> save(CodexAccount account) =>
-      _client.write(CodexAccountSave(account), domain: DataDomain.agents);
-
-  Future<CodexAccount> credentials(String id) async =>
-      (await _client.send(CodexAccountCredentials(id))).value;
-
   Future<void> delete(String id) =>
       _client.write(CodexAccountDelete(id), domain: DataDomain.agents);
 }
 
-/// The usage history at the server: a reading is recorded there (it keeps
-/// what is worth a row, `usageSampleWorthKeeping`, and prunes), and a chart
-/// asks for an account's history. Nothing of it is copied here.
+/// The usage history at the server, which records every reading it takes
+/// (keeping what is worth a row, `usageSampleWorthKeeping`, and pruning); a
+/// chart asks for an account's history. Nothing of it is copied here.
 class UsageHistoryData {
   UsageHistoryData(this._client);
 
@@ -155,17 +110,67 @@ class UsageHistoryData {
   /// The account whose history gained rows, here or at another client.
   Stream<String> get recorded => _client.usageRecorded;
 
-  /// Records [usage] for [accountKey]; answers how many rows were written.
-  Future<int> record(String accountKey, AgentUsage usage) {
-    final samples = usageSamplesOf(accountKey, usage);
-    if (samples.isEmpty) return Future.value(0);
-    return _client.write(UsageRecord(samples), domain: DataDomain.agents);
-  }
-
   /// [accountKey]'s history since [since], oldest first.
   Future<List<UsageSample>> since(String accountKey, DateTime since) async =>
       (await _client.send(UsageHistory(accountKey, since))).value;
 }
+
+/// The work the server does for its agents, asked for: usage read now,
+/// who is signed in and switching who is, finding the agents, and the CLI
+/// import. Each is answered when the server's work is done; the rows it
+/// wrote reach this app's copies as changes first.
+class AgentWorkData {
+  AgentWorkData(this._client);
+
+  final DataClient _client;
+
+  Future<R> _ask<R>(AgentWorkRequest<R> request) async =>
+      (await _client.send(request)).value;
+
+  /// Every account's usage as the server last read it, by account key.
+  KeyedReplica<AccountUsageState> get usage => _client.usageStates;
+
+  /// Asks the server to read [accountKey] (every account when null) now —
+  /// through its throttle — and answers the accounts as they then stand.
+  Future<List<AccountUsageState>> refreshUsage([String? accountKey]) =>
+      _ask(UsageRefresh(accountKey: accountKey));
+
+  /// Who is signed in to installation [installationId] now.
+  Future<AgentSignIn> signIn(String installationId) =>
+      _ask(AccountsCurrent(installationId));
+
+  /// Captures the account signed in to [installationId]; answers its id.
+  Future<String> capture(String installationId) =>
+      _ask(AccountsCapture(installationId));
+
+  /// Signs [installationId] in as saved account [accountId].
+  Future<void> switchTo(String installationId, String accountId) => _ask(
+    AccountsSwitch(installationId: installationId, accountId: accountId),
+  );
+
+  /// Probes every environment (or [environmentId] alone, add-only).
+  Future<AgentDiscoveryReport> detect({String? environmentId}) =>
+      _ask(AgentsDetect(environmentId: environmentId));
+
+  /// Checks the recorded executables and repairs rotted paths.
+  Future<AgentPathRepairReport> repair({bool full = false}) =>
+      _ask(AgentsRepair(full: full));
+
+  /// The conversations the agents' own stores hold, merged into projects.
+  Future<List<DetectedProject>> scanImports() => _ask(const ImportsScan());
+
+  /// Imports [projects] as the workspace's projects and history.
+  Future<ImportSummary> addImports(List<DetectedProject> projects) =>
+      _ask(ImportsAdd(projects));
+
+  /// Imports as history what the stores hold for checkouts [repositoryIds].
+  Future<ImportSummary> importForRepositories(List<String> repositoryIds) =>
+      _ask(ImportsForRepositories(repositoryIds));
+}
+
+final agentWorkProvider = Provider<AgentWorkData>(
+  (ref) => AgentWorkData(ref.watch(dataClientProvider)),
+);
 
 final agentInstallationsDataProvider = Provider<AgentInstallationsData>(
   (ref) => AgentInstallationsData(ref.watch(dataClientProvider)),

@@ -5,7 +5,6 @@ import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -44,19 +43,20 @@ import '../../support/test_machine.dart';
 /// gives: the suite runs at `--concurrency=4`, so a wall-clock assertion over a
 /// few milliseconds is a coin toss, while widget builds are countable exactly.
 void main() {
-  late FakeAgentUsageService service;
-
   /// The database `barContainer` seeded, so a test that has to reach past the
   /// providers — writing a pane id onto a session row — writes into the one the
   /// container is reading.
   late TestMachine seeded;
 
-  setUp(() => service = FakeAgentUsageService());
+  /// The server `barContainer` connected to, whose usage a test moves.
+  late FakeDataServer server;
 
   Future<ProviderContainer> barContainer() async {
-    final server = FakeDataServer();
+    server = FakeDataServer();
     final db = seedUsageDatabase(server: server);
     seeded = db;
+    // The server has read the session's account.
+    seedUsage(server, agentInstallation(), usage: usageSnapshot(percent: 62));
     // A name long enough to compete for the row's width at 720px, which is
     // where the loss of the middle group is felt.
     server.repositoryRows.insert(
@@ -66,13 +66,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        // A real floor: this file still has to prove a tick cannot reach the
-        // row, and a zero floor would arm nothing to prove it with.
-        ...fakeTerminalOverrides(
-          machine: db,
-          usageService: service,
-          usagePollFloor: kUsageMinInterval,
-        ),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -119,9 +113,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('the quota is not on this row any more, and neither is its '
-      'timer', (tester) async {
-    service.answer = usageSnapshot(percent: 62);
+  testWidgets('the quota is not on this row any more', (tester) async {
     final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
@@ -129,15 +121,14 @@ void main() {
     expect(find.byType(UsageChip), findsNothing);
     expect(find.textContaining('62%'), findsNothing);
     expect(
-      service.calls,
+      server.agentWork.refreshes,
       isEmpty,
-      reason: 'the window chrome asks no vendor anything',
+      reason: 'the window chrome asks the server nothing about usage',
     );
     await quiesce(tester, container);
   });
 
   testWidgets('a quota change cannot reach the row at all', (tester) async {
-    service.answer = usageSnapshot(percent: 62);
     final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
@@ -145,11 +136,9 @@ void main() {
     ShellStatusBar.debugItemBuildCount = 0;
     UsageChip.debugBuildCount = 0;
 
-    service.answer = usageSnapshot(percent: 77);
-    // Nothing watches the policy here, so there is nothing to refresh — which
-    // is the assertion. Five intervals of a real floor produce no build of
-    // anything on this row.
-    await tester.pump(kUsageMinInterval * 5);
+    // The server's next reading of the session's account, told as a change.
+    seedUsage(server, agentInstallation(), usage: usageSnapshot(percent: 77));
+    await tester.pump();
     await tester.pump();
 
     expect(

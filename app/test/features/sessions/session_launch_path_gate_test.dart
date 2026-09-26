@@ -207,9 +207,25 @@ void main() {
         installations: [row],
         responder: _whereFindsNothing,
       );
+      // The repair is the server's (its sweep's rules are tested in
+      // karmashala_environments): it follows the junction and moves the row.
+      var repairs = 0;
+      h.server.agentWork.onRepair = (_) {
+        repairs++;
+        h.server.installationRows.upsert(
+          agentInstallation(
+            id: 'codex-row',
+            agentId: AgentIds.codex,
+            path: _real,
+            version: '0.145.0',
+          ),
+        );
+        return AgentPathRepairReport(checkedAt: testTime);
+      };
       final records = _captureLogs();
 
       final result = await _launch(h, row);
+      expect(repairs, 1, reason: 'the launch asked the server once');
 
       // The row moved and kept its id, and the pane runs the binary that is
       // actually there rather than the spelling the request carried.

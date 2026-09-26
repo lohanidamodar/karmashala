@@ -154,103 +154,6 @@ final class AgentsList extends DataRequest<AgentsSnapshot> {
       _decode(kind, () => AgentsSnapshot.fromJson(_object(json, kind)));
 }
 
-/// Reconciles what a probe of [environmentId] [found] with its recorded
-/// installations (`planReconcile`): [probed] names the agents it asked
-/// about — only their leftover rows are judged — and [readings] what this
-/// client's disk says of each row's path. Rows not found are removed only
-/// when nothing points at them. Answers what the sweep established.
-final class InstallationsReconcile
-    extends DataRequest<InstallationsReconciled> {
-  const InstallationsReconcile({
-    required this.environmentId,
-    required this.readAt,
-    this.found = const [],
-    this.probed = const {},
-    this.readings = const {},
-  });
-
-  factory InstallationsReconcile._from(_Arguments args) {
-    final readings = args.values['readings'] ?? const <String, Object?>{};
-    if (readings is! Map) {
-      throw DataRefused.invalid('$name: "readings" must map ids to readings');
-    }
-    try {
-      return InstallationsReconcile(
-        environmentId: args.string('environmentId'),
-        readAt: args.date('readAt'),
-        found: args.objects('found', installationFromJson),
-        probed: args.strings('probed', orEmpty: true).toSet(),
-        readings: {
-          for (final entry in readings.entries)
-            entry.key as String: reachabilityFromJson(entry.value),
-        },
-      );
-    } on FormatException catch (error) {
-      throw DataRefused.invalid('$name: ${error.message}');
-    } on TypeError {
-      throw DataRefused.invalid('$name: "readings" must map ids to readings');
-    }
-  }
-
-  static const String name = 'installations.reconcile';
-
-  final String environmentId;
-  final DateTime readAt;
-  final List<AgentInstallation> found;
-  final Set<String> probed;
-  final Map<String, ExecutableReachability> readings;
-
-  @override
-  String get kind => name;
-
-  @override
-  Map<String, Object?> argumentsToJson() => {
-    'environmentId': environmentId,
-    'readAt': readAt.toUtc().toIso8601String(),
-    'found': [for (final f in found) installationToJson(f)],
-    'probed': [...probed],
-    'readings': {
-      for (final entry in readings.entries)
-        entry.key: reachabilityToJson(entry.value),
-    },
-  };
-
-  @override
-  Object? resultToJson(InstallationsReconciled result) => result.toJson();
-
-  @override
-  InstallationsReconciled resultFromJson(Object? json) => _decode(
-    kind,
-    () => InstallationsReconciled.fromJson(_object(json, kind)),
-  );
-}
-
-/// Records what the CLI of installation [id] answered, and when it was
-/// asked — a confirmed reading is a fresh reading.
-final class InstallationVersion extends _InstallationWrite {
-  const InstallationVersion({
-    required this.id,
-    required this.version,
-    required this.readAt,
-  });
-
-  static const String name = 'installations.recordVersion';
-
-  final String id;
-  final String version;
-  final DateTime readAt;
-
-  @override
-  String get kind => name;
-
-  @override
-  Map<String, Object?> argumentsToJson() => {
-    'id': id,
-    'version': version,
-    'readAt': readAt.toUtc().toIso8601String(),
-  };
-}
-
 /// Points installation [id] at [path], as a person chose it — a sweep will
 /// not move it. Refused [DataRefusalCode.invalid] for a blank path, and for
 /// one another row of the same agent there already holds.
@@ -269,57 +172,6 @@ final class InstallationSetPath extends _InstallationWrite {
   Map<String, Object?> argumentsToJson() => {'id': id, 'path': path};
 }
 
-/// Saves a Claude account captured from an installation — the one with the
-/// same email and organization is rewritten, keeping its id. Answers it
-/// **without its credentials**.
-final class ClaudeAccountSave extends DataRequest<ClaudeAccount> {
-  const ClaudeAccountSave(this.account);
-
-  static const String name = 'claudeAccounts.save';
-
-  final ClaudeAccount account;
-
-  @override
-  String get kind => name;
-
-  @override
-  Map<String, Object?> argumentsToJson() => {
-    'account': claudeAccountToJson(account, credentials: true),
-  };
-
-  @override
-  Object? resultToJson(ClaudeAccount result) => claudeAccountToJson(result);
-
-  @override
-  ClaudeAccount resultFromJson(Object? json) =>
-      _decode(kind, () => claudeAccountFromJson(_object(json, kind)));
-}
-
-/// Saved Claude account [id] **with** its credentials — asked right before
-/// an installation is switched to it, answered to the asking client alone
-/// and never told as a change.
-final class ClaudeAccountCredentials extends DataRequest<ClaudeAccount> {
-  const ClaudeAccountCredentials(this.id);
-
-  static const String name = 'claudeAccounts.credentials';
-
-  final String id;
-
-  @override
-  String get kind => name;
-
-  @override
-  Map<String, Object?> argumentsToJson() => {'id': id};
-
-  @override
-  Object? resultToJson(ClaudeAccount result) =>
-      claudeAccountToJson(result, credentials: true);
-
-  @override
-  ClaudeAccount resultFromJson(Object? json) =>
-      _decode(kind, () => claudeAccountFromJson(_object(json, kind)));
-}
-
 /// Forgets a saved Claude account (no installation's files are touched).
 final class ClaudeAccountDelete extends _AckRequest {
   const ClaudeAccountDelete(this.id);
@@ -335,54 +187,6 @@ final class ClaudeAccountDelete extends _AckRequest {
   Map<String, Object?> argumentsToJson() => {'id': id};
 }
 
-/// Saves a Codex account — the one with the same account id is rewritten,
-/// keeping its id. Answers it **without its credentials**.
-final class CodexAccountSave extends DataRequest<CodexAccount> {
-  const CodexAccountSave(this.account);
-
-  static const String name = 'codexAccounts.save';
-
-  final CodexAccount account;
-
-  @override
-  String get kind => name;
-
-  @override
-  Map<String, Object?> argumentsToJson() => {
-    'account': codexAccountToJson(account, credentials: true),
-  };
-
-  @override
-  Object? resultToJson(CodexAccount result) => codexAccountToJson(result);
-
-  @override
-  CodexAccount resultFromJson(Object? json) =>
-      _decode(kind, () => codexAccountFromJson(_object(json, kind)));
-}
-
-/// Saved Codex account [id] **with** its credentials, for a switch.
-final class CodexAccountCredentials extends DataRequest<CodexAccount> {
-  const CodexAccountCredentials(this.id);
-
-  static const String name = 'codexAccounts.credentials';
-
-  final String id;
-
-  @override
-  String get kind => name;
-
-  @override
-  Map<String, Object?> argumentsToJson() => {'id': id};
-
-  @override
-  Object? resultToJson(CodexAccount result) =>
-      codexAccountToJson(result, credentials: true);
-
-  @override
-  CodexAccount resultFromJson(Object? json) =>
-      _decode(kind, () => codexAccountFromJson(_object(json, kind)));
-}
-
 final class CodexAccountDelete extends _AckRequest {
   const CodexAccountDelete(this.id);
 
@@ -395,31 +199,6 @@ final class CodexAccountDelete extends _AckRequest {
 
   @override
   Map<String, Object?> argumentsToJson() => {'id': id};
-}
-
-/// Records one usage reading, as candidate samples (`usageSamplesOf`): the
-/// server keeps those worth a row (`usageSampleWorthKeeping`) and prunes
-/// the history as it goes. Answers how many rows were written.
-final class UsageRecord extends DataRequest<int> {
-  const UsageRecord(this.samples);
-
-  static const String name = 'usage.record';
-
-  final List<UsageSample> samples;
-
-  @override
-  String get kind => name;
-
-  @override
-  Map<String, Object?> argumentsToJson() => {
-    'samples': [for (final s in samples) usageSampleToJson(s)],
-  };
-
-  @override
-  Object? resultToJson(int result) => result;
-
-  @override
-  int resultFromJson(Object? json) => json is int ? json : _badAnswer(kind);
 }
 
 /// Every sample of [accountKey] recorded at or after [since], oldest first.

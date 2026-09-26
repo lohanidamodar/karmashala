@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -23,22 +22,17 @@ import '../../support/test_machine.dart';
 void main() {
   late TestMachine db;
   late MovableClock clock;
-  late FakeAgentUsageService service;
-
   late Override data;
 
   setUp(() async {
     db = seedUsageDatabase();
+    // The server's last reading of the account, as it tells the app.
+    seedUsage(db.server, agentInstallation(), usage: usageSnapshot());
     data = await db.server.override();
     clock = MovableClock(testTime);
-    service = FakeAgentUsageService(clock: clock);
   });
 
-  List<Override> overrides() => [
-    data,
-    clockProvider.overrideWithValue(clock),
-    agentUsageServiceProvider.overrideWithValue(service),
-  ];
+  List<Override> overrides() => [data, clockProvider.overrideWithValue(clock)];
 
   void seedHistory() {
     final dao = db.server.usageRows;

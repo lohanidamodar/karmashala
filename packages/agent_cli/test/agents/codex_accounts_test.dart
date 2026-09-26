@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:agent_cli/discovery.dart' show SystemClock;
 import 'package:agent_cli/usage.dart';
 
-import '../../support/fakes.dart';
-import '../../support/fixtures.dart';
-import '../../support/temp_directory.dart';
+import '../support/fakes.dart';
+import '../support/fixtures.dart';
+import '../support/temp_directory.dart';
 
 void main() {
   String token(Map<String, Object?> claims) {

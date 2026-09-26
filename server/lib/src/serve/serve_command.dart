@@ -11,6 +11,8 @@ import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
+import '../agents/forwarded_runs.dart';
+import '../agents/server_agent_work.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/session_mcp_access.dart';
@@ -18,6 +20,7 @@ import '../companion/daemon_companion.dart';
 import '../domain/session_registry.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
+import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/daemon_mcp.dart';
 import '../mcp/mcp_tool_relay.dart';
 import '../mcp/tools/instructions_tool_set.dart';
@@ -269,9 +272,23 @@ Future<int> runServe(
     database: database,
     onDecision: (decision) => data.announce([DecisionRecorded(decision)]),
   );
+  // Usage, accounts, detection and the CLI import: the work done for the
+  // agents on this machine, whichever client asks, and on its own.
+  final runs = ForwardedRuns();
+  final hostEnvironment = environment ?? Platform.environment;
+  final agentWork = ServerAgentWork(
+    data: data,
+    runs: runs,
+    hostEnvironment: hostEnvironment,
+    // `off`: work only when asked — no usage schedule, no start-up check. For
+    // a test's server: its temporary HOME holds no credentials, and its
+    // schedule would reach for this machine's Keychain whatever HOME says.
+    onItsOwn: hostEnvironment[kAgentWorkVariable] != 'off',
+  )..attach();
   final companion = DaemonCompanion(
     database: database,
     data: data,
+    usageService: agentWork.usage.service,
     registry: registry,
     hostName: settings.name,
     dataDirectory: dataDirectory,
@@ -291,7 +308,12 @@ Future<int> runServe(
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   final reach = CheckoutReach(database);
-  final folders = ProjectFolders(tools, reach);
+  // A project an agent adds imports the CLI history of its new checkouts.
+  final folders = ProjectFolders(
+    tools,
+    reach,
+    onRecorded: agentWork.imports.checkoutsRecorded,
+  );
   final liveness = SessionLiveness(
     (id) => registry.find(hostSessionIdOf(id)) != null,
   );
@@ -337,6 +359,7 @@ Future<int> runServe(
     companion: companion,
     build: hostBuildOf(Platform.resolvedExecutable),
     mcpTools: mcpTools,
+    runs: runs,
   )..prompts = prompts;
   server.lifecycle.statusSnapshot = status.snapshot;
   // Every turn's before and after checkpoints, taken here (slice 2b): off the
@@ -441,7 +464,9 @@ Future<int> runServe(
         appConnected: () => mcpTools.appConnected,
         launcher: () => companion.launcher,
       ),
-    );
+    )
+    // `get_usage` is read here from the server's own usage (slice 2a).
+    ..add(UsageToolSet(agentWork.usage));
   // `server.config.set` brings the phone listener in line at once.
   if (companionServing) {
     config.apply = (settings) => companion.reconfigure(
@@ -483,6 +508,8 @@ Future<int> runServe(
       } on Object catch (error) {
         errSink.writeln('karmashala_host: agent probe failed ($error)');
       }
+      if (stopping.isCompleted) return;
+      await agentWork.start(log: sink.writeln);
     }),
   );
 
@@ -563,6 +590,8 @@ Future<int> runServe(
   mcpTools.close();
   tools.close();
   await companion.close();
+  agentWork.stop();
+  runs.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await automations?.close();

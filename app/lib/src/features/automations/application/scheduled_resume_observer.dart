@@ -1,12 +1,11 @@
+import '../../agents/data/agents_data.dart';
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/presentation/usage_chip.dart' show formatResetClock;
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -35,9 +34,19 @@ class ScheduledResumeObserver extends Notifier<int> {
       SessionChangeKind.placement,
     });
 
-    final usage = ref.watch(agentUsageServiceProvider);
-    usage.addReadingListener(_onReading);
-    ref.onDispose(() => usage.removeReadingListener(_onReading));
+    // A fresh reading the server took, whoever asked for it.
+    final readings = ref.watch(agentWorkProvider).usage.serverChanges.listen((
+      change,
+    ) {
+      final reading = change.after?.usage;
+      if (reading == null) return;
+      if (identical(reading, change.before?.usage) ||
+          reading.fetchedAt == change.before?.usage?.fetchedAt) {
+        return;
+      }
+      _onReading(change.key, reading);
+    });
+    ref.onDispose(readings.cancel);
 
     for (final resume in _waiting()) {
       AgentActivityStatus? before;
@@ -126,9 +135,8 @@ class ScheduledResumeObserver extends Notifier<int> {
   }
 
   /// A reading that came off the wire anyway. Costs no request of its own.
-  void _onReading(AgentInstallation installation, AgentUsage reading) {
+  void _onReading(String key, AgentUsage reading) {
     if (_disposed) return;
-    final key = usageAccountKey(installation);
     final now = ref.read(clockProvider).nowUtc();
     for (final resume in _waiting()) {
       if (resume.state != ScheduledResumeState.pending) continue;

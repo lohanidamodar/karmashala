@@ -3,6 +3,7 @@
 /// JSON envelope that carries them over any transport.
 library;
 
+export 'src/agent_work_values.dart';
 export 'src/automation_values.dart';
 export 'src/data_change.dart';
 export 'src/data_endpoint.dart';

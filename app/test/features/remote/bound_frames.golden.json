@@ -1006,86 +1006,10 @@
           "request": {},
           "frames": [
             {
-              "type": "result",
+              "type": "error",
               "payload": {
-                "accounts": [
-                  {
-                    "key": "claudeCode@windows",
-                    "agentId": "claudeCode",
-                    "agentName": "Claude Code",
-                    "environment": "Windows",
-                    "email": "owner@example.com",
-                    "readAt": "2026-01-02T03:04:05.000Z",
-                    "windows": [
-                      {
-                        "label": "5-hour",
-                        "percent": 62.0,
-                        "resetsAt": "2026-01-02T05:15:05.000Z",
-                        "spanSeconds": 18000,
-                        "pace": "ahead",
-                        "limitAt": "2026-01-02T04:47:39.838710Z"
-                      },
-                      {
-                        "label": "7-day",
-                        "percent": 1.0,
-                        "resetsAt": "2026-01-05T03:04:05.000Z",
-                        "spanSeconds": 604800,
-                        "pace": "on_pace"
-                      }
-                    ]
-                  },
-                  {
-                    "key": "claudeCode@wsl:Ubuntu",
-                    "agentId": "claudeCode",
-                    "agentName": "Claude Code",
-                    "environment": "WSL · Ubuntu",
-                    "email": "owner@example.com",
-                    "readAt": "2026-01-02T03:04:05.000Z",
-                    "windows": [
-                      {
-                        "label": "5-hour",
-                        "percent": 62.0,
-                        "resetsAt": "2026-01-02T05:15:05.000Z",
-                        "spanSeconds": 18000,
-                        "pace": "ahead",
-                        "limitAt": "2026-01-02T04:47:39.838710Z"
-                      },
-                      {
-                        "label": "7-day",
-                        "percent": 1.0,
-                        "resetsAt": "2026-01-05T03:04:05.000Z",
-                        "spanSeconds": 604800,
-                        "pace": "on_pace"
-                      }
-                    ]
-                  },
-                  {
-                    "key": "claudeCode@ssh:build-box",
-                    "agentId": "claudeCode",
-                    "agentName": "Claude Code",
-                    "environment": "SSH · build-box",
-                    "email": "owner@example.com",
-                    "readAt": "2026-01-02T03:04:05.000Z",
-                    "windows": [
-                      {
-                        "label": "5-hour",
-                        "percent": 62.0,
-                        "resetsAt": "2026-01-02T05:15:05.000Z",
-                        "spanSeconds": 18000,
-                        "pace": "ahead",
-                        "limitAt": "2026-01-02T04:47:39.838710Z"
-                      },
-                      {
-                        "label": "7-day",
-                        "percent": 1.0,
-                        "resetsAt": "2026-01-05T03:04:05.000Z",
-                        "spanSeconds": 604800,
-                        "pace": "on_pace"
-                      }
-                    ]
-                  }
-                ],
-                "observedAt": "2026-08-31T10:00:00.000Z"
+                "code": "bad_request",
+                "message": "this host cannot report usage"
               }
             }
           ]

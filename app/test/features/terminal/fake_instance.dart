@@ -1,8 +1,5 @@
 import 'dart:convert';
 
-import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
-import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:karmashala_core/paths.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -34,7 +31,6 @@ import 'package:karmashala/src/features/terminal/application/terminal_profiles.d
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
-import '../agents/usage_fixtures.dart';
 
 /// A process-free [TerminalInstance] so the controller can be tested without
 /// spawning a real PTY.
@@ -326,10 +322,8 @@ fakeTerminalOverrides({
   TerminalLayoutStore? layoutStore,
   Override? data,
   TerminalInstanceFactory? instanceFactory,
-  AgentUsageService? usageService,
   bool shellIntegration = false,
   bool restoreLivePanes = true,
-  Duration usagePollFloor = Duration.zero,
   bool frameGatedProbes = false,
   GitFiles? gitFiles,
   PathProbe? pathProbe,
@@ -400,22 +394,6 @@ fakeTerminalOverrides({
     // renders a session. Same reason as the autosave above; tests that care
     // about polling drive it explicitly.
     deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
-    // The session bar's usage chip has its own timer, and the same problem: it
-    // is drawn by every test that renders a session, and a live tick would be
-    // pending when the test ends. Zero means no timer; the tests that are about
-    // the schedule hand back a real floor.
-    usagePollFloorProvider.overrideWithValue(usagePollFloor),
-    // **And the chip's service is faked by default.** The chip moved from the
-    // window's status bar — which a handful of tests draw — into the session
-    // bar, which ninety-odd of them draw, and the real `AgentUsageService`
-    // locates CLI stores on the host and reads credentials off disk before it
-    // gives up. Nothing in a widget test wants that, and no test may ever make
-    // a live request. A test that has something to say about usage hands its
-    // own service in here rather than adding a second override, because
-    // Riverpod refuses the same provider twice in one container.
-    agentUsageServiceProvider.overrideWithValue(
-      usageService ?? FakeAgentUsageService(),
-    ),
     // [instanceFactory] replaces the default rather than adding a second
     // override: Riverpod refuses the same provider twice in one container, so a
     // test that needs a pane to fail has to substitute here.

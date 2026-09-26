@@ -177,10 +177,15 @@ class DataClient {
   final knownHosts = KeyedReplica<KnownHostKey>();
 
   /// The agents: every installation, and the saved accounts **without their
-  /// credentials** — a token bundle is asked for, right before a switch.
+  /// credentials** — a token bundle never leaves the server.
   final installations = KeyedReplica<AgentInstallation>();
   final claudeAccounts = KeyedReplica<ClaudeAccount>(_sameClaude);
   final codexAccounts = KeyedReplica<CodexAccount>(_sameCodex);
+
+  /// Every agent account's usage as the server last read it, by account key
+  /// (`usageAccountKey`): the reading, how its last attempt failed, when it
+  /// asks next. The server reads them; this only follows.
+  final usageStates = KeyedReplica<AccountUsageState>((a, b) => a.sameAs(b));
 
   /// The paired devices, **without their keys or push tokens**.
   final devices = KeyedReplica<PairedDevice>(samePairedDevice);
@@ -500,6 +505,9 @@ class DataClient {
     installations.replaceAll({
       for (final i in snapshot.installations) i.id: i,
     }, revision);
+    usageStates.replaceAll({
+      for (final u in snapshot.usage) u.accountKey: u,
+    }, revision);
   }
 
   /// Applies a change to where agents run, or to the agents, the server made
@@ -539,6 +547,8 @@ class DataClient {
         codexAccounts.applyAt(id, null, revision);
       case UsageRecorded(:final accountKey):
         if (!_usageRecorded.isClosed) _usageRecorded.add(accountKey);
+      case UsageStateChanged(:final state):
+        usageStates.applyAt(state.accountKey, state, revision);
     }
   }
 
@@ -893,6 +903,7 @@ class DataClient {
       installations,
       claudeAccounts,
       codexAccounts,
+      usageStates,
       devices,
       worktreeSetups,
       worktreeRuns,

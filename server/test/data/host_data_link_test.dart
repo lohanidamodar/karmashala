@@ -144,6 +144,6 @@ void main() {
     expect(MessageType.dataRequest.code, 0x32);
     expect(MessageType.dataAnswer.code, 0x33);
     expect(MessageType.dataChanges.code, 0x34);
-    expect(kProtocolVersion, 17);
+    expect(kProtocolVersion, 18);
   });
 }

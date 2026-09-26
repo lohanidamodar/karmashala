@@ -5,7 +5,6 @@ import 'package:agent_cli/read.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:path/path.dart' as p;
 

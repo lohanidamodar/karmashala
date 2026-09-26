@@ -1,8 +1,8 @@
+import 'package:karmashala/src/core/database/sqlite_row_reader.dart';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,7 +125,9 @@ void main() {
         writeAnnotation(id, 'test me now');
         writeSummaries([(id, 'wHAT ?')]);
 
-        final sessions = await CliDetectionService().readStores([store()]);
+        final sessions = await CliDetectionService(
+          readRows: readSqliteRows,
+        ).readStores([store()]);
 
         expect(sessions.length, 1);
         final session = sessions.single;
@@ -150,20 +152,23 @@ void main() {
       writeConversation(orphan);
       writeLastConversations({'/home/me/proj': placed});
 
-      final sessions = await CliDetectionService().readStores([store()]);
+      final sessions = await CliDetectionService(
+        readRows: readSqliteRows,
+      ).readStores([store()]);
 
       expect(sessions.map((s) => s.sessionId), [placed]);
     });
 
     test('a store that is not there is not an error', () async {
-      final sessions = await CliDetectionService().readStores([
-        CliStore(
-          environmentId: 'windows',
-          homesByAgentId: {
-            AgentIds.antigravity: p.join(tmp.path, 'nothing-here'),
-          },
-        ),
-      ]);
+      final sessions = await CliDetectionService(readRows: readSqliteRows)
+          .readStores([
+            CliStore(
+              environmentId: 'windows',
+              homesByAgentId: {
+                AgentIds.antigravity: p.join(tmp.path, 'nothing-here'),
+              },
+            ),
+          ]);
       expect(sessions, isEmpty);
     });
   });

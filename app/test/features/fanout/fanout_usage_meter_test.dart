@@ -25,16 +25,18 @@ void main() {
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           agentUsageProvider.overrideWith(
-            (ref, install) async => AgentUsage(
-              fetchedAt: testTime,
-              windows: [
-                UsageWindow(
-                  label: '5-hour',
-                  percent: install.agentId == AgentIds.codex ? 97 : 12,
-                  resetsAt: testTime.add(const Duration(hours: 4)),
-                  span: kUsageFiveHourWindow,
-                ),
-              ],
+            (ref, install) => AsyncData(
+              AgentUsage(
+                fetchedAt: testTime,
+                windows: [
+                  UsageWindow(
+                    label: '5-hour',
+                    percent: install.agentId == AgentIds.codex ? 97 : 12,
+                    resetsAt: testTime.add(const Duration(hours: 4)),
+                    span: kUsageFiveHourWindow,
+                  ),
+                ],
+              ),
             ),
           ),
         ],

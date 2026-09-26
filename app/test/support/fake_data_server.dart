@@ -47,6 +47,7 @@ part 'fake_pairings.dart';
 part 'fake_worktrees.dart';
 part 'fake_automations.dart';
 part 'fake_conversations.dart';
+part 'fake_agent_work.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -190,6 +191,10 @@ class FakeDataServer {
     compareCodexAccounts,
   );
   late final usageRows = FakeUsageRows._(this);
+
+  /// The work the server does for its agents: usage it read, sign-ins,
+  /// capture and switch, detection and the CLI import — scripted.
+  late final agentWork = FakeAgentWork._(this);
 
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
@@ -335,6 +340,8 @@ class FakeDataServer {
           UsageRecorded():
         // Seed these through their tables; a change alone says too little.
         break;
+      case UsageStateChanged(:final state):
+        agentWork.usage[state.accountKey] = state;
     }
   }
 
@@ -409,6 +416,14 @@ class FakeDataServer {
 
   DataReply<R> _handle<R>(FakeDataLink origin, DataRequest<R> request) {
     requests.add(request.kind);
+    if (request case final AgentWorkRequest<Object?> work) {
+      // Agent work is answered when done, and what it wrote is told to every
+      // link — the asker's too — as the server announces it.
+      final written = <DataChange>[];
+      final result = agentWork._handle(work, written);
+      _tell(null, written);
+      return DataReply(result as R, revision, const []);
+    }
     final changes = <DataChange>[];
     final Object? result = switch (request) {
       DataSubscribe() => _subscribe(origin),
@@ -525,17 +540,11 @@ class FakeDataServer {
       KnownHostTrust() ||
       KnownHostForget() ||
       AgentsList() ||
-      InstallationsReconcile() ||
-      InstallationVersion() ||
       InstallationSetPath() ||
-      ClaudeAccountSave() ||
-      ClaudeAccountCredentials() ||
       ClaudeAccountDelete() ||
-      CodexAccountSave() ||
-      CodexAccountCredentials() ||
       CodexAccountDelete() ||
-      UsageRecord() ||
       UsageHistory() => _handleHosts(request, changes),
+      AgentWorkRequest() => throw StateError('answered above'),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

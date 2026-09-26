@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
@@ -10,8 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_usage_section.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AccountUsageState;
 import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -29,7 +29,6 @@ void main() {
   late FakeDataServer server;
   late DataClient client;
   late MovableClock clock;
-  late _PerAgentUsageService service;
 
   final claude = agentInstallation(id: 'a1', agentId: AgentIds.claudeCode);
   final codex = agentInstallation(
@@ -38,12 +37,35 @@ void main() {
     path: r'C:\Users\me\.bin\codex.exe',
   );
 
+  /// What the server reads of each agent's account, by agent id.
+  final answers = <String, AgentUsage>{};
+
   setUp(() async {
     server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     client = await server.connect();
     clock = MovableClock(testTime);
-    service = _PerAgentUsageService(clock: clock);
+    answers.clear();
+    // A refresh the page asks for reads the account's answer.
+    server.agentWork.onRefresh = (key) {
+      final installation = [
+        claude,
+        codex,
+      ].firstWhere((i) => usageAccountKey(i) == key);
+      return AccountUsageState(
+        accountKey: key,
+        agentId: installation.agentId,
+        environmentId: installation.environmentId,
+        usage: answers[installation.agentId] ?? usageSnapshot(),
+      );
+    };
   });
+
+  /// The server has read [installation]'s account, and told the app.
+  void read(AgentInstallation installation) => seedUsage(
+    server,
+    installation,
+    usage: answers[installation.agentId] ?? usageSnapshot(),
+  );
 
   void seedHistory(String account) {
     final dao = server.usageRows;
@@ -77,7 +99,6 @@ void main() {
     overrides: [
       dataClientProvider.overrideWithValue(client),
       clockProvider.overrideWithValue(clock),
-      agentUsageServiceProvider.overrideWithValue(service),
     ],
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -108,23 +129,29 @@ void main() {
   testWidgets('while reading, a spinner stands in for the button', (
     tester,
   ) async {
-    service.hold = true;
     await tester.pumpWidget(page([claude]));
+    await tester.pump();
+    // A server mid-answer.
+    final hold = server.hold = Completer<void>();
     await tester.tap(find.text('Check usage'));
     await tester.pump();
     expect(find.byType(InlineSpinner), findsOneWidget);
     expect(find.textContaining('Reading this account'), findsOneWidget);
-    service.release();
+    server.hold = null;
+    hold.complete();
     await tester.pump();
     await tester.pump();
     expect(find.byType(InlineSpinner), findsNothing);
     expect(find.textContaining('62%'), findsOneWidget);
+    expect(server.agentWork.refreshes, [
+      usageAccountKey(claude),
+    ], reason: 'the check asks the server to read this account');
   });
 
   testWidgets('a meter is drawn in status colours, never the accent, with a '
       'pace tick', (tester) async {
-    service.answers[AgentIds.claudeCode] = usageSnapshot(percent: 62);
-    await service.fetch(claude, const []);
+    answers[AgentIds.claudeCode] = usageSnapshot(percent: 62);
+    read(claude);
     await tester.pumpWidget(page([claude]));
 
     final meters = tester.widgetList<LinearMeter>(find.byType(LinearMeter));
@@ -149,11 +176,11 @@ void main() {
   testWidgets('a nearly spent window over pace says when it runs out', (
     tester,
   ) async {
-    service.answers[AgentIds.claudeCode] = usageSnapshot(
+    answers[AgentIds.claudeCode] = usageSnapshot(
       percent: 90,
       resetsIn: const Duration(hours: 4),
     );
-    await service.fetch(claude, const []);
+    read(claude);
     await tester.pumpWidget(page([claude]));
 
     final meter = tester.widget<LinearMeter>(find.byType(LinearMeter).first);
@@ -165,7 +192,7 @@ void main() {
   });
 
   testWidgets('with no history yet, the chart explains itself', (tester) async {
-    await service.fetch(claude, const []);
+    read(claude);
     await tester.pumpWidget(page([claude]));
     expect(find.byType(TimeSeriesChart), findsNothing);
     expect(find.textContaining('No history for 5-hour yet'), findsOneWidget);
@@ -175,7 +202,7 @@ void main() {
     tester,
   ) async {
     seedHistory(usageAccountKey(claude));
-    await service.fetch(claude, const []);
+    read(claude);
     await tester.pumpWidget(page([claude]));
     // The history is asked of the server; its answer is a frame later.
     await tester.pump();
@@ -203,10 +230,10 @@ void main() {
   testWidgets('two accounts with readings are compared side by side', (
     tester,
   ) async {
-    service.answers[AgentIds.claudeCode] = usageSnapshot(percent: 62);
-    service.answers[AgentIds.codex] = usageSnapshot(percent: 97);
-    await service.fetch(claude, const []);
-    await service.fetch(codex, const []);
+    answers[AgentIds.claudeCode] = usageSnapshot(percent: 62);
+    answers[AgentIds.codex] = usageSnapshot(percent: 97);
+    read(claude);
+    read(codex);
     await tester.pumpWidget(page([claude, codex]));
 
     expect(find.text('Closest to a limit, per account'), findsOneWidget);
@@ -219,7 +246,7 @@ void main() {
   });
 
   testWidgets('one account has nothing to compare against', (tester) async {
-    await service.fetch(claude, const []);
+    read(claude);
     await tester.pumpWidget(page([claude, codex]));
     expect(find.byType(RankedBars), findsNothing);
   });
@@ -228,42 +255,16 @@ void main() {
     tester,
   ) async {
     seedHistory(usageAccountKey(claude));
-    service.answers[AgentIds.codex] = usageSnapshot(
+    answers[AgentIds.codex] = usageSnapshot(
       percent: 97,
       resetsIn: const Duration(hours: 4, minutes: 30),
     );
-    await service.fetch(claude, const []);
-    await service.fetch(codex, const []);
+    read(claude);
+    read(codex);
     await expectSurvivesWindowMatrix(
       tester,
       build: () => page([claude, codex]),
       because: 'the usage page is read at the smallest window too',
     );
   });
-}
-
-/// Answers per agent, and can hold a request open to show the loading state.
-class _PerAgentUsageService extends FakeAgentUsageService {
-  _PerAgentUsageService({super.clock});
-
-  final answers = <String, AgentUsage>{};
-  bool hold = false;
-  Completer<void>? _gate;
-
-  void release() {
-    hold = false;
-    _gate?.complete();
-    _gate = null;
-  }
-
-  @override
-  Future<AgentUsage> fetchFresh(
-    AgentInstallation installation,
-    List<ExecutionEnvironment> environments,
-  ) async {
-    if (hold) await (_gate ??= Completer<void>()).future;
-    calls.add(installation);
-    return answers[installation.agentId] ??
-        usageSnapshot(fetchedAt: clock.nowUtc());
-  }
 }

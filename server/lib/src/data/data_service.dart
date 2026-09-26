@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
+import 'package:agent_cli/usage.dart'
+    show ClaudeAccount, CodexAccount, UsageSample;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_git/git.dart'
@@ -11,6 +13,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
+import 'agent_work.dart';
 import 'automations_handler.dart';
 import 'conversations_handler.dart';
 import 'evidence_handler.dart';
@@ -39,7 +42,8 @@ class DataService {
     String Function()? newId,
     bool Function(String sessionId)? runsSession,
     bool Function(String path)? opens,
-  }) : _now = clock ?? _utcNow {
+  }) : _database = database,
+       _now = clock ?? _utcNow {
     final filing = FilingLookup(database);
     _notes = NotesHandler(database, filing, _now);
     _todos = TodosHandler(database, filing, _now);
@@ -71,7 +75,13 @@ class DataService {
 
   static DateTime _utcNow() => DateTime.now().toUtc();
 
+  final AppDatabase _database;
   final DateTime Function() _now;
+
+  /// The server's agent components (usage, accounts, detection, the CLI
+  /// import), set by `serve`; without them that work is refused
+  /// `unavailable`.
+  AgentWork? agentWork;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -99,6 +109,23 @@ class DataService {
   late final ConversationsHandler conversations;
   final _links = <DataSession>{};
   var _revision = 0;
+  final _changeListeners = <void Function(List<DataChange> changes)>[];
+
+  /// Tells [listener] of every write, a client's or the server's own — how
+  /// the server's own components follow the rows (usage asks again when a
+  /// session moves).
+  void addChangeListener(void Function(List<DataChange> changes) listener) =>
+      _changeListeners.add(listener);
+
+  void removeChangeListener(void Function(List<DataChange> changes) listener) =>
+      _changeListeners.remove(listener);
+
+  void _noticed(List<DataChange> changes) {
+    conversations.noticed(changes);
+    for (final listener in [..._changeListeners]) {
+      listener(changes);
+    }
+  }
 
   /// The number of the last write, since this service started.
   int get revision => _revision;
@@ -115,7 +142,7 @@ class DataService {
   /// outside any request, under the next revision.
   void announce(List<DataChange> changes) {
     if (changes.isEmpty) return;
-    conversations.noticed(changes);
+    _noticed(changes);
     _tell(null, DataChanges(++_revision, List.unmodifiable(changes)));
   }
 
@@ -170,18 +197,122 @@ class DataService {
   List<AgentInstallation> installationsIn(String environmentId) =>
       _hosts.installationsIn(environmentId);
 
+  // What the server's agent components read and write — as the server, told
+  // to every client.
+
+  /// Every recorded installation, oldest first.
+  List<AgentInstallation> get installations => _hosts.allInstallations();
+
+  /// Every recorded environment.
+  List<ExecutionEnvironment> get environments => _hosts.allEnvironments();
+
+  /// Records a probe of [environmentId] by the one rule (`planReconcile`).
+  InstallationsReconciled reconcileProbe({
+    required String environmentId,
+    required DateTime readAt,
+    required List<AgentInstallation> found,
+    required Set<String> probed,
+    required Map<String, ExecutableReachability> readings,
+  }) => _asServer(
+    'recording what was found',
+    (changes) => _hosts.reconcile(
+      environmentId: environmentId,
+      readAt: readAt,
+      found: found,
+      probed: probed,
+      readings: readings,
+      changes: changes,
+    ),
+  );
+
+  /// Records what installation [id]'s CLI answered.
+  void recordInstallationVersion(String id, String version, DateTime readAt) =>
+      _asServer(
+        'recording a version',
+        (changes) => _hosts.recordVersion(id, version, readAt, changes),
+      );
+
+  /// Saves a captured Claude account; answers it without credentials.
+  ClaudeAccount saveClaudeAccount(ClaudeAccount account) =>
+      _asServer('saving an account', (changes) {
+        return _hosts.saveClaudeAccount(account, changes);
+      });
+
+  /// Saves a captured Codex account; answers it without credentials.
+  CodexAccount saveCodexAccount(CodexAccount account) =>
+      _asServer('saving an account', (changes) {
+        return _hosts.saveCodexAccount(account, changes);
+      });
+
+  /// [write] as the server, told to every client — and, failing, refused in
+  /// the store's own words, never a statement's values (a saved account's
+  /// credentials are some).
+  T _asServer<T>(String what, T Function(List<DataChange> changes) write) {
+    final changes = <DataChange>[];
+    final T result;
+    try {
+      result = write(changes);
+    } on DataRefused {
+      rethrow;
+    } on Object catch (error) {
+      throw DataRefused(
+        DataRefusalCode.failed,
+        '$what failed: ${error is SqliteException ? error.message : error}',
+      );
+    }
+    announce(changes);
+    return result;
+  }
+
+  /// Saved account [id] **with** its credentials — never answered to a
+  /// client; the server reads it to switch an installation.
+  ClaudeAccount claudeAccount(String id) => _hosts.claudeAccount(id);
+  CodexAccount codexAccount(String id) => _hosts.codexAccount(id);
+
+  /// Records one reading's samples in the usage history; answers how many
+  /// rows it kept.
+  int recordUsage(List<UsageSample> samples) => samples.isEmpty
+      ? 0
+      : _asServer(
+          'recording usage',
+          (changes) => _hosts.recordUsage(samples, changes),
+        );
+
+  /// Tells every client an account's usage as it now stands.
+  void announceUsage(AccountUsageState state) =>
+      announce([UsageStateChanged(state)]);
+
+  /// A server-owned `app_metadata` value (a reserved key).
+  String? serverValue(String key) => _database.readMetadata(key);
+
+  void setServerValue(String key, String value) =>
+      _database.writeMetadata(key, value);
+
+  /// [request] applied as the server itself — validated and written by the
+  /// same handler a client's is, and told to every client.
+  R applyAsServer<R>(DataRequest<R> request) => _handle(null, request).value;
+
   void _tell(DataSession? origin, DataChanges batch) {
     for (final link in _links) {
       if (link != origin && link._subscribed) link._deliver(batch);
     }
   }
 
-  DataReply<R> _handle<R>(DataSession origin, DataRequest<R> request) {
+  DataReply<R> _handle<R>(DataSession? origin, DataRequest<R> request) {
     final changes = <DataChange>[];
     final Object? result;
     try {
       result = switch (request) {
-        DataSubscribe() => origin._subscribe(),
+        DataSubscribe() =>
+          origin?._subscribe() ??
+              (throw const DataRefused.invalid(
+                'the server subscribes to nothing',
+              )),
+        // Reads disks and endpoints, so answered when done:
+        // `DataSession.handleLater`.
+        AgentWorkRequest() => throw DataRefused.invalid(
+          '${request.kind} is answered asynchronously',
+        ),
         final AutomationsRequest r => _automations.handle(r, changes),
         final CheckpointsRequest r => _evidence.handleCheckpoints(r, changes),
         // Runs git, so answered when done: `DataSession.handleLater`.
@@ -279,17 +410,12 @@ class DataService {
         final SshHostDelete r => _hosts.deleteSshHost(r, changes),
         final KnownHostTrust r => _hosts.trustKey(r, changes),
         final KnownHostForget r => _hosts.forgetKey(r, changes),
-        AgentsList() => _hosts.agents(),
-        final InstallationsReconcile r => _hosts.reconcile(r, changes),
-        final InstallationVersion r => _hosts.recordVersion(r, changes),
+        AgentsList() => _hosts.agents(
+          usage: agentWork?.usageStates() ?? const [],
+        ),
         final InstallationSetPath r => _hosts.setPath(r, changes),
-        final ClaudeAccountSave r => _hosts.saveClaudeAccount(r, changes),
-        final ClaudeAccountCredentials r => _hosts.claudeCredentials(r),
         final ClaudeAccountDelete r => _hosts.deleteClaudeAccount(r, changes),
-        final CodexAccountSave r => _hosts.saveCodexAccount(r, changes),
-        final CodexAccountCredentials r => _hosts.codexCredentials(r),
         final CodexAccountDelete r => _hosts.deleteCodexAccount(r, changes),
-        final UsageRecord r => _hosts.recordUsage(r, changes),
         final UsageHistory r => _hosts.usageHistory(r),
       };
     } on DataRefused {
@@ -304,7 +430,7 @@ class DataService {
       );
     }
     if (changes.isEmpty) return DataReply(result as R, _revision);
-    conversations.noticed(changes);
+    _noticed(changes);
     final batch = DataChanges(++_revision, List.unmodifiable(changes));
     _tell(origin, batch);
     return DataReply(result as R, _revision, batch.changes);
@@ -328,9 +454,12 @@ class DataSession {
   /// once — out of order, which only a request that writes nothing a client
   /// copies may be.
   static bool isAnsweredLater(DataRequest<Object?> request) =>
-      request is ConversationsCatchUp || request is CheckpointWorkRequest;
+      request is ConversationsCatchUp ||
+      request is CheckpointWorkRequest ||
+      request is AgentWorkRequest;
 
-  /// Answers any request: at once, or when its work is done.
+  /// Answers any request: at once, or when its work is done. What agent work
+  /// writes is told to every client, this one too, as it is written.
   Future<DataReply<R>> handleLater<R>(DataRequest<R> request) async {
     if (request is ConversationsCatchUp) {
       final changed = await _service.conversations.catchUp();
@@ -344,6 +473,15 @@ class DataSession {
       }
       final value = await work(request as CheckpointWorkRequest<Object?>);
       return DataReply(value as R, _service._revision);
+    }
+    if (request case final AgentWorkRequest<Object?> asked) {
+      final work =
+          _service.agentWork ??
+          (throw const DataRefused.unavailable(
+            'this server does no work for its agents',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
     }
     return handle(request);
   }

@@ -1,6 +1,5 @@
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';

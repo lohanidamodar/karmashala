@@ -88,22 +88,9 @@ void main() {
       KnownHostTrust(key),
       const KnownHostForget('box', 22),
       const AgentsList(),
-      InstallationsReconcile(
-        environmentId: 'windows',
-        readAt: t0,
-        found: [installation],
-        probed: const {'codex'},
-        readings: const {'a1': ExecutableReachability.unreachable},
-      ),
-      InstallationVersion(id: 'a1', version: '2', readAt: t0),
       const InstallationSetPath(id: 'a1', path: 'd.exe'),
-      ClaudeAccountSave(claude),
-      const ClaudeAccountCredentials('c'),
       const ClaudeAccountDelete('c'),
-      CodexAccountSave(codex),
-      const CodexAccountCredentials('x'),
       const CodexAccountDelete('x'),
-      UsageRecord([sample]),
       UsageHistory('k', t0),
     ];
     for (final request in requests) {
@@ -120,16 +107,23 @@ void main() {
     }
   });
 
-  test('a save carries the credentials it saves; its toString does not', () {
-    final json = jsonEncode(DataEnvelope.request(1, ClaudeAccountSave(claude)));
-    expect(json, contains('secret-token'));
-    expect('${ClaudeAccountSave(claude)}', isNot(contains('secret')));
-    final read =
-        DataEnvelope.readRequest(
-              overTheWire(jsonDecode(json) as Map<String, Object?>),
-            ).request!
-            as ClaudeAccountSave;
-    expect(read.account.claudeAiOauth, claude.claudeAiOauth);
+  test('no request saves or answers a credential', () {
+    for (final kind in [
+      'claudeAccounts.save',
+      'claudeAccounts.credentials',
+      'codexAccounts.save',
+      'codexAccounts.credentials',
+      'usage.record',
+      'installations.reconcile',
+      'installations.recordVersion',
+    ]) {
+      final read = DataEnvelope.readRequest({
+        'id': 1,
+        'kind': kind,
+        'arguments': const <String, Object?>{},
+      });
+      expect(read.refusal?.code, DataRefusalCode.invalid, reason: kind);
+    }
   });
 
   test('answers carry typed results', () {
@@ -165,18 +159,6 @@ void main() {
     expect(agents.claudeAccounts.single.claudeAiOauth, isEmpty);
     expect(agents.codexAccounts.single.auth, isEmpty);
 
-    expect(
-      roundTrip(
-        const ClaudeAccountCredentials('c'),
-        claude,
-      ).value.claudeAiOauth['accessToken'],
-      'secret-token',
-    );
-    expect(
-      roundTrip(const CodexAccountCredentials('x'), codex).value.auth,
-      codex.auth,
-    );
-    expect(roundTrip(UsageRecord([sample]), 1).value, 1);
     expect(roundTrip(UsageHistory('k', t0), [sample]).value, [sample]);
     expect(
       roundTrip(
@@ -217,19 +199,5 @@ void main() {
     expect((back.changes[4] as KnownHostChanged).key, key);
     expect((back.changes[6] as InstallationChanged).installation, installation);
     expect((back.changes[5] as KnownHostRemoved).port, 22);
-  });
-
-  test('a misshapen reconcile is refused, not thrown', () {
-    final read = DataEnvelope.readRequest({
-      'id': 1,
-      'kind': 'installations.reconcile',
-      'arguments': {
-        'environmentId': 'windows',
-        'readAt': t0.toIso8601String(),
-        'readings': {'a1': 'sideways'},
-      },
-    });
-    expect(read.request, isNull);
-    expect(read.refusal!.code, DataRefusalCode.invalid);
   });
 }

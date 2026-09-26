@@ -14,6 +14,7 @@ import 'notes_todos_tool_set.dart';
 import 'review_thread_tool_set.dart';
 import 'snippet_tool_set.dart';
 import 'session_tool_schemas.dart';
+import 'usage_tool_set.dart';
 
 /// Every tool the server runs itself, in the order `tools/list` serves them —
 /// before the app's own (panes, the editor, browsers, devices, recordings).
@@ -34,4 +35,5 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...checksToolSchemas,
   ...sessionControlToolSchemas,
   ...launchToolSchemas,
+  ...usageToolSchemas,
 ];

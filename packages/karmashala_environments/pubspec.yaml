@@ -28,6 +28,8 @@ dependencies:
   # The tables, in the app's one schema.
   karmashala_store:
     path: ../karmashala_store
+  # The sweep reads a recorded path with this machine's separator.
+  path: ^1.9.1
   # `SqliteException`, a unique path another row holds.
   sqlite3: ^3.3.3
 

@@ -31,6 +31,7 @@ import 'package:karmashala_verification/verification.dart'
         verificationRunFromJson,
         verificationRunToJson;
 
+import 'agent_work_values.dart';
 import 'session_values.dart';
 import 'worktree_values.dart';
 
@@ -106,6 +107,9 @@ sealed class DataChange {
     ),
     'codexAccountRemoved' => CodexAccountRemoved(json['id']! as String),
     'usageRecorded' => UsageRecorded(json['accountKey']! as String),
+    'usageStateChanged' => UsageStateChanged(
+      AccountUsageState.fromJson(_row(json)),
+    ),
     final String name => _domainChangeFromJson(name, json),
     _ => null,
   };
@@ -388,6 +392,20 @@ final class UsageRecorded extends HostsDomainChange {
   Map<String, Object?> toJson() => {
     'change': 'usageRecorded',
     'accountKey': accountKey,
+  };
+}
+
+/// An account's usage as the server now holds it: a new reading, a failed
+/// attempt, or a new time it asks next.
+final class UsageStateChanged extends HostsDomainChange {
+  const UsageStateChanged(this.state);
+
+  final AccountUsageState state;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'usageStateChanged',
+    'row': state.toJson(),
   };
 }
 

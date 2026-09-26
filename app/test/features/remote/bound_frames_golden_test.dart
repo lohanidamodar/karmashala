@@ -41,7 +41,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';

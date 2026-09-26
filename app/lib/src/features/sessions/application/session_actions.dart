@@ -12,7 +12,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/agent_store_server_providers.dart';
-import '../../cli_detection/application/detected_project_merger.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';

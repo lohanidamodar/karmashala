@@ -116,7 +116,13 @@ class LocalHost {
               '--data-dir=${home.path}/data',
             ],
       ],
-      environment: {'USERPROFILE': home.path, 'HOME': home.path},
+      environment: {
+        'USERPROFILE': home.path,
+        'HOME': home.path,
+        // No usage schedule: it would reach for this machine's real login
+        // Keychain, whatever HOME says.
+        'KARMASHALA_AGENT_WORK': 'off',
+      },
       workingDirectory: Directory.current.path,
       mode: detached
           ? ProcessStartMode.detachedWithStdio

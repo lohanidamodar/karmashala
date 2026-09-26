@@ -261,7 +261,7 @@ class ScheduledResumeController {
     final installation = access.installation;
     final remembered = installation == null || !access.readable
         ? null
-        : _ref.read(agentUsageServiceProvider).remembered(installation);
+        : _ref.read(usageReadingsProvider).remembered(installation);
     final now = _now;
     final resume = ScheduledResume(
       id: _ref.read(idGeneratorProvider).newId(),

@@ -14,9 +14,9 @@ import 'package:karmashala_store/database.dart';
 /// accounts and the usage history: validates, applies the rules in
 /// `karmashala_environments`, writes, and says what changed.
 ///
-/// **Credentials stay here.** A saved account's token bundle is written from
-/// a client's save and read back only by `*.credentials`, answered to the
-/// asking client; lists and changes carry every account without it. A saved
+/// **Credentials stay here.** A saved account's token bundle is written when
+/// the server captures it and read back only by the server, to switch an
+/// installation to it; no answer, list or change carries it. A saved
 /// SSH host's key *location* is answered to a client that asks for its hosts
 /// and never told as a change (`SshHostTouched` names the host only). None of
 /// it is logged: a refusal names what was wrong, never a value.
@@ -170,54 +170,68 @@ class HostsHandler {
 
   // Installations.
 
-  AgentsSnapshot agents() => AgentsSnapshot(
-    installations: _installations.getAll(),
-    claudeAccounts: [
-      for (final a in _claudeAccounts.getAll())
-        claudeAccountWithoutCredentials(a),
-    ],
-    codexAccounts: [
-      for (final a in _codexAccounts.getAll())
-        codexAccountWithoutCredentials(a),
-    ],
-  );
+  AgentsSnapshot agents({List<AccountUsageState> usage = const []}) =>
+      AgentsSnapshot(
+        usage: usage,
+        installations: _installations.getAll(),
+        claudeAccounts: [
+          for (final a in _claudeAccounts.getAll())
+            claudeAccountWithoutCredentials(a),
+        ],
+        codexAccounts: [
+          for (final a in _codexAccounts.getAll())
+            codexAccountWithoutCredentials(a),
+        ],
+      );
 
   /// Every installation recorded in [environmentId], oldest first.
   List<AgentInstallation> installationsIn(String environmentId) =>
       _installations.getByEnvironment(environmentId);
 
-  InstallationsReconciled reconcile(
-    InstallationsReconcile request,
-    List<DataChange> changes,
-  ) {
-    final environmentId = request.environmentId;
+  /// Records a probe of [environmentId] by the one rule (`planReconcile`):
+  /// [probed] names the agents asked about — only their leftover rows are
+  /// judged — and [readings] what this machine's disk says of each row.
+  InstallationsReconciled reconcile({
+    required String environmentId,
+    required DateTime readAt,
+    required List<AgentInstallation> found,
+    required Set<String> probed,
+    required Map<String, ExecutableReachability> readings,
+    required List<DataChange> changes,
+  }) {
     if (_environments.getById(environmentId) == null) {
       throw DataRefused.notFound('no environment with id $environmentId');
     }
-    for (final found in request.found) {
-      if (found.environmentId != environmentId) {
+    for (final row in found) {
+      if (row.environmentId != environmentId) {
         throw DataRefused.invalid(
-          '${found.agentId} was found in ${found.environmentId}, '
+          '${row.agentId} was found in ${row.environmentId}, '
           'not $environmentId',
         );
       }
-      if (found.executable.path.trim().isEmpty) {
-        throw DataRefused.invalid('${found.agentId} was found at no path');
+      if (row.executable.path.trim().isEmpty) {
+        throw DataRefused.invalid('${row.agentId} was found at no path');
       }
     }
     return _apply(
       planReconcile(
         environmentId: environmentId,
         stored: _installations.getByEnvironment(environmentId),
-        found: request.found,
-        probed: request.probed,
-        readings: request.readings,
-        readAt: request.readAt,
+        found: found,
+        probed: probed,
+        readings: readings,
+        readAt: readAt,
       ),
-      request.readAt,
+      readAt,
       changes,
     );
   }
+
+  /// Every recorded installation, oldest first.
+  List<AgentInstallation> allInstallations() => _installations.getAll();
+
+  /// Every recorded environment.
+  List<ExecutionEnvironment> allEnvironments() => _environments.getAll();
 
   /// What the server found on this machine itself: recorded by the same
   /// rules, judging no leftover row — a CLI that has gone is the desktop's
@@ -300,20 +314,19 @@ class HostsHandler {
     );
   }
 
+  /// Records what installation [id]'s CLI answered, read at [readAt].
   AgentInstallation recordVersion(
-    InstallationVersion request,
+    String id,
+    String version,
+    DateTime readAt,
     List<DataChange> changes,
   ) {
-    _installation(request.id);
-    if (request.version.trim().isEmpty) {
+    _installation(id);
+    if (version.trim().isEmpty) {
       throw const DataRefused.invalid('a version reading says something');
     }
-    _installations.recordVersion(
-      request.id,
-      request.version,
-      readAt: request.readAt,
-    );
-    return _installationChanged(request.id, changes);
+    _installations.recordVersion(id, version, readAt: readAt);
+    return _installationChanged(id, changes);
   }
 
   AgentInstallation setPath(
@@ -352,22 +365,26 @@ class HostsHandler {
 
   // Saved accounts.
 
+  /// Saves a Claude account the server captured — the one with the same
+  /// email and organization keeps its id. Answers it without credentials.
   ClaudeAccount saveClaudeAccount(
-    ClaudeAccountSave request,
+    ClaudeAccount account,
     List<DataChange> changes,
   ) {
-    final problem = claudeAccountProblem(request.account);
+    final problem = claudeAccountProblem(account);
     if (problem != null) throw DataRefused.invalid(problem);
     final saved = claudeAccountWithoutCredentials(
-      _claudeAccounts.upsert(request.account),
+      _claudeAccounts.upsert(account),
     );
     changes.add(ClaudeAccountChanged(saved));
     return saved;
   }
 
-  ClaudeAccount claudeCredentials(ClaudeAccountCredentials request) =>
-      _claudeAccounts.getById(request.id) ??
-      (throw DataRefused.notFound('no saved Claude account ${request.id}'));
+  /// Saved Claude account [id] **with** its credentials — the server's own
+  /// read, right before it switches an installation to it.
+  ClaudeAccount claudeAccount(String id) =>
+      _claudeAccounts.getById(id) ??
+      (throw DataRefused.notFound('no saved Claude account $id'));
 
   DataAck deleteClaudeAccount(
     ClaudeAccountDelete request,
@@ -379,24 +396,27 @@ class HostsHandler {
     return const DataAck();
   }
 
+  /// Saves a Codex account the server captured — the one with the same
+  /// account id keeps its id. Answers it without credentials.
   CodexAccount saveCodexAccount(
-    CodexAccountSave request,
+    CodexAccount account,
     List<DataChange> changes,
   ) {
-    final problem = codexAccountProblem(request.account);
+    final problem = codexAccountProblem(account);
     if (problem != null) throw DataRefused.invalid(problem);
     final saved = codexAccountWithoutCredentials(
-      _codexAccounts.upsert(request.account),
+      _codexAccounts.upsert(account),
     );
     changes.add(CodexAccountChanged(saved));
     return saved;
   }
 
-  CodexAccount codexCredentials(CodexAccountCredentials request) {
+  /// Saved Codex account [id] **with** its credentials, for a switch.
+  CodexAccount codexAccount(String id) {
     for (final account in _codexAccounts.getAll()) {
-      if (account.id == request.id) return account;
+      if (account.id == id) return account;
     }
-    throw DataRefused.notFound('no saved Codex account ${request.id}');
+    throw DataRefused.notFound('no saved Codex account $id');
   }
 
   DataAck deleteCodexAccount(
@@ -412,9 +432,11 @@ class HostsHandler {
 
   // Usage history.
 
-  int recordUsage(UsageRecord request, List<DataChange> changes) {
+  /// Records one reading's candidate samples (`usageSamplesOf`): keeps what
+  /// is worth a row and prunes at most hourly by the readings' own clock.
+  int recordUsage(List<UsageSample> samples, List<DataChange> changes) {
     DateTime? at;
-    for (final sample in request.samples) {
+    for (final sample in samples) {
       if (sample.accountKey.trim().isEmpty || sample.windowLabel.isEmpty) {
         throw const DataRefused.invalid('a usage sample names its window');
       }
@@ -423,7 +445,7 @@ class HostsHandler {
     final gained = <String>{};
     var written = 0;
     _db.transaction(() {
-      for (final sample in request.samples) {
+      for (final sample in samples) {
         final last = _usage.latest(sample.accountKey, sample.windowLabel);
         if (!usageSampleWorthKeeping(sample, last)) continue;
         _usage.insert(sample);

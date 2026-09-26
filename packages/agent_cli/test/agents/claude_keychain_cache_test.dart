@@ -1,13 +1,13 @@
 import 'dart:convert';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
+import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 
-import '../../support/fake_cli_store_locator.dart';
-import '../../support/fake_http_client.dart';
-import '../../support/fakes.dart';
-import '../../support/fixtures.dart';
-import 'package:agent_cli/read.dart';
+import '../support/fake_cli_store_locator.dart';
+import '../support/fake_http_client.dart';
+import '../support/fakes.dart';
+import '../support/fixtures.dart';
 
 /// **What one glance at the quota chip costs the login Keychain.**
 ///

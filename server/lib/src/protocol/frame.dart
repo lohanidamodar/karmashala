@@ -103,7 +103,14 @@ enum MessageType {
   // client → host: every pane it has now; host → client: the panes whose
   // bottom rows to send with the next report.
   paneFacts(0x36),
-  paneTailsWanted(0x37);
+  paneTailsWanted(0x37),
+  // Protocol 18 (slice 2a): commands the server runs through the app, for
+  // the one reach it has no transport of its own for (SSH). client → host:
+  // "run them through me"; host → client: one command; client → host: how
+  // it ended.
+  runOffer(0x38),
+  runCall(0x39),
+  runResult(0x3a);
 
   const MessageType(this.code);
   final int code;

@@ -149,6 +149,9 @@ Map<String, String> scratchEnvironment(Directory root) => {
   'HOME': '${root.path}/home',
   'USERPROFILE': '${root.path}/home',
   'KARMASHALA_HOST_DIR': '${root.path}/host',
+  // Agent work only when asked: no usage schedule reaching for a Keychain,
+  // no start-up probe of this machine's CLIs.
+  'KARMASHALA_AGENT_WORK': 'off',
 };
 
 /// A [ServerAgents] whose probe finds nothing and spawns nothing.

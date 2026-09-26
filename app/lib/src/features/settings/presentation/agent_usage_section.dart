@@ -11,7 +11,6 @@ import 'package:agent_cli/usage.dart';
 import '../../agents/presentation/usage_history_charts.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 import 'package:agent_cli/discovery.dart';
-import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart';
 import 'agent_label.dart';
@@ -68,12 +67,13 @@ class _AccountComparison extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final service = ref.watch(agentUsageServiceProvider);
     final bars = <BarDatum>[];
     final seen = <String>{};
     for (final installation in installations) {
       if (!seen.add(usageAccountKey(installation))) continue;
-      final usage = service.remembered(installation);
+      final usage = ref
+          .watch(accountUsageProvider(usageAccountKey(installation)))
+          ?.usage;
       if (usage == null) continue;
       UsageWindow? tightest;
       for (final window in usage.windows) {
@@ -139,7 +139,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     super.initState();
     // The card opens on whatever was last read, with its age: a blank one was
     // hiding a number the app already had.
-    final service = ref.read(agentUsageServiceProvider);
+    final service = ref.read(usageReadingsProvider);
     _usage = service.remembered(widget.installation);
     // And why it is not moving: a card that looked untroubled beside a stalled
     // chip is how the two surfaces came to disagree about one account.
@@ -151,10 +151,9 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
       _loading = true;
       _failure = null;
     });
-    final service = ref.read(agentUsageServiceProvider);
+    final service = ref.read(usageReadingsProvider);
     try {
-      final environments = ref.read(environmentsDataProvider).getAll();
-      final usage = await service.fetch(widget.installation, environments);
+      final usage = await service.fetch(widget.installation);
       if (mounted) setState(() => _usage = usage);
     } on UsageException catch (e) {
       // The reading survives the failure after it: an aged number beats none.

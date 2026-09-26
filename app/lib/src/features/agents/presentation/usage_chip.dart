@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,7 +9,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../../app/shell/workbench_tabs.dart';
 import '../../settings/presentation/settings_nav.dart';
 import '../application/agent_usage_providers.dart';
-import '../application/usage_refresh_policy.dart';
 import 'package:agent_cli/usage.dart';
 import 'usage_chip_popover.dart';
 
@@ -282,29 +283,6 @@ class UsageChip extends ConsumerStatefulWidget {
 }
 
 class _UsageChipState extends ConsumerState<UsageChip> {
-  /// The policy this chip keeps alive, held as a plain object so it can be
-  /// stopped from [dispose], where `ref` is no longer safe to read.
-  UsageRefreshController? _policy;
-
-  /// Holds [policy] and lets go of the one held before, when they differ. The
-  /// hold moves when the chip's account does, not on every build: retaining on
-  /// each build and releasing only the latest policy kept a chip's first
-  /// account's timer running after its session moved to another.
-  void _hold(UsageRefreshController? policy) {
-    if (identical(policy, _policy)) return;
-    _policy?.release(this);
-    _policy = policy;
-    policy?.retain(this);
-  }
-
-  @override
-  void dispose() {
-    // The only teardown hook that always runs. Released, not stopped: the timer
-    // belongs to the *account*, and a sibling pane may still be on screen.
-    _policy?.release(this);
-    super.dispose();
-  }
-
   /// One period's words. Both slots are drawn in one colour — the worst
   /// window's — because two colours in a 12px row read as two chips.
   Widget _words(String fact, Color colour) => Text(
@@ -320,23 +298,17 @@ class _UsageChipState extends ConsumerState<UsageChip> {
     final installation = ref.watch(
       usageInstallationForSessionProvider(widget.sessionId),
     );
-    if (installation == null) {
-      _hold(null);
-      return const SizedBox.shrink();
-    }
+    if (installation == null) return const SizedBox.shrink();
 
-    // Keeps this **account's** timer alive while a chip on it is on screen.
+    // The server reads the account on its own schedule and tells this app;
+    // the chip only draws what it was told.
     final account = usageAccountKey(installation);
-    ref.watch(usageRefreshProvider(account));
-    final policy = ref.read(usageRefreshProvider(account).notifier);
-    _hold(policy);
-
+    final state = ref.watch(accountUsageProvider(account));
     final view = usageChipViewFor(
       ref.watch(agentUsageProvider(installation)),
       ref.read(clockProvider).nowUtc(),
-      // Survives what `AsyncValue` cannot: the chip is rebuilt from nothing
-      // every time the focused pane moves to another account and back.
-      remembered: ref.watch(agentUsageServiceProvider).remembered(installation),
+      // The last reading, shown stale beside a failed attempt.
+      remembered: state?.usage,
     );
     final semantic = SemanticColors.of(context);
     final colour = switch (view.tone) {
@@ -348,7 +320,7 @@ class _UsageChipState extends ConsumerState<UsageChip> {
 
     return InkWell(
       onTap: () {
-        policy.refresh();
+        unawaited(ref.read(usageReadingsProvider).refresh(account));
         openSettingsTab(ref, anchor: SettingsAnchor.usage);
       },
       // The hover card is pictures; the plain sentence is what a screen reader

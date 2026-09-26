@@ -1,5 +1,9 @@
-import 'package:agent_cli/process.dart';
-import 'package:agent_cli/read.dart';
+import '../../environments/environment_kind.dart';
+import '../../environments/environment_path.dart';
+import '../../environments/execution_environment.dart';
+import '../../process/path_translator.dart';
+import 'detected_project.dart';
+import 'detected_session.dart';
 
 /// Merges detected sessions into projects keyed by a canonical path, so the
 /// same folder seen through different CLIs and environments is one project.

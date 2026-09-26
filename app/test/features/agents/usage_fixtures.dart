@@ -1,60 +1,34 @@
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AccountUsageState, UsageFailure;
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:agent_cli/process.dart';
 
-import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 
-/// An [AgentUsageService] that answers from the test.
-///
-/// Substituted for the real one through `agentUsageServiceProvider`, so the
-/// provider under test still runs its own body — nothing here reaches the
-/// vendor endpoints, and no token is read from disk.
-///
-/// **It overrides the network half only.** `fetchFresh` is the lookup; `fetch`
-/// — the throttle, the remembered reading and the `429` backoff — is the real
-/// one, so a test that counts [calls] counts requests that would actually have
-/// left the machine.
-class FakeAgentUsageService extends AgentUsageService {
-  FakeAgentUsageService({
-    AgentUsage? answer,
-    UsageException? failure,
-    Clock? clock,
-  }) : this._(clock ?? FixedClock(testTime), answer, failure);
-
-  FakeAgentUsageService._(Clock clock, this.answer, this.failure)
-    : super(
-        storeLocator: FixedLocator(const []),
-        clock: clock,
-        // No jitter: a test pins the schedule exactly, and the spread itself is
-        // measured in `usage_throttle_test.dart` where it belongs.
-        throttle: UsageThrottle(clock: clock, jitter: () => 0),
-      );
-
-  /// What the next fetch returns, when [failure] is null.
-  AgentUsage? answer;
-
-  /// What the next fetch throws instead.
-  UsageException? failure;
-
-  /// One entry per request, in order. This is the number the refresh policy's
-  /// tests count.
-  final List<AgentInstallation> calls = [];
-
-  @override
-  Future<AgentUsage> fetchFresh(
-    AgentInstallation installation,
-    List<ExecutionEnvironment> environments,
-  ) async {
-    calls.add(installation);
-    final failed = failure;
-    if (failed != null) throw failed;
-    return answer ?? usageSnapshot(fetchedAt: clock.nowUtc());
-  }
+/// Puts [installation]'s account on [server] as the server last read it:
+/// [usage] (however old), how the last attempt failed ([failure]), and when
+/// it asks next — told to every connected client, the way the server's
+/// schedule tells them. Nothing reaches a vendor or a credential.
+AccountUsageState seedUsage(
+  FakeDataServer server,
+  AgentInstallation installation, {
+  AgentUsage? usage,
+  UsageFailure? failure,
+  DateTime? nextAt,
+}) {
+  final state = AccountUsageState(
+    accountKey: usageAccountKey(installation),
+    agentId: installation.agentId,
+    environmentId: installation.environmentId,
+    usage: usage,
+    failure: failure,
+    nextAt: nextAt,
+  );
+  server.agentWork.setUsage(state);
+  return state;
 }
 
 /// One usage snapshot. The second window is deliberately near zero so a test

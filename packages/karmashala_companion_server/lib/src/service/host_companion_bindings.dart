@@ -29,11 +29,12 @@ import 'sessions_at_rest.dart';
 /// - **The app's while it is connected, the host's while it is not** — for a
 ///   phone driving a machine with no desktop: the workspace and adding a
 ///   project ([workspace]), starting and resuming sessions and a session's
-///   model or mode ([control]), usage ([usage]) and attachments
-///   ([attachments]). The app's answers are the launcher's, its composer's and
+///   model or mode ([control]) and attachments ([attachments]). The app's answers are the launcher's, its composer's and
 ///   its Settings', so it keeps them while it is there. A host composed
 ///   without one of these refuses it with no app: "the Karmashala app is not
 ///   running".
+/// - **The server's alone**: usage ([usage]), read by the server on its own
+///   schedule from the credentials on its machine (slice 2a).
 RemoteHostBindings hostCompanionBindings({
   required String hostName,
   required CompanionAppLink app,
@@ -135,11 +136,8 @@ RemoteHostBindings hostCompanionBindings({
       (prompts) => prompts.answerMenu(request),
       () => forwarded.answerMenu(request),
     ),
-    usage: () => app.connected
-        ? forwarded.usage()
-        : usage == null
-        ? Future.error(companionAppNotRunning)
-        : usage(),
+    // The server reads usage itself (slice 2a), the app open or not.
+    usage: () => usage == null ? Future.error(companionAppNotRunning) : usage(),
     notes: notes,
     registerPush: registerPush,
     listWorkspace: () => appOrHost(

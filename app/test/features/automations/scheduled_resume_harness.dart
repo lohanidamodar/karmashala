@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -22,6 +23,8 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AccountUsageState, UsageFailure;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -68,6 +71,68 @@ class ResumingLauncher extends SessionLauncher {
   }
 }
 
+/// **The server's usage of the harness's accounts**, as a test scripts it.
+///
+/// The server reads usage — when the app asks (`usage.refresh`, which
+/// [answer] and [failure] script) and on its own schedule ([serverRead]) —
+/// and tells the app every change, which is how the scheduled-resume observer
+/// hears a fresh reading. Nothing here reaches a vendor.
+class ServerUsage {
+  ServerUsage._(this._server, this._clock) {
+    _server.agentWork.onRefresh = _read;
+  }
+
+  final FakeDataServer _server;
+  final MovableClock _clock;
+
+  /// What the server reads when asked; a fresh default reading when null.
+  AgentUsage? answer;
+
+  /// How the server's read fails instead, when set. The reading it held
+  /// stays beside the failure, as the server keeps it.
+  UsageException? failure;
+
+  /// Every `usage.refresh` this app asked of the server, by account key.
+  List<String?> get calls => _server.agentWork.refreshes;
+
+  /// The server read [installation]'s account on its own schedule — [usage],
+  /// or [answer] — and told every client.
+  void serverRead(AgentInstallation installation, [AgentUsage? usage]) {
+    if (usage != null) answer = usage;
+    _server.agentWork.setUsage(
+      _state(installation, usageAccountKey(installation)),
+    );
+  }
+
+  AccountUsageState _read(String key) {
+    final installation = _server.installationRows.getAll().firstWhere(
+      (i) => usageAccountKey(i) == key,
+    );
+    return _state(installation, key);
+  }
+
+  AccountUsageState _state(AgentInstallation installation, String key) {
+    final failed = failure;
+    return AccountUsageState(
+      accountKey: key,
+      agentId: installation.agentId,
+      environmentId: installation.environmentId,
+      usage: failed == null
+          ? answer ?? usageSnapshot(fetchedAt: _clock.nowUtc())
+          : _server.agentWork.usage[key]?.usage,
+      failure: failed == null
+          ? null
+          : UsageFailure(
+              message: failed.message,
+              kind: failed.kind,
+              until: failed.retryIn == null
+                  ? null
+                  : _clock.nowUtc().add(failed.retryIn!),
+            ),
+    );
+  }
+}
+
 /// Everything a scheduled-resume test needs, with nothing that waits: the
 /// clock is moved and the one timer is fired by hand.
 class ResumeHarness {
@@ -80,10 +145,10 @@ class ResumeHarness {
     server.environmentRows.upsert(windowsEnv());
     server.installationRows.insert(agentInstallation(agentId: agentId));
     clock = MovableClock(DateTime.utc(2026, 9, 17, 12));
-    usage = FakeAgentUsageService(clock: clock);
+    usage = ServerUsage._(server, clock);
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(usageService: usage),
+        ...fakeTerminalOverrides(),
         dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('resume-')),
@@ -119,7 +184,7 @@ class ResumeHarness {
 
   final FakeDataServer server;
   late final MovableClock clock;
-  late final FakeAgentUsageService usage;
+  late final ServerUsage usage;
   late final ProviderContainer container;
   final timer = ManualAutomationTimer();
   final presenter = RecordingPresenter();

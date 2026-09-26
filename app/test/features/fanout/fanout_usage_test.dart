@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not part of the main barrel in Riverpod 3.
@@ -14,6 +12,8 @@ import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_usage_strip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show UsageFailure;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -50,46 +50,59 @@ AgentUsage windowAt(
   fetchedAt: testTime,
 );
 
+/// The server [seededWorkspace] last stood up, for a test that tells the app
+/// the server's usage of an account.
+late FakeDataServer workspaceServer;
+
+/// The two installations [seededWorkspace] seeds.
+final claudeInstall = agentInstallation(id: 'a1', agentId: AgentIds.claudeCode);
+final codexInstall = agentInstallation(
+  id: 'a2',
+  agentId: AgentIds.codex,
+  path: r'C:\Users\me\.bin\codex.exe',
+);
+
 /// The workspace the dialog reads — one project with its checkout `r1` — and
 /// the two agents installed on this machine.
 Future<Override> seededWorkspace() {
-  final server = FakeDataServer()
+  final server = workspaceServer = FakeDataServer()
     ..environmentRows.upsert(windowsEnv())
     ..projectRows.insert(project())
     ..repositoryRows.insert(repository());
   server.installationRows
-    ..insert(agentInstallation(id: 'a1', agentId: AgentIds.claudeCode))
-    ..insert(
-      agentInstallation(
-        id: 'a2',
-        agentId: AgentIds.codex,
-        path: r'C:\Users\me\.bin\codex.exe',
-      ),
-    );
+    ..insert(claudeInstall)
+    ..insert(codexInstall);
   return server.override();
 }
 
 TestMachine seeded() => TestMachine();
 
-typedef UsageLookup = FutureOr<AgentUsage> Function(AgentInstallation);
+typedef UsageLookup = AsyncValue<AgentUsage> Function(AgentInstallation);
 
 /// Opens the dialog on its setup page and ticks [select] agents, which is what
 /// makes the strip ask about anything at all.
+///
+/// [usageFor] stands in for the account's live usage; without it the strip
+/// reads what the server told ([seed] tells it before the dialog opens).
 Future<ProviderContainer> pumpSetup(
   WidgetTester tester, {
-  required UsageLookup usageFor,
+  UsageLookup? usageFor,
+  void Function(FakeDataServer server)? seed,
   int select = 2,
   List<Override> extraOverrides = const [],
 }) async {
   seeded();
+  final data = await seededWorkspace();
+  seed?.call(workspaceServer);
   final container = ProviderContainer(
     overrides: [
-      await seededWorkspace(),
+      data,
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
       ),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
-      agentUsageProvider.overrideWith((ref, install) => usageFor(install)),
+      if (usageFor != null)
+        agentUsageProvider.overrideWith((ref, install) => usageFor(install)),
       ...extraOverrides,
     ],
   );
@@ -150,7 +163,14 @@ void main() {
   testWidgets('a comfortable account shows the number, and no warning', (
     tester,
   ) async {
-    await pumpSetup(tester, usageFor: (_) => windowAt(12));
+    // What the server told, through the real providers.
+    await pumpSetup(
+      tester,
+      seed: (server) {
+        seedUsage(server, claudeInstall, usage: windowAt(12));
+        seedUsage(server, codexInstall, usage: windowAt(12));
+      },
+    );
 
     expect(find.text('Starts 2 sessions'), findsOneWidget);
     expect(find.text('Claude Code · Windows · 5-hour'), findsOneWidget);
@@ -165,9 +185,11 @@ void main() {
   ) async {
     await pumpSetup(
       tester,
-      usageFor: (install) => install.agentId == AgentIds.claudeCode
-          ? windowAt(92, resetsIn: const Duration(hours: 2, minutes: 5))
-          : windowAt(12),
+      usageFor: (install) => AsyncData(
+        install.agentId == AgentIds.claudeCode
+            ? windowAt(92, resetsIn: const Duration(hours: 2, minutes: 5))
+            : windowAt(12),
+      ),
     );
 
     expect(find.text('Starts 2 sessions'), findsOneWidget);
@@ -190,15 +212,17 @@ void main() {
     await pumpSetup(
       tester,
       extraOverrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
-      usageFor: (_) => AgentUsage(
-        windows: [
-          UsageWindow(
-            label: '5-hour',
-            percent: 40,
-            resetsAt: testTime.add(const Duration(hours: 3, minutes: 1)),
-          ),
-        ],
-        fetchedAt: testTime,
+      usageFor: (_) => AsyncData(
+        AgentUsage(
+          windows: [
+            UsageWindow(
+              label: '5-hour',
+              percent: 40,
+              resetsAt: testTime.add(const Duration(hours: 3, minutes: 1)),
+            ),
+          ],
+          fetchedAt: testTime,
+        ),
       ),
     );
 
@@ -208,14 +232,17 @@ void main() {
   testWidgets('an unreadable account says so — not 0%, not 100%', (
     tester,
   ) async {
+    // The server's failed attempts, in its own words, and no reading ever.
+    const notSignedIn = UsageFailure(
+      message: 'Not signed in to Claude in this environment.',
+      kind: UsageFailureKind.auth,
+    );
     final container = await pumpSetup(
       tester,
-      // Async, like the service: a failed lookup is a rejected future, not a
-      // synchronous throw. Riverpod then retries it, which is exactly the state
-      // that used to read as "still checking".
-      usageFor: (_) => Future<AgentUsage>.error(
-        UsageException('Not signed in to Claude in this environment.'),
-      ),
+      seed: (server) {
+        seedUsage(server, claudeInstall, failure: notSignedIn);
+        seedUsage(server, codexInstall, failure: notSignedIn);
+      },
     );
 
     expect(find.text('not recorded'), findsNWidgets(2));
@@ -232,8 +259,7 @@ void main() {
     expect(find.text('do the thing'), findsOneWidget);
     expectLaunchStillOffered(tester);
 
-    // Riverpod keeps a retry timer alive behind a failed lookup; closing the
-    // dialog is what disposes it, and the container stands in for that here.
+    // Closing the dialog; the container stands in for that here.
     container.dispose();
   });
 
@@ -242,24 +268,25 @@ void main() {
     // The strip used to read the error first and print "not recorded" over a
     // reading the app was holding — the fan-out is exactly where losing it
     // costs something, because the number is why the dialog shows it at all.
-    final clock = MovableClock(testTime);
-    final service = FakeAgentUsageService(clock: clock)
-      ..answer = usageSnapshot(percent: 62);
-    await service.fetch(agentInstallation(id: 'a1'), const []);
-    clock.now = clock.now.add(const Duration(minutes: 4));
-
+    // The server read the Claude account four minutes ago and has been rate
+    // limited since; it never read the Codex one.
+    final clock = MovableClock(testTime.add(const Duration(minutes: 4)));
+    const rateLimited = UsageFailure(
+      message: 'Rate limited by the usage service.',
+      kind: UsageFailureKind.rateLimited,
+    );
     await pumpSetup(
       tester,
-      usageFor: (_) => Future<AgentUsage>.error(
-        UsageException(
-          'Rate limited by the usage service.',
-          kind: UsageFailureKind.rateLimited,
-        ),
-      ),
-      extraOverrides: [
-        clockProvider.overrideWithValue(clock),
-        agentUsageServiceProvider.overrideWithValue(service),
-      ],
+      seed: (server) {
+        seedUsage(
+          server,
+          claudeInstall,
+          usage: usageSnapshot(percent: 62),
+          failure: rateLimited,
+        );
+        seedUsage(server, codexInstall, failure: rateLimited);
+      },
+      extraOverrides: [clockProvider.overrideWithValue(clock)],
     );
 
     expect(find.textContaining('62%'), findsOneWidget);
@@ -277,7 +304,8 @@ void main() {
   ) async {
     await pumpSetup(
       tester,
-      usageFor: (_) => AgentUsage(windows: const [], fetchedAt: testTime),
+      usageFor: (_) =>
+          AsyncData(AgentUsage(windows: const [], fetchedAt: testTime)),
     );
 
     expect(find.text('not recorded'), findsNWidgets(2));
@@ -290,7 +318,7 @@ void main() {
     // Antigravity. A reply arrived, it named what the account is allowed, and
     // it measured nothing — which at the point of spending several sessions at
     // once must read as "unknown" and never as an untouched 0%.
-    await pumpSetup(tester, usageFor: (_) => antigravitySnapshot());
+    await pumpSetup(tester, usageFor: (_) => AsyncData(antigravitySnapshot()));
 
     expect(find.text('not recorded'), findsNWidgets(2));
     expect(find.text('No quota reported for this account.'), findsNWidgets(2));
@@ -298,13 +326,11 @@ void main() {
     expectLaunchStillOffered(tester);
   });
 
-  testWidgets('a slow lookup never holds the dialog up', (tester) async {
-    final pending = Completer<AgentUsage>();
-    addTearDown(() {
-      if (!pending.isCompleted) pending.complete(windowAt(12));
-    });
-
-    await pumpSetup(tester, usageFor: (_) => pending.future);
+  testWidgets('a reading not yet taken never holds the dialog up', (
+    tester,
+  ) async {
+    // The server has said nothing of either account yet.
+    await pumpSetup(tester);
 
     // Nothing has arrived, and the dialog is fully usable anyway.
     expect(find.text('checking…'), findsNWidgets(2));
@@ -313,7 +339,10 @@ void main() {
     expect(find.text('do the thing'), findsOneWidget);
     expectLaunchStillOffered(tester);
 
-    pending.complete(windowAt(12));
+    // The server's readings arrive, told as changes.
+    seedUsage(workspaceServer, claudeInstall, usage: windowAt(12));
+    seedUsage(workspaceServer, codexInstall, usage: windowAt(12));
+    await tester.pump();
     await tester.pump();
     expect(find.text('12%'), findsNWidgets(2));
     expectLaunchStillOffered(tester);
@@ -328,7 +357,7 @@ void main() {
       select: 0,
       usageFor: (install) {
         asked.add(install.id);
-        return windowAt(12);
+        return AsyncData(windowAt(12));
       },
     );
 
@@ -352,9 +381,11 @@ void main() {
         ),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         agentUsageProvider.overrideWith(
-          (ref, install) => install.agentId == AgentIds.claudeCode
-              ? windowAt(92, resetsIn: const Duration(hours: 2, minutes: 5))
-              : windowAt(12),
+          (ref, install) => AsyncData(
+            install.agentId == AgentIds.claudeCode
+                ? windowAt(92, resetsIn: const Duration(hours: 2, minutes: 5))
+                : windowAt(12),
+          ),
         ),
       ],
     );
@@ -401,13 +432,13 @@ void main() {
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         agentUsageProvider.overrideWith(
           (ref, install) => switch (install.agentId) {
-            AgentIds.claudeCode => windowAt(
-              96,
-              resetsIn: const Duration(hours: 2, minutes: 5),
+            AgentIds.claudeCode => AsyncData(
+              windowAt(96, resetsIn: const Duration(hours: 2, minutes: 5)),
             ),
-            AgentIds.codex => windowAt(12, label: '7-day'),
-            _ => Future<AgentUsage>.error(
+            AgentIds.codex => AsyncData(windowAt(12, label: '7-day')),
+            _ => AsyncError(
               UsageException('Usage is not available for Antigravity.'),
+              StackTrace.empty,
             ),
           },
         ),

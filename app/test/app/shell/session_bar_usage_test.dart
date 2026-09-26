@@ -2,8 +2,6 @@ import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
-import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -53,7 +51,6 @@ void main() {
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
-  late FakeAgentUsageService service;
   late MovableClock clock;
   late SessionDelivery delivery;
 
@@ -68,17 +65,15 @@ void main() {
     hasWorktree: true,
   );
 
-  final claudeAccount = usageAccountKey(agentInstallation());
-
-  ProviderContainer containerFor({Duration floor = Duration.zero}) {
+  /// The container, and — unless [read] is false — the server's reading of
+  /// the Claude account, told to the app the way the server's schedule tells
+  /// it.
+  ProviderContainer containerFor({bool read = true}) {
+    if (read) seedUsage(server, agentInstallation(), usage: usageSnapshot());
     final made = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(
-          machine: db,
-          usageService: service,
-          usagePollFloor: floor,
-        ),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(clock),
         sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -102,7 +97,6 @@ void main() {
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     clock = MovableClock(testTime);
-    service = FakeAgentUsageService(clock: clock);
     delivery = fullBar;
   });
 
@@ -192,7 +186,7 @@ void main() {
   testWidgets('a quota change repaints the chip and nothing else in the bar', (
     tester,
   ) async {
-    container = containerFor(floor: kUsageMinInterval);
+    container = containerFor();
     seedPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
@@ -201,12 +195,12 @@ void main() {
     UsageChip.debugBuildCount = 0;
     DeliveryStateLine.debugBuildCount = 0;
 
-    // Past the floor, or the refresh is answered from memory and there is no
-    // change to measure — which is itself the subject of
-    // `usage_refresh_policy_test.dart`.
-    clock.now = clock.now.add(usageFixtureFloor);
-    service.answer = usageSnapshot(percent: 77, fetchedAt: clock.nowUtc());
-    container.read(usageRefreshProvider(claudeAccount).notifier).refresh();
+    // The server's next reading, told as a change.
+    seedUsage(
+      server,
+      agentInstallation(),
+      usage: usageSnapshot(percent: 77, fetchedAt: clock.nowUtc()),
+    );
     await tester.pump();
     await tester.pump();
 
@@ -230,9 +224,9 @@ void main() {
     // Two tabs, two accounts. This is the whole of *"each session might be
     // different one"*: activating the other tab must change which quota is
     // reported, because it is a different account's.
-    server.installationRows.insert(
-      agentInstallation(id: 'a2', agentId: AgentIds.codex),
-    );
+    final codex = agentInstallation(id: 'a2', agentId: AgentIds.codex);
+    server.installationRows.insert(codex);
+    seedUsage(server, codex, usage: usageSnapshot(percent: 30));
     container = containerFor();
     seedPane();
     seedPane(id: 's2', installation: 'a2');
@@ -240,10 +234,11 @@ void main() {
     await pump(tester);
 
     expect(
-      service.calls.single.agentId,
-      AgentIds.codex,
-      reason: 'the tab that is up is the Codex one, and it is asked about',
+      find.text('30% · 2h11m'),
+      findsOneWidget,
+      reason: "the tab that is up is the Codex one, and it shows Codex's quota",
     );
+    expect(find.text('62% · 2h11m'), findsNothing);
 
     final tabs = container.read(terminalSessionsControllerProvider).tabs;
     container
@@ -251,10 +246,12 @@ void main() {
         .activateTab(tabs.first.id);
     await tester.pumpAndSettle();
 
-    expect(service.calls.map((i) => i.agentId).toList(), [
-      AgentIds.codex,
-      AgentIds.claudeCode,
-    ], reason: 'switching pane switches account, and asks that account');
+    expect(
+      find.text('62% · 2h11m'),
+      findsOneWidget,
+      reason: "switching pane switches account, and shows that account's",
+    );
+    expect(find.text('30% · 2h11m'), findsNothing);
     await quiesce(tester);
   });
 
@@ -278,20 +275,22 @@ void main() {
       Size.zero,
       reason: 'no glyph, no dash, and no room reserved for either',
     );
-    expect(service.calls, isEmpty);
+    expect(server.agentWork.refreshes, isEmpty);
   });
 
   testWidgets('before the first reading it claims nothing, and says so', (
     tester,
   ) async {
     // §19: never a number that was not observed. The glyph is the gauge and the
-    // words are an ellipsis until an answer lands.
-    container = containerFor();
+    // words are an ellipsis until the server has read the account.
+    container = containerFor(read: false);
     seedPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await tester.pumpWidget(workbench());
+    await tester.pumpAndSettle();
 
     expect(find.text('usage …'), findsOneWidget);
+    seedUsage(server, agentInstallation(), usage: usageSnapshot());
     await tester.pumpAndSettle();
     expect(find.text('62% · 2h11m'), findsOneWidget);
     await quiesce(tester);

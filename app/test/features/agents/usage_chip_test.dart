@@ -2,8 +2,6 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
@@ -20,11 +18,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show UsageFailure;
+
 import '../../support/fakes.dart';
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
-import '../../support/test_machine.dart';
 
 /// **Every provider the chip's tree caused to exist**, by name — the bill
 /// `session_switch_cost_test.dart` counts the same way.
@@ -44,8 +45,8 @@ final class _Subscriptions extends ProviderObserver {
   }
 }
 
-/// The account key the seeded workspace files its quota under, and therefore
-/// the key of the refresh policy behind its chip: `claudeCode@windows`.
+/// The account key the seeded workspace files its quota under:
+/// `claudeCode@windows`.
 final _claudeAccount = usageAccountKey(agentInstallation());
 
 /// The chip, in a tree, reading one container.
@@ -53,8 +54,7 @@ final _claudeAccount = usageAccountKey(agentInstallation());
 /// [visible] takes the chip out without taking the scope with it — the shape a
 /// pane switch has. Unmounting the whole `UncontrolledProviderScope` instead
 /// would prove nothing: Riverpod cancels its scheduled auto-dispose when the
-/// surrounding scope goes, which is why `UsageChip.dispose` stops the timer
-/// itself.
+/// surrounding scope goes.
 Widget chipIn(ProviderContainer container, {bool visible = true}) =>
     UncontrolledProviderScope(
       container: container,
@@ -75,32 +75,47 @@ Widget chipIn(ProviderContainer container, {bool visible = true}) =>
 /// the last surface that broke it — now keeps it too).
 void main() {
   late MovableClock clock;
-  late FakeAgentUsageService service;
+  late FakeDataServer server;
   final light = SemanticColors.forBrightness(Brightness.light);
 
+  /// What the server last read of the seeded account, told to the app when
+  /// the container is built: [answer], and how the last attempt failed.
+  AgentUsage? answer;
+  UsageFailure? failure;
+
   setUp(() {
-    // One clock for the container and for the service, so a test that moves
-    // time past the account's floor moves it for both. A fixed clock leaves
-    // every reading eternally fresh and no refresh in this file can reach the
-    // endpoint.
+    // The countdowns are drawn against this clock; a test that moves it moves
+    // what "ago" and "resets in" say.
     clock = MovableClock(testTime);
-    service = FakeAgentUsageService(clock: clock);
+    answer = usageSnapshot(fetchedAt: testTime);
+    failure = null;
   });
+
+  /// Tells the app the server's new state of the seeded account, as the
+  /// server's own schedule would after a read.
+  void serverRead({AgentUsage? usage, UsageFailure? failed, String? agentId}) =>
+      seedUsage(
+        server,
+        agentInstallation(agentId: agentId ?? AgentIds.claudeCode),
+        usage: usage,
+        failure: failed,
+      );
 
   Future<ProviderContainer> containerFor({
     String agentId = AgentIds.claudeCode,
     _Subscriptions? observer,
-    void Function(TestMachine db)? seed,
   }) async {
     final db = seedUsageDatabase(agentId: agentId);
-    seed?.call(db);
+    server = db.server;
+    if (answer != null || failure != null) {
+      serverRead(usage: answer, failed: failure, agentId: agentId);
+    }
     final data = await db.server.override();
     final container = ProviderContainer(
       observers: [?observer],
       overrides: [
         data,
         clockProvider.overrideWithValue(clock),
-        agentUsageServiceProvider.overrideWithValue(service),
         // Settings opens on a tap; nothing here may probe a real machine.
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
@@ -134,12 +149,8 @@ void main() {
     return container;
   }
 
-  /// Moves past the account's floor, which is what a refresh has to do before
-  /// it can reach the endpoint at all — [usageFixtureFloor].
-  void pastTheFloor() => clock.now = clock.now.add(usageFixtureFloor);
-
-  /// The policy owns a real periodic timer, and `testWidgets` fails a test that
-  /// leaves one pending. Blur is the app's own way of cancelling it.
+  /// Blurs the window at the end of a test, so nothing the focused app keeps
+  /// running is left pending.
   Future<void> quiesce(WidgetTester tester, ProviderContainer container) async {
     container.read(windowFocusedProvider.notifier).set(false);
     await tester.pump();
@@ -156,7 +167,7 @@ void main() {
       tester.widget<Text>(find.text(label)).style?.color;
 
   testWidgets('draws each period as a percent and a countdown', (tester) async {
-    service.answer = usageSnapshot(percent: 62);
+    answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
 
     expect(find.text('62% · 2h11m'), findsOneWidget);
@@ -183,7 +194,7 @@ void main() {
     // you this week — and the owner's reading of the row settled it: *"we have
     // enough space here, so let's show both the daily limit and weekly limit
     // together."*
-    service.answer = AgentUsage(
+    answer = AgentUsage(
       windows: [
         // Listed longest-first on purpose: the order on screen is the period's,
         // never the payload's.
@@ -239,7 +250,7 @@ void main() {
     // One window and one only. The missing period is not a zero, not a dash and
     // not a second slot standing empty — `HealthLevel.unknown` is the same
     // answer to the same question one panel over.
-    service.answer = AgentUsage(
+    answer = AgentUsage(
       windows: [
         UsageWindow(
           label: '5-hour',
@@ -268,7 +279,7 @@ void main() {
     // on a scale, so neither can take a slot in the pair. When they are all
     // there is, the tightest of them answers alone — the rule the chip has
     // always had.
-    service.answer = AgentUsage(
+    answer = AgentUsage(
       windows: const [
         UsageWindow(label: 'Extra usage', percent: 12),
         UsageWindow(label: 'Opus', percent: 88),
@@ -290,7 +301,7 @@ void main() {
     // colour a number it does not show. A paid-overage window beating both
     // periods is the one case where the pair is not the whole story, and the
     // chip then says what it used to say.
-    service.answer = AgentUsage(
+    answer = AgentUsage(
       windows: [
         UsageWindow(
           label: '5-hour',
@@ -322,7 +333,7 @@ void main() {
     // One period, then two, under one tree that never moves: the second window
     // arrives inside the reading the chip already watches, so it must not add a
     // provider, a subscription or a request.
-    service.answer = AgentUsage(
+    answer = AgentUsage(
       windows: [
         UsageWindow(
           label: '5-hour',
@@ -339,11 +350,9 @@ void main() {
     await tester.pump();
     expect(find.text('62% · 2h11m'), findsOneWidget);
     final one = {...watched.names};
-    final requests = service.calls.length;
 
-    pastTheFloor();
-    service.answer = usageSnapshot(percent: 62, fetchedAt: clock.nowUtc());
-    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
+    // The server's next reading names both periods.
+    serverRead(usage: usageSnapshot(percent: 62, fetchedAt: clock.nowUtc()));
     await tester.pump();
     await tester.pump();
 
@@ -355,9 +364,9 @@ void main() {
       reason: 'the second period is drawn from what was already watched',
     );
     expect(
-      service.calls.length,
-      requests + 1,
-      reason: 'one refresh, one request — a period is not a lookup',
+      server.agentWork.refreshes,
+      isEmpty,
+      reason: 'a period is not a lookup — the app asked the server nothing',
     );
     await quiesce(tester, container);
   });
@@ -377,7 +386,7 @@ void main() {
   ]) {
     testWidgets('at ${percent.round()}% the chip reads $tone, and still spells '
         'the number out', (tester) async {
-      service.answer = usageSnapshot(percent: percent);
+      answer = usageSnapshot(percent: percent);
       final container = await pumpChip(tester);
 
       final label = '${percent.round()}% · 2h11m';
@@ -398,7 +407,7 @@ void main() {
     // each tier into `percent: 0.0`. The chip then spelled out a confident
     // `0%` — the most alarming reading there is — for something nobody had
     // read. It now says what it says for any unmeasured thing.
-    service.answer = antigravitySnapshot();
+    answer = antigravitySnapshot();
     final container = await pumpChip(tester, agentId: AgentIds.antigravity);
 
     expect(find.text('usage —'), findsOneWidget);
@@ -441,7 +450,7 @@ void main() {
     );
     expect(find.byType(Tooltip), findsNothing);
     expect(
-      service.calls,
+      server.agentWork.refreshes,
       isEmpty,
       reason: 'an agent with no usage endpoint is never asked',
     );
@@ -451,8 +460,11 @@ void main() {
   testWidgets('an expired token mutes the chip and never raises a SnackBar', (
     tester,
   ) async {
-    service.failure = UsageException(
-      'Access token expired. Run the agent once to refresh, then retry.',
+    answer = null;
+    failure = const UsageFailure(
+      message:
+          'Access token expired. Run the agent once to refresh, then retry.',
+      kind: UsageFailureKind.auth,
     );
     final container = await pumpChip(tester);
 
@@ -469,7 +481,7 @@ void main() {
     expect(
       tooltipOf(tester),
       'Access token expired. Run the agent once to refresh, then retry.',
-      reason: "the service's own sentence, verbatim",
+      reason: "the server's own sentence, verbatim",
     );
     expect(
       find.byType(SnackBar),
@@ -482,16 +494,20 @@ void main() {
   testWidgets('a failed refresh keeps the number it had, and says it is old', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
+    answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
     expect(find.text('62% · 2h11m'), findsOneWidget);
 
-    // Offline behaves exactly like any other failed fetch.
-    pastTheFloor();
-    service.failure = UsageException(
-      'Could not reach the usage service: SocketException',
+    // Offline behaves exactly like any other failed fetch: the server keeps
+    // the reading it had and tells the attempt's failure beside it.
+    clock.now = clock.now.add(usageFixtureFloor);
+    serverRead(
+      usage: answer,
+      failed: const UsageFailure(
+        message: 'Could not reach the usage service: SocketException',
+        kind: UsageFailureKind.unreachable,
+      ),
     );
-    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
     await tester.pump();
     await tester.pump();
 
@@ -509,18 +525,24 @@ void main() {
 
   testWidgets('a rate limit keeps the number, and says how long it is '
       'waiting', (tester) async {
-    service.answer = usageSnapshot(percent: 62);
+    answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
     expect(find.text('62% · 2h11m'), findsOneWidget);
 
-    // What the endpoint actually sent the owner. The service turns it into a
-    // wait; the chip's job is to keep the number and explain the pause.
-    pastTheFloor();
-    service.failure = UsageException(
-      'Rate limited by the usage service.',
-      kind: UsageFailureKind.rateLimited,
+    // What the endpoint actually sent the owner. The server turns it into a
+    // wait, in its own words; the chip's job is to keep the number and explain
+    // the pause.
+    clock.now = clock.now.add(usageFixtureFloor);
+    serverRead(
+      usage: answer,
+      failed: UsageFailure(
+        message:
+            'Rate limited by the usage service. Waiting 1m before asking '
+            'again.',
+        kind: UsageFailureKind.rateLimited,
+        until: clock.now.add(const Duration(minutes: 1)),
+      ),
     );
-    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
     await tester.pump();
     await tester.pump();
 
@@ -541,18 +563,6 @@ void main() {
           'a number that was not confirmed is drawn as a reading with an '
           'age, not as a live gauge',
     );
-
-    // And the poll stops spending requests on a limit it has been told about —
-    // the whole bug: 60 requests an hour into an endpoint that was refusing.
-    // Thirty seconds on: past the floor, so the floor is not what refuses; the
-    // wait the vendor's own `429` bought is.
-    final spent = service.calls.length;
-    clock.now = clock.now.add(const Duration(seconds: 30));
-    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
-    await tester.pump();
-    await tester.pump();
-    expect(service.calls.length, spent, reason: 'the backoff is in force');
-    expect(find.text('62% · 2h7m'), findsOneWidget);
     await quiesce(tester, container);
   });
 
@@ -562,7 +572,7 @@ void main() {
     // a previous value through a refresh, but not through the autoDispose that
     // a pane switch causes — and the first failure after coming back then had
     // nothing to fall back on.
-    service.answer = usageSnapshot(percent: 62);
+    answer = usageSnapshot(percent: 62);
     final container = await containerFor();
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
@@ -574,9 +584,12 @@ void main() {
     await tester.pumpWidget(chipIn(container, visible: false));
     await tester.pump(const Duration(milliseconds: 1));
     clock.now = clock.now.add(const Duration(minutes: 5));
-    service.failure = UsageException(
-      'Could not reach the usage service: SocketException',
-      kind: UsageFailureKind.unreachable,
+    serverRead(
+      usage: answer,
+      failed: const UsageFailure(
+        message: 'Could not reach the usage service: SocketException',
+        kind: UsageFailureKind.unreachable,
+      ),
     );
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
@@ -594,15 +607,14 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('coming back inside the floor costs no request at all', (
+  testWidgets('coming back to the pane asks the server nothing', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
+    // The server reads on its own schedule; a chip mounting only draws what
+    // it was told. A pane switch used to be a request.
+    answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
-    expect(service.calls.length, 1);
 
-    // A pane switch away and back. Every one of these used to be a request,
-    // bounded by nothing — the trigger the poll interval never covered.
     for (var i = 0; i < 5; i++) {
       await tester.pumpWidget(chipIn(container, visible: false));
       // Long enough for Riverpod's scheduled auto-dispose to actually run, so
@@ -614,24 +626,28 @@ void main() {
 
     expect(find.text('62% · 2h11m'), findsOneWidget);
     expect(
-      service.calls.length,
-      1,
-      reason: 'five switches, and the reading was seconds old every time',
+      server.agentWork.refreshes,
+      isEmpty,
+      reason: 'five switches, and not one ask',
     );
     await quiesce(tester, container);
   });
 
-  testWidgets('clicking refreshes and opens the usage view Settings already '
-      'has', (tester) async {
-    service.answer = usageSnapshot();
+  testWidgets('clicking asks the server to refresh and opens the usage view '
+      'Settings already has', (tester) async {
+    answer = usageSnapshot();
     final container = await pumpChip(tester);
-    final before = service.calls.length;
-    pastTheFloor();
 
     await tester.tap(find.byIcon(AppIcons.circleHalf));
     await tester.pumpAndSettle();
 
-    expect(service.calls.length, before + 1, reason: 'a click is a refresh');
+    expect(
+      server.agentWork.refreshes,
+      [_claudeAccount],
+      reason:
+          'a click asks the server to read this account; its throttle '
+          'decides whether that costs a request',
+    );
     // Settings is a workbench tab now, so the click asks for a **page**
     // rather than pushing a route: it writes the section and opens the tab.
     final target = container.read(settingsTabSectionProvider);
@@ -650,17 +666,13 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('and clicking inside the floor spends nothing, however often', (
+  testWidgets('clicking again focuses the one Settings tab, however often', (
     tester,
   ) async {
-    // **A click is not a licence.** It is a request path like any other, and it
-    // passes the same floor: inside three minutes the number it would fetch is
-    // the number already on the chip, so the click opens the panel and asks
-    // nobody. Nothing in the app can force a request any more, which is the
-    // point — four of the five triggers used to be able to.
-    service.answer = usageSnapshot();
+    // Each click is an ask of the server — whose floor decides whether it
+    // costs a request (the server's own tests) — and never a second tab.
+    answer = usageSnapshot();
     final container = await pumpChip(tester);
-    final before = service.calls.length;
 
     for (var i = 0; i < 5; i++) {
       await tester.tap(find.byIcon(AppIcons.circleHalf));
@@ -676,7 +688,7 @@ void main() {
       );
     }
 
-    expect(service.calls.length, before, reason: 'five clicks, no requests');
+    expect(server.agentWork.refreshes, hasLength(5));
     await quiesce(tester, container);
   });
 
@@ -861,66 +873,6 @@ void main() {
       );
       expect(view.label, '12%');
     });
-  });
-
-  testWidgets('a chip that moves to another account lets go of the first', (
-    tester,
-  ) async {
-    // Two chips on one account, and something else keeping that account's
-    // policy alive. When one chip's session moves to another account and the
-    // other chip leaves, nothing on screen speaks for the first account, so
-    // its timer must stop — a chip that retained on every build and only
-    // released its latest policy kept it running.
-    service.answer = usageSnapshot(percent: 62);
-    final container = await containerFor(
-      seed: (db) {
-        db.server.installationRows.insert(
-          agentInstallation(id: 'a2', agentId: AgentIds.codex),
-        );
-        db.server.sessionRows
-          ..insert(session(id: 's2', agentInstallationId: 'a2'))
-          ..insert(session(id: 's3'));
-      },
-    );
-    final keepAlive = container.listen(
-      usageRefreshProvider(_claudeAccount),
-      (_, _) {},
-    );
-    addTearDown(keepAlive.close);
-
-    Widget chips({required String first, required bool second}) =>
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Column(
-                children: [
-                  UsageChip(key: const ValueKey('first'), sessionId: first),
-                  if (second) const UsageChip(sessionId: 's3'),
-                ],
-              ),
-            ),
-          ),
-        );
-
-    await tester.pumpWidget(chips(first: 's1', second: true));
-    await tester.pump();
-    final policy = container.read(
-      usageRefreshProvider(_claudeAccount).notifier,
-    );
-    expect(policy.isPolling, isTrue);
-
-    await tester.pumpWidget(chips(first: 's2', second: true));
-    await tester.pump();
-    await tester.pumpWidget(chips(first: 's2', second: false));
-    await tester.pump();
-
-    expect(
-      policy.isPolling,
-      isFalse,
-      reason: 'no chip on screen is on this account any more',
-    );
-    await quiesce(tester, container);
   });
 
   group('formatUsageDuration', () {

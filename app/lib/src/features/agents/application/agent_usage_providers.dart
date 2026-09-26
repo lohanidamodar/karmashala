@@ -1,41 +1,123 @@
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/agent_cli_bridge.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../environments/application/environment_providers.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import 'package:agent_cli/usage.dart';
-import 'package:agent_cli/discovery.dart';
+import '../data/agents_data.dart';
 import 'agent_installations_controller.dart';
 import 'agent_providers.dart';
-import 'usage_history.dart';
 
-/// Fetches live usage/limits for an agent installation. Every fresh reading is
-/// written to the usage history.
-final agentUsageServiceProvider = Provider<AgentUsageService>((ref) {
-  final service = AgentUsageService(
-    storeLocator: ref.watch(cliStoreLocatorProvider),
-    clock: ref.watch(agentCliClockProvider),
-    registry: ref.watch(agentRegistryProvider),
-  );
-  // Read lazily: the store is only needed once a reading actually arrives.
-  service.addReadingListener(
-    (installation, usage) => ref
-        .read(usageHistoryRecorderProvider)
-        .record(usageAccountKey(installation), usage),
-  );
-  return service;
-});
+/// **Usage as the server reads it.** The server asks each agent's usage
+/// endpoint on its own schedule — the floor while the quota moves, longer
+/// while it does not, and when a session moves — and tells this app every
+/// account's state as it changes. Nothing here asks a vendor: [refresh] asks
+/// the server, whose throttle decides whether that costs a request.
+class UsageReadings {
+  UsageReadings(this._work, this._now);
 
-/// Live usage for one installation, on demand. **Retry is off**: it would be a
-/// second polling loop, 401ing with an expired token while nobody is there.
-final agentUsageProvider = FutureProvider.autoDispose
-    .family<AgentUsage, AgentInstallation>((ref, installation) {
-      final service = ref.watch(agentUsageServiceProvider);
-      final environments = ref.watch(environmentsDataProvider).getAll();
-      return service.fetch(installation, environments);
-    }, retry: (_, _) => null);
+  final AgentWorkData _work;
+  final DateTime Function() _now;
+
+  /// [installation]'s account as the server last read it, or null before it
+  /// has said anything of it.
+  AccountUsageState? stateOf(AgentInstallation installation) =>
+      _work.usage[usageAccountKey(installation)];
+
+  /// The last reading of [installation]'s account, however old.
+  AgentUsage? remembered(AgentInstallation installation) =>
+      stateOf(installation)?.usage;
+
+  /// The wait the server is sitting out for this account, or null.
+  UsageException? pendingPause(AgentInstallation installation) {
+    final failure = stateOf(installation)?.failure;
+    final until = failure?.until;
+    if (failure == null || until == null || !until.isAfter(_now())) {
+      return null;
+    }
+    return failure.toException(_now());
+  }
+
+  /// How long until the server asks about this account on its own.
+  Duration dueIn(AgentInstallation installation) {
+    final next = stateOf(installation)?.nextAt;
+    if (next == null) return Duration.zero;
+    final left = next.difference(_now());
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// Asks the server to read [installation]'s account now and answers the
+  /// reading. Throws [UsageException] with the server's words when there is
+  /// none.
+  Future<AgentUsage> fetch(AgentInstallation installation) async {
+    final key = usageAccountKey(installation);
+    final List<AccountUsageState> states;
+    try {
+      states = await _work.refreshUsage(key);
+    } on DataRefused catch (refusal) {
+      throw UsageException(refusal.message, kind: UsageFailureKind.notAsked);
+    }
+    final state = states.where((s) => s.accountKey == key).firstOrNull;
+    return _readingOf(state);
+  }
+
+  /// Asks the server to read [accountKey] now; what it read arrives as a
+  /// change.
+  Future<void> refresh(String accountKey) =>
+      _work.refreshUsage(accountKey).then((_) {}, onError: (Object _) {});
+
+  AgentUsage _readingOf(AccountUsageState? state) {
+    final failure = state?.failure;
+    if (failure != null) throw failure.toException(_now());
+    return state?.usage ??
+        (throw UsageException(
+          'The server has not read this account yet.',
+          kind: UsageFailureKind.notAsked,
+        ));
+  }
+}
+
+final usageReadingsProvider = Provider<UsageReadings>(
+  (ref) => UsageReadings(
+    ref.watch(agentWorkProvider),
+    () => ref.read(clockProvider).nowUtc(),
+  ),
+);
+
+/// One account's state as the server tells it, rebuilt when it changes.
+final accountUsageProvider = Provider.autoDispose
+    .family<AccountUsageState?, String>((ref, accountKey) {
+      final usage = ref.watch(agentWorkProvider).usage;
+      final current = usage[accountKey];
+      // Only this account's change rebuilds it: a chip on one account does
+      // not repaint for another's reading.
+      final listening = usage.changes.listen((_) {
+        if (!identical(usage[accountKey], current)) ref.invalidateSelf();
+      });
+      ref.onDispose(listening.cancel);
+      return current;
+    });
+
+/// Live usage for one installation's account, as the server last read it:
+/// the reading, the last attempt's failure, or loading before the server has
+/// said anything.
+final agentUsageProvider = Provider.autoDispose
+    .family<AsyncValue<AgentUsage>, AgentInstallation>((ref, installation) {
+      final state = ref.watch(
+        accountUsageProvider(usageAccountKey(installation)),
+      );
+      final failure = state?.failure;
+      if (failure != null) {
+        return AsyncError(
+          failure.toException(ref.read(clockProvider).nowUtc()),
+          StackTrace.empty,
+        );
+      }
+      final usage = state?.usage;
+      return usage == null ? const AsyncLoading() : AsyncData(usage);
+    });
 
 /// **Whose quota one session is spending**: keyed by session, not by whatever
 /// is focused. Null — and no chip at all — for an agent with no endpoint.

@@ -282,17 +282,13 @@ void main() {
       List<AgentInstallation> rows, {
       Set<String> probed = const {'codex'},
       Map<String, ExecutableReachability> readings = const {},
-    }) => app
-        .handle(
-          InstallationsReconcile(
-            environmentId: 'windows',
-            readAt: now,
-            found: rows,
-            probed: probed,
-            readings: readings,
-          ),
-        )
-        .value;
+    }) => service.reconcileProbe(
+      environmentId: 'windows',
+      readAt: now,
+      found: rows,
+      probed: probed,
+      readings: readings,
+    );
 
     List<AgentInstallation> rows() =>
         app.handle(const AgentsList()).value.installations;
@@ -380,17 +376,19 @@ void main() {
         refused(DataRefusalCode.invalid),
       );
       expect(
-        () => app.handle(
-          InstallationVersion(id: 'nope', version: '1', readAt: now),
-        ),
+        () => service.recordInstallationVersion('nope', '1', now),
         refused(DataRefusalCode.notFound),
       );
     });
 
     test('an environment nobody recorded is refused', () {
       expect(
-        () => app.handle(
-          InstallationsReconcile(environmentId: 'wsl:Nope', readAt: now),
+        () => service.reconcileProbe(
+          environmentId: 'wsl:Nope',
+          readAt: now,
+          found: const [],
+          probed: const {},
+          readings: const {},
         ),
         refused(DataRefusalCode.notFound, 'wsl:Nope'),
       );
@@ -430,10 +428,10 @@ void main() {
     );
 
     test('a save answers and tells the account without its credentials', () {
-      final saved = app.handle(ClaudeAccountSave(claude())).value;
+      final saved = service.saveClaudeAccount(claude());
       expect(saved.claudeAiOauth, isEmpty);
       expect(saved.oauthAccount, isNull);
-      app.handle(CodexAccountSave(codex()));
+      service.saveCodexAccount(codex());
       expect(toldText(), isNot(contains('secret')));
       expect(toldText(), isNot(contains('refresh-')));
       expect(toldText(), isNot(contains('uuid-1')));
@@ -441,59 +439,68 @@ void main() {
       expect(jsonEncode(listed.toJson()), isNot(contains('secret')));
     });
 
-    test('credentials are answered only to the client that asks', () {
-      app.handle(ClaudeAccountSave(claude()));
-      app.handle(CodexAccountSave(codex()));
+    test('credentials are the server\'s alone: no request reads them', () {
+      service.saveClaudeAccount(claude());
+      service.saveCodexAccount(codex());
       told.clear();
-      final full = app.handle(const ClaudeAccountCredentials('a1')).value;
+      final full = service.claudeAccount('a1');
       expect(full.claudeAiOauth['accessToken'], 'secret-token');
       expect(full.oauthAccount, {'accountUuid': 'uuid-1'});
-      expect(app.handle(const CodexAccountCredentials('c1')).value.auth, {
-        'tokens': 'codex-secret',
-      });
+      expect(service.codexAccount('c1').auth, {'tokens': 'codex-secret'});
       expect(told, isEmpty, reason: 'a read is never told');
-      // And through the envelope, the only way a client asks.
-      final answer = app.handleJson(
-        DataEnvelope.request(9, const ClaudeAccountCredentials('a1')),
-      );
-      expect(jsonEncode(answer), contains('secret-token'));
+      for (final kind in [
+        'claudeAccounts.credentials',
+        'codexAccounts.credentials',
+        'claudeAccounts.save',
+        'codexAccounts.save',
+      ]) {
+        final answer = app.handleJson({
+          'id': 9,
+          'kind': kind,
+          'arguments': {'id': 'a1'},
+        });
+        expect(jsonEncode(answer), isNot(contains('secret')), reason: kind);
+        expect(jsonEncode(answer), contains('refusal'), reason: kind);
+      }
     });
 
     test('a re-capture of the same account keeps its id', () {
-      app.handle(ClaudeAccountSave(claude()));
-      final again = app
-          .handle(ClaudeAccountSave(claude(id: 'a2', token: 'newer')))
-          .value;
+      service.saveClaudeAccount(claude());
+      final again = service.saveClaudeAccount(claude(id: 'a2', token: 'newer'));
       expect(again.id, 'a1');
       expect(
-        app.handle(const ClaudeAccountCredentials('a1')).value.claudeAiOauth,
+        service.claudeAccount('a1').claudeAiOauth,
         containsPair('accessToken', 'newer'),
       );
     });
 
     test('an account without credentials is refused; forgetting is told', () {
       expect(
-        () => app.handle(
-          ClaudeAccountSave(claudeAccountWithoutCredentials(claude())),
+        () => service.saveClaudeAccount(
+          claudeAccountWithoutCredentials(claude()),
         ),
         refused(DataRefusalCode.invalid, 'sign-in'),
       );
-      app.handle(ClaudeAccountSave(claude()));
+      service.saveClaudeAccount(claude());
       app.handle(const ClaudeAccountDelete('a1'));
       expect(toldChanges().whereType<ClaudeAccountRemoved>(), hasLength(1));
       expect(
-        () => app.handle(const ClaudeAccountCredentials('a1')),
+        () => service.claudeAccount('a1'),
         refused(DataRefusalCode.notFound),
       );
     });
 
     test('a store failure never quotes the values it was given', () {
       db.execute('DROP TABLE claude_accounts;');
-      final answer = app.handleJson(
-        DataEnvelope.request(1, ClaudeAccountSave(claude())),
-      );
-      expect(jsonEncode(answer), contains('failed'));
-      expect(jsonEncode(answer), isNot(contains('secret')));
+      Object? error;
+      try {
+        service.saveClaudeAccount(claude());
+      } on Object catch (e) {
+        error = e;
+      }
+      expect(error, isA<DataRefused>());
+      expect('$error', contains('failed'));
+      expect('$error', isNot(contains('secret')));
     });
   });
 
@@ -507,8 +514,7 @@ void main() {
           recordedAt: at,
         );
 
-    int record(List<UsageSample> samples) =>
-        app.handle(UsageRecord(samples)).value;
+    int record(List<UsageSample> samples) => service.recordUsage(samples);
 
     List<UsageSample> history() =>
         app.handle(UsageHistory(account, DateTime.utc(2000))).value;

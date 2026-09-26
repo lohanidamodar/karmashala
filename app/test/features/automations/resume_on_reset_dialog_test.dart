@@ -1,4 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +20,9 @@ void main() {
     h.addSession();
   });
   tearDown(() => h.dispose());
+
+  /// The installation every seeded session runs on.
+  AgentInstallation installation() => h.server.installationRows.getById('a1')!;
 
   /// A 5-hour window at its limit resetting in 1h12m, and a quiet weekly one.
   AgentUsage limited() => AgentUsage(
@@ -70,7 +74,7 @@ void main() {
   testWidgets(
     'the window at its limit is preselected, with its reset in words',
     (tester) async {
-      h.usage.answer = limited();
+      h.usage.serverRead(installation(), limited());
       await open(tester, ['s1']);
 
       expect(find.text('5-hour window — at its limit'), findsOneWidget);
@@ -89,7 +93,7 @@ void main() {
   );
 
   testWidgets('confirming arms it, with what was chosen', (tester) async {
-    h.usage.answer = limited();
+    h.usage.serverRead(installation(), limited());
     await open(tester, ['s1']);
     await tester.tap(find.text('7-day window'));
     await tester.enterText(find.byType(TextField), 'carry on');
@@ -114,17 +118,20 @@ void main() {
   testWidgets('the window the agent named is preselected when none is spent', (
     tester,
   ) async {
-    h.usage.answer = AgentUsage(
-      fetchedAt: h.now,
-      windows: [
-        for (final window in limited().windows)
-          UsageWindow(
-            label: window.label,
-            percent: 20,
-            resetsAt: window.resetsAt,
-            span: window.span,
-          ),
-      ],
+    h.usage.serverRead(
+      installation(),
+      AgentUsage(
+        fetchedAt: h.now,
+        windows: [
+          for (final window in limited().windows)
+            UsageWindow(
+              label: window.label,
+              percent: 20,
+              resetsAt: window.resetsAt,
+              span: window.span,
+            ),
+        ],
+      ),
     );
     await open(tester, ['s1'], namedWindow: '7-day');
     expect(find.text('7-day window — the one the agent named'), findsOneWidget);
@@ -132,7 +139,7 @@ void main() {
 
   testWidgets('a mode that asks disables the button with the gate\'s sentence, '
       'and picking one that does not enables it', (tester) async {
-    h.usage.answer = limited();
+    h.usage.serverRead(installation(), limited());
     h.server.sessionRows.updatePermissionMode('s1', null);
     await open(tester, ['s1']);
 
@@ -175,7 +182,7 @@ void main() {
   testWidgets('a session already scheduled opens as a change, and can cancel', (
     tester,
   ) async {
-    h.usage.answer = limited();
+    h.usage.serverRead(installation(), limited());
     await open(tester, ['s1']);
     await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
@@ -190,7 +197,7 @@ void main() {
 
   testWidgets('several sessions are each armed at their own limit\'s reset, '
       'and one in a mode that asks is named and skipped', (tester) async {
-    h.usage.answer = limited();
+    h.usage.serverRead(installation(), limited());
     h.addSession(id: 's2', title: 'Second');
     h.addSession(id: 's3', title: 'Asks first', permissionMode: null);
     await open(tester, ['s1', 's2', 's3']);
@@ -203,12 +210,10 @@ void main() {
     expect(h.live('s1')?.windowLabel, '5-hour');
     expect(h.live('s2')?.windowLabel, '5-hour');
     expect(h.live('s3'), isNull);
-    // One account, one request: the throttle served the second from memory.
-    expect(h.usage.calls, hasLength(1));
   });
 
   testWidgets('survives the window matrix, single and several', (tester) async {
-    h.usage.answer = limited();
+    h.usage.serverRead(installation(), limited());
     h.addSession(id: 's2', title: 'Second');
     h.server.sessionRows.updatePermissionMode('s2', null);
     await expectSurvivesWindowMatrix(
@@ -228,7 +233,7 @@ void main() {
   testWidgets('the countdown turns with the minute, and only it rebuilds', (
     tester,
   ) async {
-    h.usage.answer = limited();
+    h.usage.serverRead(installation(), limited());
     await open(tester, ['s1']);
     // Identity as the probe: a rebuilt dialog is a new `AlertDialog` widget.
     int dialog() => identityHashCode(tester.widget(find.byType(AlertDialog)));

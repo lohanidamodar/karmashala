@@ -1,16 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
+import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 
-import '../../support/fake_cli_store_locator.dart';
-import '../../support/fakes.dart';
-import '../../support/fake_http_client.dart';
-import '../../support/fixtures.dart';
-import 'package:agent_cli/read.dart';
+import '../support/fake_cli_store_locator.dart';
+import '../support/fakes.dart';
+import '../support/fake_http_client.dart';
+import '../support/fixtures.dart';
 
 const _usageBody = '{"five_hour": {"utilization": 42.0}}';
 

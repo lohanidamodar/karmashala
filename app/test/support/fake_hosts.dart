@@ -146,6 +146,7 @@ extension _FakeHosts on FakeDataServer {
   );
 
   AgentsSnapshot _agentsSnapshot() => AgentsSnapshot(
+    usage: [...agentWork.usage.values],
     installations: installationRows.getAll(),
     claudeAccounts: [
       for (final a in claudeAccountRows.getAll())
@@ -160,60 +161,6 @@ extension _FakeHosts on FakeDataServer {
   AgentInstallation _installation(String id) =>
       installationRows.getById(id) ??
       (throw DataRefused.notFound('no agent installation with id $id'));
-
-  InstallationsReconciled _reconcile(
-    InstallationsReconcile r,
-    List<DataChange> changes,
-  ) {
-    final plan = planReconcile(
-      environmentId: r.environmentId,
-      stored: installationRows.getByEnvironment(r.environmentId),
-      found: r.found,
-      probed: r.probed,
-      readings: r.readings,
-      readAt: r.readAt,
-    );
-    plan.moves.forEach((id, path) {
-      changes.add(
-        installationRows._put(
-          installationAt(_installation(id), path, byUser: false),
-        ),
-      );
-    });
-    plan.versions.forEach((id, version) {
-      changes.add(
-        installationRows._put(
-          _installation(id).copyWith(version: version, versionReadAt: r.readAt),
-        ),
-      );
-    });
-    for (final row in plan.inserts) {
-      changes.add(installationRows._put(row));
-    }
-    final removed = <AgentInstallation>[];
-    final retained = <AgentInstallation>[];
-    for (final row in plan.absent) {
-      final referenced = sessionRows.getAll().any(
-        (session) => session.agentInstallationId == row.id,
-      );
-      if (referenced) {
-        retained.add(row);
-      } else {
-        changes.add(installationRows._remove(row));
-        removed.add(row);
-      }
-    }
-    return InstallationsReconciled(
-      present: plan.present,
-      added: plan.inserts,
-      removed: removed,
-      retained: retained,
-      pinned: plan.pinned,
-      unreachable: plan.unreachable,
-      versionChanges: plan.versionChanges,
-      pathChanges: plan.pathChanges,
-    );
-  }
 
   SshHost _putSshHost(SshHost host, List<DataChange> changes) {
     final saved = host.copyWith(
@@ -292,24 +239,6 @@ extension _FakeHosts on FakeDataServer {
     return stripped;
   }
 
-  int _recordUsage(List<UsageSample> samples, List<DataChange> changes) {
-    var written = 0;
-    final gained = <String>{};
-    for (final sample in samples) {
-      if (!usageSampleWorthKeeping(
-        sample,
-        usageRows.latest(sample.accountKey, sample.windowLabel),
-      )) {
-        continue;
-      }
-      usageRows._samples.add(sample);
-      gained.add(sample.accountKey);
-      written++;
-    }
-    changes.addAll(gained.map(UsageRecorded.new));
-    return written;
-  }
-
   Object? _handleHosts(DataRequest<Object?> request, List<DataChange> c) =>
       switch (request) {
         EnvironmentsList() => _environmentsSnapshot(),
@@ -330,14 +259,6 @@ extension _FakeHosts on FakeDataServer {
           return const DataAck();
         }(),
         AgentsList() => _agentsSnapshot(),
-        final InstallationsReconcile r => _reconcile(r, c),
-        final InstallationVersion r => () {
-          final row = _installation(
-            r.id,
-          ).copyWith(version: r.version, versionReadAt: r.readAt);
-          c.add(installationRows._put(row));
-          return row;
-        }(),
         final InstallationSetPath r => () {
           final row = _installation(r.id);
           final path = r.path.trim();
@@ -349,27 +270,18 @@ extension _FakeHosts on FakeDataServer {
           c.add(installationRows._put(moved));
           return moved;
         }(),
-        ClaudeAccountSave(:final account) => _saveClaude(account, c),
-        ClaudeAccountCredentials(:final id) =>
-          claudeAccountRows.getById(id) ??
-              (throw DataRefused.notFound('no saved Claude account $id')),
         ClaudeAccountDelete(:final id) => () {
           if (claudeAccountRows._rows.remove(id) != null) {
             c.add(ClaudeAccountRemoved(id));
           }
           return const DataAck();
         }(),
-        CodexAccountSave(:final account) => _saveCodex(account, c),
-        CodexAccountCredentials(:final id) =>
-          codexAccountRows.getById(id) ??
-              (throw DataRefused.notFound('no saved Codex account $id')),
         CodexAccountDelete(:final id) => () {
           if (codexAccountRows._rows.remove(id) != null) {
             c.add(CodexAccountRemoved(id));
           }
           return const DataAck();
         }(),
-        UsageRecord(:final samples) => _recordUsage(samples, c),
         UsageHistory(:final accountKey, :final since) => usageRows.since(
           accountKey,
           since,

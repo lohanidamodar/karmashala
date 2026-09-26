@@ -1,22 +1,12 @@
-import 'package:karmashala/src/core/data/data_client.dart';
-import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala_core/paths.dart';
-import 'package:karmashala_core/testing.dart';
-import 'package:karmashala/src/core/paths/path_probe_provider.dart';
-import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/discovery.dart' hide PathProbe;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_environments/sweep.dart';
+import 'package:test/test.dart';
 
-import '../../support/fake_command_runner.dart';
-import '../../support/fakes.dart';
-import '../../support/fake_data_server.dart';
-import '../../support/fixtures.dart';
+import 'support/fakes.dart';
+import 'support/fixtures.dart';
+import 'support/sweep_world.dart';
 
 /// The bug, described rather than depended on.
 ///
@@ -35,74 +25,48 @@ final _now = DateTime.utc(2026, 9, 8, 12);
 final _recent = DateTime.utc(2026, 9, 8, 11);
 
 void main() {
-  late FakeDataServer server;
-  late DataClient client;
-  late ProviderContainer container;
+  late SweepWorld world;
   late FakeCommandRunner windows;
   late FakeCommandRunner wsl;
   late FakeCommandRunner ssh;
 
-  ProviderContainer workspaceWith({
+  AgentSweep workspaceWith({
     required PathProbe probe,
     CommandResult Function(CommandRequest)? responder,
   }) {
     windows = FakeCommandRunner(responder: responder);
     wsl = FakeCommandRunner(environmentId: 'wsl:Ubuntu', responder: responder);
     ssh = FakeCommandRunner(environmentId: 'ssh:h1', responder: responder);
-    return ProviderContainer(
-      overrides: [
-        dataClientProvider.overrideWithValue(client),
-        clockProvider.overrideWithValue(FixedClock(_now)),
-        idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
-        pathProbeProvider.overrideWithValue(probe),
-        commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(
-            byEnvironmentId: {
-              'windows': windows,
-              'wsl:Ubuntu': wsl,
-              'ssh:h1': ssh,
-            },
-          ),
-        ),
-      ],
+    final byId = {'windows': windows, 'wsl:Ubuntu': wsl, 'ssh:h1': ssh};
+    return world.sweep(
+      runnerFor: (environment) => byId[environment.id]!,
+      pathProbe: probe,
+      clock: FixedClock(_now),
     );
   }
 
   CommandResult answering(String version) =>
       CommandResult(exitCode: 0, stdout: '$version (Claude Code)', stderr: '');
 
-  setUp(() async {
-    server = FakeDataServer();
-    server.environmentRows
-      ..upsert(windowsEnv())
-      ..upsert(wslEnv())
-      ..upsert(sshEnvFixture());
-    client = await server.connect();
-  });
-  tearDown(() {
-    container.dispose();
-  });
+  setUp(() => world = SweepWorld([windowsEnv(), wslEnv(), sshEnvFixture()]));
 
-  AgentInstallationsController controllerOf(ProviderContainer c) =>
-      c.read(agentInstallationsControllerProvider.notifier);
-
-  group('the launch-time version refresh', () {
+  group('the start-time version refresh', () {
     test('a reading still inside the freshness bound spawns nothing', () async {
-      // The whole claim to running on every launch: §20's path check spawns no
+      // The whole claim to running on every start: the path check spawns no
       // process when nothing is wrong, and this must not undo that. A machine
-      // relaunched five times in an hour re-reads once, not five times.
-      server.installationRows.insert(
+      // restarted five times in an hour re-reads once, not five times.
+      world.installations.insert(
         agentInstallation(version: '2.1.263', versionReadAt: _recent),
       );
-      container = workspaceWith(
+      final sweep = workspaceWith(
         probe: FakePathProbe(files: const {_winClaude}),
         responder: (_) => fail('a fresh reading is not re-read'),
       );
 
-      final changed = await controllerOf(container).refreshStaleVersions();
+      final changed = await sweep.refreshStaleVersions();
 
-      // Counted, not timed. This is the number that decides whether the design
-      // is affordable.
+      // Counted, not timed. This is the number that decides whether the
+      // design is affordable.
       expect(windows.requests, isEmpty);
       expect(changed, isEmpty);
     });
@@ -110,76 +74,77 @@ void main() {
     test(
       'a reading past the bound costs exactly one spawn and lands',
       () async {
-        server.installationRows.insert(
+        world.installations.insert(
           agentInstallation(
             path: _winClaude,
             version: '2.1.252',
             versionReadAt: _long,
           ),
         );
-        container = workspaceWith(
+        final sweep = workspaceWith(
           probe: FakePathProbe(files: const {_winClaude}),
           responder: (_) => answering('2.1.263'),
         );
 
-        final changed = await controllerOf(container).refreshStaleVersions();
+        final changed = await sweep.refreshStaleVersions();
 
-        // One process for one row: the executable itself, with the descriptor's
-        // own version arguments. No `where`, because the path is already known.
+        // One process for one row: the executable itself, with the
+        // descriptor's own version arguments. No `where`: the path is known.
         expect(windows.requests, hasLength(1));
         expect(windows.requests.single.executable, _winClaude);
         expect(windows.requests.single.arguments, ['--version']);
-        final row = server.installationRows.getById('a1')!;
+        final row = world.installations.getById('a1')!;
         expect(row.version, '2.1.263');
         expect(row.versionReadAt, _now);
+        expect(changed.single.displayName, 'Claude Code');
         expect(changed.single.from, '2.1.252');
         expect(changed.single.to, '2.1.263');
       },
     );
 
     test('an undated number is re-read, which is every pre-v40 row', () async {
-      // The owner's row: a version with no record of when it was read is not
-      // treated as current. This is the one-time cost of the migration, and it
-      // extinguishes itself on the first launch.
-      server.installationRows.insert(
+      // A version with no record of when it was read is not treated as
+      // current. The one-time cost of the migration, extinguished on the
+      // first start.
+      world.installations.insert(
         agentInstallation(path: _winClaude, version: '2.1.252'),
       );
-      container = workspaceWith(
+      final sweep = workspaceWith(
         probe: FakePathProbe(files: const {_winClaude}),
         responder: (_) => answering('2.1.263'),
       );
 
-      await controllerOf(container).refreshStaleVersions();
+      await sweep.refreshStaleVersions();
 
-      expect(server.installationRows.getById('a1')!.version, '2.1.263');
+      expect(world.installations.getById('a1')!.version, '2.1.263');
     });
 
     test('a confirmed number still refreshes its age', () async {
-      server.installationRows.insert(
+      world.installations.insert(
         agentInstallation(
           path: _winClaude,
           version: '2.1.263',
           versionReadAt: _long,
         ),
       );
-      container = workspaceWith(
+      final sweep = workspaceWith(
         probe: FakePathProbe(files: const {_winClaude}),
         responder: (_) => answering('2.1.263'),
       );
 
-      final changed = await controllerOf(container).refreshStaleVersions();
+      final changed = await sweep.refreshStaleVersions();
 
       // Nothing *changed*, and something was nonetheless *learned*.
       expect(changed, isEmpty);
-      expect(server.installationRows.getById('a1')!.versionReadAt, _now);
+      expect(world.installations.getById('a1')!.versionReadAt, _now);
     });
   });
 
-  group('and it is judged in the row own environment', () {
+  group('and it is judged in the row\'s own environment', () {
     test(
       'a WSL row is asked in WSL, never stat-ed or spawned from here',
       () async {
-        server.installationRows.insert(
+        world.installations.insert(
           agentInstallation(
             environmentId: 'wsl:Ubuntu',
             path: _wslClaude,
@@ -189,27 +154,26 @@ void main() {
         );
         // A disk with nothing on it: a WSL path is spelled for *its* disk, so a
         // local stat is not evidence either way and must not gate the probe.
-        container = workspaceWith(
+        final sweep = workspaceWith(
           probe: FakePathProbe(),
           responder: (_) => answering('2.1.263'),
         );
 
-        await controllerOf(container).refreshStaleVersions();
+        await sweep.refreshStaleVersions();
 
         expect(wsl.requests.single.executable, _wslClaude);
         expect(windows.requests, isEmpty);
-        expect(server.installationRows.getById('a1')!.version, '2.1.263');
+        expect(world.installations.getById('a1')!.version, '2.1.263');
       },
     );
 
     test(
-      'an SSH row is never probed by a launch, and says how old it is',
+      'an SSH row is never probed by a start, and says how old it is',
       () async {
         // Probing one means dialling somebody's machine, which is not something
-        // a launch does unasked — the same rule `discoverUnprobed` follows. The
-        // honest answer is the recorded reading with its age, not a fresh number
-        // bought by opening a socket.
-        server.installationRows.insert(
+        // a start does unasked — the same rule `discoverUnprobed` follows. The
+        // honest answer is the recorded reading with its age.
+        world.installations.insert(
           agentInstallation(
             environmentId: 'ssh:h1',
             path: _sshClaude,
@@ -217,15 +181,15 @@ void main() {
             versionReadAt: _long,
           ),
         );
-        container = workspaceWith(
+        final sweep = workspaceWith(
           probe: FakePathProbe(),
-          responder: (_) => fail('a launch does not dial an SSH host'),
+          responder: (_) => fail('a start does not dial an SSH host'),
         );
 
-        await controllerOf(container).refreshStaleVersions();
+        await sweep.refreshStaleVersions();
 
         expect(ssh.requests, isEmpty);
-        final row = server.installationRows.getById('a1')!;
+        final row = world.installations.getById('a1')!;
         expect(row.version, '2.1.260');
         expect(row.versionReadAt, _long);
         expect(versionFreshness(row, now: _now), VersionFreshness.stale);
@@ -235,27 +199,26 @@ void main() {
     test(
       'a local row whose executable is gone is not spawned at, and is kept',
       () async {
-        // `claudeCode | windows | 2.1.245` on the owner's machine: `where claude`
-        // finds nothing, so the row names a version for a binary that is not
-        // there. Spawning it could only fail, and the row is never deleted on a
-        // failed reading — so the number stays, wearing its age, beside §20's
-        // own verdict about the path.
-        server.installationRows.insert(
+        // `where claude` finds nothing, so the row names a version for a
+        // binary that is not there. Spawning it could only fail, and the row
+        // is never deleted on a failed reading — so the number stays, wearing
+        // its age, beside the path check's own verdict about the path.
+        world.installations.insert(
           agentInstallation(
             path: _winClaude,
             version: '2.1.245',
             versionReadAt: _long,
           ),
         );
-        container = workspaceWith(
+        final sweep = workspaceWith(
           probe: FakePathProbe(),
           responder: (_) => fail('a path just observed missing is not spawned'),
         );
 
-        await controllerOf(container).refreshStaleVersions();
+        await sweep.refreshStaleVersions();
 
         expect(windows.requests, isEmpty);
-        final row = server.installationRows.getById('a1')!;
+        final row = world.installations.getById('a1')!;
         expect(row.version, '2.1.245');
         expect(row.versionReadAt, _long);
         expect(versionFreshness(row, now: _now), VersionFreshness.stale);
@@ -265,25 +228,24 @@ void main() {
 
   group('a reading that could not be taken', () {
     test('a failed probe changes neither the number nor its age', () async {
-      server.installationRows.insert(
+      world.installations.insert(
         agentInstallation(
           path: _winClaude,
           version: '2.1.252',
           versionReadAt: _long,
         ),
       );
-      container = workspaceWith(
+      final sweep = workspaceWith(
         probe: FakePathProbe(files: const {_winClaude}),
         responder: (_) =>
             const CommandResult(exitCode: 1, stdout: '', stderr: 'boom'),
       );
 
-      final changed = await controllerOf(container).refreshStaleVersions();
+      final changed = await sweep.refreshStaleVersions();
 
       // An unknown is never a zero: the row keeps what it had, including how
-      // old it was, so the next launch tries again and the label still admits
-      // the number may be wrong.
-      final row = server.installationRows.getById('a1')!;
+      // old it was, so the next start tries again.
+      final row = world.installations.getById('a1')!;
       expect(row.version, '2.1.252');
       expect(row.versionReadAt, _long);
       expect(changed, isEmpty);
@@ -292,67 +254,112 @@ void main() {
     test(
       'an environment that refuses to run anything is survived, not deleted',
       () async {
-        server.installationRows.insert(
+        world.installations.insert(
           agentInstallation(
             path: _winClaude,
             version: '2.1.252',
             versionReadAt: _long,
           ),
         );
-        container = workspaceWith(
+        final sweep = workspaceWith(
           probe: FakePathProbe(files: const {_winClaude}),
         );
         windows.throwError = CommandException('no');
 
-        await controllerOf(container).refreshStaleVersions();
+        await sweep.refreshStaleVersions();
 
-        expect(server.installationRows.getAll(), hasLength(1));
-        expect(server.installationRows.getById('a1')!.version, '2.1.252');
+        expect(world.installations.getAll(), hasLength(1));
+        expect(world.installations.getById('a1')!.version, '2.1.252');
       },
     );
+
+    test('an environment with no runner to build is skipped', () async {
+      world.installations.insert(
+        agentInstallation(
+          environmentId: 'wsl:Ubuntu',
+          path: _wslClaude,
+          version: '2.1.252',
+          versionReadAt: _long,
+        ),
+      );
+      final sweep = world.sweep(
+        runnerFor: (_) => throw StateError('no distribution recorded'),
+        pathProbe: FakePathProbe(),
+        clock: FixedClock(_now),
+      );
+
+      expect(await sweep.refreshStaleVersions(), isEmpty);
+      expect(world.installations.getById('a1')!.versionReadAt, _long);
+    });
+
+    test('a reading the server refuses to record is not reported', () async {
+      world.installations.insert(
+        agentInstallation(
+          path: _winClaude,
+          version: '2.1.252',
+          versionReadAt: _long,
+        ),
+      );
+      final sweep = AgentSweep(
+        environments: () => [windowsEnv()],
+        installations: world.installations.getAll,
+        reconcile: world.installations.reconcile,
+        recordVersion: (id, version, readAt) async =>
+            throw StateError('refused'),
+        runnerFor: (_) =>
+            FakeCommandRunner(responder: (_) => answering('2.1.263')),
+        probeLog: world.probeLog,
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(_now),
+        pathProbe: FakePathProbe(files: const {_winClaude}),
+      );
+
+      expect(await sweep.refreshStaleVersions(), isEmpty);
+      expect(world.installations.getById('a1')!.version, '2.1.252');
+    });
   });
 
   test('one spawn per stale row, and none for the fresh ones', () async {
     // The affordability claim, as a count. Three stale rows across two
     // environments; the fourth is fresh and the fifth is on somebody else's
     // machine.
-    final dao = server.installationRows;
-    dao.insert(
-      agentInstallation(id: 'w1', path: _winClaude, versionReadAt: _long),
-    );
-    dao.insert(
-      agentInstallation(
-        id: 'w2',
-        agentId: AgentIds.codex,
-        path: r'C:\Users\d\.local\bin\codex.exe',
-        versionReadAt: _long,
-      ),
-    );
-    dao.insert(
-      agentInstallation(
-        id: 'l1',
-        environmentId: 'wsl:Ubuntu',
-        path: _wslClaude,
-        versionReadAt: _long,
-      ),
-    );
-    dao.insert(
-      agentInstallation(
-        id: 'f1',
-        agentId: AgentIds.antigravity,
-        path: r'C:\Users\d\.local\bin\agy.exe',
-        versionReadAt: _recent,
-      ),
-    );
-    dao.insert(
-      agentInstallation(
-        id: 's1',
-        environmentId: 'ssh:h1',
-        path: _sshClaude,
-        versionReadAt: _long,
-      ),
-    );
-    container = workspaceWith(
+    world.installations
+      ..insert(
+        agentInstallation(id: 'w1', path: _winClaude, versionReadAt: _long),
+      )
+      ..insert(
+        agentInstallation(
+          id: 'w2',
+          agentId: AgentIds.codex,
+          path: r'C:\Users\d\.local\bin\codex.exe',
+          versionReadAt: _long,
+        ),
+      )
+      ..insert(
+        agentInstallation(
+          id: 'l1',
+          environmentId: 'wsl:Ubuntu',
+          path: _wslClaude,
+          versionReadAt: _long,
+        ),
+      )
+      ..insert(
+        agentInstallation(
+          id: 'f1',
+          agentId: AgentIds.antigravity,
+          path: r'C:\Users\d\.local\bin\agy.exe',
+          versionReadAt: _recent,
+        ),
+      )
+      ..insert(
+        agentInstallation(
+          id: 's1',
+          environmentId: 'ssh:h1',
+          path: _sshClaude,
+          versionReadAt: _long,
+        ),
+      );
+    final sweep = workspaceWith(
       probe: FakePathProbe(
         files: const {
           _winClaude,
@@ -363,7 +370,7 @@ void main() {
       responder: (_) => answering('9.9.9'),
     );
 
-    await controllerOf(container).refreshStaleVersions();
+    await sweep.refreshStaleVersions();
 
     expect(windows.requests, hasLength(2));
     expect(wsl.requests, hasLength(1));

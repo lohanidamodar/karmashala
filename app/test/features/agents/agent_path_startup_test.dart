@@ -1,266 +1,118 @@
 import 'dart:async';
 
-import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
-import 'package:karmashala_core/paths.dart';
-import 'package:karmashala_core/testing.dart';
-import 'package:karmashala/src/core/paths/path_probe_provider.dart';
-import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/agents/application/agent_path_repair_providers.dart';
-import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/metadata_keys.dart';
+import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
+import 'package:karmashala/src/features/agents/application/agent_path_repair_providers.dart';
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import 'package:karmashala/src/core/data/metadata_keys.dart';
 
-const _stored = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe';
-const _storedDir = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin';
-const _release = r'C:\Users\d\.codex\packages\standalone\releases\0.153.4';
-const _real =
-    r'C:\Users\d\.codex\packages\standalone\releases\0.153.4\codex.exe';
-
+/// The launch's check of the stored agent executables: the server checks and
+/// repairs them (its sweep's rules are tested in
+/// `packages/karmashala_environments/test/agent_path_repair_test.dart`); the
+/// app asks once, behind the first frame, and publishes the answer.
 void main() {
   late FakeDataServer server;
+  late int repairs;
 
   setUp(() {
     server = FakeDataServer();
     server.environmentRows.upsert(windowsEnv());
+    repairs = 0;
+    server.agentWork.onRepair = (full) {
+      repairs++;
+      return AgentPathRepairReport(checkedAt: testTime);
+    };
   });
 
-  Future<ProviderContainer> scoped({
-    required PathProbe probe,
-    required FakeCommandRunner runner,
-  }) async {
-    final data = await server.override();
-    final container = ProviderContainer(
-      overrides: [
-        data,
-        pathProbeProvider.overrideWithValue(probe),
-        commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: runner),
-        ),
-      ],
-    );
+  Future<ProviderContainer> scoped() async {
+    final container = ProviderContainer(overrides: [await server.override()]);
     addTearDown(container.dispose);
     return container;
   }
 
-  FakeCommandRunner findingCodexAt(String path) => FakeCommandRunner(
-    responder: (req) => req.executable == 'where'
-        ? (req.arguments.single == 'codex'
-              ? CommandResult(exitCode: 0, stdout: '$path\r\n', stderr: '')
-              : const CommandResult(exitCode: 1, stdout: '', stderr: ''))
-        : const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
+  void discoveredBefore() => server.store.write(
+    MetadataKeys.agentsDiscoveredAt,
+    '2026-07-28T00:00:00Z',
   );
 
-  group('the startup path check', () {
-    test('does not run until the first frame is released', () async {
-      // The whole reason it is gated. A stat is cheap, but the sweep behind a
-      // failure spawns a process per broken agent, and the window must not be
-      // waiting on `where` to answer before it can paint. Same shape as the
-      // hook install and the CLI import, which the launch already sequences
-      // this way.
-      server.store.write(
-        MetadataKeys.agentsDiscoveredAt,
-        '2026-07-28T00:00:00Z',
-      );
-      server.installationRows.insert(
-        agentInstallation(agentId: AgentIds.codex, path: _stored),
-      );
-      final probe = FakePathProbe(
-        files: const {_real},
-        links: const {_storedDir: _release},
-      );
-      final runner = findingCodexAt(_real);
-      final container = await scoped(probe: probe, runner: runner);
-      final gate = Completer<void>();
+  test('does not ask until the first frame is released', () async {
+    discoveredBefore();
+    final container = await scoped();
+    final gate = Completer<void>();
 
-      unawaited(
-        AppLifecycle(
-          container,
-        ).repairAgentPaths(afterFirstFrame: () => gate.future),
-      );
-      await pumpEventQueue();
+    unawaited(
+      AppLifecycle(
+        container,
+      ).repairAgentPaths(afterFirstFrame: () => gate.future),
+    );
+    await pumpEventQueue();
 
-      // Counted, not timed: nothing has been asked of the filesystem or the OS
-      // while the window is still trying to paint.
-      expect(probe.queries, isEmpty, reason: 'the window has not painted yet');
-      expect(runner.requests, isEmpty);
-      // And the app says so rather than saying nothing.
+    expect(repairs, 0, reason: 'the window has not painted yet');
+    expect(container.read(agentPathRepairProvider).hasChecked, isFalse);
+
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(repairs, 1);
+    expect(container.read(agentPathRepairProvider).hasChecked, isTrue);
+  });
+
+  test('a gate that throws still gets the paths checked', () async {
+    discoveredBefore();
+    final container = await scoped();
+
+    await AppLifecycle(container).repairAgentPaths(
+      afterFirstFrame: () => Future<void>.error(StateError('no binding')),
+    );
+
+    expect(repairs, 1);
+    expect(container.read(agentPathRepairProvider).hasChecked, isTrue);
+  });
+
+  test(
+    'a workspace that has never discovered leaves it to the first run',
+    () async {
+      final container = await scoped();
+
+      await AppLifecycle(container).repairAgentPaths();
+
+      expect(repairs, 0);
       expect(container.read(agentPathRepairProvider).hasChecked, isFalse);
+    },
+  );
 
-      gate.complete();
-      await pumpEventQueue();
+  test('asks once per launch however many callers ask', () async {
+    discoveredBefore();
+    final container = await scoped();
+    final lifecycle = AppLifecycle(container);
 
-      expect(probe.queries, isNotEmpty);
-      expect(container.read(agentPathRepairProvider).hasChecked, isTrue);
-      expect(server.installationRows.getAll().single.executable.path, _real);
-    });
+    await Future.wait([
+      lifecycle.repairAgentPaths(),
+      lifecycle.repairAgentPaths(),
+    ]);
 
-    test('a gate that throws still gets the paths checked', () async {
-      // The gate is about *when*, never about *whether*: a launch straight to
-      // the tray may never paint a frame, and it must not be a launch whose
-      // agents stay unlaunchable.
-      server.store.write(
-        MetadataKeys.agentsDiscoveredAt,
-        '2026-07-28T00:00:00Z',
-      );
-      server.installationRows.insert(
-        agentInstallation(agentId: AgentIds.codex, path: _stored),
-      );
-      final probe = FakePathProbe(
-        files: const {_real},
-        links: const {_storedDir: _release},
-      );
-      final container = await scoped(
-        probe: probe,
-        runner: findingCodexAt(_real),
-      );
-
-      await AppLifecycle(container).repairAgentPaths(
-        afterFirstFrame: () => Future<void>.error(StateError('no binding')),
-      );
-
-      expect(container.read(agentPathRepairProvider).hasChecked, isTrue);
-      expect(server.installationRows.getAll().single.executable.path, _real);
-    });
-
-    test(
-      'a workspace that has never discovered leaves it to the first run',
-      () async {
-        // That launch's own first-run scan is writing the rows this would be
-        // checking; racing it would probe everything twice.
-        server.installationRows.insert(
-          agentInstallation(agentId: AgentIds.codex, path: _stored),
-        );
-        final probe = FakePathProbe();
-        final runner = FakeCommandRunner();
-        final container = await scoped(probe: probe, runner: runner);
-
-        await AppLifecycle(container).repairAgentPaths();
-
-        expect(probe.queries, isEmpty);
-        expect(runner.requests, isEmpty);
-        expect(container.read(agentPathRepairProvider).hasChecked, isFalse);
-      },
-    );
-
-    test('runs once per launch however many callers ask', () async {
-      server.store.write(
-        MetadataKeys.agentsDiscoveredAt,
-        '2026-07-28T00:00:00Z',
-      );
-      server.installationRows.insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
-      final probe = FakePathProbe(files: const {_real});
-      final container = await scoped(
-        probe: probe,
-        runner: FakeCommandRunner(
-          responder: (_) => fail('a healthy workspace spawns nothing'),
-        ),
-      );
-      final lifecycle = AppLifecycle(container);
-
-      await Future.wait([
-        lifecycle.repairAgentPaths(),
-        lifecycle.repairAgentPaths(),
-      ]);
-
-      // One reading, not two: the check is idempotent but the stats are not
-      // free, and two concurrent sweeps writing the same rows is a race.
-      expect(probe.queries, hasLength(1));
-      expect(container.read(agentPathRepairProvider).isClean, isTrue);
-    });
+    expect(repairs, 1);
+    expect(container.read(agentPathRepairProvider).isClean, isTrue);
   });
 
-  group('the startup version refresh', () {
-    test('waits for the first frame, and for the path check', () async {
-      // Ordered, not just gated: a row the repair moves has had its version
-      // re-read by that sweep, and a row whose executable is gone must not be
-      // spawned at.
-      server.store.write(
-        MetadataKeys.agentsDiscoveredAt,
-        '2026-07-28T00:00:00Z',
-      );
-      server.installationRows.insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
-      final probe = FakePathProbe(files: const {_real});
-      final runner = FakeCommandRunner(
-        responder: (_) =>
-            const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
-      );
-      final container = await scoped(probe: probe, runner: runner);
-      final gate = Completer<void>();
+  test('a server that refuses leaves the reading unchecked', () async {
+    discoveredBefore();
+    server.agentWork.onRepair = (_) =>
+        throw const DataRefusedForTest('the server is busy');
+    final container = await scoped();
 
-      unawaited(
-        AppLifecycle(
-          container,
-        ).refreshAgentVersions(afterFirstFrame: () => gate.future),
-      );
-      await pumpEventQueue();
+    await AppLifecycle(container).repairAgentPaths();
 
-      expect(runner.requests, isEmpty, reason: 'the window has not painted');
-
-      gate.complete();
-      await pumpEventQueue();
-
-      // One process, for the executable already on record — the row's version
-      // was undated, which is every row written before v40.
-      expect(runner.requests.single.executable, _real);
-      expect(server.installationRows.getById('a1')!.version, '0.153.4');
-    });
-
-    test('runs once per launch however many callers ask', () async {
-      server.store.write(
-        MetadataKeys.agentsDiscoveredAt,
-        '2026-07-28T00:00:00Z',
-      );
-      server.installationRows.insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
-      final runner = FakeCommandRunner(
-        responder: (_) =>
-            const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
-      );
-      final container = await scoped(
-        probe: FakePathProbe(files: const {_real}),
-        runner: runner,
-      );
-      final lifecycle = AppLifecycle(container);
-
-      await Future.wait([
-        lifecycle.refreshAgentVersions(),
-        lifecycle.refreshAgentVersions(),
-      ]);
-
-      // Counted: two concurrent readings of the same row is a wasted process
-      // and a race over the same column.
-      expect(runner.requests, hasLength(1));
-    });
-
-    test(
-      'a workspace that has never discovered leaves it to the first run',
-      () async {
-        server.installationRows.insert(
-          agentInstallation(agentId: AgentIds.codex, path: _real),
-        );
-        final runner = FakeCommandRunner(
-          responder: (_) => fail('the first-run scan is writing these rows'),
-        );
-        final container = await scoped(
-          probe: FakePathProbe(files: const {_real}),
-          runner: runner,
-        );
-
-        await AppLifecycle(container).refreshAgentVersions();
-
-        expect(runner.requests, isEmpty);
-      },
-    );
+    expect(container.read(agentPathRepairProvider).hasChecked, isFalse);
   });
+}
+
+/// A failure the fake server's scripted repair throws.
+class DataRefusedForTest implements Exception {
+  const DataRefusedForTest(this.message);
+  final String message;
 }

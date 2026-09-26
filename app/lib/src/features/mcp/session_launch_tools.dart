@@ -2,7 +2,6 @@ import '../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../agents/application/agent_providers.dart';
-import '../agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -34,7 +33,6 @@ class SessionLaunchTools {
 
   static const Set<String> _names = <String>{
     'open_new_session',
-    'get_usage',
     'open_session',
     'session_handoff',
     'session_fork',
@@ -55,10 +53,6 @@ class SessionLaunchTools {
           useWorktree: args['useWorktree'] == true,
           permissionMode: args['permissionMode'] as String?,
           callerSessionId: callerSessionId,
-        ),
-        'get_usage' => _getUsage(
-          cli: args['cli'] as String?,
-          environmentId: args['environmentId'] as String?,
         ),
         'open_session' => _openSession(args['id'] as String?),
         'session_handoff' => _sessionHandoff(
@@ -621,44 +615,6 @@ class SessionLaunchTools {
     'note': kForkCarriesTheWholeConversation,
   };
 
-  Future<Object?> _getUsage({String? cli, String? environmentId}) async {
-    // Unnamed, the first agent in registry order whose adapter has a usage
-    // endpoint answers.
-    final agentId =
-        parseCli(_container, cli) ??
-        _container
-            .read(agentRegistryProvider)
-            .adapters
-            .where((adapter) => adapter.usage != null)
-            .firstOrNull
-            ?.id;
-    if (agentId == null) throw StateError('No agent here reports usage.');
-    final install = installFor(_container, agentId, environmentId);
-    if (install == null) {
-      throw StateError('No $agentId installation found.');
-    }
-    final environments = _container.read(environmentsDataProvider).getAll();
-    final usage = await _container
-        .read(agentUsageServiceProvider)
-        .fetch(install, environments);
-    // **A window with no reading omits `percent` entirely.** Antigravity's
-    // `loadCodeAssist` names tiers and measures nothing; a `0` would be acted on.
-    return {
-      'environmentId': install.environmentId,
-      'windows': [
-        for (final w in usage.windows)
-          {
-            'label': w.label,
-            if (w.percent != null) 'percent': w.percent,
-            if (w.resetsAt != null) 'resetsAt': w.resetsAt!.toIso8601String(),
-          },
-      ],
-      if (usage.tokenExpiresAt != null)
-        'tokenExpiresAt': usage.tokenExpiresAt!.toIso8601String(),
-      'fetchedAt': usage.fetchedAt.toIso8601String(),
-    };
-  }
-
   Future<Object?> _openSession(String? id) async {
     if (id == null) throw ArgumentError('Missing session id.');
 
@@ -776,26 +732,6 @@ class SessionLaunchTools {
 /// The schemas for the tools in [SessionLaunchTools] that start or reopen a
 /// session. Two lists, because the served order is a contract the golden holds.
 const List<Map<String, dynamic>> sessionLaunchToolSchemas = [
-  {
-    'name': 'get_usage',
-    'description':
-        'An agent account\'s usage against its limits, read live. cli is '
-        '"claude", "codex" or "antigravity"; environmentId is optional '
-        '(defaults to the first matching installation). Each window carries a '
-        'label and, when the agent reported one, a "percent" used and a '
-        '"resetsAt". A window with no "percent" was not measured — '
-        'Antigravity names the account\'s tiers and reports no quota against '
-        'them — and that absence means unknown, never zero. "fetchedAt" is '
-        'when the reading was taken.',
-    'inputSchema': {
-      'type': 'object',
-      'properties': {
-        'cli': {'type': 'string'},
-        'environmentId': {'type': 'string'},
-      },
-      'required': ['cli'],
-    },
-  },
   {
     'name': 'open_session',
     'description':

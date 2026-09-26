@@ -4,7 +4,6 @@ import 'package:karmashala/src/app/shell/status_bar_items.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';

@@ -48,13 +48,11 @@ class _StaticSettings extends SettingsController {
 }
 
 void main() {
-  late FakeAgentUsageService service;
-
-  setUp(() => service = FakeAgentUsageService());
-
   Future<ProviderContainer> barContainer() async {
     final server = FakeDataServer();
     final db = seedUsageDatabase(server: server);
+    // The server has read the session's account.
+    seedUsage(server, agentInstallation(), usage: usageSnapshot(percent: 62));
     // A name long enough to compete for the row's width at 720px, which is
     // where a second chip's arrival is felt.
     server.repositoryRows.insert(
@@ -64,7 +62,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(machine: db, usageService: service),
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
         settingsControllerProvider.overrideWith(
@@ -98,7 +96,6 @@ void main() {
   testWidgets('a model change does not reach the window row at all', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
     final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
@@ -132,7 +129,6 @@ void main() {
   testWidgets('closing the side panel redraws only the panel item', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
     final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
@@ -153,7 +149,6 @@ void main() {
   testWidgets('a rename does not wake the row either', (tester) async {
     // The narrowing this row was asked for: the CLI store sweep renames rows on
     // a timer, without the user doing anything at all.
-    service.answer = usageSnapshot(percent: 62);
     final container = await barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
@@ -173,7 +168,6 @@ void main() {
   testWidgets('the row holds at the minimum window with both chips gone', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
     final container = await barContainer();
     container.read(sessionLauncherProvider).setModel('s1', 'sonnet');
     await expectSurvivesWindowMatrix(
@@ -193,7 +187,6 @@ void main() {
     // widest thing the chip can be asked to draw. It used to be this row's
     // problem; the session bar owns it now, where it is the one label that
     // gives way.
-    service.answer = usageSnapshot(percent: 62);
     final container = await barContainer();
     container
         .read(sessionLauncherProvider)

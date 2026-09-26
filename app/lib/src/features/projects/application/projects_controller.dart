@@ -7,7 +7,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/application/project_import_service.dart';
+import '../../agents/data/agents_data.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
@@ -147,9 +147,7 @@ class ProjectsController extends Notifier<List<Project>> {
     ref.read(selectedSessionIdProvider.notifier).select(null);
     ref.read(selectedImportedSessionIdProvider.notifier).select(null);
 
-    final summary = await ref
-        .read(projectImportServiceProvider)
-        .importAll(detected);
+    final summary = await ref.read(agentWorkProvider).addImports(detected);
     // Every store was read and everything in them imported, so this reading
     // does speak for the whole workspace.
     ref.read(cliSessionsCheckedProvider.notifier).stampAll();

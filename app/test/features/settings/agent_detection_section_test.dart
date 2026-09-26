@@ -1,3 +1,5 @@
+import 'package:agent_cli/discovery.dart'
+    show AgentDiscoveryReport, AgentPathRepairReport, EnvironmentScanReport;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -88,7 +90,33 @@ void main() {
     expect(find.textContaining('Not scanned yet'), findsOneWidget);
   });
 
+  /// What the server's sweep reports, as it would word it: [found] agents
+  /// present of those the registry knows, [added] of them new.
+  AgentDiscoveryReport report({required int found, int added = 0}) {
+    final rows = [
+      agentInstallation(),
+      if (found > 1)
+        agentInstallation(
+          id: 'a2',
+          agentId: AgentIds.codex,
+          path: r'C:\bin\codex.exe',
+        ),
+    ].take(found).toList();
+    return AgentDiscoveryReport([
+      EnvironmentScanReport(
+        environmentId: 'windows',
+        environmentName: 'Windows',
+        reachable: true,
+        found: rows,
+        added: rows.skip(found - added).toList(),
+        missing: [if (found < 2) 'Codex CLI', if (found < 1) 'Claude Code'],
+      ),
+    ]);
+  }
+
   testWidgets('reports what it found and what it did not', (tester) async {
+    db.server.agentWork.onRepair = (_) =>
+        AgentPathRepairReport(checkedAt: testTime, scan: report(found: 1));
     await pump(tester);
     await tester.tap(find.text('Detect agents'));
     await tester.pumpAndSettle();
@@ -100,7 +128,8 @@ void main() {
   });
 
   testWidgets('says plainly when it found nothing', (tester) async {
-    installed.clear();
+    db.server.agentWork.onRepair = (_) =>
+        AgentPathRepairReport(checkedAt: testTime, scan: report(found: 0));
     await pump(tester);
     await tester.tap(find.text('Detect agents'));
     await tester.pumpAndSettle();
@@ -109,11 +138,16 @@ void main() {
   });
 
   testWidgets('a second run reports the agent it newly found', (tester) async {
+    db.server.agentWork.onRepair = (_) =>
+        AgentPathRepairReport(checkedAt: testTime, scan: report(found: 1));
     await pump(tester);
     await tester.tap(find.text('Detect agents'));
     await tester.pumpAndSettle();
 
-    installed.add('codex');
+    db.server.agentWork.onRepair = (_) => AgentPathRepairReport(
+      checkedAt: testTime,
+      scan: report(found: 2, added: 1),
+    );
     await tester.tap(find.text('Detect agents'));
     await tester.pumpAndSettle();
 

@@ -212,10 +212,6 @@ Future<void> _bootstrap(AppLogger logger) async {
   // than a process that happens to end. See `AppLifecycle`.
   final lifecycle = AppLifecycle(container, logger: logger);
 
-  // An already-discovered workspace still has to notice agents it has never
-  // looked for — the ones an app upgrade added after the one-time scan.
-  lifecycle.startAgentDiscovery();
-
   // A release build has no VM service, so the log is the only place this app
   // can say what it is holding. Started here rather than after the first frame:
   // the interval is long enough that bootstrap is over before it first fires.
@@ -309,10 +305,6 @@ Future<void> _bootstrap(AppLogger logger) async {
   // The stored agent executables, on every launch: a path is durable state,
   // whether it resolves is a measurement, and Codex's self-update rots it.
   unawaited(lifecycle.repairAgentPaths(afterFirstFrame: afterFirstFrame));
-
-  // And what those executables *are*, when the last reading has aged out. Only
-  // rows older than `kVersionReadingFreshFor`, so a fresh workspace spawns none.
-  unawaited(lifecycle.refreshAgentVersions(afterFirstFrame: afterFirstFrame));
 }
 
 /// Runs the one-time startup agent discovery. On success it stamps

@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';

@@ -10,7 +10,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/presentation/usage_chip.dart' show formatResetClock;
-import '../../environments/application/environment_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_status_registry.dart';
@@ -230,9 +229,7 @@ class UsageLimitWatcher extends Notifier<int> {
         if (!access.readable) return null;
         final AgentUsage reading;
         try {
-          reading = await ref
-              .read(agentUsageServiceProvider)
-              .fetch(installation, ref.read(environmentsDataProvider).getAll());
+          reading = await ref.read(usageReadingsProvider).fetch(installation);
         } on UsageException {
           return null;
         }

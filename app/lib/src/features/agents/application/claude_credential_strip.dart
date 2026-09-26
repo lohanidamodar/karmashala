@@ -3,21 +3,25 @@ import 'package:riverpod/riverpod.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/launch.dart';
-import '../../environments/application/environment_providers.dart';
-import 'claude_accounts_controller.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AnthropicSignIn;
+
+import '../data/agents_data.dart';
 import 'agent_providers.dart';
 
 /// Whether an interactive Claude login exists for [installation] — presence and
-/// expiry, never the token. `false` for anything that could not be read, so a
-/// launch only ever withholds on evidence.
+/// expiry, never the token, as the server read it. `false` for anything that
+/// could not be read, so a launch only ever withholds on evidence.
 final claudeLoginPresentProvider =
     FutureProvider.family<bool, AgentInstallation>((ref, installation) async {
-      final environments = ref.watch(environmentsDataProvider).getAll();
-      final paths = await ref
-          .watch(claudeAuthLocatorProvider)
-          .pathsFor(installation, environments);
-      if (paths == null) return false;
-      return ref.watch(claudeAuthServiceProvider).hasUsableLogin(paths);
+      try {
+        final signIn = await ref
+            .watch(agentWorkProvider)
+            .signIn(installation.id);
+        return signIn is AnthropicSignIn && signIn.usableLogin;
+      } on Object {
+        return false;
+      }
     });
 
 /// What one launch decided about the Anthropic credential variables it would

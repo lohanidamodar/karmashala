@@ -2,9 +2,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
-import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -193,47 +191,6 @@ void main() {
       expect(dao.repositoryIdsById(), {
         for (final row in dao.getAll()) row.id: row.repositoryId,
       });
-    });
-  });
-
-  group('the whole-store import', () {
-    test('does not re-add a conversation that is already live', () async {
-      server.sessionRows.insert(native());
-      final container = ProviderContainer(
-        overrides: [
-          ...fakeTerminalOverrides(machine: db),
-          dataClientProvider.overrideWithValue(client),
-          clockProvider.overrideWithValue(FixedClock(testTime)),
-          idGeneratorProvider.overrideWithValue(SequentialIdGenerator('p-')),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final summary = await container
-          .read(projectImportServiceProvider)
-          .importAll([
-            DetectedProject(
-              canonicalKey: r'c:\src\demo\app',
-              displayPath: r'C:\src\demo\app',
-              sessions: [
-                DetectedSession(
-                  cli: AgentIds.claudeCode,
-                  sessionId: 'cli-abc',
-                  cwd: const EnvironmentPath(
-                    environmentId: 'windows',
-                    path: r'C:\src\demo\app',
-                  ),
-                  filePath: r'C:\store\cli-abc.jsonl',
-                  storeHome: r'C:\store',
-                  modifiedAt: testTime,
-                ),
-              ],
-              subagentSessions: const [],
-            ),
-          ]);
-
-      expect(summary.sessions, 0);
-      expect(dao.getAll(), isEmpty);
     });
   });
 

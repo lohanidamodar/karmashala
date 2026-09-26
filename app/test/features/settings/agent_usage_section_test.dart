@@ -4,9 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_usage_section.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AccountUsageState, UsageFailure;
 
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
@@ -23,16 +24,34 @@ import '../../support/test_machine.dart';
 void main() {
   late TestMachine db;
   late MovableClock clock;
-  late FakeAgentUsageService service;
+
+  /// What the server's read of the account answers when the card asks: the
+  /// reading it holds, and how its latest attempt failed.
+  AgentUsage? answer;
+  UsageFailure? failure;
 
   final installation = agentInstallation();
+
+  UsageFailure failed(
+    String message, {
+    UsageFailureKind kind = UsageFailureKind.unusable,
+    DateTime? until,
+  }) => UsageFailure(message: message, kind: kind, until: until);
 
   setUp(() {
     db = TestMachine();
     FakeDataServer().runsOn(db);
     db.server.environmentRows.upsert(windowsEnv());
     clock = MovableClock(testTime);
-    service = FakeAgentUsageService(clock: clock);
+    answer = null;
+    failure = null;
+    db.server.agentWork.onRefresh = (key) => AccountUsageState(
+      accountKey: key,
+      agentId: installation.agentId,
+      environmentId: installation.environmentId,
+      usage: answer,
+      failure: failure,
+    );
   });
 
   Future<void> pump(WidgetTester tester) async {
@@ -41,7 +60,6 @@ void main() {
         overrides: [
           await db.server.override(),
           clockProvider.overrideWithValue(clock),
-          agentUsageServiceProvider.overrideWithValue(service),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -69,7 +87,7 @@ void main() {
     // Antigravity's `loadCodeAssist` names the account's tiers and measures
     // nothing. The card used to draw a bar sitting at 0% for each of them,
     // which is a quantity — and the most reassuring one there is.
-    service.answer = antigravitySnapshot();
+    answer = antigravitySnapshot();
     await pump(tester);
     await check(tester);
 
@@ -90,7 +108,7 @@ void main() {
   ) async {
     // The test clock is months from the real date. A countdown read against
     // `DateTime.now()` says the reset already passed ("soon").
-    service.answer = usageSnapshot(percent: 62);
+    answer = usageSnapshot(percent: 62);
     await pump(tester);
     await check(tester);
 
@@ -99,9 +117,11 @@ void main() {
   });
 
   testWidgets('a 429 is a wait, and is not drawn as a fault', (tester) async {
-    service.failure = UsageException(
-      'Rate limited by the usage service.',
+    // The server's refusal, in its own words.
+    failure = failed(
+      'Rate limited by the usage service. Waiting 1m before asking again.',
       kind: UsageFailureKind.rateLimited,
+      until: testTime.add(const Duration(minutes: 1)),
     );
     await pump(tester);
     await check(tester);
@@ -119,13 +139,6 @@ void main() {
       SemanticColors.forBrightness(Brightness.light).attention,
       reason: 'nothing is broken, so nothing is red',
     );
-
-    // And the button no longer spends a request on a limit it knows about.
-    final spent = service.calls.length;
-    await tester.tap(find.textContaining('Check usage'));
-    await tester.pump();
-    await tester.pump();
-    expect(service.calls.length, spent);
   });
 
   testWidgets('the card opens saying why the number is not moving', (
@@ -133,13 +146,14 @@ void main() {
   ) async {
     // The user opens Settings *because* the chip stopped moving. A card that
     // said nothing would be the two surfaces disagreeing about one account.
-    service.failure = UsageException(
-      'Rate limited by the usage service.',
-      kind: UsageFailureKind.rateLimited,
-    );
-    await expectLater(
-      () => service.fetch(installation, const []),
-      throwsA(isA<UsageException>()),
+    seedUsage(
+      db.server,
+      installation,
+      failure: failed(
+        'Rate limited by the usage service. Waiting 40s before asking again.',
+        kind: UsageFailureKind.rateLimited,
+        until: testTime.add(const Duration(minutes: 1)),
+      ),
     );
     clock.now = clock.now.add(const Duration(seconds: 20));
 
@@ -151,14 +165,14 @@ void main() {
         'Rate limited by the usage service. Waiting 40s before asking again.',
       ),
       findsOneWidget,
-      reason: 'the countdown is read now, not when the refusal arrived',
+      reason: "the server's pause, in its words, while it is still in force",
     );
   });
 
   testWidgets('an expired token asks the user to run the agent', (
     tester,
   ) async {
-    service.failure = UsageException(
+    failure = failed(
       'Access token expired. Run the agent once to refresh, then retry.',
       kind: UsageFailureKind.auth,
     );
@@ -184,7 +198,7 @@ void main() {
   testWidgets('an endpoint that never answered is nobody\'s fault', (
     tester,
   ) async {
-    service.failure = UsageException(
+    failure = failed(
       'Could not reach the usage service: SocketException',
       kind: UsageFailureKind.unreachable,
     );
@@ -202,14 +216,14 @@ void main() {
   testWidgets('a failed check keeps the bars, and says how old they are', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
+    answer = usageSnapshot(percent: 62);
     await pump(tester);
     await check(tester);
     expect(find.textContaining('62%'), findsOneWidget);
     expect(find.text('Checked just now'), findsOneWidget);
 
     clock.now = clock.now.add(const Duration(minutes: 4));
-    service.failure = UsageException(
+    failure = failed(
       'Could not reach the usage service: SocketException',
       kind: UsageFailureKind.unreachable,
     );
@@ -229,10 +243,8 @@ void main() {
   testWidgets('the card opens on what was already read, and asks nothing', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
-    // The chip's own read, a minute before Settings was opened.
-    await service.fetch(installation, const []);
-    expect(service.calls.length, 1);
+    // The server's own read, a minute before Settings was opened.
+    seedUsage(db.server, installation, usage: usageSnapshot(percent: 62));
     clock.now = clock.now.add(const Duration(minutes: 1));
 
     await pump(tester);
@@ -244,9 +256,9 @@ void main() {
     );
     expect(find.text('Checked 1m ago'), findsOneWidget);
     expect(
-      service.calls.length,
-      1,
-      reason: 'opening a panel is not a reason to spend a request',
+      db.server.agentWork.refreshes,
+      isEmpty,
+      reason: 'opening a panel is not a reason to ask for a read',
     );
     expect(find.textContaining('Refresh'), findsOneWidget);
   });

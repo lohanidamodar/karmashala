@@ -114,7 +114,7 @@ class _AccountUsage extends ConsumerWidget {
     // had; reading the error first printed "not recorded" over a held number.
     final value =
         usage.value ??
-        ref.watch(agentUsageServiceProvider).remembered(installation);
+        ref.watch(accountUsageProvider(usageAccountKey(installation)))?.usage;
     if (value == null) {
       // Slow, offline, or a token being refreshed — none of which is the
       // dialog's problem. Deliberately plain text and not a spinner: this row

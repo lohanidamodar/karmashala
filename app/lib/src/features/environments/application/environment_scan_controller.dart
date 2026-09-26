@@ -1,12 +1,11 @@
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/agent_cli_bridge.dart';
-import '../../../core/process/command_runner_providers.dart';
-import '../../agents/application/agent_providers.dart';
-import 'package:agent_cli/discovery.dart';
+import '../../agents/data/agents_data.dart';
 import '../../ssh/application/ssh_failure.dart';
 import '../../ssh/application/ssh_providers.dart';
-import 'package:agent_cli/process.dart';
 
 /// What the last agent scan of one environment did.
 class EnvironmentScan {
@@ -22,8 +21,9 @@ class EnvironmentScan {
   final int? found;
 }
 
-/// Probes **one** environment for installed agents — not `discoverAll`: a
-/// remote host must be dialled, and one failure belongs to one environment.
+/// Asks the server to probe **one** environment for installed agents — not
+/// every one: a remote host must be dialled, and one failure belongs to one
+/// environment. Only what it found is recorded; nothing it missed is judged.
 class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
   @override
   Map<String, EnvironmentScan> build() => const {};
@@ -34,38 +34,25 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
   Future<void> scan(ExecutionEnvironment environment) async {
     _set(environment.id, const EnvironmentScan(busy: true));
     try {
-      // Connect first, explicitly. Discovery treats an unavailable environment as
-      // "nothing installed", which for a remote host hides a refusal as an empty list.
+      // Connect first, here, where a person can be asked to trust the host's
+      // key: the server's commands on it come through this app's connection,
+      // and a refusal must read as one rather than as nothing installed.
       if (environment.kind == EnvironmentKind.ssh) {
         await ref
             .read(sshConnectionPoolProvider)
             .forEnvironment(environment)
             .client();
       }
-
-      final found = await AgentDiscoveryService(
-        runner: ref
-            .read(commandRunnerFactoryProvider)
-            .forEnvironment(environment),
-        environment: environment,
-        ids: ref.read(agentCliIdsProvider),
-        clock: ref.read(agentCliClockProvider),
-        registry: ref.read(agentRegistryProvider),
-        // The third and last caller of discovery, so a per-environment scan sees
-        // through a Windows junction chain exactly as the other two do.
-        pathProbe: ref.read(agentCliPathProbeProvider),
-        hostEnvironment: ref.read(hostEnvironmentProvider),
-      ).discover();
-
-      // Recorded by the one rule; no leftover row is judged by this scan.
-      await ref
-          .read(agentInstallationsDataProvider)
-          .reconcile(
-            environmentId: environment.id,
-            readAt: ref.read(agentCliClockProvider).nowUtc(),
-            found: found,
-          );
-      _set(environment.id, EnvironmentScan(found: found.length));
+      final report = await ref
+          .read(agentWorkProvider)
+          .detect(environmentId: environment.id);
+      final scanned = report.environments.firstOrNull;
+      if (scanned != null && !scanned.reachable) {
+        throw StateError(scanned.error ?? 'Environment did not respond.');
+      }
+      _set(environment.id, EnvironmentScan(found: report.foundCount));
+    } on DataRefused catch (refusal) {
+      _set(environment.id, EnvironmentScan(error: refusal.message));
     } on Object catch (e) {
       _set(environment.id, EnvironmentScan(error: describeSshFailure(e)));
     }

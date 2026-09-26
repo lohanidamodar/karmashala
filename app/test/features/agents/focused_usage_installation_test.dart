@@ -27,7 +27,6 @@ void main() {
       overrides: [
         await database.server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        agentUsageServiceProvider.overrideWithValue(FakeAgentUsageService()),
       ],
     );
     addTearDown(container.dispose);

@@ -1,15 +1,16 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ImportSummary;
+
+import '../../agents/data/agents_data.dart';
+import '../../../core/database/sqlite_row_reader.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../workspaces/data/workspace_data.dart';
 import 'package:karmashala_git/repositories.dart';
-import '../../sessions/application/session_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -17,22 +18,15 @@ import '../data/cli_session_mutator.dart';
 import 'agent_store_server_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
-import 'cli_detection_service.dart';
-import 'detected_project_merger.dart';
 import 'pane_facts_reporter.dart';
-import 'project_import_service.dart';
-import 'session_auto_import_service.dart';
+
+export 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ImportSummary;
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
-  (ref) => CliDetectionService(registry: ref.watch(agentRegistryProvider)),
-);
-
-final projectImportServiceProvider = Provider<ProjectImportService>(
-  (ref) => ProjectImportService(
-    workspace: ref.watch(workspaceDataProvider),
-    importedSessionDao: ref.watch(importedSessionsProvider),
-    ids: ref.watch(idGeneratorProvider),
-    clock: ref.watch(clockProvider),
+  (ref) => CliDetectionService(
+    readRows: readSqliteRows,
+    registry: ref.watch(agentRegistryProvider),
   ),
 );
 
@@ -42,25 +36,19 @@ final storeScanRunnerProvider = Provider<StoreScanRunner>(
   (ref) => sharedStoreScanRunner,
 );
 
-final sessionAutoImportServiceProvider = Provider<SessionAutoImportService>(
-  (ref) => SessionAutoImportService(
-    locator: ref.watch(cliStoreLocatorProvider),
-    scan: ref.watch(storeScanRunnerProvider).scan,
-    environmentDao: ref.watch(environmentsDataProvider),
-    importedSessionDao: ref.watch(importedSessionsProvider),
-    sessionDao: ref.watch(sessionsDataProvider),
-    ids: ref.watch(idGeneratorProvider),
-    clock: ref.watch(clockProvider),
-  ),
-);
-
-/// Runs auto-import for a project's repositories. Exposed as a function provider
-/// so callers (and tests) can substitute it without touching the filesystem.
+/// Imports, as history, what the agents' stores hold for a project's
+/// checkouts — the server reads its stores and writes the records. Exposed as
+/// a function provider so callers (and tests) can substitute it.
 typedef AutoImportRunner =
     Future<ImportSummary> Function(List<Repository> repos);
 
 final autoImportRunnerProvider = Provider<AutoImportRunner>(
-  (ref) => ref.read(sessionAutoImportServiceProvider).importForRepositories,
+  (ref) =>
+      (repos) async => repos.isEmpty
+      ? const ImportSummary()
+      : ref.read(agentWorkProvider).importForRepositories([
+          for (final repo in repos) repo.id,
+        ]),
 );
 
 /// Tells the server this app's terminal panes as facts, over the host link:
@@ -196,8 +184,8 @@ final cliSessionMutatorProvider = Provider<CliSessionMutator>(
   (ref) => CliSessionMutator(registry: ref.watch(agentRegistryProvider)),
 );
 
-/// Detects projects/sessions from the Claude Code and Codex CLI stores, merges
-/// them, and supports rename/delete. Runs on demand (it scans the filesystem).
+/// The projects and conversations the agents' own stores hold, as the server
+/// read them, and rename/delete of one. Runs on demand.
 class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
   @override
   Future<List<DetectedProject>> build() async => const [];
@@ -208,23 +196,16 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
     state = await AsyncValue.guard(_load);
   }
 
-  /// Reads every store, unnarrowed: this door's job is to find projects the
-  /// workspace has never heard of, so it must not narrow to what it has.
-  Future<List<DetectedProject>> _load() async {
-    final environments = ref.read(environmentsDataProvider).getAll();
-    final sessions = await scanCliStores(ref);
-    // Deliberately no freshness stamp: this listed the stores and imported
-    // nothing, and the stamp means "brought up to date", not "somebody looked".
-    return mergeDetectedProjects(sessions, {
-      for (final e in environments) e.id: e,
-    });
-  }
+  /// Every store, unnarrowed, read by the server: this door's job is to find
+  /// projects the workspace has never heard of. Deliberately no freshness
+  /// stamp: this listed the stores and imported nothing.
+  Future<List<DetectedProject>> _load() =>
+      ref.read(agentWorkProvider).scanImports();
 
-  /// Imports every detected project/session into the workspace, ignoring
-  /// duplicates. Returns what was added.
-  Future<ImportSummary> importAll() => ref
-      .read(projectImportServiceProvider)
-      .importAll(state.asData?.value ?? const []);
+  /// Imports every detected project/session into the workspace — the server
+  /// writes them, ignoring duplicates. Returns what was added.
+  Future<ImportSummary> importAll() =>
+      ref.read(agentWorkProvider).addImports(state.asData?.value ?? const []);
 
   Future<void> renameSession(DetectedSession session, String newTitle) async {
     await ref

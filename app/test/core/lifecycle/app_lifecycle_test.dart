@@ -5,10 +5,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_layout_pro
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala_core/logging.dart';
-import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
-import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -26,12 +23,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/fake_command_runner.dart';
-import '../../support/fake_data_server.dart';
-import '../../support/fixtures.dart';
 import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
-import 'package:karmashala/src/core/data/metadata_keys.dart';
 
 /// The application lifecycle owner.
 ///
@@ -771,73 +764,6 @@ void main() {
       expect(natives.window.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
     });
-  });
-
-  group('agents nobody has ever looked for', () {
-    test(
-      'a workspace that has discovered before sweeps for new agents',
-      () async {
-        final server = FakeDataServer();
-        server.store.write(
-          MetadataKeys.agentsDiscoveredAt,
-          '2026-07-28T00:00:00Z',
-        );
-        final data = await server.override();
-        server.environmentRows.upsert(windowsEnv());
-        final runner = FakeCommandRunner(
-          responder: (req) =>
-              const CommandResult(exitCode: 1, stdout: '', stderr: ''),
-        );
-        final scoped = ProviderContainer(
-          overrides: [
-            data,
-            commandRunnerFactoryProvider.overrideWithValue(
-              FakeCommandRunnerFactory(fallback: runner),
-            ),
-          ],
-        );
-        addTearDown(scoped.dispose);
-
-        AppLifecycle(scoped).startAgentDiscovery();
-        await pumpEventQueue();
-
-        // Every shipped agent, asked about once, because this workspace has no
-        // record of ever having looked.
-        expect(runner.requests, isNotEmpty);
-        expect(
-          AgentProbeLog(
-            server.store,
-          ).hasProbed(AgentIds.antigravity, 'windows'),
-          isTrue,
-        );
-      },
-    );
-
-    test(
-      'a workspace that has never discovered leaves it to the first run',
-      () async {
-        final server = FakeDataServer();
-        server.environmentRows.upsert(windowsEnv());
-        final data = await server.override();
-        final runner = FakeCommandRunner();
-        final scoped = ProviderContainer(
-          overrides: [
-            data,
-            commandRunnerFactoryProvider.overrideWithValue(
-              FakeCommandRunnerFactory(fallback: runner),
-            ),
-          ],
-        );
-        addTearDown(scoped.dispose);
-
-        AppLifecycle(scoped).startAgentDiscovery();
-        await pumpEventQueue();
-
-        // The one-time startup scan is already probing everything; two sweeps
-        // racing would spawn every probe twice.
-        expect(runner.requests, isEmpty);
-      },
-    );
   });
 
   group('the agents\' hooks are installed behind the first frame', () {
