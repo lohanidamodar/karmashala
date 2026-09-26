@@ -8,6 +8,7 @@ import '../features/settings/domain/app_theme_mode.dart';
 import '../features/ssh/presentation/ssh_prompt_host.dart';
 import '../features/terminal/presentation/session_host_banner.dart';
 import 'shell/app_shell.dart';
+import 'shell/native_menus.dart';
 import 'package:karmashala_ui/theme.dart';
 
 /// Root application widget: theming and the desktop shell. The `ProviderScope`
@@ -46,8 +47,12 @@ class KarmashalaApp extends ConsumerWidget {
       },
       // Inside `home` rather than `builder` because the SSH prompt host needs a
       // Navigator above it to show a host key fingerprint on, and the session
-      // host banner one to confirm a restart on.
-      home: const SshPromptHost(child: SessionHostBanner(child: AppShell())),
+      // host banner one to confirm a restart on. The macOS menu bar is above
+      // both, so a strip coming or going never re-creates it: there is one
+      // menu bar per app, and a second mounting over the first is an error.
+      home: const NativeShellMenus(
+        child: SshPromptHost(child: SessionHostBanner(child: AppShell())),
+      ),
     );
   }
 }

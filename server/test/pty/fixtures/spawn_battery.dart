@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -48,6 +49,18 @@ final _libc = Libc.open();
 Set<int> _openFds() => {
   for (var fd = 0; fd < 1024; fd++)
     if (_libc.fcntl(fd, kFGetFd, 0) >= 0) fd,
+};
+
+final int Function(int) _isatty = DynamicLibrary.process()
+    .lookupFunction<Int32 Function(Int32), int Function(int)>('isatty');
+
+/// The open descriptors that are terminals — a session's master, and nothing
+/// `dart:io` opens (pipes and sockets). What a scenario that runs `dart:io`
+/// processes beside its sessions measures: their descriptors come and go on
+/// their own schedule, and are not the sessions'.
+Set<int> _openTerminals() => {
+  for (final fd in _openFds())
+    if (_isatty(fd) == 1) fd,
 };
 
 void _check(bool holds, String what) {
@@ -202,12 +215,19 @@ Future<void> _closeWhileHeld(String dir) async {
 /// Spawning while another isolate starts `dart:io` processes: `dart:io` forks
 /// from its own thread, marks its pipes close-on-exec only after `pipe()`
 /// returns, and reaps every child while one of its own lives — so a code may
-/// be lost here, but no session may fail to end and nothing may be left open.
+/// be lost here, but no session may fail to end and none may leave its pty
+/// open.
+///
+/// Only the sessions' own descriptors are counted. The process's whole table
+/// is not theirs to answer for: `dart:io` holds descriptors of its own that
+/// come and go on its schedule — one still open when `before` was taken, or a
+/// pipe the other isolate had not closed yet when it exited, which then stays
+/// (both seen, about 1 run in 4 under load; a pipe, never a terminal, and
+/// never without that isolate).
 Future<void> _alongsideDartIo(String dir) async {
   await _run(['true']);
-  // `dart:io` keeps a descriptor of its own once it has run a process.
-  await Process.run('/bin/sh', ['-c', 'exit 0']);
-  final before = _openFds();
+  final before = _openTerminals();
+  final owned = <int>{};
   final other = Isolate.run(() async {
     for (var i = 0; i < 20; i++) {
       final result = await Process.run('/bin/sh', ['-c', 'exit 0']);
@@ -216,20 +236,25 @@ Future<void> _alongsideDartIo(String dir) async {
     return true;
   });
   for (var i = 0; i < 20; i++) {
+    final open = _openTerminals();
     final pty = _launcher.start(
       PtySpawnRequest(
         argv: const ['test', '-f', 'README.md'],
         workingDirectory: dir,
       ),
     );
+    // What this session holds: the terminals that were not open before it.
+    final its = _openTerminals().difference(open);
+    _check(its.isNotEmpty, 'session $i: no descriptor of its own was seen');
+    owned.addAll(its);
     pty.output.listen((_) {});
     await pty.exitCode.timeout(const Duration(seconds: 10));
     await pty.close();
   }
   _check(await other, 'a dart:io process failed');
-  final after = _openFds();
+  final after = _openTerminals();
   _check(
-    after.length == before.length,
-    'left open: ${after.difference(before)}',
+    after.intersection(owned).isEmpty && after.length == before.length,
+    'left open: ${after.difference(before)} (the sessions held $owned)',
   );
 }

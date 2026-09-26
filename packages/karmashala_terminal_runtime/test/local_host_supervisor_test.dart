@@ -67,12 +67,18 @@ void main() {
     ],
     Duration stableAfter = const Duration(hours: 1),
     Duration outdatedRecheck = const Duration(hours: 1),
+    Duration noBinaryRecheck = const Duration(hours: 1),
+    Duration crashLoopRecheck = const Duration(hours: 1),
+    Duration nudgeFloor = Duration.zero,
   }) {
     final supervisor = LocalHostSupervisor(
       access: access,
       backoff: backoff,
       stableAfter: stableAfter,
       outdatedRecheck: outdatedRecheck,
+      noBinaryRecheck: noBinaryRecheck,
+      crashLoopRecheck: crashLoopRecheck,
+      nudgeFloor: nudgeFloor,
     );
     addTearDown(supervisor.dispose);
     return supervisor;
@@ -224,8 +230,13 @@ void main() {
       expect(stopped.reason, contains('3 times in a row'));
       expect(stopped.reason, contains('fatal: the store is locked'));
       expect(stopped.lastOutput, ['fatal: the store is locked']);
+      expect(stopped.nextAttemptAt, isNotNull, reason: 'the slow look');
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(starts, 4, reason: 'it went on after the cap');
+      // A nudge does not shorten a crash loop's slow timer.
+      supervisor.nudge('the data client found no server');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(starts, 4, reason: 'a nudge undid the cap');
 
       // The person's restart is the way out, and it starts the count again.
       await supervisor.restartNow();
@@ -262,18 +273,134 @@ void main() {
       expect(stopped.lastOutput, contains('panic: boom'));
     });
 
-    test('with no binary there is nothing to retry', () async {
+    test('after the cap it is still tried, slowly: a host that stays up '
+        'then is running again', () async {
+      var starts = 0;
+      var healthy = false;
       final access = LocalHostSessionAccess(
         paths: paths,
-        executable: LocalHostExecutable(
-          executableDirectory: home.path,
-          repositoryRoot: home.path,
-        ),
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        startServe: (_) async {
+          starts++;
+          if (!healthy) {
+            return _ServeProcess('', stderr: 'fatal: the store is locked\n')
+              ..exit();
+          }
+          await serve();
+          return _ServeProcess(banner());
+        },
       );
-      final supervisor = supervise(access);
+      anExecutable();
+      final supervisor = supervise(
+        access,
+        crashLoopRecheck: const Duration(milliseconds: 150),
+      );
+
+      await supervisor.start();
+      await phase(supervisor, HostSupervisionPhase.stopped);
+      expect(starts, 4);
+      // Still failing: one more try per slow look, and stopped again at once
+      // rather than a fresh round of quick restarts.
+      await supervisor.changes
+          .where((s) => s.phase == HostSupervisionPhase.stopped)
+          .first
+          .timeout(const Duration(seconds: 5));
+      expect(starts, 5);
+      expect(supervisor.state.phase, HostSupervisionPhase.stopped);
+
+      healthy = true;
+      final restarted = supervisor.restarted.first;
+      final back = await restarted.timeout(const Duration(seconds: 5));
+      expect(back.isReady, isTrue);
+      expect(starts, 6);
+      expect(supervisor.state.phase, HostSupervisionPhase.running);
+    });
+  });
+
+  group('with no binary', () {
+    LocalHostSessionAccess access(List<String> starts) =>
+        LocalHostSessionAccess(
+          paths: paths,
+          executable: LocalHostExecutable(
+            executableDirectory: home.path,
+            repositoryRoot: home.path,
+          ),
+          startServe: (path) async {
+            starts.add(path);
+            await serve();
+            return _ServeProcess(banner());
+          },
+        );
+
+    test('it stops at once, and looks again on a slow timer: a binary that '
+        'comes back is started', () async {
+      final starts = <String>[];
+      final supervisor = supervise(
+        access(starts),
+        noBinaryRecheck: const Duration(milliseconds: 100),
+      );
       await supervisor.start();
       expect(supervisor.state.phase, HostSupervisionPhase.stopped);
       expect(supervisor.state.reason, contains('No karmashala_host'));
+      expect(supervisor.state.nextAttemptAt, isNotNull);
+
+      // Still missing at the next look: stopped again, nothing started.
+      await supervisor.changes
+          .where((s) => s.phase == HostSupervisionPhase.stopped)
+          .first
+          .timeout(const Duration(seconds: 5));
+      expect(starts, isEmpty);
+
+      // A rebuild puts it back.
+      final binary = anExecutable();
+      final back = await supervisor.restarted.first.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(back.isReady, isTrue);
+      expect(starts, [binary.path]);
+      expect(supervisor.state.phase, HostSupervisionPhase.running);
+    });
+
+    test('a nudge looks now, but no more than once per floor', () async {
+      final starts = <String>[];
+      final supervisor = supervise(
+        access(starts),
+        nudgeFloor: const Duration(milliseconds: 300),
+      );
+      await supervisor.start();
+      expect(supervisor.state.phase, HostSupervisionPhase.stopped);
+      final looks = <HostSupervision>[];
+      final sub = supervisor.changes.listen(looks.add);
+      addTearDown(sub.cancel);
+
+      // The first nudge looks at once (the launch's start was not a look).
+      supervisor.nudge('the data client found no server');
+      await pumpEventQueue();
+      expect(looks, hasLength(1));
+      // A tight redial loop is not a tight look loop.
+      for (var i = 0; i < 20; i++) {
+        supervisor.nudge('the data client found no server');
+      }
+      await pumpEventQueue();
+      expect(looks, hasLength(1), reason: 'nudged inside the floor');
+
+      final binary = anExecutable();
+      supervisor.nudge('the data client found no server');
+      await pumpEventQueue();
+      expect(starts, isEmpty, reason: 'still inside the floor');
+
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      final restarted = supervisor.restarted.first;
+      supervisor.nudge('the data client found no server');
+      final back = await restarted.timeout(const Duration(seconds: 5));
+      expect(back.isReady, isTrue);
+      expect(starts, [binary.path]);
+      expect(supervisor.state.phase, HostSupervisionPhase.running);
+
+      // Running: a nudge is nothing.
+      supervisor.nudge('the data client found no server');
+      await pumpEventQueue();
+      expect(starts, hasLength(1));
     });
   });
 

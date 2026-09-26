@@ -37,7 +37,6 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
-import 'native_menus.dart';
 import 'shell_title_bar.dart';
 
 export 'shell_title_bar.dart' show ShellTitleBar;
@@ -199,75 +198,75 @@ class _AppShellState extends ConsumerState<AppShell> {
         namedWindow: request.namedWindow,
       );
     });
-    return NativeShellMenus(
-      child: ShellShortcuts(
-        child: Scaffold(
-          // The bar's height follows the text scale (menus must not clip at
-          // 125%+), and `preferredSize` cannot read a context.
-          appBar: ShellTitleBar(height: Chrome.titleBarOf(context)),
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = ShellWidth.of(constraints.maxWidth);
-                // At compact widths the Explorer and the workbench take turns
-                // in the same column.
-                final showExplorer = width.isCompact
-                    ? shell.focusedPane == ShellPane.explorer
-                    : shell.explorerPaneVisible;
-                // Measured as if focus mode were off: it hides the rail too, and
-                // leaving it must not find the selection dropped.
-                final panelFits = ShellLayout.panelFits(
-                  available: constraints.maxWidth,
-                  explorerColumn: showExplorer && !width.isCompact,
-                );
-                _reportPanelRoom(panelFits);
-                final layout = ShellLayout.allocate(
-                  available: constraints.maxWidth,
-                  explorerColumn: !zen && showExplorer && !width.isCompact,
-                  panelOpen: !zen && SidePanel.openSurface(ref) != null,
-                  explorerWidth: _explorerDrag ?? explorerWidth,
-                  panelWidth: _panelDrag ?? panelWidth,
-                );
-                return Column(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (!zen && showExplorer)
-                            width.isCompact
-                                ? const Expanded(child: ExplorerPanel())
-                                : ResizableColumn(
-                                    width: layout.explorerWidth!,
-                                    semanticLabel: 'Resize Explorer width',
-                                    onResize: (value) => setState(
-                                      () => _explorerDrag = layout
-                                          .clampExplorer(value),
+    // The macOS menu bar is mounted above this, in `KarmashalaApp`.
+    return ShellShortcuts(
+      child: Scaffold(
+        // The bar's height follows the text scale (menus must not clip at
+        // 125%+), and `preferredSize` cannot read a context.
+        appBar: ShellTitleBar(height: Chrome.titleBarOf(context)),
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = ShellWidth.of(constraints.maxWidth);
+              // At compact widths the Explorer and the workbench take turns
+              // in the same column.
+              final showExplorer = width.isCompact
+                  ? shell.focusedPane == ShellPane.explorer
+                  : shell.explorerPaneVisible;
+              // Measured as if focus mode were off: it hides the rail too, and
+              // leaving it must not find the selection dropped.
+              final panelFits = ShellLayout.panelFits(
+                available: constraints.maxWidth,
+                explorerColumn: showExplorer && !width.isCompact,
+              );
+              _reportPanelRoom(panelFits);
+              final layout = ShellLayout.allocate(
+                available: constraints.maxWidth,
+                explorerColumn: !zen && showExplorer && !width.isCompact,
+                panelOpen: !zen && SidePanel.openSurface(ref) != null,
+                explorerWidth: _explorerDrag ?? explorerWidth,
+                panelWidth: _panelDrag ?? panelWidth,
+              );
+              return Column(
+                children: [
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!zen && showExplorer)
+                          width.isCompact
+                              ? const Expanded(child: ExplorerPanel())
+                              : ResizableColumn(
+                                  width: layout.explorerWidth!,
+                                  semanticLabel: 'Resize Explorer width',
+                                  onResize: (value) => setState(
+                                    () => _explorerDrag = layout.clampExplorer(
+                                      value,
                                     ),
-                                    onResizeEnd: _saveExplorerWidth,
-                                    child: const ExplorerPanel(),
                                   ),
-                          if (!width.isCompact || !showExplorer)
-                            const Expanded(child: WorkbenchView()),
-                          if (!zen)
-                            SidePanel(
-                              bodyWidth: layout.panelWidth,
-                              hasRoom: panelFits,
-                              onResize: (value) => setState(
-                                () => _panelDrag = layout.clampPanel(value),
-                              ),
-                              onResizeEnd: _savePanelWidth,
+                                  onResizeEnd: _saveExplorerWidth,
+                                  child: const ExplorerPanel(),
+                                ),
+                        if (!width.isCompact || !showExplorer)
+                          const Expanded(child: WorkbenchView()),
+                        if (!zen)
+                          SidePanel(
+                            bodyWidth: layout.panelWidth,
+                            hasRoom: panelFits,
+                            onResize: (value) => setState(
+                              () => _panelDrag = layout.clampPanel(value),
                             ),
-                        ],
-                      ),
+                            onResizeEnd: _savePanelWidth,
+                          ),
+                      ],
                     ),
-                    if (width.isCompact && !zen)
-                      _CompactPaneSelector(shell: shell),
-                    const ShellStatusBar(),
-                  ],
-                );
-              },
-            ),
+                  ),
+                  if (width.isCompact && !zen)
+                    _CompactPaneSelector(shell: shell),
+                  const ShellStatusBar(),
+                ],
+              );
+            },
           ),
         ),
       ),

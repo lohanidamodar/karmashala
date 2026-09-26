@@ -251,8 +251,13 @@ String? _supervisionText(HostSupervision? supervision, {DateTime? now}) {
           '${supervision.maxAttempts}$wait'
           '${why == null || why.isEmpty ? '' : ' · $why'}$tail';
     case HostSupervisionPhase.stopped:
+      final next = supervision.nextAttemptAt;
+      final look = next == null
+          ? ''
+          : ' · looked at again in '
+                '${_seconds(next.difference(now ?? DateTime.now()))}';
       return 'Session host: stopped: ${supervision.reason ?? 'no reason was '
-              'recorded'}$tail';
+              'recorded'}$look$tail';
     case HostSupervisionPhase.idle:
     case HostSupervisionPhase.starting:
     case HostSupervisionPhase.running:

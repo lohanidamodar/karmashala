@@ -35,8 +35,10 @@ enum HostSupervisionPhase {
   /// running until they end or the person restarts it.
   outdated,
 
-  /// Given up: no binary, or the host kept exiting. Only the person restarts
-  /// it from here.
+  /// Not restarted on the backoff any more: there is no binary, or the host
+  /// kept exiting. Still looked at on a slow timer ([HostSupervision.
+  /// nextAttemptAt]) — a binary that comes back is started — and the person
+  /// may restart it at once.
   stopped,
 }
 
@@ -66,7 +68,8 @@ class HostSupervision {
   final int attempt;
   final int maxAttempts;
 
-  /// When the next attempt runs, while [HostSupervisionPhase.restarting].
+  /// When the next attempt runs, while [HostSupervisionPhase.restarting], or
+  /// the next slow look while [HostSupervisionPhase.stopped].
   final DateTime? nextAttemptAt;
 
   /// The last lines the host printed, when this app started it.
@@ -95,6 +98,13 @@ class HostSupervision {
 /// keeps the host's last output as the reason. Each time a host is up again,
 /// [restarted] fires so everything that rides it re-attaches.
 ///
+/// **Stopped is not forever.** With no binary it looks again every
+/// [noBinaryRecheck] — a rebuild or an update puts one back — and a [nudge]
+/// (the data client redialling a server that is not there) brings that look
+/// forward, at most once per [nudgeFloor]. After a crash loop the host is
+/// tried once more every [crashLoopRecheck]; nudges do not shorten that, or
+/// the cap would mean nothing.
+///
 /// **An older host holding sessions** is never killed from here: it is
 /// [HostSupervisionPhase.outdated], looked at again every [outdatedRecheck]
 /// (and replaced then if it holds nothing), and only [restartNow] with
@@ -105,6 +115,9 @@ class LocalHostSupervisor {
     this.backoff = kHostRestartBackoff,
     this.stableAfter = const Duration(seconds: 30),
     this.outdatedRecheck = const Duration(seconds: 30),
+    this.noBinaryRecheck = const Duration(seconds: 30),
+    this.crashLoopRecheck = const Duration(minutes: 5),
+    this.nudgeFloor = const Duration(seconds: 10),
     DateTime Function()? now,
     AppLogger? logger,
   }) : _now = now ?? DateTime.now,
@@ -128,6 +141,15 @@ class LocalHostSupervisor {
   final List<Duration> backoff;
   final Duration stableAfter;
   final Duration outdatedRecheck;
+
+  /// How often a supervisor stopped for want of a binary looks for one.
+  final Duration noBinaryRecheck;
+
+  /// How often a supervisor stopped by a crash loop tries the host once more.
+  final Duration crashLoopRecheck;
+
+  /// The least time between two looks a [nudge] may cause.
+  final Duration nudgeFloor;
   final DateTime Function() _now;
   final AppLogger _log;
 
@@ -142,6 +164,12 @@ class LocalHostSupervisor {
   DateTime? _runningSince;
   var _attempts = 0;
   var _busy = false;
+
+  /// Whether the stop was a crash loop rather than a missing binary.
+  var _crashLoop = false;
+
+  /// When a stopped supervisor last looked, for [nudgeFloor].
+  DateTime? _lastLook;
   var _disposed = false;
   List<String> _lastOutput = const [];
 
@@ -195,6 +223,33 @@ class LocalHostSupervisor {
       return;
     }
     unawaited(_confirmAttached());
+  }
+
+  /// Something that needs the host found it missing — the data client's
+  /// redial. While stopped for want of a binary, looks now instead of at the
+  /// next [noBinaryRecheck], at most once per [nudgeFloor]; ignored otherwise
+  /// (running, restarting and outdated already have their own timers, and a
+  /// crash loop keeps its slow one).
+  void nudge(String why) {
+    if (_disposed ||
+        _busy ||
+        _state.phase != HostSupervisionPhase.stopped ||
+        _crashLoop) {
+      return;
+    }
+    final last = _lastLook;
+    if (last != null && _now().difference(last) < nudgeFloor) return;
+    _next?.cancel();
+    unawaited(_look(why));
+  }
+
+  /// A stopped supervisor's look: start the host if it can be started now.
+  Future<void> _look(String why) async {
+    if (_disposed || _busy || _state.phase != HostSupervisionPhase.stopped) {
+      return;
+    }
+    _lastLook = _now();
+    await _attemptNow(why);
   }
 
   /// The person asked: the count is cleared and the host is started, or —
@@ -307,11 +362,10 @@ class LocalHostSupervisor {
       return;
     }
     if (reading.status == HostDeploymentStatus.noBinary) {
-      _set(
-        HostSupervisionPhase.stopped,
-        reading: reading,
-        reason: reading.reason,
-      );
+      // Nothing was started, so nothing crashed: a binary that comes back
+      // starts on a fresh count.
+      _attempts = 0;
+      _stop(reading: reading, reason: reading.reason, crashLoop: false);
       return;
     }
     // Would not start, would not answer, or nobody is there: another attempt.
@@ -330,14 +384,14 @@ class LocalHostSupervisor {
       _log.error(
         'Stopped restarting the session host after $_attempts attempts: $why',
       );
-      _set(
-        HostSupervisionPhase.stopped,
+      _stop(
         reading: reading,
         reason:
             'It was started again $_attempts times in a row and went down or '
-            'failed each time, so it is no longer restarted on its own. '
-            'Last: $why',
+            'failed each time, so it is now tried only every '
+            '${_describe(crashLoopRecheck)}. Last: $why',
         output: output,
+        crashLoop: true,
       );
       return;
     }
@@ -351,6 +405,38 @@ class LocalHostSupervisor {
     );
     _next = Timer(delay, () => unawaited(_attemptNow(why)));
   }
+
+  /// Stopped, with the slow look scheduled.
+  void _stop({
+    required String? reason,
+    required bool crashLoop,
+    HostDeployment? reading,
+    List<String> output = const [],
+  }) {
+    _next?.cancel();
+    _crashLoop = crashLoop;
+    final delay = crashLoop ? crashLoopRecheck : noBinaryRecheck;
+    _set(
+      HostSupervisionPhase.stopped,
+      reading: reading,
+      reason: reason,
+      nextAttemptAt: _now().add(delay),
+      output: output,
+    );
+    _next = Timer(
+      delay,
+      () => unawaited(
+        _look(
+          crashLoop
+              ? 'trying the session host again after it kept exiting'
+              : 'looking for the session host binary again',
+        ),
+      ),
+    );
+  }
+
+  static String _describe(Duration delay) =>
+      delay.inMinutes >= 1 ? '${delay.inMinutes} min' : '${delay.inSeconds} s';
 
   /// [read], with a throw turned into null: supervision never fails.
   Future<HostDeployment?> _measure(

@@ -52,8 +52,10 @@ Future<DataClient> connectLocalServerData({
 }
 
 /// Ties the data link to the supervisor that keeps this machine's server
-/// up: a server it brings back is dialled at once, and a data link that
-/// closes is reported to it as a possible loss (it checks before acting).
+/// up: a server it brings back is dialled at once, a data link that closes is
+/// reported to it as a possible loss (it checks before acting), and each
+/// redial that finds nobody nudges it — a supervisor stopped for want of a
+/// binary looks again then, no more often than its own floor allows.
 /// Returns what undoes it.
 void Function() superviseDataLink(
   DataClient client,
@@ -65,6 +67,9 @@ void Function() superviseDataLink(
     final connected = connection.state == DataLinkState.connected;
     if (wasConnected && !connected) {
       supervisor.hostLost('the data link to it closed');
+    }
+    if (connection.state == DataLinkState.unavailable) {
+      supervisor.nudge('the data client found no server');
     }
     wasConnected = connected;
   });

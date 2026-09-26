@@ -224,6 +224,21 @@ void main() {
       expect(line, contains('one ⏎ two'));
     });
 
+    test('stopped, with when it is looked at again', () {
+      final line = sessionHostStatusText(
+        null,
+        now: now,
+        supervision: HostSupervision(
+          phase: HostSupervisionPhase.stopped,
+          observedAt: now,
+          reason: 'No karmashala_host beside this app.',
+          nextAttemptAt: now.add(const Duration(seconds: 30)),
+        ),
+      );
+      expect(line, contains('No karmashala_host beside this app.'));
+      expect(line, contains('looked at again in 30s'));
+    });
+
     test('running, with its pid', () {
       final line = sessionHostStatusText(
         HostDeployment(

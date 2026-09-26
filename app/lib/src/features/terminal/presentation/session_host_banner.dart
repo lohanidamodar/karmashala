@@ -10,10 +10,10 @@ import '../../settings/presentation/session_host_status_line.dart'
 import '../application/local_host_providers.dart';
 
 /// A strip above the shell while this machine's session host needs the person:
-/// supervision gave up restarting it, or an earlier Karmashala's host holds
-/// running sessions that only the person may end. Without a host, MCP, hooks,
-/// the companion and automations are all gone, and Settings is not where
-/// anybody looks first.
+/// supervision stopped restarting it on the quick backoff (it only looks again
+/// slowly), or an earlier Karmashala's host holds running sessions that only
+/// the person may end. Without a host, MCP, hooks, the companion and
+/// automations are all gone, and Settings is not where anybody looks first.
 ///
 /// Mounted inside `home`, under the Navigator, so its confirmation can open.
 class SessionHostBanner extends ConsumerStatefulWidget {
@@ -38,54 +38,63 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
         supervision != null &&
         sessionHostNeedsPerson(supervision) &&
         !_sameNews(supervision, _dismissed);
-    if (!shown) return widget.child;
+    // One tree whether or not the strip shows: the shell under it keeps its
+    // element, so it is never rebuilt from scratch — which also re-created
+    // everything above its content, the macOS menu bar among it.
+    return Column(
+      children: [
+        if (shown) _strip(context, supervision),
+        Expanded(
+          key: const ValueKey('session_host_banner_child'),
+          child: widget.child,
+        ),
+      ],
+    );
+  }
+
+  Widget _strip(BuildContext context, HostSupervision supervision) {
     final scheme = Theme.of(context).colorScheme;
     final style = Theme.of(
       context,
     ).textTheme.labelMedium?.copyWith(color: scheme.onErrorContainer);
     final outdated = supervision.phase == HostSupervisionPhase.outdated;
-    return Column(
-      children: [
-        Material(
-          key: const ValueKey('session_host_banner'),
-          color: scheme.errorContainer,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: [
-                Icon(AppIcons.warning, color: scheme.onErrorContainer),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${outdated ? '' : 'MCP, hooks, the companion and '
-                              'automations are off until it runs · '}'
-                    '${sessionHostStatusText(supervision.reading, supervision: supervision)}',
-                    style: style,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TextButton(
-                  key: const ValueKey('session_host_banner_restart'),
-                  onPressed: _busy ? null : () => _restart(supervision),
-                  child: Text(
-                    outdated
-                        ? sessionHostRestartLabel(supervision.reading)
-                        : 'Restart host',
-                  ),
-                ),
-                IconButton(
-                  key: const ValueKey('session_host_banner_dismiss'),
-                  icon: Icon(AppIcons.x, color: scheme.onErrorContainer),
-                  onPressed: () => setState(() => _dismissed = supervision),
-                ),
-              ],
+    return Material(
+      key: const ValueKey('session_host_banner'),
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          children: [
+            Icon(AppIcons.warning, color: scheme.onErrorContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${outdated ? '' : 'MCP, hooks, the companion and '
+                          'automations are off until it runs · '}'
+                '${sessionHostStatusText(supervision.reading, supervision: supervision)}',
+                style: style,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            TextButton(
+              key: const ValueKey('session_host_banner_restart'),
+              onPressed: _busy ? null : () => _restart(supervision),
+              child: Text(
+                outdated
+                    ? sessionHostRestartLabel(supervision.reading)
+                    : 'Restart host',
+              ),
+            ),
+            IconButton(
+              key: const ValueKey('session_host_banner_dismiss'),
+              icon: Icon(AppIcons.x, color: scheme.onErrorContainer),
+              onPressed: () => setState(() => _dismissed = supervision),
+            ),
+          ],
         ),
-        Expanded(child: widget.child),
-      ],
+      ),
     );
   }
 
