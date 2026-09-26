@@ -10,6 +10,7 @@ import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
+import 'companion_machine.dart';
 import 'companion_route.dart';
 import 'companion_search.dart';
 import 'companion_session_list.dart';
@@ -56,7 +57,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
   Future<void> _switchProject(List<CompanionProjectGroup> groups) async {
     final picked = await companionSheet<String>(
       context,
-      title: 'Projects on this desktop',
+      title: 'Projects on ${readCompanionMachineName(ref)}',
       children: [
         for (final group in groups)
           ListTile(
@@ -196,8 +197,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
                           icon: AppIcons.chat,
                           title: 'No sessions yet',
                           body:
-                              'Start a session in ${group.name} from this '
-                              'desktop.',
+                              'Start a session in ${group.name} on '
+                              '${watchCompanionMachineName(ref)}.',
                           actionLabel:
                               ref
                                   .read(companionGatewayProvider)
@@ -237,8 +238,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
         icon: AppIcons.folder,
         title: 'This project is gone',
         body:
-            'Your desktop no longer lists any session here. It may have been '
-            'archived, or the folder moved.',
+            'No session here is listed on ${watchCompanionMachineName(ref)} '
+            'any more. It may have been archived, or the folder moved.',
         actionLabel: 'Back to projects',
         onAction: () => Navigator.of(context).maybePop(),
       );

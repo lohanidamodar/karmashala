@@ -111,12 +111,12 @@ void main() {
     // banner that can only ever show it by accident.
     gateway.setLink(CompanionLinkState.connecting);
     await tester.pump();
-    expect(find.textContaining('Connecting to your desktop'), findsOneWidget);
+    expect(find.textContaining('Connecting to Desktop'), findsOneWidget);
 
     gateway.linkTrouble = 'Your desktop is not answering on this relay.';
     await tester.pump();
 
-    expect(find.textContaining('Connecting to your desktop'), findsOneWidget);
+    expect(find.textContaining('Connecting to Desktop'), findsOneWidget);
     expect(
       find.text('Your desktop is not answering on this relay.'),
       findsOneWidget,

@@ -10,6 +10,7 @@ import '../application/companion_environments.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
+import 'companion_machine.dart';
 import 'companion_route.dart';
 import 'companion_search.dart';
 import 'companion_session_list.dart';
@@ -55,9 +56,7 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
   Widget build(BuildContext context) {
     final sessions = ref.watch(companionSessionsProvider);
     final link = ref.watch(companionLinkProvider).asData?.value;
-    final hostName =
-        ref.watch(companionPairingProvider).asData?.value?.hostName ??
-        'your desktop';
+    final hostName = watchCompanionMachineName(ref);
     final projects = ref.watch(companionProjectsProvider);
     final canAdd = ref
         .watch(companionGatewayProvider)
@@ -316,8 +315,8 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
       icon: AppIcons.folderPlus,
       title: 'No projects yet',
       body:
-          'Add a project from its desktop path, or start a session there — '
-          'it shows up here as soon as it exists.',
+          'Add a project by its path on $hostName, or start a session there '
+          '— it shows up here as soon as it exists.',
       actionLabel:
           ref
               .read(companionGatewayProvider)

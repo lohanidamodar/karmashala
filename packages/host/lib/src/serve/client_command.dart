@@ -5,6 +5,7 @@ import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
 import '../protocol/frame.dart';
 import '../protocol/messages.dart';
+import '../pty/process_alive.dart';
 import 'host_paths.dart';
 
 /// The hand-operated half of the host: what somebody sitting on the machine
@@ -304,7 +305,7 @@ Future<int> runStop(
   Process.killPid(pid);
   final deadline = DateTime.now().add(grace);
   while (DateTime.now().isBefore(deadline)) {
-    if (!_alive(pid)) {
+    if (!processIsAlive(pid)) {
       sink.writeln('stopped pid $pid');
       return 0;
     }
@@ -312,7 +313,7 @@ Future<int> runStop(
   }
   Process.killPid(pid, ProcessSignal.sigkill);
   await Future<void>.delayed(const Duration(milliseconds: 200));
-  if (_alive(pid)) {
+  if (processIsAlive(pid)) {
     errSink.writeln('karmashala_host stop: pid $pid would not go');
     return 6;
   }
@@ -326,16 +327,6 @@ int? _lockPid(String lockPath) {
     return int.tryParse(text);
   } on FileSystemException {
     return null;
-  }
-}
-
-bool _alive(int pid) {
-  try {
-    // Signal 0 asks without sending: alive and ours, or not.
-    return Process.killPid(pid, ProcessSignal.sigusr1) ||
-        Process.killPid(pid, ProcessSignal.sigusr1);
-  } on Object {
-    return false;
   }
 }
 

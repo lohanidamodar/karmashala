@@ -25,6 +25,7 @@ void main() {
 
   SessionStore store({int keep = 16}) => SessionStore(
     Directory('${root.path}/sessions'),
+    owner: '/data/this-server',
     capacityBytes: 4096,
     keepEndedSessions: keep,
   )..ensureDirectory();

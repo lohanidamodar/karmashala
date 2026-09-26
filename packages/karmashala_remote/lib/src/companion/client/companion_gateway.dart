@@ -222,8 +222,32 @@ class CompanionConnection {
       'CompanionConnection($name, $hostId${active ? ', active' : ''})';
 }
 
-/// One session's live status, in the terms the phone shows.
-enum CompanionSessionStatus { working, idle, needsYou, failed, unknown }
+/// One session's status, in the terms the phone shows: what its agent is
+/// doing while the session runs, and how it ended once it has.
+enum CompanionSessionStatus {
+  working,
+  idle,
+  needsYou,
+
+  /// The agent's turn failed, or the session ended in error.
+  failed,
+
+  /// Nobody can say: no status is kept, or the host lost sight of the
+  /// session.
+  unknown,
+
+  /// The session ended on its own (`completed`).
+  ended,
+
+  /// The user ended it (`cancelled`).
+  stoppedByYou;
+
+  /// Whether this is how the session ended rather than what its agent is
+  /// doing — never replaced by a later reading of the agent.
+  bool get isEnding =>
+      this == CompanionSessionStatus.ended ||
+      this == CompanionSessionStatus.stoppedByYou;
+}
 
 /// Why a session is (or was) asking for the user — the attention-inbox kinds
 /// the host forwards (design §5: finished / needs you / failed).

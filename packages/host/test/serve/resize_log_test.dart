@@ -30,6 +30,7 @@ void main() {
   test('a resize is written at the offset it took effect', () {
     final store = SessionStore(
       Directory('${root.path}/sessions'),
+      owner: '/data/this-server',
       capacityBytes: 4096,
     )..ensureDirectory();
     final record = store.open('s1', request, DateTime.utc(2026, 9, 24))
@@ -45,6 +46,7 @@ void main() {
   test('rotation keeps the size in force at the new first byte', () {
     final store = SessionStore(
       Directory('${root.path}/sessions'),
+      owner: '/data/this-server',
       capacityBytes: 100,
     )..ensureDirectory();
     final record = store.open('s1', request, DateTime.utc(2026, 9, 24))

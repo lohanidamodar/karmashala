@@ -8,6 +8,7 @@ import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
+import 'companion_machine.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
 import 'link_banner.dart';
@@ -59,7 +60,9 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
     final gateway = ref.read(companionGatewayProvider);
     if (gateway.link != CompanionLinkState.connected) {
       setState(
-        () => _error = 'Connect to your desktop before adding a project.',
+        () => _error =
+            'Connect to ${readCompanionMachineName(ref)} before adding a '
+            'project.',
       );
       return;
     }
@@ -87,7 +90,9 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
       if (!mounted) return;
       if (gateway.pairing?.hostId != hostId) {
         setState(
-          () => _error = 'The active desktop changed. Review and submit again.',
+          () => _error =
+              'The machine this phone is connected to changed. Review and '
+              'submit again.',
         );
         return;
       }
@@ -121,13 +126,13 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
             const LinkBanner(),
             Expanded(
               child: !granted
-                  ? const CompanionNotice(
+                  ? CompanionNotice(
                       icon: AppIcons.warningCircle,
                       title: 'Not granted',
                       tone: NoticeTone.attention,
                       body:
-                          'This desktop did not grant this phone permission '
-                          'to add projects.',
+                          'This phone was not granted permission to add '
+                          'projects on ${watchCompanionMachineName(ref)}.',
                     )
                   : _form(),
             ),

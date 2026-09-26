@@ -250,7 +250,7 @@ void main() {
       await tester.tap(find.byTooltip('Attach a file'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('the desktop takes up to'), findsOneWidget);
+      expect(find.textContaining('this session takes up to'), findsOneWidget);
       expect(
         find.byTooltip('Remove'),
         findsNothing,

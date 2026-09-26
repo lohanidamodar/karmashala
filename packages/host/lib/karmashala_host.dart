@@ -19,6 +19,7 @@ export 'src/protocol/messages.dart';
 export 'src/protocol/wire.dart';
 export 'src/serve/host_paths.dart';
 export 'src/serve/client_command.dart';
+export 'src/pty/process_alive.dart';
 export 'src/serve/host_server.dart';
 export 'src/serve/lifecycle_feed.dart';
 export 'src/serve/serve_command.dart' show runServe, dataDirectoryOf;

@@ -149,7 +149,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'The desktop takes ${extensions.join(', ')} — not .$suffix.',
+            'This session takes ${extensions.join(', ')} — not .$suffix.',
           ),
         ),
       );
@@ -161,7 +161,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'That file is ${_megabytes(bytes.length)} — the desktop takes up '
+            'That file is ${_megabytes(bytes.length)} — this session takes up '
             'to ${_megabytes(support.maxBytes)}.',
           ),
         ),

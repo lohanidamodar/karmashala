@@ -122,6 +122,18 @@ extension _GatewaySessions on RemoteCompanionGateway {
       iso == null ? null : DateTime.tryParse(iso)?.toUtc();
 
   CompanionSessionStatus _statusOf(RemoteSessionSnapshot snapshot) {
+    // A session that has ended says how, whatever its agent last did: an
+    // agent's "idle" beside a cancelled row is a claim about nothing.
+    switch (snapshot.status) {
+      case 'completed':
+        return CompanionSessionStatus.ended;
+      case 'cancelled':
+        return CompanionSessionStatus.stoppedByYou;
+      case 'failed':
+        return CompanionSessionStatus.failed;
+      case 'unknown':
+        return CompanionSessionStatus.unknown;
+    }
     if (snapshot.attention == 'needs_approval') {
       return CompanionSessionStatus.needsYou;
     }
@@ -136,11 +148,7 @@ extension _GatewaySessions on RemoteCompanionGateway {
         'failed' => CompanionSessionStatus.failed,
         _ => CompanionSessionStatus.working,
       },
-      'idle' ||
-      'created' ||
-      'completed' ||
-      'cancelled' => CompanionSessionStatus.idle,
-      'failed' => CompanionSessionStatus.failed,
+      'idle' || 'created' => CompanionSessionStatus.idle,
       _ => CompanionSessionStatus.unknown,
     };
   }

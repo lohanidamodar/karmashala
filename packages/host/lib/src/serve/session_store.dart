@@ -10,15 +10,26 @@ import '../pty/pty.dart';
 /// A session's ring, on disk, bounded the same way the ring is: append-only,
 /// with the absolute offset of the first surviving byte beside it, which is the
 /// whole contract `attach since N` needs.
+///
+/// Every record names the server it belongs to ([owner], its data directory):
+/// the directory is the user's runtime dir, which every host this user runs
+/// on this machine uses in turn — the desktop app's, a standalone server with
+/// a `--data-dir` of its own — and a server restores, prunes and reports only
+/// its own records.
 class SessionStore implements SessionBacklogStore {
   SessionStore(
     this.directory, {
+    required this.owner,
     this.capacityBytes = OutputBacklog.defaultCapacityBytes,
     this.keepEndedSessions = 16,
   });
 
   /// `<host directory>/sessions`.
   final Directory directory;
+
+  /// The owning server's data directory, as [storeOwnerOf] names it. A record
+  /// naming another — or none — is another server's, and left alone.
+  final String owner;
 
   /// The ring's capacity, so a restarted host answers what a running one would.
   final int capacityBytes;
@@ -29,7 +40,16 @@ class SessionStore implements SessionBacklogStore {
   /// A quarter of a capacity late, so the copy is amortised over that quarter.
   int get rotateAboveBytes => capacityBytes + capacityBytes ~/ 4;
 
-  static const int _metaVersion = 1;
+  static const int _metaVersion = 2;
+
+  /// The record in [dir] when it is this server's, else null. Throws on one
+  /// that cannot be read.
+  Map<String, dynamic>? _ownMeta(Directory dir) {
+    final meta =
+        jsonDecode(File('${dir.path}/meta.json').readAsStringSync())
+            as Map<String, dynamic>;
+    return meta['store'] == owner ? meta : null;
+  }
 
   void ensureDirectory() {
     if (!directory.existsSync()) directory.createSync(recursive: true);
@@ -92,11 +112,9 @@ class SessionStore implements SessionBacklogStore {
 
   RestoredSession? _readOne(Directory dir) {
     try {
-      final metaFile = File('${dir.path}/meta.json');
-      if (!metaFile.existsSync()) return null;
-      final meta =
-          jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
-      if (meta['version'] != _metaVersion) return null;
+      if (!File('${dir.path}/meta.json').existsSync()) return null;
+      final meta = _ownMeta(dir);
+      if (meta == null || meta['version'] != _metaVersion) return null;
       final id = meta['id'] as String;
       final firstOffset = (meta['firstOffset'] as num).toInt();
 
@@ -225,28 +243,24 @@ class SessionStore implements SessionBacklogStore {
     }
   }
 
-  /// Keeps the newest [keepEndedSessions] ended records and deletes the rest.
-  /// Run when a session ends, never on a timer.
+  /// Keeps the newest [keepEndedSessions] of this server's ended records and
+  /// deletes the rest of them. Run when a session ends, never on a timer.
+  /// Another server's records, and ones that cannot be read (which cannot say
+  /// whose they are), are never touched.
   void pruneEnded() {
     if (!directory.existsSync()) return;
     final ended = <(DateTime, Directory)>[];
     for (final entity in directory.listSync().whereType<Directory>()) {
       try {
-        final meta =
-            jsonDecode(File('${entity.path}/meta.json').readAsStringSync())
-                as Map<String, dynamic>;
-        if (meta['state'] == 'running') continue;
+        final meta = _ownMeta(entity);
+        if (meta == null || meta['state'] == 'running') continue;
         final endedAt = (meta['endedAt'] as num?)?.toInt() ?? 0;
         ended.add((
           DateTime.fromMicrosecondsSinceEpoch(endedAt, isUtc: true),
           entity,
         ));
       } on Object {
-        // Unreadable: it can go with the rest of the old ones.
-        ended.add((
-          DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true),
-          entity,
-        ));
+        continue;
       }
     }
     if (ended.length <= keepEndedSessions) return;
@@ -258,6 +272,18 @@ class SessionStore implements SessionBacklogStore {
         // Held open by something; it will be pruned next time one ends.
       }
     }
+  }
+}
+
+/// The owner a [SessionStore] records for [dataDirectory]: absolute, with
+/// symbolic links resolved when it exists (`/tmp` and `/private/tmp` are one
+/// directory on macOS), so one server always names itself the same way.
+String storeOwnerOf(String dataDirectory) {
+  final absolute = Directory(dataDirectory).absolute;
+  try {
+    return absolute.resolveSymbolicLinksSync();
+  } on FileSystemException {
+    return absolute.path;
   }
 }
 
@@ -391,6 +417,7 @@ class SessionRecord implements SessionRecorder {
     final lifecycle = _lifecycle;
     final meta = <String, Object?>{
       'version': SessionStore._metaVersion,
+      'store': _store.owner,
       'id': id,
       'argv': _request.argv,
       'workingDirectory': _request.workingDirectory,

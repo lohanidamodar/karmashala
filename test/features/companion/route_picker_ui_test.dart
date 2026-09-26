@@ -81,10 +81,7 @@ void main() {
     );
     await pumpPhone(tester, gateway: gateway, home: const ConnectionsSection());
 
-    expect(
-      find.textContaining('no longer offered by the desktop'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('no longer offered by '), findsOneWidget);
 
     await tester.tap(find.textContaining('Route: Relay at'));
     await tester.pumpAndSettle();

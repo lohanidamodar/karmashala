@@ -195,6 +195,7 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
       next.add(
         session.copyWith(
           status: switch (kind) {
+            _ when session.status.isEnding => session.status,
             CompanionAttentionKind.needsYou => CompanionSessionStatus.needsYou,
             CompanionAttentionKind.failed => CompanionSessionStatus.failed,
             CompanionAttentionKind.finished ||

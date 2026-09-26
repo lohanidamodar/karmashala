@@ -50,6 +50,11 @@ class HostPaths {
 
   String get preferredSocketPath => '${directory.path}/host.sock';
   String get lockPath => '${directory.path}/host.lock';
+
+  /// The data directory of the server holding [lockPath], written beside it
+  /// (the lock itself stays a bare pid: shell scripts read it). What a second
+  /// server started as the same user is refused with.
+  String get holderDataDirectoryPath => '${directory.path}/host.data-dir';
   String get logPath => '${directory.path}/host.log';
   String get binDirectory => '${directory.path}/bin';
 
@@ -69,6 +74,8 @@ class HostPaths {
 
   /// Each session's output and metadata, inside the same owner-only directory
   /// as the socket — scrollback is as sensitive as the channel carrying it.
+  /// Shared by every server this user runs here in turn; each record names
+  /// the data directory of the server it belongs to (`SessionStore.owner`).
   String get sessionsDirectory => '${directory.path}/sessions';
 
   void ensureDirectory() {
@@ -128,15 +135,23 @@ class HostPaths {
 /// One instance per user, held by an OS file lock rather than a pid file: a pid
 /// lies after a reboot or a wrap, and a lock is released however the holder dies.
 class HostLock {
-  HostLock._(this._file, this.path);
+  HostLock._(this._file, this.path, this._notePath);
 
   final RandomAccessFile _file;
   final String path;
+  final String? _notePath;
 
   /// Null when another instance holds it, so no second host binds over its
-  /// socket.
-  static HostLock? tryAcquire(String path) {
-    final file = File(path).openSync(mode: FileMode.write);
+  /// socket. With [dataDirectory], the holder's data directory is written to
+  /// [notePath] for [describeHolder] to name.
+  static HostLock? tryAcquire(
+    String path, {
+    String? notePath,
+    String? dataDirectory,
+  }) {
+    // Opened without truncating: a refused attempt must leave the holder's
+    // pid readable, for this refusal, `stop` and the deployer's scripts.
+    final file = File(path).openSync(mode: FileMode.append);
     try {
       file.lockSync(FileLock.exclusive);
     } on FileSystemException {
@@ -144,22 +159,55 @@ class HostLock {
       return null;
     }
     file
+      ..truncateSync(0)
+      ..setPositionSync(0)
       ..writeStringSync('$pid\n')
       ..flushSync();
-    return HostLock._(file, path);
+    if (notePath != null) {
+      try {
+        if (dataDirectory == null) {
+          if (File(notePath).existsSync()) File(notePath).deleteSync();
+        } else {
+          File(notePath).writeAsStringSync('$dataDirectory\n', flush: true);
+        }
+      } on FileSystemException {
+        // Only ever read for a refusal's wording.
+      }
+    }
+    return HostLock._(file, path, notePath);
   }
 
   /// Best effort, for a refusal message that names something. Never trusted.
-  static String describeHolder(String path) {
+  static String describeHolder(String path, {String? notePath}) {
+    String? holder;
     try {
       final text = File(path).readAsStringSync().trim();
-      return text.isEmpty ? 'an unnamed process' : 'pid $text';
+      if (text.isNotEmpty) holder = 'pid $text';
     } on FileSystemException {
-      return 'an unnamed process';
+      // Unnamed.
     }
+    String? data;
+    if (notePath != null) {
+      try {
+        final text = File(notePath).readAsStringSync().trim();
+        if (text.isNotEmpty) data = 'data in $text';
+      } on FileSystemException {
+        // An older host, or one that could not write it.
+      }
+    }
+    final parts = [?holder, ?data];
+    return parts.isEmpty ? 'an unnamed process' : parts.join(', ');
   }
 
   void release() {
+    final note = _notePath;
+    if (note != null) {
+      try {
+        File(note).deleteSync();
+      } on FileSystemException {
+        // Never written, or already gone.
+      }
+    }
     try {
       _file
         ..unlockSync()

@@ -130,7 +130,7 @@ void main() {
     await tester.tap(find.text('alpha'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Projects on this desktop'), findsOneWidget);
+    expect(find.text('Projects on Desktop'), findsOneWidget);
     expect(find.text('2 sessions  ·  1 needs you'), findsOneWidget);
 
     await tester.tap(find.text('beta').last);
@@ -151,7 +151,7 @@ void main() {
 
     await tester.tap(find.text('alpha'), warnIfMissed: false);
     await tester.pumpAndSettle();
-    expect(find.text('Projects on this desktop'), findsNothing);
+    expect(find.text('Projects on Desktop'), findsNothing);
   });
 
   testWidgets('metadata-only projects can switch between empty projects', (

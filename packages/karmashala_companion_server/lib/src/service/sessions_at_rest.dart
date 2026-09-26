@@ -157,7 +157,10 @@ class SessionsAtRest {
       status: row.status.name,
       archived: row.isArchived,
       attention: remoteAttentionOf(agent),
-      activity: agent?.status.name,
+      // What the agent of a *running* session is doing: a row that ended (or
+      // that nothing can see) has no agent activity, only its ending, and a
+      // last "idle" beside "cancelled" is a claim about nothing.
+      activity: row.status.claimsLive ? agent?.status.name : null,
       repositoryId: row.repositoryId,
       repositoryName: place?.repositoryName,
       createdAt: row.createdAt.toUtc().toIso8601String(),

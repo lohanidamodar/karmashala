@@ -679,6 +679,33 @@ void main() {
     expect(find.text('Resume session'), findsOneWidget);
   });
 
+  // Found on a phone: after the session was ended the header chip still read
+  // "Idle" beside "cancelled".
+  for (final (status, word) in [
+    (CompanionSessionStatus.ended, 'Ended'),
+    (CompanionSessionStatus.stoppedByYou, 'Stopped by you'),
+    (CompanionSessionStatus.failed, 'Failed'),
+    (CompanionSessionStatus.unknown, 'Unknown'),
+  ]) {
+    testWidgets('an ended session\'s header says "$word", and offers resume', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: FakeCompanionGateway.paired(
+          sessions: [summary('s1', status: status, live: false)],
+          transcripts: const {'s1': []},
+        ),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.text(word), findsOneWidget);
+      expect(find.text('Idle'), findsNothing);
+      expect(find.text('Resume session'), findsOneWidget);
+    });
+  }
+
   testWidgets('an authorized offline session asks to reconnect before resume', (
     tester,
   ) async {
@@ -741,7 +768,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SessionViewScreen), findsOneWidget);
-    expect(find.textContaining('active desktop changed'), findsOneWidget);
+    expect(find.textContaining('connected to changed'), findsOneWidget);
   });
 
   for (final (label, size) in [

@@ -18,85 +18,269 @@ const _usage =
 karmashala_host $kHostVersion — Karmashala's session host.
 
   karmashala_host serve         own sessions on this machine until told to stop
-                                --data-dir=<dir>: the store is
-                                  <dir>/karmashala.sqlite and the config
-                                  <dir>/server.json (required unless
-                                  --standalone)
-                                --standalone: a server on its own — data in
-                                  ~/.karmashala unless --data-dir says, phone
-                                  listener on loopback unless --bind says,
-                                  agent CLIs found at start
-                                --name=<n> --bind=<ip> --companion-port=<n>
-                                --relay=<url> --relay-token=<t>
-                                --extra-relay=<url> --[no-]beacon --no-notes
-                                --no-companion --mcp-port=<n>: override
-                                  server.json, field by field
-  karmashala_host init          write server.json from the flags above;
-                                  --force replaces one that is there
+  karmashala_host init          write a server's server.json
   karmashala_host pair          open a pairing window and print its code and QR
-                                --capabilities=<list|all> --relay=<url>
-                                --name=<label> --address=<host[:port]>
   karmashala_host devices       the phones paired with this server
   karmashala_host revoke <id>   revoke one (see `devices` for ids)
-  karmashala_host agents        the agent CLIs this server found; --refresh
-                                  probes again
+  karmashala_host agents        the agent CLIs this server found
   karmashala_host attach        proxy stdio to the running host's socket
   karmashala_host list          what this machine's host is holding
   karmashala_host end <id>      end one session (see `list` for ids)
-  karmashala_host stop          stop the host itself; --force takes sessions with it
-  karmashala_host relay         be the relay for one desktop; `relay --help` for flags
+  karmashala_host stop          stop the host itself
+  karmashala_host relay         be the relay for one desktop
   karmashala_host probe-pty     prove the pty layer works on this machine
   karmashala_host probe-store   prove this machine can hold a store
   karmashala_host version       print the host and protocol versions
+
+`karmashala_host <command> --help` says what a command takes.
 ''';
+
+/// The flags `server.json` has, which `serve` overrides it with and `init`
+/// writes it from (`ServerConfig.fromFlags`).
+const _configValueFlags = {
+  'name',
+  'bind',
+  'companion-port',
+  'relay',
+  'relay-token',
+  'extra-relay',
+  'mcp-port',
+};
+const _configSwitches = {
+  'companion',
+  'no-companion',
+  'beacon',
+  'no-beacon',
+  'notes',
+  'no-notes',
+};
+
+const _configFlagsUsage = '''
+  --name=<n>              the name phones show (default: the hostname)
+  --bind=<ip>             the phone listener's interface
+  --companion-port=<n>    the phone listener's port (default 47820)
+  --relay=<url>           a relay phones meet this server at
+  --relay-token=<t>       that relay's token (32+ url-safe characters)
+  --extra-relay=<url>     another relay, repeatable
+  --[no-]beacon           announce on the LAN (default off)
+  --[no-]notes            phone notes (default on)
+  --[no-]companion        serve phones at all (default on)
+  --mcp-port=<n>          the agents' MCP endpoint, always loopback (default 47821)
+''';
+
+/// What one subcommand accepts. Checked before the command runs, so `--help`
+/// or a flag nobody knows never reaches code that binds, writes or signals.
+class _Command {
+  const _Command({
+    required this.usage,
+    required this.run,
+    this.valueFlags = const {},
+    this.switches = const {},
+    this.shortSwitches = const {},
+    this.positional = 0,
+  });
+
+  final String usage;
+  final Future<int> Function(List<String> args, IOSink out, IOSink err) run;
+
+  /// Written `--flag=value`.
+  final Set<String> valueFlags;
+
+  /// Written `--flag`.
+  final Set<String> switches;
+
+  /// Written `-f`.
+  final Set<String> shortSwitches;
+
+  /// How many bare words may follow the command.
+  final int positional;
+
+  /// Null when [args] are all known, else the sentence to refuse with.
+  String? refusal(List<String> args) {
+    var words = 0;
+    for (final arg in args) {
+      if (arg.startsWith('--')) {
+        final equals = arg.indexOf('=');
+        final name = arg.substring(2, equals < 0 ? arg.length : equals);
+        if (equals < 0 && switches.contains(name)) continue;
+        if (equals >= 0 && valueFlags.contains(name)) continue;
+        if (valueFlags.contains(name)) {
+          return '--$name needs a value: --$name=…';
+        }
+        if (switches.contains(name)) return '--$name takes no value';
+        return 'unknown flag "$arg"';
+      }
+      if (arg.startsWith('-') && arg.length > 1) {
+        if (shortSwitches.contains(arg.substring(1))) continue;
+        return 'unknown flag "$arg"';
+      }
+      words++;
+      if (words > positional) return 'unexpected argument "$arg"';
+    }
+    return null;
+  }
+}
+
+final Map<String, _Command> _commands = {
+  'serve': _Command(
+    usage:
+        '''
+karmashala_host serve — own sessions on this machine until told to stop.
+
+  --data-dir=<dir>        the server's data: <dir>/karmashala.sqlite (the
+                          store), <dir>/server.json (its config) and
+                          <dir>/sessions (its session records). Required
+                          unless --standalone
+  --standalone            a server on its own: data in ~/.karmashala unless
+                          --data-dir says, phone listener on loopback unless
+                          --bind says, agent CLIs found at start
+$_configFlagsUsage
+Each config flag overrides server.json, field by field.
+''',
+    valueFlags: {'data-dir', ..._configValueFlags},
+    switches: {'standalone', ..._configSwitches},
+    run: (args, out, err) => runServe(args, out: out, err: err),
+  ),
+  'init': _Command(
+    usage: '''
+karmashala_host init — write a server's server.json (owner-only).
+
+  --data-dir=<dir>        where (default ~/.karmashala)
+  --force                 replace a server.json that is there
+$_configFlagsUsage''',
+    valueFlags: {'data-dir', ..._configValueFlags},
+    switches: {'force', ..._configSwitches},
+    run: (args, out, err) => runInit(args, out: out, err: err),
+  ),
+  'pair': _Command(
+    usage: '''
+karmashala_host pair — open a pairing window at the running server and print
+its code and QR, then wait until a device pairs or the window closes.
+
+  --capabilities=<list|all>   what the device may do (default all)
+  --relay=<url>               meet the phone at this relay, for this window
+  --name=<label>              the name the paired device gets
+  --address=<host[:port]>     where the phone dials (makes the QR a host invite)
+  --no-color                  draw the QR without colour
+''',
+    valueFlags: {'capabilities', 'relay', 'name', 'address'},
+    switches: {'no-color'},
+    run: (args, out, err) => runPair(args, out: out, err: err),
+  ),
+  'devices': _Command(
+    usage: '''
+karmashala_host devices — every phone paired with the running server.
+''',
+    run: (args, out, err) => runDevices(args, out: out, err: err),
+  ),
+  'revoke': _Command(
+    usage: '''
+karmashala_host revoke <id> — revoke one paired device, by its id or a prefix
+only it has (see `devices`), and drop its live links.
+''',
+    positional: 1,
+    run: (args, out, err) => runRevoke(args, out: out, err: err),
+  ),
+  'agents': _Command(
+    usage: '''
+karmashala_host agents — the agent CLIs the running server recorded.
+
+  --refresh               look for them again now
+''',
+    switches: {'refresh'},
+    run: (args, out, err) => runAgents(args, out: out, err: err),
+  ),
+  'attach': _Command(
+    usage: '''
+karmashala_host attach — proxy stdio to the running host's socket.
+''',
+    run: (args, out, err) => runAttach(args, output: out, err: err),
+  ),
+  'list': _Command(
+    usage: '''
+karmashala_host list — every session this machine's host is holding.
+''',
+    run: (args, out, err) => runList(out: out, err: err),
+  ),
+  'end': _Command(
+    usage: '''
+karmashala_host end <id> — end one session (see `list` for ids).
+''',
+    positional: 1,
+    run: (args, out, err) => runEnd(args, out: out, err: err),
+  ),
+  'stop': _Command(
+    usage: '''
+karmashala_host stop — stop the host itself. Refuses while it holds running
+sessions.
+
+  --force, -f             stop it anyway, and its sessions with it
+''',
+    switches: {'force'},
+    shortSwitches: {'f'},
+    run: (args, out, err) => runStop(args, out: out, err: err),
+  ),
+  'probe-pty': _Command(
+    usage: '''
+karmashala_host probe-pty — prove the pty layer works on this machine.
+''',
+    run: (args, out, err) => runPtyProbe(out: out),
+  ),
+  'probe-store': _Command(
+    usage: '''
+karmashala_host probe-store — prove this machine can hold a store.
+''',
+    run: (args, out, err) => runStoreProbe(out: out),
+  ),
+  'version': _Command(
+    usage: '''
+karmashala_host version — print the host and protocol versions.
+''',
+    run: (args, out, err) async {
+      // Both numbers, because the deployer compares them separately: a host
+      // can be new enough to run and still speak a protocol the app does not.
+      out.writeln('host $kHostVersion protocol $kProtocolVersion');
+      return 0;
+    },
+  ),
+};
 
 Future<int> runHostCli(List<String> args, {IOSink? out, IOSink? err}) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
-  final command = args.isEmpty ? '' : args.first;
-  switch (command) {
-    case 'serve':
-      return runServe(args.skip(1).toList(), out: sink, err: errSink);
-    case 'attach':
-      return runAttach(args.skip(1).toList(), output: sink, err: errSink);
-    case 'list':
-      return runList(out: sink, err: errSink);
-    case 'end':
-      return runEnd(args.skip(1).toList(), out: sink, err: errSink);
-    case 'stop':
-      return runStop(args.skip(1).toList(), out: sink, err: errSink);
+  final name = args.isEmpty ? '' : args.first;
+  final rest = args.skip(1).toList();
+  switch (name) {
     case 'relay':
-      return runRelay(args.skip(1).toList(), out: sink, err: errSink);
-    case 'init':
-      return runInit(args.skip(1).toList(), out: sink, err: errSink);
-    case 'pair':
-      return runPair(args.skip(1).toList(), out: sink, err: errSink);
-    case 'devices':
-      return runDevices(args.skip(1).toList(), out: sink, err: errSink);
-    case 'revoke':
-      return runRevoke(args.skip(1).toList(), out: sink, err: errSink);
-    case 'agents':
-      return runAgents(args.skip(1).toList(), out: sink, err: errSink);
-    case 'probe-pty':
-      return runPtyProbe(out: sink);
-    case 'probe-store':
-      return runStoreProbe(out: sink);
+      // Its own strict parser, which answers --help and refuses the unknown.
+      return runRelay(rest, out: sink, err: errSink);
     case 'pty-exec':
       // Not in the usage: the host starts it, nobody else has a reason to.
-      return runPtyExec(args.skip(1).toList());
-    case 'version':
-      // Both numbers, because the deployer compares them separately: a host
-      // can be new enough to run and still speak a protocol the app does not.
-      sink.writeln('host $kHostVersion protocol $kProtocolVersion');
-      return 0;
+      // What follows is a child's argv, never flags of ours.
+      return runPtyExec(rest);
     case '':
     case '-h':
     case '--help':
       sink.write(_usage);
       return args.isEmpty ? 2 : 0;
-    default:
-      errSink.writeln('karmashala_host: unknown command "$command"');
-      errSink.write(_usage);
-      return 2;
   }
+  final command = _commands[name];
+  if (command == null) {
+    errSink
+      ..writeln('karmashala_host: unknown command "$name"')
+      ..write(_usage);
+    return 2;
+  }
+  if (rest.contains('--help') || rest.contains('-h')) {
+    sink.write(command.usage);
+    return 0;
+  }
+  final refused = command.refusal(rest);
+  if (refused != null) {
+    errSink
+      ..writeln('karmashala_host $name: $refused')
+      ..write(command.usage);
+    return 2;
+  }
+  return command.run(rest, sink, errSink);
 }

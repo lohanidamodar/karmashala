@@ -155,7 +155,7 @@ void main() {
     await pumpPhone(tester, gateway: gateway, home: const AddProjectScreen());
     await _fill(tester);
     await _tapAdd(tester);
-    expect(find.textContaining('Connect to your desktop'), findsOneWidget);
+    expect(find.textContaining('before adding a project'), findsOneWidget);
     expect(gateway.calls, isEmpty);
   });
 
@@ -179,7 +179,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(AddProjectScreen), findsOneWidget);
-    expect(find.textContaining('active desktop changed'), findsOneWidget);
+    expect(find.textContaining('connected to changed'), findsOneWidget);
   });
 
   testWidgets('phone and tablet layouts do not overflow', (tester) async {

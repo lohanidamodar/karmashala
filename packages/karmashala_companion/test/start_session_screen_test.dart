@@ -351,7 +351,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(StartSessionScreen), findsOneWidget);
-      expect(find.textContaining('active desktop changed'), findsOneWidget);
+      expect(find.textContaining('connected to changed'), findsOneWidget);
     });
 
     testWidgets('a phone without the grant is told, not left guessing', (

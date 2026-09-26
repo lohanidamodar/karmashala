@@ -126,7 +126,7 @@ class _CompanionMenuCardState extends State<CompanionMenuCard> {
         if (!widget.canAnswer)
           Text(
             'This phone was not granted approval rights, so it cannot answer. '
-            'Answer on the desktop.',
+            'Answer in its terminal.',
             style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
           )
         else ...[

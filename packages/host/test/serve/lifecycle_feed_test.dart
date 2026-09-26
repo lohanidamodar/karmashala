@@ -315,9 +315,11 @@ void main() {
         // A handle may still be held on Windows.
       }
     });
-    SessionStore store() =>
-        SessionStore(Directory('${root.path}/sessions'), capacityBytes: 4096)
-          ..ensureDirectory();
+    SessionStore store() => SessionStore(
+      Directory('${root.path}/sessions'),
+      owner: '/data/this-server',
+      capacityBytes: 4096,
+    )..ensureDirectory();
 
     final first = SessionRegistry(launcher: launcher, store: store());
     first.open('pane', request);

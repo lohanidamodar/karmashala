@@ -143,11 +143,21 @@ Future<int> runServe(
       return 6;
   }
 
-  final lock = HostLock.tryAcquire(paths.lockPath);
+  // One host per user per machine: the socket, lock, hook endpoint and
+  // MCP credentials are the user's, whatever data directory a server has.
+  // The refusal names the other server's data directory, so a second one
+  // started beside it says whose socket it met.
+  final lock = HostLock.tryAcquire(
+    paths.lockPath,
+    notePath: paths.holderDataDirectoryPath,
+    dataDirectory: dataDirectory,
+  );
   if (lock == null) {
     errSink.writeln(
       'karmashala_host: another host is already running for this user '
-      '(${HostLock.describeHolder(paths.lockPath)}); socket ${paths.socketPath}',
+      '(${HostLock.describeHolder(paths.lockPath, notePath: paths.holderDataDirectoryPath)}); '
+      'socket ${paths.socketPath}. One host serves each user on a machine: '
+      'stop it (`karmashala_host stop`), or run this one as another user',
     );
     return 3;
   }
@@ -167,9 +177,14 @@ Future<int> runServe(
   }
 
   // Read before anything binds, so the first client already sees what the last
-  // host left.
-  final store = SessionStore(Directory(paths.sessionsDirectory))
-    ..ensureDirectory();
+  // host left — this server's records only: the directory is the user's, and
+  // the desktop app's host or another server may have left theirs in it.
+  final dataDir = Directory(dataDirectory);
+  if (!dataDir.existsSync()) dataDir.createSync(recursive: true);
+  final store = SessionStore(
+    Directory(paths.sessionsDirectory),
+    owner: storeOwnerOf(dataDirectory),
+  )..ensureDirectory();
   final registry = SessionRegistry(launcher: pty.launcher, store: store);
 
   // The app's own database, shared: its pairings, its host id and the rows

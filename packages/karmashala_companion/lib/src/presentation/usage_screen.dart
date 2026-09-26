@@ -8,6 +8,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_providers.dart';
 import 'companion_chrome.dart';
+import 'companion_machine.dart';
 import 'companion_states.dart';
 
 /// Where a quota stops being background information — the desktop's pair.
@@ -30,8 +31,9 @@ class UsageScreen extends ConsumerWidget {
         title: 'Usage was not granted to this phone',
         body:
             'This phone was paired before usage limits could be shared. Pair '
-            'it again from the desktop — Settings › Remote access — and leave '
-            '"See usage limits" on.',
+            'it again — from the desktop app\'s Settings › Remote access, or '
+            '`karmashala_host pair` on a server — and leave "See usage '
+            'limits" on.',
       );
     }
     final usage = ref.watch(companionUsageProvider);
@@ -46,13 +48,14 @@ class UsageScreen extends ConsumerWidget {
         onRefresh: () => ref.refresh(companionUsageProvider.future),
         child: snapshot.accounts.isEmpty
             ? ListView(
-                children: const [
+                children: [
                   CompanionNotice(
                     icon: AppIcons.info,
                     title: 'No accounts to show',
                     body:
-                        'Your desktop has no Claude Code, Codex or Antigravity '
-                        'installed that it can read limits for.',
+                        'No Claude Code, Codex or Antigravity is installed on '
+                        '${watchCompanionMachineName(ref)} that it can read '
+                        'limits for.',
                   ),
                 ],
               )

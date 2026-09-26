@@ -16,6 +16,7 @@ import 'companion_approval_card.dart';
 import 'companion_menu_card.dart';
 import 'companion_question_card.dart';
 import 'companion_chrome.dart';
+import 'companion_machine.dart';
 import 'companion_composer.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
@@ -36,7 +37,8 @@ bool companionOffersResume(
     session != null &&
     (session.imported ||
         (!session.live &&
-            (session.status == CompanionSessionStatus.idle ||
+            (session.status.isEnding ||
+                session.status == CompanionSessionStatus.idle ||
                 session.status == CompanionSessionStatus.failed ||
                 session.status == CompanionSessionStatus.unknown)));
 
@@ -168,8 +170,9 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
             title: 'Session no longer available',
             body:
                 _resumeFailure ??
-                'The desktop no longer lists this session. Go back and '
-                    'choose another session.',
+                'This session is no longer listed on '
+                    '${watchCompanionMachineName(ref)}. Go back and choose '
+                    'another session.',
             tone: NoticeTone.attention,
           )
         // NOT `AsyncValue.when`: a provider being retried is `AsyncLoading`
@@ -185,7 +188,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 // the phone cannot keep.
                 : CompanionNotice(
                     icon: AppIcons.linkBreak,
-                    title: 'Waiting for your desktop',
+                    title: 'Waiting for ${watchCompanionMachineName(ref)}',
                     body:
                         "This session's messages arrive as soon as the link "
                         'is back.',
@@ -331,7 +334,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
       if (hostBefore != hostAfter) {
         setState(
           () => _resumeFailure =
-              'The active desktop changed while '
+              'The machine this phone is connected to changed while '
               'this session was being resumed. Try again.',
         );
         return;

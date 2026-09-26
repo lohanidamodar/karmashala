@@ -313,7 +313,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('4m ago'), findsOneWidget);
-      expect(find.textContaining('Your desktop was not asked'), findsOneWidget);
+      expect(find.textContaining('The machine was not asked'), findsOneWidget);
     });
 
     testWidgets('offers the way out of the filter', (tester) async {

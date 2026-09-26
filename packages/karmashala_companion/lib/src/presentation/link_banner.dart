@@ -6,6 +6,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'companion_machine.dart';
 import 'companion_states.dart';
 
 /// The strip that says the host cannot be reached, drawn above every tab and
@@ -47,7 +48,7 @@ class LinkBanner extends ConsumerWidget {
     final headline = connecting
         ? machine
               ? 'Connecting to ${pairing?.hostName ?? 'the machine'}…'
-              : 'Connecting to your desktop…'
+              : 'Connecting to ${companionMachineNameOf(pairing)}…'
         : 'Host unreachable';
     final detail =
         trouble ??
@@ -55,7 +56,8 @@ class LinkBanner extends ConsumerWidget {
             ? null
             : machine
             ? 'Check that the machine is running and can be reached from here.'
-            : 'Check that Karmashala is running on your desktop.');
+            : 'Check that Karmashala is running on '
+                  '${companionMachineNameOf(pairing)}.');
 
     return Material(
       // The word carries the meaning and the tint only supports it, so the text

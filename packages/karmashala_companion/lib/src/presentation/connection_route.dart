@@ -26,7 +26,7 @@ String connectionRouteLine(
   final gone =
       pin.kind == CompanionRouteKind.relay && !_offers(connection, pin);
   return 'Route: ${describeRoutePin(pin)} (pinned)'
-      '${gone ? ' · no longer offered by the desktop' : ''}';
+      '${gone ? ' · no longer offered by ${connection.name}' : ''}';
 }
 
 bool _offers(CompanionConnection connection, CompanionRoutePin pin) =>
@@ -123,12 +123,13 @@ Future<CompanionRoutePin?> showRoutePicker(
       _RouteOption(
         pin: CompanionRoutePin.auto,
         current: current,
-        detail: 'This network when the desktop is on it, otherwise a relay.',
+        detail:
+            'This network when ${connection.name} is on it, otherwise a relay.',
       ),
       _RouteOption(
         pin: CompanionRoutePin.lan,
         current: current,
-        detail: 'Only while this phone and the desktop share a network.',
+        detail: 'Only while this phone and ${connection.name} share a network.',
       ),
       for (final pin in relays)
         _RouteOption(
@@ -136,7 +137,7 @@ Future<CompanionRoutePin?> showRoutePicker(
           current: current,
           detail: _offers(connection, pin)
               ? 'Only this relay, wherever you are.'
-              : 'No longer offered by the desktop.',
+              : 'No longer offered by ${connection.name}.',
         ),
     ],
   );

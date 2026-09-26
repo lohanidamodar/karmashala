@@ -104,7 +104,7 @@ class _SessionControlsState extends ConsumerState<SessionControls> {
         if (options.models.isNotEmpty) ...[
           _heading('Model'),
           _row(
-            label: 'Desktop default',
+            label: 'Machine default',
             summary: options.modelDefaultLabel ?? 'The agent chooses',
             selected: options.modelId == null,
             onTap: enabled ? () => _choose(modelDefault: true) : null,
@@ -120,7 +120,7 @@ class _SessionControlsState extends ConsumerState<SessionControls> {
         if (options.permissions.isNotEmpty) ...[
           _heading('Permission mode'),
           _row(
-            label: 'Desktop default',
+            label: 'Machine default',
             summary: options.permissionDefaultLabel ?? '',
             selected: options.permissionId == null,
             onTap: enabled ? () => _choose(permissionDefault: true) : null,
@@ -134,7 +134,7 @@ class _SessionControlsState extends ConsumerState<SessionControls> {
             ),
         ],
         if (options.models.isEmpty && options.permissions.isEmpty)
-          _note('This session has nothing the desktop can change.'),
+          _note('This session has nothing the machine can change.'),
         if (!canChange)
           _note(
             'This phone was not granted send_prompt, so it can look but not '
@@ -186,7 +186,7 @@ String outcomeSentence(RemoteConfigureOutcome outcome) => switch (outcome) {
   RemoteConfigureOutcome.afterTurn =>
     'Switches when the agent finishes this turn.',
   RemoteConfigureOutcome.pickerOpened =>
-    'The agent opened its own picker on the desktop — choose it there to '
+    'The agent opened its own picker in its terminal — choose it there to '
         'switch now. It is also saved for the next launch.',
   RemoteConfigureOutcome.recorded =>
     'Saved — applies the next time this session runs.',

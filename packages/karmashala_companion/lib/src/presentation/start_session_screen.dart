@@ -8,6 +8,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
 import 'companion_chrome.dart';
+import 'companion_machine.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
 import 'link_banner.dart';
@@ -107,7 +108,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
 
   Future<void> _pickProject(List<RemoteWorkspaceProject> projects) async {
     final picked = await _sheet<String>(
-      title: 'Projects on this desktop',
+      title: 'Projects on ${readCompanionMachineName(ref)}',
       children: [
         for (final project in projects)
           ListTile(
@@ -262,8 +263,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
       if (hostBefore != hostAfter) {
         setState(
           () => _failure =
-              'The active desktop changed while this session was starting. '
-              'Try again.',
+              'The machine this phone is connected to changed while this '
+              'session was starting. Try again.',
         );
         return;
       }
@@ -317,14 +318,15 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
                       ),
                       data: _form,
                     )
-                  : const CompanionNotice(
+                  : CompanionNotice(
                       icon: AppIcons.warningCircle,
                       title: 'Not granted',
                       tone: NoticeTone.attention,
                       body:
-                          'This desktop did not grant this phone permission to '
-                          'start sessions. Pair again and tick "Start new '
-                          'sessions" to use it.',
+                          'This phone was not granted permission to start '
+                          'sessions on ${watchCompanionMachineName(ref)}. '
+                          'Pair again and tick "Start new sessions" to use '
+                          'it.',
                     ),
             ),
           ],
@@ -334,6 +336,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   }
 
   Widget _form(List<RemoteWorkspaceProject> projects) {
+    final machine = readCompanionMachineName(ref);
     final project = _project(projects);
     if (project == null) {
       final staleSelection = _projectId != null || widget.projectId != null;
@@ -350,9 +353,9 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
             : 'Nothing to start in',
         body: staleSelection
             ? 'The project selected for this session is no longer in the '
-                  'desktop workspace. Go back and choose another project.'
-            : 'Your desktop lists no project with a checkout in it. Add one '
-                  'here and it will show up on the next refresh.',
+                  'workspace on $machine. Go back and choose another project.'
+            : 'No project with a checkout in it is listed on $machine. Add '
+                  'one here and it will show up on the next refresh.',
         actionLabel: canAdd ? 'Add project' : null,
         onAction: canAdd
             ? () async {
@@ -373,9 +376,9 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
         icon: AppIcons.folder,
         title: _repositoryId == null ? 'No checkout here' : 'Checkout changed',
         body: _repositoryId == null
-            ? '${project.name} has no repository your desktop can start '
-                  'a session in.'
-            : 'That checkout is no longer available on the desktop. '
+            ? '${project.name} has no repository $machine can start a '
+                  'session in.'
+            : 'That checkout is no longer available on $machine. '
                   'Go back and choose another checkout.',
       );
     }
@@ -412,14 +415,14 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
               : null,
         ),
         if (agent == null)
-          const Padding(
-            padding: EdgeInsets.all(Insets.lg),
+          Padding(
+            padding: const EdgeInsets.all(Insets.lg),
             child: CompanionNotice(
               icon: AppIcons.robot,
               title: 'No agent installed here',
               tone: NoticeTone.attention,
               body:
-                  'Your desktop has no agent installed in the environment this '
+                  'No agent is installed on $machine in the environment this '
                   'checkout lives in, so there is nothing to start it with.',
             ),
           )
@@ -525,7 +528,7 @@ class _StartFormFields extends StatelessWidget {
           textInputAction: TextInputAction.next,
           decoration: const InputDecoration(
             labelText: 'Title',
-            helperText: 'Optional — your desktop names it if you do not.',
+            helperText: 'Optional — the machine names it if you do not.',
             border: OutlineInputBorder(),
           ),
         ),

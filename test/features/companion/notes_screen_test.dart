@@ -53,7 +53,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Release checklist\nbump the version'), findsOneWidget);
     expect(
-      find.textContaining('rest of this note is on the desktop'),
+      find.textContaining('rest of this note is on the machine'),
       findsOneWidget,
     );
   });
@@ -65,7 +65,7 @@ void main() {
       tester,
       const RemoteNotesSnapshot(notes: [], todos: [], notesEnabled: false),
     );
-    expect(find.text('Notes are switched off on the desktop.'), findsOneWidget);
+    expect(find.text('Notes are switched off on Desktop.'), findsOneWidget);
     expect(find.text('Nothing on the todo list.'), findsOneWidget);
   });
 

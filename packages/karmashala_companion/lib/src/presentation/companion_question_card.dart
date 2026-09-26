@@ -150,7 +150,7 @@ class _CompanionQuestionCardState extends State<CompanionQuestionCard> {
         if (!widget.canAnswer)
           Text(
             'This phone was not granted approval rights, so it cannot answer. '
-            'Answer on the desktop.',
+            'Answer in its terminal.',
             style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
           )
         else ...[
@@ -170,7 +170,7 @@ class _CompanionQuestionCardState extends State<CompanionQuestionCard> {
           ),
           const SizedBox(height: Insets.xs),
           Text(
-            'Your choice is typed into the session on the desktop.',
+            "Your choice is typed into the session's terminal.",
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),

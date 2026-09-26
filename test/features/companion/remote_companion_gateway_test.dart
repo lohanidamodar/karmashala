@@ -395,6 +395,50 @@ void main() {
     },
   );
 
+  // Found on a phone driving a server: a cancelled session's header still
+  // read "Idle", the last thing its agent was seen doing.
+  test(
+    'an ended session reads how it ended, never its agent\'s last activity',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final gateway = makeGateway();
+      await pairPhone(gateway);
+
+      Future<CompanionSessionSummary> reads(
+        String status, {
+        String? attention,
+      }) async {
+        fake.sessions['s1'] = RemoteSessionSnapshot(
+          sessionId: 's1',
+          title: 'Fix the tests',
+          status: status,
+          activity: 'idle',
+          attention: attention,
+        );
+        return (await gateway.listSessions()).single;
+      }
+
+      final completed = await reads('completed');
+      expect(completed.status, CompanionSessionStatus.ended);
+      expect(completed.live, isFalse);
+      expect(
+        (await reads('cancelled')).status,
+        CompanionSessionStatus.stoppedByYou,
+      );
+      expect((await reads('failed')).status, CompanionSessionStatus.failed);
+      expect((await reads('unknown')).status, CompanionSessionStatus.unknown);
+      expect(
+        (await reads('cancelled', attention: kAttentionNeedsApproval)).status,
+        CompanionSessionStatus.stoppedByYou,
+        reason:
+            'a prompt left on the screen of a session that ended waits '
+            'for nobody',
+      );
+      expect((await reads('created')).status, CompanionSessionStatus.idle);
+    },
+  );
+
   test(
     'an approval answered on the desktop stops offering itself on the '
     'phone',

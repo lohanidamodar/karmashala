@@ -123,6 +123,71 @@ void main() {
     });
   });
 
+  group('its own session records', () {
+    const request = PtySpawnRequest(argv: ['/bin/sh'], columns: 80, rows: 24);
+
+    test('another host\'s records in the user\'s runtime dir are not '
+        'restored, and are left as they were', () async {
+      final hostDir = Directory(p.join(root.path, 'host'));
+      final sessions = Directory(HostPaths(hostDir).sessionsDirectory);
+      final appHome = Directory(p.join(root.path, 'app-data'))..createSync();
+      final theirs = SessionStore(sessions, owner: storeOwnerOf(appHome.path))
+        ..ensureDirectory();
+      for (var i = 0; i < 3; i++) {
+        theirs.open('app-$i', request, DateTime.utc(2026, 9, 26))
+          ..ended(SessionExited(0, DateTime.utc(2026, 9, 26, 1)))
+          ..close();
+      }
+
+      final server = await InProcessServer.start(root, standalone());
+      addTearDown(server.stop);
+      expect(
+        server.out.text.toString(),
+        contains('restored 0 session(s) from ${sessions.path}'),
+      );
+      expect(await server.stop(), 0, reason: '${server.err.text}');
+      expect(
+        SessionStore(
+          sessions,
+          owner: storeOwnerOf(appHome.path),
+        ).restore().map((s) => s.id).toSet(),
+        {'app-0', 'app-1', 'app-2'},
+      );
+    });
+
+    test('a second server as the same user is refused, naming the data '
+        'directory of the one that holds the socket', () async {
+      final first = await InProcessServer.start(root, standalone());
+      addTearDown(first.stop);
+      // A process of its own: the lock is a POSIX record lock, which never
+      // conflicts with its own process.
+      final second = await Process.run(
+        Platform.resolvedExecutable,
+        [
+          'bin/karmashala_host.dart',
+          'serve',
+          '--standalone',
+          '--data-dir=${p.join(root.path, 'other-data')}',
+          '--companion-port=0',
+          '--mcp-port=0',
+        ],
+        environment: {
+          'HOME': p.join(root.path, 'home'),
+          kHostDirectoryEnvironmentVariable: first.paths.directory.path,
+        },
+      ).timeout(const Duration(minutes: 2));
+      expect(second.exitCode, 3, reason: '${second.stdout}${second.stderr}');
+      expect('${second.stderr}', contains('data in $dataDir'));
+      expect('${second.stderr}', contains('pid $pid'));
+      expect(await first.stop(), 0, reason: '${first.err.text}');
+      expect(
+        File(first.paths.holderDataDirectoryPath).existsSync(),
+        isFalse,
+        reason: 'a server that stopped holds nothing to name',
+      );
+    });
+  });
+
   group('its own config', () {
     test('server.json is served by, and a flag overrides it', () async {
       await const ServerConfig(

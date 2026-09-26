@@ -78,7 +78,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
 
     expect(find.byType(InlineSpinner), findsNothing);
-    expect(find.textContaining('desktop'), findsWidgets);
+    expect(find.textContaining('Waiting for'), findsWidgets);
   });
 
   testWidgets('a transcript still on its way over a live link may show a '

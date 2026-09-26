@@ -21,8 +21,10 @@ void main() {
   SessionStore storeOf({
     int capacityBytes = 4096,
     int keepEndedSessions = 16,
+    String owner = _owner,
   }) => SessionStore(
     Directory('${root.path}/sessions'),
+    owner: owner,
     capacityBytes: capacityBytes,
     keepEndedSessions: keepEndedSessions,
   )..ensureDirectory();
@@ -39,7 +41,10 @@ void main() {
   test('a record that cannot be opened is a no-op, never a throw', () {
     // A file where the sessions directory should be: every create under it fails.
     File('${root.path}/blocked').writeAsStringSync('');
-    final store = SessionStore(Directory('${root.path}/blocked'));
+    final store = SessionStore(
+      Directory('${root.path}/blocked'),
+      owner: _owner,
+    );
 
     final record = store.open('pane-a', request, startedAt);
     expect(record.isRecording, isFalse);
@@ -128,13 +133,13 @@ void main() {
     },
   );
 
-  test('a record from before the feed, ended in its own words, reads as it '
-      'was written', () {
+  test('a record ended in its own words reads as it was written', () {
     final dir = Directory('${root.path}/sessions/old')
       ..createSync(recursive: true);
     File('${dir.path}/meta.json').writeAsStringSync(
       jsonEncode({
-        'version': 1,
+        'version': 2,
+        'store': _owner,
         'id': 'old',
         'argv': ['/bin/sh'],
         'workingDirectory': null,
@@ -263,7 +268,98 @@ void main() {
     final restored = storeOf().restore();
     expect(restored.map((s) => s.id).toSet(), {'pane/one', r'pane\one'});
   });
+
+  group('records belong to one server', () {
+    test('a server restores its own records and never another\'s', () {
+      storeOf(owner: '/home/me/.karmashala').open('desktop', request, startedAt)
+        ..record(_bytes('the app host'))
+        ..ended(SessionExited(0, DateTime.utc(2026, 9, 9, 12, 1)))
+        ..close();
+      storeOf().open('mine', request, startedAt)
+        ..record(_bytes('this server'))
+        ..ended(SessionExited(0, DateTime.utc(2026, 9, 9, 12, 2)))
+        ..close();
+
+      expect(storeOf().restore().map((s) => s.id), ['mine']);
+      expect(
+        storeOf(owner: '/home/me/.karmashala').restore().map((s) => s.id),
+        ['desktop'],
+      );
+    });
+
+    test('another server\'s running record is not marked lost by this one', () {
+      storeOf(
+        owner: '/home/me/.karmashala',
+      ).open('theirs', request, startedAt).record(_bytes('still going'));
+
+      expect(storeOf().restore(), isEmpty);
+      final dir = Directory(
+        '${root.path}/sessions/theirs-${_hashOf('theirs')}',
+      );
+      final meta =
+          jsonDecode(File('${dir.path}/meta.json').readAsStringSync())
+              as Map<String, dynamic>;
+      expect(meta['state'], 'running');
+      expect(meta['store'], '/home/me/.karmashala');
+    });
+
+    test('a record that names no server is nobody\'s here', () {
+      final dir = Directory('${root.path}/sessions/unowned')
+        ..createSync(recursive: true);
+      File('${dir.path}/meta.json').writeAsStringSync(
+        jsonEncode({
+          'version': 1,
+          'id': 'unowned',
+          'argv': ['/bin/sh'],
+          'workingDirectory': null,
+          'environment': <String, String>{},
+          'columns': 80,
+          'rows': 24,
+          'startedAt': startedAt.microsecondsSinceEpoch,
+          'firstOffset': 0,
+          'state': 'exited',
+          'exitCode': 0,
+          'reason': null,
+          'endedAt': startedAt.microsecondsSinceEpoch,
+        }),
+      );
+      expect(storeOf().restore(), isEmpty);
+    });
+
+    test('pruning counts and deletes only this server\'s ended records', () {
+      final theirs = storeOf(owner: '/home/me/.karmashala');
+      for (var i = 0; i < 3; i++) {
+        theirs.open('theirs-$i', request, startedAt)
+          ..ended(SessionExited(0, DateTime.utc(2026, 9, 9, 11, i)))
+          ..close();
+      }
+      final mine = storeOf(keepEndedSessions: 1);
+      for (var i = 0; i < 3; i++) {
+        mine.open('mine-$i', request, startedAt)
+          ..ended(SessionExited(0, DateTime.utc(2026, 9, 9, 12, i)))
+          ..close();
+      }
+
+      expect(storeOf().restore().map((s) => s.id), ['mine-2']);
+      expect(
+        storeOf(
+          owner: '/home/me/.karmashala',
+        ).restore().map((s) => s.id).toSet(),
+        {'theirs-0', 'theirs-1', 'theirs-2'},
+      );
+    });
+
+    test('a server names its data directory the same way however it is '
+        'spelled', () {
+      final data = Directory('${root.path}/data')..createSync();
+      final link = Link('${root.path}/linked')..createSync(data.path);
+      expect(storeOwnerOf(link.path), storeOwnerOf(data.path));
+      expect(storeOwnerOf('${data.path}/'), storeOwnerOf(data.path));
+    }, skip: Platform.isWindows ? 'a link needs privileges there' : null);
+  });
 }
+
+const _owner = '/data/this-server';
 
 Uint8List _bytes(String s) => Uint8List.fromList(utf8.encode(s));
 String _text(BacklogSlice slice) =>

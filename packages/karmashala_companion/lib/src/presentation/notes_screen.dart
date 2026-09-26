@@ -6,6 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_providers.dart';
 import 'companion_chrome.dart';
+import 'companion_machine.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
 
@@ -17,6 +18,7 @@ class NotesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapshot = ref.watch(companionNotesProvider);
+    final machine = watchCompanionMachineName(ref);
     return companionAsync(
       snapshot,
       loading: () => const CompanionSkeletonList(rows: 4, lines: 1),
@@ -43,17 +45,17 @@ class NotesScreen extends ConsumerWidget {
             else
               for (final todo in data.todos) _TodoRow(todo: todo),
             if (data.omittedTodos > 0)
-              _Empty('${data.omittedTodos} more on the desktop.'),
+              _Empty('${data.omittedTodos} more on $machine.'),
             const SizedBox(height: Insets.lg),
             _Heading('Notes', count: data.notes.length),
             if (!data.notesEnabled)
-              const _Empty('Notes are switched off on the desktop.')
+              _Empty('Notes are switched off on $machine.')
             else if (data.notes.isEmpty)
               const _Empty('No notes yet.')
             else
               for (final note in data.notes) _NoteRow(note: note),
             if (data.omittedNotes > 0)
-              _Empty('${data.omittedNotes} older notes on the desktop.'),
+              _Empty('${data.omittedNotes} older notes on $machine.'),
           ],
         ),
       ),
@@ -198,7 +200,7 @@ class NoteScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: Insets.md),
                 child: Text(
-                  'The rest of this note is on the desktop.',
+                  'The rest of this note is on the machine.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

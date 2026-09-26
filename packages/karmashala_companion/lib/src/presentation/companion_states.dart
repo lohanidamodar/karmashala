@@ -30,7 +30,7 @@ Widget companionAsync<T>(
 /// already; anything else is a bug, and a Dart type helps nobody.
 String companionErrorText(Object error) => error is GatewayException
     ? error.message
-    : 'Something went wrong talking to your desktop.';
+    : 'Something went wrong talking to the machine.';
 
 /// How old the snapshot a companion screen is drawing is. A reading whose time
 /// was never recorded says "age unknown" and never "just now" (§19).
@@ -152,7 +152,7 @@ class CompanionNotice extends StatelessWidget {
     title: 'No match for "$query"',
     body:
         'Searched $searched in the snapshot this phone holds — $age. '
-        'Your desktop was not asked.',
+        'The machine was not asked.',
     actionLabel: 'Clear search',
     onAction: onClear,
   );

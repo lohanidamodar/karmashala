@@ -157,7 +157,7 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
                   else if (!widget.canAnswer)
                     Text(
                       'This phone was not granted approval rights, so it cannot '
-                      'answer. Answer on the desktop.',
+                      'answer. Answer in its terminal.',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.error,
                       ),
@@ -184,10 +184,10 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
                 'Reply to it below.',
           RemoteWaitKind.unrecorded when !_answerable =>
             'We can tell $name has stopped for you, but not what it wants. '
-                'Open the session on the desktop to see what it is showing.',
+                'Open its terminal to see what it is showing.',
           _ =>
             'We can tell $name is asking for something, but not what. Open '
-                'the session on the desktop to read the prompt.',
+                'its terminal to read the prompt.',
         },
         style: theme.textTheme.bodySmall?.copyWith(
           color: scheme.onSurfaceVariant,
@@ -246,13 +246,13 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
             'to it below.',
       RemoteWaitKind.approval =>
         '$name has not told us which keys answer its prompts, so answer it '
-            'on the desktop.',
+            'in its terminal.',
       RemoteWaitKind.unrecorded =>
         'We cannot tell whether $name has a prompt open, so Karmashala will '
-            'not send it a key. Answer on the desktop.',
+            'not send it a key. Answer in its terminal.',
       RemoteWaitKind.question =>
         '$name is asking a question this phone could not read, so answer '
-            'it on the desktop.',
+            'it in its terminal.',
     }, style: theme.textTheme.labelSmall?.copyWith(color: scheme.error));
   }
 
@@ -302,7 +302,7 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
         if (!hasDeny)
           Text(
             "${approval.agentName}'s prompt names no way to decline. To "
-            'refuse, use the desktop.',
+            'refuse, use its terminal.',
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
