@@ -11,7 +11,8 @@ import 'side_panel_state.dart';
 import 'status_bar.dart';
 import 'workbench.dart';
 
-import '../../core/database/database_providers.dart';
+import '../../core/data/data_providers.dart';
+import '../../core/data/metadata_keys.dart';
 import '../../core/lifecycle/before_quit.dart';
 import '../../features/automations/application/automation_event_router.dart';
 import '../../features/automations/application/automation_runner.dart';
@@ -128,12 +129,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(reopenSessionsFromLastQuit(ref));
-      final database = ref.read(databaseProvider);
-      if (database.readMetadata(MetadataKeys.environmentHealthOnboarding) !=
+      final preferences = ref.read(appPreferencesProvider);
+      if (preferences.read(MetadataKeys.environmentHealthOnboarding) !=
           'pending') {
         return;
       }
-      database.writeMetadata(MetadataKeys.environmentHealthOnboarding, 'shown');
+      preferences.write(MetadataKeys.environmentHealthOnboarding, 'shown');
       EnvironmentHealthDialog.show(context);
     });
   }

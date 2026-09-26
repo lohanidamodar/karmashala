@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 
 /// The choices offered for how many checkpoints a session keeps per repository.
 /// `null` keeps every one.
@@ -52,7 +52,7 @@ const String kCheckpointSettingsKey = 'checkpoints.settings.v1';
 class CheckpointSettingsController extends Notifier<CheckpointSettings> {
   @override
   CheckpointSettings build() {
-    final raw = ref.read(databaseProvider).readMetadata(kCheckpointSettingsKey);
+    final raw = ref.read(appPreferencesProvider).read(kCheckpointSettingsKey);
     if (raw == null) return const CheckpointSettings();
     try {
       return CheckpointSettings.fromJson(jsonDecode(raw));
@@ -69,8 +69,8 @@ class CheckpointSettingsController extends Notifier<CheckpointSettings> {
   void _save(CheckpointSettings next) {
     state = next;
     ref
-        .read(databaseProvider)
-        .writeMetadata(kCheckpointSettingsKey, jsonEncode(next.toJson()));
+        .read(appPreferencesProvider)
+        .write(kCheckpointSettingsKey, jsonEncode(next.toJson()));
   }
 }
 

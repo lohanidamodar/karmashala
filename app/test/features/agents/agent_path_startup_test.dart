@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import 'package:karmashala/src/core/data/metadata_keys.dart';
 
 const _stored = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe';
 const _storedDir = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin';

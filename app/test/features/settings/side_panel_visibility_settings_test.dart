@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala_store/database.dart';
+import '../../support/stored_preferences.dart';
 
 /// Which side-panel surfaces the rail leaves out, stored by id so a surface
 /// added, removed or reordered later cannot shift somebody's choice onto
@@ -48,8 +50,9 @@ void main() {
       db.close();
     });
 
-    List<String> stored() =>
-        SettingsRepository(db).load().hiddenSidePanelSurfaces;
+    List<String> stored() => SettingsRepository(
+      StoredPreferences(db),
+    ).load().hiddenSidePanelSurfaces;
 
     test('hides and shows one surface, persisted and sorted', () {
       controller.setSidePanelSurfaceHidden('plan', hidden: true);
@@ -76,12 +79,18 @@ void main() {
     });
 
     test('show all clears every hidden id, known or not', () {
-      db.writeMetadata(
-        'settings.v1',
-        '{"hiddenSidePanelSurfaces":["media","fromANewerBuild"]}',
+      // Written through the server, as another build would: the controller
+      // takes it without being asked.
+      container
+          .read(appPreferencesProvider)
+          .write(
+            'settings.v1',
+            '{"hiddenSidePanelSurfaces":["media","fromANewerBuild"]}',
+          );
+      expect(
+        container.read(settingsControllerProvider).hiddenSidePanelSurfaces,
+        ['fromANewerBuild', 'media'],
       );
-      container.invalidate(settingsControllerProvider);
-      controller = container.read(settingsControllerProvider.notifier);
       controller.showAllSidePanelSurfaces();
       expect(stored(), isEmpty);
     });

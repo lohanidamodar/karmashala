@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/permission_fixtures.dart';
+import '../../support/stored_preferences.dart';
 
 void main() {
   group('simulator slimming', _simulatorSlimmingTests);
@@ -54,7 +55,9 @@ void main() {
         isTrue,
       );
       expect(
-        SettingsRepository(db).load().shellIntegrationEnabled,
+        SettingsRepository(
+          StoredPreferences(db),
+        ).load().shellIntegrationEnabled,
         isTrue,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -101,7 +104,7 @@ void main() {
         isTrue,
       );
       expect(
-        SettingsRepository(db).load().hostBackedLocalPanes,
+        SettingsRepository(StoredPreferences(db)).load().hostBackedLocalPanes,
         isTrue,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -156,7 +159,9 @@ void main() {
         isFalse,
       );
       expect(
-        SettingsRepository(db).load().letAgentsUpdateThemselves,
+        SettingsRepository(
+          StoredPreferences(db),
+        ).load().letAgentsUpdateThemselves,
         isFalse,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -204,7 +209,7 @@ void main() {
         isFalse,
       );
       expect(
-        SettingsRepository(db).load().restoreLivePanes,
+        SettingsRepository(StoredPreferences(db)).load().restoreLivePanes,
         isFalse,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -234,14 +239,17 @@ void main() {
 
       controller.setTerminalThemeSource(r'ghostty:C:\themes\Nord');
       expect(
-        SettingsRepository(db).load().terminalThemeSource,
+        SettingsRepository(StoredPreferences(db)).load().terminalThemeSource,
         r'ghostty:C:\themes\Nord',
       );
 
       // Clearing must actually clear — a plain `?? this.x` copyWith cannot
       // express "set this back to null".
       controller.setTerminalThemeSource(null);
-      expect(SettingsRepository(db).load().terminalThemeSource, isNull);
+      expect(
+        SettingsRepository(StoredPreferences(db)).load().terminalThemeSource,
+        isNull,
+      );
     });
   });
 
@@ -347,7 +355,10 @@ void main() {
       final controller = container.read(settingsControllerProvider.notifier);
 
       controller.setUiTextScale(1.25);
-      expect(SettingsRepository(db).load().uiTextScale, 1.25);
+      expect(
+        SettingsRepository(StoredPreferences(db)).load().uiTextScale,
+        1.25,
+      );
 
       controller.setUiTextScale(5.0);
       expect(
@@ -385,14 +396,20 @@ void main() {
       final controller = container.read(settingsControllerProvider.notifier);
 
       controller.adjustTerminalFontSize(1);
-      expect(SettingsRepository(db).load().terminalFontSize, 14.0);
+      expect(
+        SettingsRepository(StoredPreferences(db)).load().terminalFontSize,
+        14.0,
+      );
 
       controller.adjustTerminalFontSize(-2);
-      expect(SettingsRepository(db).load().terminalFontSize, 12.0);
+      expect(
+        SettingsRepository(StoredPreferences(db)).load().terminalFontSize,
+        12.0,
+      );
 
       controller.resetTerminalFontSize();
       expect(
-        SettingsRepository(db).load().terminalFontSize,
+        SettingsRepository(StoredPreferences(db)).load().terminalFontSize,
         Settings.defaultTerminalFontSize,
       );
 
@@ -415,11 +432,14 @@ void main() {
     tearDown(() => db.close());
 
     test('load returns defaults when nothing is stored', () {
-      expect(SettingsRepository(db).load(), const Settings());
+      expect(
+        SettingsRepository(StoredPreferences(db)).load(),
+        const Settings(),
+      );
     });
 
     test('save then load round-trips', () {
-      final repo = SettingsRepository(db);
+      final repo = SettingsRepository(StoredPreferences(db));
       repo.save(const Settings(defaultAgent: AgentIds.antigravity));
       expect(repo.load().defaultAgent, AgentIds.antigravity);
     });
@@ -448,7 +468,10 @@ void main() {
         AgentIds.codex,
       );
       // A fresh repository sees the persisted value.
-      expect(SettingsRepository(db).load().defaultAgent, AgentIds.codex);
+      expect(
+        SettingsRepository(StoredPreferences(db)).load().defaultAgent,
+        AgentIds.codex,
+      );
     });
 
     test('setting a permission persists per agent and session kind', () {
@@ -459,7 +482,7 @@ void main() {
           claudeAcceptEditsStored,
         );
 
-      final loaded = SettingsRepository(db).load();
+      final loaded = SettingsRepository(StoredPreferences(db)).load();
       expect(
         loaded.permissionsFor(AgentIds.claudeCode).newSessions,
         claudeBypassStored,

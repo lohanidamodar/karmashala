@@ -11,6 +11,8 @@ import 'package:karmashala/src/features/settings/presentation/settings_screen.da
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/stored_preferences.dart';
+import 'package:karmashala_notes/store.dart';
 
 void main() {
   group('the setting', () {
@@ -42,7 +44,10 @@ void main() {
           .setNotesEnabled(false);
 
       expect(container.read(notesEnabledProvider), isFalse);
-      expect(SettingsRepository(db).load().notesEnabled, isFalse);
+      expect(
+        SettingsRepository(StoredPreferences(db)).load().notesEnabled,
+        isFalse,
+      );
     });
   });
 
@@ -104,7 +109,7 @@ void main() {
         isNot(contains(SidePanelSurface.notes)),
       );
       // …and not destroyed. Turning it back on brings the same list back.
-      expect(container.read(noteDaoProvider).list(), hasLength(1));
+      expect(NoteDao(container.read(databaseProvider)).list(), hasLength(1));
       container.read(settingsControllerProvider.notifier).setNotesEnabled(true);
       expect(
         container.read(notesProvider).single.body,

@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/settings/presentation/settings_catalog.d
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_store/database.dart';
+import '../../support/stored_preferences.dart';
 
 /// Settings → Devices draws the device pane's own slimming controls, writing
 /// the same stored settings, so the two places cannot disagree.
@@ -60,7 +61,10 @@ void main() {
     await tester.tap(find.byKey(const Key('android-slimming-enabled')));
     await tester.pumpAndSettle();
     expect(container.read(settingsControllerProvider).androidSlimming, isFalse);
-    expect(SettingsRepository(db).load().androidSlimming, isFalse);
+    expect(
+      SettingsRepository(StoredPreferences(db)).load().androidSlimming,
+      isFalse,
+    );
 
     await tester.tap(find.byKey(const Key('slimming-enabled')));
     await tester.pumpAndSettle();

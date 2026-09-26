@@ -19,6 +19,7 @@ import 'package:karmashala_store/database.dart';
 import '../../support/memory_server_config.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/stored_preferences.dart';
 
 const _token = '0123456789abcdef0123456789abcdef';
 final _url = Uri.parse('ws://203.0.113.9:8787/k/$_token');
@@ -126,7 +127,7 @@ void main() {
           );
       first.read(sshRelaysProvider.notifier).setEnabled('h1', false);
 
-      final entry = SshRelaysController.readFrom(db).single;
+      final entry = SshRelaysController.readFrom(StoredPreferences(db)).single;
       expect(entry.url, _url);
       expect(entry.port, 8787);
       expect(entry.hostName, 'do-box');
@@ -146,7 +147,7 @@ void main() {
 
       expect(container.read(sshRelaysProvider).single.hostName, 'renamed');
       relays.remove('h1');
-      expect(SshRelaysController.readFrom(db), isEmpty);
+      expect(SshRelaysController.readFrom(StoredPreferences(db)), isEmpty);
     });
 
     test('a garbled entry costs itself and nothing else', () {
@@ -155,9 +156,14 @@ void main() {
         '[{"hostId":"h1","port":8787,"url":"$_url"},{"hostId":7},"junk",'
         '{"hostId":"h2","port":8787,"url":"not a url"}]',
       );
-      expect(SshRelaysController.readFrom(db).map((e) => e.hostId), ['h1']);
+      expect(
+        SshRelaysController.readFrom(
+          StoredPreferences(db),
+        ).map((e) => e.hostId),
+        ['h1'],
+      );
       db.writeMetadata(kSshRelaysMetadataKey, 'not json');
-      expect(SshRelaysController.readFrom(db), isEmpty);
+      expect(SshRelaysController.readFrom(StoredPreferences(db)), isEmpty);
     });
 
     test('the token is in the URL and in nothing that prints', () {

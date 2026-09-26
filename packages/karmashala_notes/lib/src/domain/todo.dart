@@ -50,6 +50,40 @@ class Todo {
     createdAt: createdAt,
   );
 
+  /// The wire shape: dates as ISO-8601 UTC, absent fields omitted.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'body': body,
+    'projectId': ?projectId,
+    'position': position,
+    'doneAt': ?doneAt?.toUtc().toIso8601String(),
+    'createdAt': createdAt.toUtc().toIso8601String(),
+  };
+
+  /// Throws [FormatException] on a map that is not a todo.
+  static Todo fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    final body = json['body'];
+    final position = json['position'];
+    final createdAt = json['createdAt'];
+    final doneAt = json['doneAt'];
+    if (id is! String ||
+        body is! String ||
+        position is! int ||
+        createdAt is! String ||
+        (doneAt != null && doneAt is! String)) {
+      throw const FormatException('not a todo');
+    }
+    return Todo(
+      id: id,
+      body: body,
+      projectId: json['projectId'] as String?,
+      position: position,
+      doneAt: doneAt == null ? null : DateTime.parse(doneAt as String).toUtc(),
+      createdAt: DateTime.parse(createdAt).toUtc(),
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       other is Todo &&

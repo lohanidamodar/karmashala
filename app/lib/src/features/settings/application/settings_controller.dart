@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/logging/diagnostics_bootstrap.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import '../data/settings_repository.dart';
@@ -11,13 +11,29 @@ import '../domain/settings.dart';
 import '../domain/usage_limit_settings.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
-  (ref) => SettingsRepository(ref.watch(databaseProvider)),
+  (ref) => SettingsRepository(ref.watch(appPreferencesProvider)),
 );
 
-/// Holds the user [Settings], persisting every change.
+/// Holds the user [Settings], persisting every change at the server — and
+/// taking the settings another client wrote there.
 class SettingsController extends Notifier<Settings> {
   @override
-  Settings build() => ref.watch(settingsRepositoryProvider).load();
+  Settings build() {
+    final repository = ref.watch(settingsRepositoryProvider);
+    _raw = repository.raw();
+    final changes = ref.watch(appPreferencesProvider).changes.listen((_) {
+      final raw = repository.raw();
+      if (raw == _raw) return;
+      _raw = raw;
+      state = SettingsRepository.decode(raw);
+    });
+    ref.onDispose(changes.cancel);
+    return SettingsRepository.decode(_raw);
+  }
+
+  /// What is stored, as last read or written here: a change is one only when
+  /// it differs, so this client's own writes never come back as news.
+  String? _raw;
 
   /// Turns debug mode on or off: the root logger moves between `ALL` and
   /// `INFO`, and the Logs panel appears with it.
@@ -471,7 +487,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void _save() => ref.read(settingsRepositoryProvider).save(state);
+  /// [_raw] first: the copy tells its listeners synchronously, and this
+  /// write must not read as another client's.
+  void _save() {
+    final raw = _raw = SettingsRepository.encode(state);
+    ref.read(settingsRepositoryProvider).saveRaw(raw);
+  }
 }
 
 final settingsControllerProvider =

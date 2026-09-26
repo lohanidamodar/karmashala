@@ -15,6 +15,7 @@ import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
+import '../../support/stored_preferences.dart';
 
 /// A database as the release before v50 left it, with [settings] as its
 /// stored `settings.v1` and, optionally, relay prefs already written.
@@ -80,7 +81,9 @@ void main() {
       // Written by the upgrade, so the next settings save — which no longer
       // carries the old key — cannot take it away.
       expect(
-        RelayPrefsController.readFrom(container.read(databaseProvider)),
+        RelayPrefsController.readFrom(
+          StoredPreferences(container.read(databaseProvider)),
+        ),
         local,
       );
     });
@@ -135,11 +138,14 @@ void main() {
       container
           .read(settingsControllerProvider.notifier)
           .setLocalRelayPort(9002);
-      final saved = SettingsRepository(db).load();
+      final saved = SettingsRepository(StoredPreferences(db)).load();
       expect(saved.localRelayPort, 9002);
       expect(saved.toJson(), isNot(contains('remoteAccessEnabled')));
       expect(saved.toJson(), isNot(contains('remoteRelayUrl')));
-      expect(RelayPrefsController.readFrom(db)?.localEnabled, isTrue);
+      expect(
+        RelayPrefsController.readFrom(StoredPreferences(db))?.localEnabled,
+        isTrue,
+      );
     });
   });
 
@@ -154,7 +160,7 @@ void main() {
           .setLocalEnabled(wanted.localEnabled);
 
       expect(container.read(relayPrefsProvider), wanted);
-      expect(RelayPrefsController.readFrom(db), wanted);
+      expect(RelayPrefsController.readFrom(StoredPreferences(db)), wanted);
       expect(open().read(relayPrefsProvider), wanted, reason: 'relaunch');
     }
   });
@@ -173,7 +179,7 @@ void main() {
   test('unreadable stored prefs fall back to off', () {
     db.writeMetadata(kRelayPrefsMetadataKey, '{not json');
 
-    expect(RelayPrefsController.readFrom(db), isNull);
+    expect(RelayPrefsController.readFrom(StoredPreferences(db)), isNull);
     expect(open().read(relayPrefsProvider).localEnabled, isFalse);
   });
 }

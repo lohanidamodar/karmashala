@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/data/data_client.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
@@ -131,6 +133,7 @@ class ProjectsController extends Notifier<List<Project>> {
     for (final project in ref.read(projectDaoProvider).getAll()) {
       ref.read(projectDaoProvider).delete(project.id);
     }
+    _refileNotesAndTodos();
     ref.read(selectedProjectIdProvider.notifier).select(null);
     ref.read(selectedRepositoryIdProvider.notifier).select(null);
     ref.read(selectedSessionIdProvider.notifier).select(null);
@@ -416,6 +419,7 @@ class ProjectsController extends Notifier<List<Project>> {
     final selection = _selectionInto(repoIds);
 
     ref.read(projectDaoProvider).delete(projectId);
+    _refileNotesAndTodos();
     _clearSelections(projectId, repoIds, selection);
     // One publish for the whole delete. It used to be one per session plus this
     // one, and each of those woke every watcher of the session list.
@@ -425,6 +429,16 @@ class ProjectsController extends Notifier<List<Project>> {
     ref
         .read(cliStorePurgeRunnerProvider)
         .start(projectName: project?.name ?? 'The project', sessions: imported);
+  }
+
+  /// A project deleted here, not through the server, unfiles its notes and
+  /// todos in the store (`ON DELETE SET NULL`): the server's copies are read
+  /// again. Goes when projects move to the data API.
+  void _refileNotesAndTodos() {
+    final data = ref.read(dataClientProvider);
+    for (final domain in [DataDomain.notes, DataDomain.todos]) {
+      unawaited(data.resync(domain).catchError((Object _) {}));
+    }
   }
 
   /// Whether the selected session sits in [repoIds]. Asked *before* the project

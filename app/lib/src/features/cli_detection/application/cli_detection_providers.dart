@@ -1,5 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/data/data_providers.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -71,7 +72,7 @@ final sessionSearchServiceProvider = Provider<SessionSearchService>(
 /// The one-off catch-up over the conversations the workspace already had.
 final conversationIndexBackfillProvider = Provider<ConversationIndexBackfill>(
   (ref) => ConversationIndexBackfill(
-    db: ref.watch(databaseProvider),
+    preferences: ref.watch(appPreferencesProvider),
     dao: ref.watch(conversationIndexDaoProvider),
     indexer: ref.watch(conversationIndexerProvider),
     clock: ref.watch(clockProvider),

@@ -1,4 +1,5 @@
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_notes/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 

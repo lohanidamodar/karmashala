@@ -12,6 +12,7 @@ import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import '../../support/stored_preferences.dart';
 
 void main() {
   group('remote access is the server config, not the app settings', () {
@@ -181,7 +182,7 @@ void main() {
 
       controller.setLocalRelayPort(9001);
 
-      final stored = SettingsRepository(db).load();
+      final stored = SettingsRepository(StoredPreferences(db)).load();
       expect(stored.localRelayPort, 9001);
     });
   });

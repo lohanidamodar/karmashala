@@ -1,20 +1,21 @@
 import 'dart:convert';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
 
 /// Which `(agent, environment)` pairs this workspace has ever *searched* for —
 /// never looked for is not the same as looked for and not found.
 class AgentProbeLog {
-  const AgentProbeLog(this._db);
+  const AgentProbeLog(this._preferences);
 
-  final AppDatabase _db;
+  final PreferenceStore _preferences;
 
   /// The metadata key holding the log.
   static const metadataKey = 'agents_probed';
 
   /// `agentId -> environmentId -> when it was last searched for`.
   Map<String, Map<String, String>> read() {
-    final raw = _db.readMetadata(metadataKey);
+    final raw = _preferences.read(metadataKey);
     if (raw == null || raw.isEmpty) return {};
     try {
       final decoded = jsonDecode(raw);
@@ -41,6 +42,6 @@ class AgentProbeLog {
   void record(String agentId, String environmentId, DateTime at) {
     final log = read();
     final forAgent = {...?log[agentId], environmentId: at.toIso8601String()};
-    _db.writeMetadata(metadataKey, jsonEncode({...log, agentId: forAgent}));
+    _preferences.write(metadataKey, jsonEncode({...log, agentId: forAgent}));
   }
 }

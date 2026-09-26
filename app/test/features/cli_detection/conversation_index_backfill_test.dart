@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
+import '../../support/stored_preferences.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -20,6 +20,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../../support/fixtures.dart';
+import 'package:karmashala/src/core/data/metadata_keys.dart';
 
 class _FixedClock implements Clock {
   const _FixedClock();
@@ -108,7 +109,7 @@ void main() {
     Future<Map<String, String>> Function()? locate,
     List<String>? walkLog,
   }) => ConversationIndexBackfill(
-    db: db,
+    preferences: StoredPreferences(db),
     dao: dao,
     indexer: indexer,
     clock: const _FixedClock(),

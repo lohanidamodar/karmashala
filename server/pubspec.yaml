@@ -61,6 +61,10 @@ dependencies:
   # no app is connected. Pure Dart.
   karmashala_companion_server:
     path: ../packages/karmashala_companion_server
+  # The data API's requests, answers and changes (protocol 11), which
+  # `src/data/` answers from the store.
+  karmashala_data_protocol:
+    path: ../packages/karmashala_data_protocol
   # The notes and todos a phone's `notes.get` reads.
   karmashala_notes:
     path: ../packages/karmashala_notes

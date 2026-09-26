@@ -18,6 +18,7 @@ import 'package:karmashala_ui/icons.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/stored_preferences.dart';
 
 /// Hiding surfaces from the side panel's rail, the way VS Code's activity bar
 /// does it: a right-click lists every surface with a check, a hidden one stays
@@ -77,7 +78,7 @@ void main() {
   );
 
   List<String> stored() =>
-      SettingsRepository(db).load().hiddenSidePanelSurfaces;
+      SettingsRepository(StoredPreferences(db)).load().hiddenSidePanelSurfaces;
 
   Finder checkRow(String label) => find.ancestor(
     of: find.text(label),

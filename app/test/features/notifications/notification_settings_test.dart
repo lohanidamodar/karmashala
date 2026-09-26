@@ -6,6 +6,7 @@ import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/stored_preferences.dart';
 
 void main() {
   test('the defaults are restrained but useful', () {
@@ -63,7 +64,9 @@ void main() {
           .setOnlyWhenUnfocused(false);
 
       expect(
-        NotificationSettingsRepository(db).load().onlyWhenUnfocused,
+        NotificationSettingsRepository(
+          StoredPreferences(db),
+        ).load().onlyWhenUnfocused,
         isFalse,
       );
     });

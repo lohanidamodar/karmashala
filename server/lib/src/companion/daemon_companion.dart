@@ -12,7 +12,7 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
 import 'package:karmashala_automations/persistence.dart' show CheckoutRows;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
-import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_notes/store.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/push.dart';
@@ -178,8 +178,8 @@ class DaemonCompanion implements CompanionHandler {
       clock: _now,
     ),
     notes: () async => notesSnapshot(
-      notes: NoteDao(database),
-      todos: TodoDao(database),
+      notes: NoteDao(database).list(),
+      todos: TodoDao(database).list(),
       projectNames: WorkspaceNames(database).projects(),
       notesEnabled: _config.notesEnabled,
     ),

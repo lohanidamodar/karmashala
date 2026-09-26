@@ -18,7 +18,7 @@ import 'package:karmashala_terminal_runtime/instances.dart'
     show HostedTerminalInstance;
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -177,8 +177,8 @@ class QuitResumeService {
     if (sessionIds.isEmpty) return true;
     try {
       _ref
-          .read(databaseProvider)
-          .writeMetadata(
+          .read(appPreferencesProvider)
+          .write(
             kQuitResumeKey,
             jsonEncode({
               'at': _ref.read(clockProvider).nowUtc().toIso8601String(),
@@ -197,7 +197,7 @@ class QuitResumeService {
   /// last time's answer cannot be applied to this time's quit.
   void forget() {
     try {
-      _ref.read(databaseProvider).writeMetadata(kQuitResumeKey, '');
+      _ref.read(appPreferencesProvider).write(kQuitResumeKey, '');
     } on Object catch (error) {
       _log.warning('quit: could not clear the resume intent: $error');
     }
@@ -207,7 +207,7 @@ class QuitResumeService {
   /// the intent is part of reading it: an intent acted on twice would reopen
   /// sessions the user closed in between.
   QuitResumePlan planForLaunch() {
-    final raw = _ref.read(databaseProvider).readMetadata(kQuitResumeKey);
+    final raw = _ref.read(appPreferencesProvider).read(kQuitResumeKey);
     if (raw == null || raw.isEmpty) return const QuitResumePlan();
     forget();
 

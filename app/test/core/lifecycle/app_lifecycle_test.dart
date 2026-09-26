@@ -31,6 +31,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
+import '../../support/stored_preferences.dart';
+import 'package:karmashala/src/core/data/metadata_keys.dart';
 
 /// The application lifecycle owner.
 ///
@@ -800,7 +802,9 @@ void main() {
         // record of ever having looked.
         expect(runner.requests, isNotEmpty);
         expect(
-          AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'windows'),
+          AgentProbeLog(
+            StoredPreferences(db),
+          ).hasProbed(AgentIds.antigravity, 'windows'),
           isTrue,
         );
       },

@@ -1,6 +1,6 @@
 /// The embedded relay's switch: this computer's own relay is this app's
-/// listener, so whether it runs is this app's preference, persisted in
-/// `app_metadata`. The internet relay is the server's config
+/// listener, so whether it runs is this app's preference, persisted among
+/// its preferences. The internet relay is the server's config
 /// (`remote_access_settings.dart`), never kept here.
 library;
 
@@ -8,10 +8,12 @@ import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_store/database.dart';
-import '../../../core/database/database_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
 
-/// Where the prefs live in the `app_metadata` key/value table.
+import '../../../core/data/data_providers.dart';
+
+/// The preference the prefs live under.
 const String kRelayPrefsMetadataKey = 'remote.relay_prefs.v1';
 
 /// Whether this app runs its embedded relay while remote access is on.
@@ -40,14 +42,14 @@ class RelayPrefs {
 class RelayPrefsController extends Notifier<RelayPrefs> {
   @override
   RelayPrefs build() {
-    final stored = readFrom(ref.watch(databaseProvider));
+    final stored = readFrom(ref.watch(appPreferencesProvider));
     return stored ?? const RelayPrefs(localEnabled: false);
   }
 
   /// The persisted prefs, or null when nothing was written yet, which means
   /// no embedded relay. Static, so a test can read what a fresh launch loads.
-  static RelayPrefs? readFrom(AppDatabase db) {
-    final raw = db.readMetadata(kRelayPrefsMetadataKey);
+  static RelayPrefs? readFrom(PreferenceStore preferences) {
+    final raw = preferences.read(kRelayPrefsMetadataKey);
     if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -66,8 +68,8 @@ class RelayPrefsController extends Notifier<RelayPrefs> {
   void _save(RelayPrefs prefs) {
     state = prefs;
     ref
-        .read(databaseProvider)
-        .writeMetadata(kRelayPrefsMetadataKey, jsonEncode(prefs.toJson()));
+        .read(appPreferencesProvider)
+        .write(kRelayPrefsMetadataKey, jsonEncode(prefs.toJson()));
   }
 }
 

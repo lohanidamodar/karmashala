@@ -1,28 +1,29 @@
 import 'package:karmashala_remote/pairing.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 
 /// How phones reach each SSH host: itself, or the hosted relay. Kept per host
 /// because it is a fact about the box's network, and only once somebody chose —
 /// an absent entry means "decide from the dial", never a default route.
 class CompanionRouteStore {
-  const CompanionRouteStore(this._database);
+  const CompanionRouteStore(this._preferences);
 
-  final AppDatabase _database;
+  final PreferenceStore _preferences;
 
   static String keyFor(String hostId) => 'ssh.companion_route.$hostId';
 
   HostRoute? read(String hostId) =>
-      HostRoute.tryParse(_database.readMetadata(keyFor(hostId)));
+      HostRoute.tryParse(_preferences.read(keyFor(hostId)));
 
   void write(String hostId, HostRoute route) =>
-      _database.writeMetadata(keyFor(hostId), route.wire);
+      _preferences.write(keyFor(hostId), route.wire);
 }
 
 final companionRouteStoreProvider = Provider<CompanionRouteStore>(
-  (ref) => CompanionRouteStore(ref.watch(databaseProvider)),
+  (ref) => CompanionRouteStore(ref.watch(appPreferencesProvider)),
 );
 
 class _RouteRevision extends Notifier<int> {

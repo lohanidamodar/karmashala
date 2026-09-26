@@ -10,6 +10,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fixtures.dart';
+import 'package:karmashala_notes/store.dart';
 
 /// `notes.get` on the desktop: the notes and todos the panels show, in their
 /// order, with project names rather than ids.

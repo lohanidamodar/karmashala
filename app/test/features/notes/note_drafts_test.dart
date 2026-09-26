@@ -13,6 +13,7 @@ import 'package:karmashala_store/database.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../system/fake_native_adapters.dart';
+import 'package:karmashala_notes/store.dart';
 
 /// The buffer a note tab edits: autosaved after a pause, never written over
 /// something that changed elsewhere, and honest about which of those it is in.
@@ -51,19 +52,22 @@ void main() {
 
     drafts().edit(id, body: 'first, then more');
     expect(draftOf(id)!.saveState, NoteSaveState.saving);
-    expect(container.read(noteDaoProvider).getById(id)!.body, 'first');
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(id)!.body,
+      'first',
+    );
 
     await tester.pump(NoteDrafts.autosaveDelay ~/ 2);
     drafts().edit(id, title: 'Named');
     await tester.pump(NoteDrafts.autosaveDelay ~/ 2);
     expect(
-      container.read(noteDaoProvider).getById(id)!.body,
+      NoteDao(container.read(databaseProvider)).getById(id)!.body,
       'first',
       reason: 'a keystroke restarts the pause',
     );
 
     await tester.pump(NoteDrafts.autosaveDelay);
-    final stored = container.read(noteDaoProvider).getById(id)!;
+    final stored = NoteDao(container.read(databaseProvider)).getById(id)!;
     expect(stored.body, 'first, then more');
     expect(stored.title, 'Named');
     expect(draftOf(id)!.saveState, NoteSaveState.saved);
@@ -75,7 +79,7 @@ void main() {
       ..open(id)
       ..edit(id, body: 'b')
       ..save(id);
-    expect(container.read(noteDaoProvider).getById(id)!.body, 'b');
+    expect(NoteDao(container.read(databaseProvider)).getById(id)!.body, 'b');
     expect(draftOf(id)!.saveState, NoteSaveState.saved);
   });
 
@@ -103,11 +107,14 @@ void main() {
     expect(draftOf(id)!.body, 'my unsaved words');
 
     await tester.pump(NoteDrafts.autosaveDelay * 3);
-    expect(container.read(noteDaoProvider).getById(id)!.body, 'their words');
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(id)!.body,
+      'their words',
+    );
 
     drafts().keepMine(id);
     expect(
-      container.read(noteDaoProvider).getById(id)!.body,
+      NoteDao(container.read(databaseProvider)).getById(id)!.body,
       'my unsaved words',
     );
     expect(draftOf(id)!.saveState, NoteSaveState.saved);
@@ -124,7 +131,10 @@ void main() {
     expect(draftOf(id)!.body, 'theirs');
     expect(draftOf(id)!.saveState, NoteSaveState.saved);
     await tester.pump(NoteDrafts.autosaveDelay * 2);
-    expect(container.read(noteDaoProvider).getById(id)!.body, 'theirs');
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(id)!.body,
+      'theirs',
+    );
   });
 
   testWidgets('releasing a draft flushes what it had not saved yet', (
@@ -135,7 +145,10 @@ void main() {
       ..open(id)
       ..edit(id, body: 'after')
       ..release(id);
-    expect(container.read(noteDaoProvider).getById(id)!.body, 'after');
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(id)!.body,
+      'after',
+    );
     expect(draftOf(id), isNull);
     await tester.pump(NoteDrafts.autosaveDelay * 2);
   });
@@ -156,8 +169,9 @@ void main() {
       adapters: FakeNatives().adapters,
       registerOsQuit: (_) {},
       endProcess: () {},
-      onQuitRequested: () async =>
-          atShutdown = container.read(noteDaoProvider).getById(id)!.body,
+      onQuitRequested: () async => atShutdown = NoteDao(
+        container.read(databaseProvider),
+      ).getById(id)!.body,
     );
     unawaited(service.quit());
     await tester.pump();

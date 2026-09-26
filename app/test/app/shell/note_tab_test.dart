@@ -26,6 +26,8 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'package:karmashala_notes/store.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 
 /// **A note opens in a workbench tab of its own**, edited with the app's one
 /// code editor and read as rendered markdown.
@@ -178,12 +180,15 @@ void main() {
 
     await typeBody(tester, 'draft, grown');
     expect(find.text('Saving…'), findsOneWidget);
-    expect(container.read(noteDaoProvider).getById(note.id)!.body, 'draft');
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
+      'draft',
+    );
 
     await tester.pump(NoteDrafts.autosaveDelay);
     await settle(tester);
     expect(
-      container.read(noteDaoProvider).getById(note.id)!.body,
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
       'draft, grown',
     );
     expect(find.text('Saved'), findsOneWidget);
@@ -216,7 +221,7 @@ void main() {
     await typeBody(tester, '# Heading\n\nchanged');
     await pressCommand(tester, LogicalKeyboardKey.keyS);
     expect(
-      container.read(noteDaoProvider).getById(note.id)!.body,
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
       '# Heading\n\nchanged',
     );
 
@@ -244,7 +249,7 @@ void main() {
     await settle(tester);
 
     expect(
-      container.read(noteDaoProvider).getById(note.id)!.title,
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.title,
       'Compact tabs',
     );
     final tabId = noteTabsIn(container).single;
@@ -275,7 +280,7 @@ void main() {
     );
     await settle(tester);
 
-    expect(container.read(noteDaoProvider).getById(note.id), isNull);
+    expect(NoteDao(container.read(databaseProvider)).getById(note.id), isNull);
     expect(noteTabsIn(container), isEmpty);
     expect(find.byType(NoteTabView), findsNothing);
   });
@@ -323,12 +328,15 @@ void main() {
     expect(find.textContaining('changed elsewhere'), findsWidgets);
     await tester.pump(NoteDrafts.autosaveDelay * 2);
     await settle(tester);
-    expect(container.read(noteDaoProvider).getById(note.id)!.body, 'theirs');
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
+      'theirs',
+    );
 
     await tester.tap(find.text('Keep mine'));
     await settle(tester);
     expect(
-      container.read(noteDaoProvider).getById(note.id)!.body,
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
       'mine, unsaved',
     );
   });
@@ -357,7 +365,10 @@ void main() {
     await settle(tester);
 
     expect(noteTabsIn(container), isEmpty);
-    expect(container.read(noteDaoProvider).getById(note.id)!.body, 'mine');
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
+      'mine',
+    );
   });
 
   testWidgets('closing an empty new note does not keep it', (tester) async {
@@ -372,7 +383,7 @@ void main() {
 
     expect(noteTabsIn(container), isEmpty);
     expect(container.read(notesProvider), isEmpty);
-    expect(container.read(noteDaoProvider).list(), isEmpty);
+    expect(NoteDao(container.read(databaseProvider)).list(), isEmpty);
   });
 
   testWidgets('it comes back after a restart', (tester) async {

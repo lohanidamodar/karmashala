@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
+import '../../support/stored_preferences.dart';
 
 void main() {
   tearDown(() => Logger.root.level = Level.INFO);
@@ -79,7 +80,7 @@ void main() {
 
       expect(container.read(settingsControllerProvider).debugMode, isTrue);
       expect(
-        SettingsRepository(db).load().debugMode,
+        SettingsRepository(StoredPreferences(db)).load().debugMode,
         isTrue,
         reason: 'the change must reach the database, not just the notifier',
       );
@@ -108,7 +109,10 @@ void main() {
           .setLogBufferSize(1000);
 
       expect(diagnostics.buffer.capacity, 1000);
-      expect(SettingsRepository(db).load().logBufferSize, 1000);
+      expect(
+        SettingsRepository(StoredPreferences(db)).load().logBufferSize,
+        1000,
+      );
     });
 
     test('applying settings never opens a file when the file is off', () {

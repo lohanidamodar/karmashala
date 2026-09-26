@@ -84,6 +84,34 @@ class Note {
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
+  /// The wire shape: dates as ISO-8601 UTC, absent fields omitted.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'title': ?title,
+    'body': body,
+    'projectId': ?projectId,
+    'sourceSessionId': ?sourceSessionId,
+    'sourceRepositoryId': ?sourceRepositoryId,
+    'sourceMessageOrdinal': ?sourceMessageOrdinal,
+    'sourceMessageRole': ?sourceMessageRole,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+  };
+
+  /// Throws [FormatException] on a map that is not a note.
+  static Note fromJson(Map<String, Object?> json) => Note(
+    id: _text(json, 'id'),
+    title: json['title'] as String?,
+    body: _text(json, 'body'),
+    projectId: json['projectId'] as String?,
+    sourceSessionId: json['sourceSessionId'] as String?,
+    sourceRepositoryId: json['sourceRepositoryId'] as String?,
+    sourceMessageOrdinal: json['sourceMessageOrdinal'] as int?,
+    sourceMessageRole: json['sourceMessageRole'] as String?,
+    createdAt: _date(json, 'createdAt'),
+    updatedAt: _date(json, 'updatedAt'),
+  );
+
   @override
   bool operator ==(Object other) =>
       other is Note &&
@@ -112,3 +140,12 @@ class Note {
     updatedAt,
   );
 }
+
+String _text(Map<String, Object?> json, String key) {
+  final value = json[key];
+  if (value is String) return value;
+  throw FormatException('note: "$key" is not a string');
+}
+
+DateTime _date(Map<String, Object?> json, String key) =>
+    DateTime.parse(_text(json, key)).toUtc();

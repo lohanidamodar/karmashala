@@ -11,6 +11,8 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/process.dart' show EnvironmentKind;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_host/data.dart' show HostDataLink;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/lifecycle_client.dart'
     show HostLifecycleWatch, HostLifecycleWatchRefused;
@@ -386,6 +388,39 @@ void main() {
         app.serverCall('server.nothing'),
         throwsA(isA<HostLifecycleWatchRefused>()),
       );
+    });
+  });
+
+  group('the data API', () {
+    test('a client writes a todo and a preference into the store, another '
+        'is told, and a second serve reads them back', () async {
+      final server = await InProcessServer.start(root, serveArgs());
+      final writer = (await HostDataLink.connect(server.paths.socketPath))!;
+      final reader = (await HostDataLink.connect(server.paths.socketPath))!;
+      await reader.send(const DataSubscribe());
+      final told = reader.changes.first;
+
+      final todo = await writer.send(const TodoAdd(id: 't1', body: 'ship it'));
+      await writer.send(const PreferenceSet('settings.v1', '{"a":1}'));
+      expect(
+        ((await told).changes.single as TodoChanged).todo.id,
+        todo.value.id,
+      );
+      await writer.close();
+      await reader.close();
+      await server.stop();
+
+      final again = await InProcessServer.start(root, serveArgs());
+      addTearDown(again.stop);
+      final client = (await HostDataLink.connect(again.paths.socketPath))!;
+      addTearDown(client.close);
+      expect(
+        (await client.send(const TodosList())).value.single.body,
+        'ship it',
+      );
+      expect((await client.send(const PreferencesGet())).value, {
+        'settings.v1': '{"a":1}',
+      });
     });
   });
 

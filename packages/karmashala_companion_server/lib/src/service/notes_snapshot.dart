@@ -5,16 +5,16 @@ import 'package:karmashala_remote/remote.dart';
 /// todos in the panel's own order, each capped so the answer fits one frame.
 /// Notes switched off are not sent, and the answer says so.
 ///
-/// One builder for the session host and the app, over the same tables, so the
+/// One builder for the session host and the app, over the same lists, so the
 /// phone reads the same list whichever of the two answers it.
 RemoteNotesSnapshot notesSnapshot({
-  required NoteDao notes,
-  required TodoDao todos,
+  required List<Note> notes,
+  required List<Todo> todos,
   required Map<String, String> projectNames,
   required bool notesEnabled,
 }) {
-  final noteRows = notesEnabled ? notes.list() : const <Note>[];
-  final todoRows = todos.list();
+  final noteRows = notesEnabled ? notes : const <Note>[];
+  final todoRows = todos;
   return RemoteNotesSnapshot(
     notesEnabled: notesEnabled,
     notes: [

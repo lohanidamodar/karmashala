@@ -13,10 +13,11 @@ part 'companion_messages.dart';
 part 'mcp_messages.dart';
 part 'status_messages.dart';
 part 'server_messages.dart';
+part 'data_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 10;
+const int kProtocolVersion = 11;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -908,4 +909,7 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.promptAnswered => PromptAnsweredMessage.decode(frame),
   MessageType.serverCall => ServerCallMessage.decode(frame),
   MessageType.serverResult => ServerResultMessage.decode(frame),
+  MessageType.dataRequest => DataRequestMessage.decode(frame),
+  MessageType.dataAnswer => DataAnswerMessage.decode(frame),
+  MessageType.dataChanges => DataChangesMessage.decode(frame),
 };

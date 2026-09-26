@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/probe/probe_mode.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
@@ -32,7 +32,8 @@ import 'watched_session_loader.dart';
 
 final notificationSettingsRepositoryProvider =
     Provider<NotificationSettingsRepository>(
-      (ref) => NotificationSettingsRepository(ref.watch(databaseProvider)),
+      (ref) =>
+          NotificationSettingsRepository(ref.watch(appPreferencesProvider)),
     );
 
 /// Holds [NotificationSettings], persisting every change.

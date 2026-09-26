@@ -4,6 +4,7 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/data/data_providers.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
@@ -22,7 +23,7 @@ import 'worktree_cleanup_policy.dart';
 import 'worktree_cleanup_service.dart';
 
 final worktreeCleanupStoreProvider = Provider<WorktreeCleanupStore>(
-  (ref) => WorktreeCleanupStore(ref.watch(databaseProvider)),
+  (ref) => WorktreeCleanupStore(ref.watch(appPreferencesProvider)),
 );
 
 /// Bumped by every settings change and every sweep, so the page and the

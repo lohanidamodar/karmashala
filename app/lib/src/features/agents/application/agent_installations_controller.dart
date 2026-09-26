@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
@@ -36,7 +36,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final ids = ref.read(agentCliIdsProvider);
     final clock = ref.read(agentCliClockProvider);
     final registry = ref.read(agentRegistryProvider);
-    final log = AgentProbeLog(ref.read(databaseProvider));
+    final log = AgentProbeLog(ref.read(appPreferencesProvider));
     final hostEnvironment = ref.read(hostEnvironmentProvider);
     final pathProbe = ref.read(agentCliPathProbeProvider);
 
@@ -510,7 +510,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   Future<List<AgentInstallation>> discoverUnprobed() async {
     final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
-    final log = AgentProbeLog(ref.read(databaseProvider));
+    final log = AgentProbeLog(ref.read(appPreferencesProvider));
     final clock = ref.read(agentCliClockProvider);
     final factory = ref.read(commandRunnerFactoryProvider);
     final ids = ref.read(agentCliIdsProvider);

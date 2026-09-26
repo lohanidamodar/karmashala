@@ -22,6 +22,7 @@ import 'package:karmashala_store/database.dart';
 import '../../../features/terminal/fake_instance.dart';
 import '../../../support/fakes.dart';
 import '../../../support/fixtures.dart';
+import '../../../support/stored_preferences.dart';
 
 /// Records the start instead of launching an agent: what is under test is that
 /// the command reaches the Explorer's own start, with the right arguments.
@@ -132,7 +133,9 @@ void main() {
     expect(explorer.starts, [(repositoryId: 'r1', installationId: 'a1')]);
     expect(find.byType(QuickOpen), findsNothing);
     // Fully resolved, so it can be run again from an empty box.
-    expect(TypedCommandHistory(db).list(), ['start Karmashala claude']);
+    expect(TypedCommandHistory(StoredPreferences(db)).list(), [
+      'start Karmashala claude',
+    ]);
     expect(container.read(selectedProjectIdProvider), 'p1');
   });
 
@@ -154,7 +157,7 @@ void main() {
 
     expect(explorer.starts, isEmpty);
     expect(find.byType(QuickOpen), findsOneWidget);
-    expect(TypedCommandHistory(db).list(), isEmpty);
+    expect(TypedCommandHistory(StoredPreferences(db)).list(), isEmpty);
   });
 
   testWidgets('an uninstalled agent is shown disabled, not hidden, and Tab '
@@ -180,13 +183,17 @@ void main() {
 
     expect(container.read(selectedSessionIdProvider), 's1');
     expect(find.byType(QuickOpen), findsNothing);
-    expect(TypedCommandHistory(db).list(), ['resume fix-login-redirect']);
+    expect(TypedCommandHistory(StoredPreferences(db)).list(), [
+      'resume fix-login-redirect',
+    ]);
   });
 
   testWidgets('an empty box offers history first; Enter runs it again', (
     tester,
   ) async {
-    TypedCommandHistory(db).record('resume write-the-release-notes');
+    TypedCommandHistory(
+      StoredPreferences(db),
+    ).record('resume write-the-release-notes');
     final container = await open(tester);
 
     expect(find.text('RECENT COMMANDS'), findsOneWidget);

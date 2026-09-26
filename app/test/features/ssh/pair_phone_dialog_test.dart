@@ -19,6 +19,7 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'fake_host_box.dart';
+import '../../support/stored_preferences.dart';
 
 /// A box that answers the two questions the dialog asks, and remembers how it
 /// was asked the second one.
@@ -309,7 +310,10 @@ void main() {
       await tester.tap(find.text('Hosted relay'));
       await settle(tester);
 
-      expect(CompanionRouteStore(db).read('h1'), HostRoute.relay);
+      expect(
+        CompanionRouteStore(StoredPreferences(db)).read('h1'),
+        HostRoute.relay,
+      );
       expect(setup.relays, ['', kDefaultRelayUrl]);
       expect(
         setup.dials,

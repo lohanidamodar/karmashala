@@ -20,6 +20,8 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'package:karmashala_notes/store.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 
 /// Ctrl+S from a note's focused body on a desktop platform. `note_tab_test`
 /// runs on the test default (Android), where `re_editor` binds no shortcuts,
@@ -89,7 +91,7 @@ void main() {
     await tester.pump();
 
     expect(
-      container.read(noteDaoProvider).getById(note.id)!.body,
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
       'kept at once',
     );
     await tester.pumpWidget(const SizedBox());

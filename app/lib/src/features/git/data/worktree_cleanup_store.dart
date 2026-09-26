@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
 
 import '../application/worktree_cleanup_policy.dart';
 
@@ -119,12 +120,12 @@ class WorktreeCleanupSweepSummary {
   }
 }
 
-/// Worktree cleanup's setting, removal log and last sweep, all in
-/// `app_metadata` — no migration, and an older build simply ignores the keys.
+/// Worktree cleanup's setting, removal log and last sweep, all among this
+/// app's preferences at the server.
 class WorktreeCleanupStore {
   WorktreeCleanupStore(this._db);
 
-  final AppDatabase _db;
+  final PreferenceStore _db;
 
   static const String settingsKey = 'worktree_cleanup.settings.v1';
   static const String logKey = 'worktree_cleanup.log.v1';
@@ -134,7 +135,7 @@ class WorktreeCleanupStore {
   static const int logLimit = 200;
 
   Object? _read(String key) {
-    final raw = _db.readMetadata(key);
+    final raw = _db.read(key);
     if (raw == null) return null;
     try {
       return jsonDecode(raw);
@@ -147,7 +148,7 @@ class WorktreeCleanupStore {
       WorktreeCleanupSettings.fromJson(_read(settingsKey));
 
   void saveSettings(WorktreeCleanupSettings settings) =>
-      _db.writeMetadata(settingsKey, jsonEncode(settings.toJson()));
+      _db.write(settingsKey, jsonEncode(settings.toJson()));
 
   /// Newest first.
   List<WorktreeCleanupLogEntry> log() {
@@ -160,12 +161,12 @@ class WorktreeCleanupStore {
 
   void appendLog(WorktreeCleanupLogEntry entry) {
     final next = [entry, ...log()].take(logLimit);
-    _db.writeMetadata(logKey, jsonEncode([for (final e in next) e.toJson()]));
+    _db.write(logKey, jsonEncode([for (final e in next) e.toJson()]));
   }
 
   WorktreeCleanupSweepSummary? lastSweep() =>
       WorktreeCleanupSweepSummary.fromJson(_read(lastSweepKey));
 
   void saveLastSweep(WorktreeCleanupSweepSummary summary) =>
-      _db.writeMetadata(lastSweepKey, jsonEncode(summary.toJson()));
+      _db.write(lastSweepKey, jsonEncode(summary.toJson()));
 }

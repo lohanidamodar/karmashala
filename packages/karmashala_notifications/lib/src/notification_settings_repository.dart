@@ -1,18 +1,19 @@
 import 'dart:convert';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
 import 'notification_settings.dart';
 
-/// Persists [NotificationSettings] in the `app_metadata` table, under its own
-/// key so it round-trips independently of the shared user settings record.
+/// Persists [NotificationSettings] as a preference of its own at the server,
+/// so it round-trips independently of the shared user settings record.
 class NotificationSettingsRepository {
-  NotificationSettingsRepository(this._db);
+  NotificationSettingsRepository(this._preferences);
 
-  final AppDatabase _db;
+  final PreferenceStore _preferences;
   static const _key = 'notifications.v1';
 
   NotificationSettings load() {
-    final raw = _db.readMetadata(_key);
+    final raw = _preferences.read(_key);
     if (raw == null) return const NotificationSettings();
     try {
       final decoded = jsonDecode(raw);
@@ -25,5 +26,5 @@ class NotificationSettingsRepository {
   }
 
   void save(NotificationSettings settings) =>
-      _db.writeMetadata(_key, jsonEncode(settings.toJson()));
+      _preferences.write(_key, jsonEncode(settings.toJson()));
 }

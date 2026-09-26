@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataEnvelope, DataRefused;
+
 import '../automations/automation_handler.dart';
 import '../companion/companion_handler.dart';
+import '../data/data_service.dart';
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
@@ -70,6 +74,9 @@ class HostServer {
   /// the reason (no store).
   ServerAdmin? admin;
 
+  /// Answers every client's data requests; null refuses them (no store).
+  DataService? data;
+
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
   final String? build;
@@ -116,6 +123,7 @@ class _ClientSession {
   final _subscriptions = <int, StreamSubscription<OutputChunk>>{};
   final _exitWatches = <int, StreamSubscription<void>>{};
   StreamSubscription<HostMessage>? _lifecycleWatch;
+  DataSession? _data;
 
   Future<void> run() async {
     final parser = FrameParser();
@@ -153,6 +161,7 @@ class _ClientSession {
     }
     _subscriptions.clear();
     _exitWatches.clear();
+    _data?.close();
     await _lifecycleWatch?.cancel();
     _server.mcpTools?.detach(this);
     _server.automations?.detach(this);
@@ -319,6 +328,8 @@ class _ClientSession {
         _onPromptAnswer(message);
       case ServerCallMessage():
         _onServerCall(message);
+      case DataRequestMessage():
+        _onDataRequest(message);
       default:
         _send(
           ErrorMessage(
@@ -378,6 +389,27 @@ class _ClientSession {
             ),
           ),
     );
+  }
+
+  /// Answered in order, at once: the store is synchronous, and a client's
+  /// writes must land in the order it sent them.
+  void _onDataRequest(DataRequestMessage message) {
+    final service = _server.data;
+    if (service == null) {
+      _send(
+        DataAnswerMessage(
+          DataEnvelope.refusal(
+            DataEnvelope.answerId(message.envelope) ?? 0,
+            const DataRefused.unavailable('this host keeps no data: no store'),
+          ),
+        ),
+      );
+      return;
+    }
+    final session = _data ??= service.open(
+      (changes) => _send(DataChangesMessage(DataEnvelope.changes(changes))),
+    );
+    _send(DataAnswerMessage(session.handleJson(message.envelope)));
   }
 
   /// Not awaited: a test suite takes minutes, and this client's other frames

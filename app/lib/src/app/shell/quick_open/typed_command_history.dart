@@ -1,16 +1,17 @@
 import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 
 /// The last typed commands that ran, fully resolved, newest first. Kept in
 /// `app_metadata` — no migration, and an older build simply ignores the key.
 class TypedCommandHistory {
-  TypedCommandHistory(this._db);
+  TypedCommandHistory(this._preferences);
 
-  final AppDatabase _db;
+  final PreferenceStore _preferences;
 
   static const String key = 'quick_open.command_history.v1';
 
@@ -19,7 +20,7 @@ class TypedCommandHistory {
 
   /// Newest first. A value this build cannot read is no history, not an error.
   List<String> list() {
-    final raw = _db.readMetadata(key);
+    final raw = _preferences.read(key);
     if (raw == null) return const [];
     try {
       final decoded = jsonDecode(raw);
@@ -38,10 +39,10 @@ class TypedCommandHistory {
     final text = command.trim();
     if (text.isEmpty) return;
     final next = [text, ...list().where((c) => c != text)].take(limit);
-    _db.writeMetadata(key, jsonEncode(next.toList()));
+    _preferences.write(key, jsonEncode(next.toList()));
   }
 }
 
 final typedCommandHistoryProvider = Provider<TypedCommandHistory>(
-  (ref) => TypedCommandHistory(ref.watch(databaseProvider)),
+  (ref) => TypedCommandHistory(ref.watch(appPreferencesProvider)),
 );

@@ -17,6 +17,7 @@ import 'package:karmashala_store/database.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/stored_preferences.dart';
 
 /// A service whose preview is scripted: the page is under test, not git.
 class _CannedService extends WorktreeCleanupService {
@@ -128,7 +129,8 @@ void main() {
 
   Finder cleanupNow() => find.byKey(const ValueKey('worktree-cleanup-now'));
 
-  WorktreeCleanupSettings stored() => WorktreeCleanupStore(db).settings();
+  WorktreeCleanupSettings stored() =>
+      WorktreeCleanupStore(StoredPreferences(db)).settings();
 
   testWidgets('off by default, with the squash-merge caveat on the page', (
     tester,

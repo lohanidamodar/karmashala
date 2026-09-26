@@ -12,6 +12,8 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala_notes/store.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 
 const _longBody =
     '# Rework the tab strip\n\n'
@@ -83,7 +85,7 @@ void main() {
     await tester.tap(find.text('No project').last);
     await tester.pumpAndSettle();
 
-    final stored = container.read(noteDaoProvider).getById(noteId)!;
+    final stored = NoteDao(container.read(databaseProvider)).getById(noteId)!;
     expect(stored.projectId, isNull);
     expect(find.text('No project'), findsOneWidget);
   });

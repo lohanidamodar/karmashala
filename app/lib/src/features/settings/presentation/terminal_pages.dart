@@ -9,6 +9,7 @@ import 'package:karmashala_terminal_runtime/themes.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
+import 'data_connection_notice.dart';
 import 'session_host_status_line.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
@@ -93,6 +94,7 @@ class TerminalAdvancedSection extends ConsumerWidget {
           ),
           // Under the switch either way: it is what the decision needs.
           const SessionHostStatusLine(),
+          const DataConnectionNotice(),
         ],
       ),
     );

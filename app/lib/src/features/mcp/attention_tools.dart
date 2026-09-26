@@ -4,7 +4,6 @@ import '../notes/application/notes_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import '../notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/attention.dart';
-import '../sessions/application/session_providers.dart';
 import 'todo_tools.dart';
 
 /// What is written down, and what is waiting: notes are the app's own
@@ -32,13 +31,13 @@ class AttentionControlTools {
           args['sessionId'] as String?,
           projectId: args['projectId'] as String?,
         ),
-        'note_add' => _noteAdd(
+        'note_add' => await _noteAdd(
           body: (args['body'] as String?) ?? '',
           title: args['title'] as String?,
           sessionId: args['sessionId'] as String? ?? callerSessionId,
           projectId: args['projectId'] as String?,
         ),
-        'note_delete' => _noteDelete(args['id'] as String?),
+        'note_delete' => await _noteDelete(args['id'] as String?),
         'inbox_list' => _inboxList(includeSeen: args['includeSeen'] == true),
         'inbox_open' => _inboxOpen(args['id'] as String?),
         'inbox_dismiss' => _inboxDismiss(args['id'] as String?),
@@ -49,12 +48,12 @@ class AttentionControlTools {
   /// `projectId: 'none'` means the unfiled ones and omitting it means all.
   Object? _notesList(String? sessionId, {String? projectId}) {
     final notes = <Note>[
-      for (final note
-          in _container.read(noteDaoProvider).list(sessionId: sessionId))
-        if (projectId == null ||
-            (projectId == TodoControlTools.unfiled
-                ? note.projectId == null
-                : note.projectId == projectId))
+      for (final note in _container.read(notesRepositoryProvider).list())
+        if ((sessionId == null || note.sourceSessionId == sessionId) &&
+            (projectId == null ||
+                (projectId == TodoControlTools.unfiled
+                    ? note.projectId == null
+                    : note.projectId == projectId)))
           note,
     ];
     return <String, Object?>{
@@ -79,28 +78,25 @@ class AttentionControlTools {
 
   /// Writes a note, keeping [body] **exactly as given**: a note is evidence, and
   /// a paraphrase's errors are invisible to whoever reads it next.
-  Object? _noteAdd({
+  Future<Object?> _noteAdd({
     required String body,
     String? title,
     String? sessionId,
     String? projectId,
-  }) {
+  }) async {
     if (body.trim().isEmpty) {
       throw ArgumentError('body is required and cannot be blank.');
     }
     // Which project it lands under: an explicit id wins, `'none'` files it
-    // nowhere, and omitting it follows the session's own repository.
-    final repositoryId = sessionId == null
-        ? null
-        : _container.read(sessionDaoProvider).getById(sessionId)?.repositoryId;
+    // nowhere, and omitting it follows the session's own repository — which
+    // the server looks up.
     final unfiled = projectId == TodoControlTools.unfiled;
-    final note = _container
+    final note = await _container
         .read(notesProvider.notifier)
-        .capture(
+        .captureStored(
           body: body,
           title: title,
           sourceSessionId: sessionId,
-          sourceRepositoryId: repositoryId,
           projectId: unfiled ? null : projectId,
           inheritProjectFromSource: !unfiled,
         );
@@ -113,14 +109,14 @@ class AttentionControlTools {
     };
   }
 
-  Object? _noteDelete(String? id) {
+  Future<Object?> _noteDelete(String? id) async {
     if (id == null || id.isEmpty) {
       throw ArgumentError('id is required. notes_list has the ids.');
     }
-    if (_container.read(noteDaoProvider).getById(id) == null) {
+    if (_container.read(notesRepositoryProvider).byId(id) == null) {
       throw StateError('No note with id $id.');
     }
-    _container.read(notesProvider.notifier).delete(id);
+    await _container.read(notesProvider.notifier).deleteStored(id);
     return <String, Object?>{'id': id, 'deleted': true};
   }
 

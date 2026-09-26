@@ -42,6 +42,7 @@ workspace:
   - packages/karmashala_companion
   - packages/karmashala_companion_server
   - packages/karmashala_core
+  - packages/karmashala_data_protocol
   - packages/karmashala_devices
   - packages/karmashala_flutter_apps
   - packages/karmashala_git

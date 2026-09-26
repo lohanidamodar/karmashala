@@ -10,6 +10,7 @@ import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/stored_preferences.dart';
 
 void main() {
   final now = DateTime.utc(2026, 9, 21, 12);
@@ -85,7 +86,7 @@ void main() {
     test('survive a round trip through app_metadata, with no migration', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      final store = WorktreeCleanupStore(db);
+      final store = WorktreeCleanupStore(StoredPreferences(db));
       expect(store.settings().enabled, isFalse);
 
       final settings = WorktreeCleanupSettings(
@@ -115,7 +116,7 @@ void main() {
     test('the removal log keeps the newest entries, capped', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      final store = WorktreeCleanupStore(db);
+      final store = WorktreeCleanupStore(StoredPreferences(db));
       for (var i = 0; i < WorktreeCleanupStore.logLimit + 5; i++) {
         store.appendLog(
           WorktreeCleanupLogEntry(

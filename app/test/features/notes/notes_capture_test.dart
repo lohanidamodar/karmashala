@@ -24,6 +24,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala_notes/store.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 
 /// A clock stuck at [testTime], so a captured note's timestamps are checkable.
 class _FixedClock implements Clock {
@@ -123,7 +125,7 @@ void main() {
     expect(note.createdAt, testTime);
 
     // And it is in the database, not only in memory.
-    expect(container.read(noteDaoProvider).list().single.id, note.id);
+    expect(NoteDao(container.read(databaseProvider)).list().single.id, note.id);
 
     // Let the confirmation and the button's "saved" flash expire.
     await tester.pump(const Duration(seconds: 5));

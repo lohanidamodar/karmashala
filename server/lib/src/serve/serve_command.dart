@@ -18,6 +18,7 @@ import '../mcp/mcp_tool_relay.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
+import '../data/data_service.dart';
 import '../server/server_config.dart';
 import '../server/server_config_service.dart';
 import '../server/server_data_directory.dart';
@@ -307,6 +308,9 @@ Future<int> runServe(
   final agents = (agentsFor ?? (database) => ServerAgents(database: database))(
     database,
   );
+  // Every client's notes, todos and preferences: the desktop app reads and
+  // writes them here, not in the store it used to open itself.
+  server.data = DataService(database);
   server.admin = ServerAdministration(
     companion: companionServing ? companion : null,
     agents: agents,

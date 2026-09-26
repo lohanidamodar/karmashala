@@ -1,21 +1,22 @@
-import 'package:karmashala_store/database.dart';
-import '../../../core/database/database_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
+import '../../../core/data/metadata_keys.dart';
 import 'package:karmashala_core/util.dart';
 import '../data/conversation_index_dao.dart';
 import 'conversation_indexer.dart';
 
 /// Catches the index up with the conversations already in the workspace — a
-/// one-off, recorded in `app_metadata`, never re-run and never scheduled.
+/// one-off, recorded among the preferences, never re-run and never scheduled.
 class ConversationIndexBackfill {
   ConversationIndexBackfill({
-    required this.db,
+    required this.preferences,
     required this.dao,
     required this.indexer,
     required this.clock,
     required this.locateTranscripts,
   });
 
-  final AppDatabase db;
+  final PreferenceStore preferences;
   final ConversationIndexDao dao;
   final ConversationIndexer indexer;
   final Clock clock;
@@ -29,7 +30,7 @@ class ConversationIndexBackfill {
 
   /// Whether the catch-up has already happened on this database.
   bool get isDone =>
-      db.readMetadata(MetadataKeys.conversationIndexBackfilledAt) != null;
+      preferences.read(MetadataKeys.conversationIndexBackfilledAt) != null;
 
   /// Runs the catch-up, at most once per database. Returns conversations
   /// indexed.
@@ -80,7 +81,7 @@ class ConversationIndexBackfill {
     }
     // Written whatever happened: one unreadable transcript is not a reason to
     // walk every store again next launch. A real trigger will queue it.
-    db.writeMetadata(
+    preferences.write(
       MetadataKeys.conversationIndexBackfilledAt,
       clock.nowUtc().toIso8601String(),
     );

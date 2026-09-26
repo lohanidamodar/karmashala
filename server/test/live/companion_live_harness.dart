@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_notes/store.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';

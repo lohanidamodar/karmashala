@@ -14,7 +14,8 @@ resolution: workspace
 dependencies:
   # The session host's protocol and domain, shared with the binary deployed to
   # remote machines so the two ends of the wire cannot drift. The app imports
-  # `package:karmashala_host/protocol.dart` only — the pty layer binds libc
+  # `protocol.dart`, `lifecycle_client.dart` and `data.dart` — never
+  # `karmashala_host.dart`: the pty layer binds libc
   # through dart:ffi and a web build would refuse the whole package for it.
   karmashala_host:
     path: ../server
@@ -57,8 +58,12 @@ dependencies:
   # store while this app is closed. Pure Dart.
   karmashala_companion_server:
     path: ../packages/karmashala_companion_server
-  # Notes and the todo list: the values and their DAOs, read by the panels
-  # here and by the session host for a phone. Pure Dart.
+  # The data API this app reads and writes notes, todos and its preferences
+  # through — the server answers it; `lib/src/core/data/` is the client.
+  karmashala_data_protocol:
+    path: ../packages/karmashala_data_protocol
+  # Notes and the todo list: the values and the rules every copy follows. The
+  # tables are the server's (`store.dart`, never imported here).
   karmashala_notes:
     path: ../packages/karmashala_notes
   # What a session is, as values: the record and its states, what a launch asks

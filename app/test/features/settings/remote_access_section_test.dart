@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_server_config.dart';
+import '../../support/stored_preferences.dart';
 
 /// Records what the section asked for; starts no service, opens no socket.
 class _FakeAccess extends RemoteAccessController {
@@ -276,7 +277,10 @@ void main() {
     await toggleRelay(tester, localTitle);
 
     // Persisted, so it auto-starts with remote access on later launches.
-    expect(RelayPrefsController.readFrom(db)!.localEnabled, isTrue);
+    expect(
+      RelayPrefsController.readFrom(StoredPreferences(db))!.localEnabled,
+      isTrue,
+    );
     expect(server.config.relayEnabled ?? true, isTrue);
     // The controller was woken — that is what auto-starts the local relay.
     expect(fake.syncCalls, 2);
@@ -346,7 +350,11 @@ void main() {
     await toggleRelay(tester, hostedTitle);
 
     expect(server.config.relayEnabled, isFalse);
-    expect(RelayPrefsController.readFrom(db)?.localEnabled ?? false, isFalse);
+    expect(
+      RelayPrefsController.readFrom(StoredPreferences(db))?.localEnabled ??
+          false,
+      isFalse,
+    );
     expect(find.textContaining('No relay is switched on'), findsOneWidget);
     expect(find.text('Relay URL'), findsNothing);
     expect(find.text('Port'), findsNothing);
@@ -418,14 +426,20 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    expect(SettingsRepository(db).load().localRelayPort, 9000);
+    expect(
+      SettingsRepository(StoredPreferences(db)).load().localRelayPort,
+      9000,
+    );
     expect(fake.syncCalls, greaterThanOrEqualTo(3));
 
     await tester.enterText(find.byType(TextField), 'not a port');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    expect(SettingsRepository(db).load().localRelayPort, 9000);
+    expect(
+      SettingsRepository(StoredPreferences(db)).load().localRelayPort,
+      9000,
+    );
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, '9000');
   });

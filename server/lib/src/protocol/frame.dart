@@ -90,7 +90,14 @@ enum MessageType {
   // client: its answer. 0x2e and 0x2f are left for the companion's own
   // frames.
   serverCall(0x30),
-  serverResult(0x31);
+  serverResult(0x31),
+  // Protocol 11: the data API — every client read and write of notes, todos
+  // and preferences goes through the server. client → host: a request;
+  // host → client: its answer; host → client: another client's changes.
+  // Each carries a `karmashala_data_protocol` envelope as JSON.
+  dataRequest(0x32),
+  dataAnswer(0x33),
+  dataChanges(0x34);
 
   const MessageType(this.code);
   final int code;

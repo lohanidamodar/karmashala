@@ -26,6 +26,7 @@ import 'package:karmashala_store/database.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/system_health_fakes.dart';
+import '../../support/stored_preferences.dart';
 
 /// "Pair a phone…" lives where the machine is shown — its SSH card, its
 /// environment card, the health panel — and every one opens the same dialog.
@@ -143,7 +144,7 @@ void main() {
   testWidgets('and says it from the store, so it survives a restart', (
     tester,
   ) async {
-    CompanionRouteStore(db).write('h1', HostRoute.relay);
+    CompanionRouteStore(StoredPreferences(db)).write('h1', HostRoute.relay);
     await pump(
       tester,
       const SingleChildScrollView(child: EnvironmentsSection()),

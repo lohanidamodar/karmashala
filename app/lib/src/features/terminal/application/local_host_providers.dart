@@ -23,15 +23,21 @@ final localHostReachableProvider = Provider<bool>(
 /// app run: the reading is memoised on it, and a second instance would measure
 /// — and possibly start — a second time.
 final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
+  if (!ref.watch(localHostReachableProvider)) return null;
+  return localHostSessionAccessFor(ref.watch(probeModeProvider));
+});
+
+/// The access [localHostSessionAccessProvider] holds, for `main`, which dials
+/// the server for data before the container exists and hands the same one
+/// to it — one access, so one measurement and one start.
+LocalHostSessionAccess? localHostSessionAccessFor(ProbeMode probe) {
   // A companion build has no filesystem to find a binary in and no business
   // starting a daemon.
   if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
     return null;
   }
-  if (!ref.watch(localHostReachableProvider)) return null;
-  final probe = ref.watch(probeModeProvider);
-  // The server keeps its data — the database this app opens too — in its own
-  // default folder, so it is started with no `--data-dir`.
+  // The server keeps its data in its own default folder, so it is started
+  // with no `--data-dir`.
   if (!probe.enabled) {
     return LocalHostSessionAccess(
       dataDirectory: () async => p.absolute((await serverDataDirectory()).path),
@@ -49,7 +55,7 @@ final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
     dataDirectory: () async => data,
     serveFlags: ['--data-dir=$data', '--mcp-port=0', '--companion-port=0'],
   );
-});
+}
 
 /// Where a probe's session host lives: `<data folder>/host`, with the socket,
 /// lock, log and sessions inside it; its store is the probe's own database. A

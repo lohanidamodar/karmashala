@@ -8,7 +8,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../../explorer/application/session_context.dart';
 import '../../notes/application/composer_draft.dart';
-import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/todos_providers.dart';
@@ -39,16 +38,6 @@ class _TodosViewState extends ConsumerState<TodosView> {
   final _composerFocus = FocusNode();
 
   @override
-  void initState() {
-    super.initState();
-    // The panel has just turned to Todos, so the list is about to be read. After
-    // the frame, because this may replace the state the build is already using.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(todosProvider.notifier).refresh();
-    });
-  }
-
-  @override
   void dispose() {
     _composer.dispose();
     _composerFocus.dispose();
@@ -63,12 +52,6 @@ class _TodosViewState extends ConsumerState<TodosView> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _composerFocus.requestFocus();
       });
-    });
-    // The other moment the list is about to be read. Only a *genuine* regain
-    // counts — the window must have been seen to lose focus first.
-    ref.listen(windowFocusedProvider, (previous, next) {
-      if (!next || previous != false) return;
-      ref.read(todosProvider.notifier).refresh();
     });
     final scope = ref.watch(todoScopeProvider);
     final all = ref.watch(todosProvider);

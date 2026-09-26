@@ -1,7 +1,5 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../repositories/application/repository_providers.dart';
-import '../sessions/application/session_providers.dart';
 import '../todos/application/todos_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 
@@ -31,21 +29,21 @@ class TodoControlTools {
           projectId: args['projectId'] as String?,
           includeDone: args['includeDone'] == true,
         ),
-        'todo_add' => _add(
+        'todo_add' => await _add(
           body: (args['body'] as String?) ?? '',
           projectId: args['projectId'] as String?,
         ),
-        'todo_done' => _done(
+        'todo_done' => await _done(
           args['id'] as String?,
           done: args['done'] is bool ? args['done']! as bool : true,
         ),
-        'todo_delete' => _delete(args['id'] as String?),
+        'todo_delete' => await _delete(args['id'] as String?),
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
   /// Open todos first in the user's own order, then the finished ones.
   Object? _list({String? projectId, required bool includeDone}) {
-    final todos = _container.read(todoDaoProvider).list();
+    final todos = _container.read(todosRepositoryProvider).list();
     final matching = <Todo>[
       for (final todo in todos)
         if ((includeDone || !todo.isDone) && _matches(todo, projectId)) todo,
@@ -64,42 +62,37 @@ class TodoControlTools {
 
   /// Writes a todo at the bottom of the list, never the top: the top is where
   /// the person using it put the thing that matters most.
-  Object? _add({required String body, String? projectId}) {
+  /// An explicit id wins, `'none'` files it nowhere, and omitting it follows
+  /// the **calling session's** project — which the server looks up.
+  Future<Object?> _add({required String body, String? projectId}) async {
     if (body.trim().isEmpty) {
       throw ArgumentError('body is required and cannot be blank.');
     }
-    final todo = _container
+    final given = projectId != null && projectId.isNotEmpty;
+    final todo = await _container
         .read(todosProvider.notifier)
-        .add(body: body, projectId: _fileUnder(projectId));
+        .addStored(
+          body: body,
+          projectId: given && projectId != unfiled ? projectId : null,
+          projectOfSession: given ? null : callerSessionId,
+        );
     return _describe(todo);
-  }
-
-  /// Which project a new todo lands in: an explicit id wins, `'none'` files it
-  /// nowhere, and omitting it follows the **calling session's** project.
-  String? _fileUnder(String? projectId) {
-    if (projectId == unfiled) return null;
-    if (projectId != null && projectId.isNotEmpty) return projectId;
-    final sessionId = callerSessionId;
-    if (sessionId == null) return null;
-    final session = _container.read(sessionDaoProvider).getById(sessionId);
-    if (session == null) return null;
-    return _container
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId)
-        ?.projectId;
   }
 
   /// Ticks a todo off, or reopens it with `done: false`. Not destructive: the
   /// row is still there, and one more call puts it back.
-  Object? _done(String? id, {required bool done}) {
+  Future<Object?> _done(String? id, {required bool done}) async {
     final todo = _todo(id);
-    _container.read(todosProvider.notifier).setDone(todo.id, done);
-    return _describe(_container.read(todoDaoProvider).getById(todo.id)!);
+    return _describe(
+      await _container
+          .read(todosProvider.notifier)
+          .setDoneStored(todo.id, done),
+    );
   }
 
-  Object? _delete(String? id) {
+  Future<Object?> _delete(String? id) async {
     final todo = _todo(id);
-    _container.read(todosProvider.notifier).delete(todo.id);
+    await _container.read(todosProvider.notifier).deleteStored(todo.id);
     return <String, Object?>{'id': todo.id, 'deleted': true};
   }
 
@@ -107,7 +100,7 @@ class TodoControlTools {
     if (id == null || id.isEmpty) {
       throw ArgumentError('id is required. todos_list has the ids.');
     }
-    final todo = _container.read(todoDaoProvider).getById(id);
+    final todo = _container.read(todosRepositoryProvider).byId(id);
     if (todo == null) throw StateError('No todo with id $id.');
     return todo;
   }

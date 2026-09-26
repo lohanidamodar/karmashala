@@ -1,0 +1,25 @@
+name: karmashala_data_protocol
+description: >-
+  The client/server data API: typed requests and their results, the change
+  events a server pushes, the refusals it answers with, and the JSON envelope
+  they travel in. No transport and no store — the host protocol carries it
+  today, and the companion protocol can carry the same envelope to a remote
+  server.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `Note` and `Todo`, the values the notes and todos requests carry.
+  karmashala_notes:
+    path: ../karmashala_notes
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

@@ -1,107 +1,123 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../core/database/database_providers.dart';
-import '../../../core/util/clock_provider.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+
+import '../../../core/data/data_providers.dart';
+import '../../../core/util/clock_provider.dart';
+import '../data/todos_repository.dart';
 import '../domain/project_scope.dart';
 
-final todoDaoProvider = Provider<TodoDao>(
-  (ref) => TodoDao(ref.watch(databaseProvider)),
+final todosRepositoryProvider = Provider<TodosRepository>(
+  (ref) => TodosRepository(ref.watch(dataClientProvider)),
 );
 
-/// Every todo, in list order, kept in memory so the panel rebuilds on a write.
-/// The cost of that is [refresh]: another process can write this table too.
+final _log = AppLogger.named('todos');
+
+/// Every todo, in list order, as the server keeps them. Live: a todo an
+/// agent or a phone writes arrives here without asking.
 class TodosController extends Notifier<List<Todo>> {
   @override
-  List<Todo> build() => ref.watch(todoDaoProvider).list();
+  List<Todo> build() {
+    final repository = ref.watch(todosRepositoryProvider);
+    final rows = repository.list();
+    final changes = repository.changes.listen((_) {
+      final next = repository.list();
+      if (!listEquals(next, state)) state = next;
+    });
+    ref.onDispose(changes.cancel);
+    return rows;
+  }
 
-  TodoDao get _dao => ref.read(todoDaoProvider);
+  TodosRepository get _repository => ref.read(todosRepositoryProvider);
 
   /// Writes a todo at the bottom of the list. [body] is kept as given beyond a
   /// trim; [projectId] null means filed under nothing, which is ordinary.
   Todo add({required String body, String? projectId}) {
+    final (draft, stored) = _add(body: body, projectId: projectId);
+    _logged('Adding a todo', stored);
+    return draft;
+  }
+
+  /// [add], answering the todo as the server stored it. With no
+  /// [projectId], filed under [projectOfSession]'s project when the server
+  /// knows it. Throws `DataRefused` (a blank body is refused).
+  Future<Todo> addStored({
+    required String body,
+    String? projectId,
+    String? projectOfSession,
+  }) => _add(
+    body: body,
+    projectId: projectId,
+    projectOfSession: projectOfSession,
+  ).$2;
+
+  (Todo, Future<Todo>) _add({
+    required String body,
+    String? projectId,
+    String? projectOfSession,
+  }) {
     final now = ref.read(clockProvider).nowUtc();
-    final todo = Todo(
+    final draft = Todo(
       id: _newId(now),
-      body: body.trim(),
+      body: todoBodyOf(body) ?? body,
       projectId: projectId,
-      position: _dao.nextPosition(),
+      position: nextTodoPosition(_repository.list()),
       createdAt: now,
     );
-    _dao.insert(todo);
-    _reload();
-    return todo;
+    return (draft, _repository.add(draft, projectOfSession: projectOfSession));
   }
 
   /// Ticks [id] off, or reopens it. Reopening is why nothing is deleted on
   /// completion: a mis-tick has to be one click to undo.
-  void setDone(String id, bool done) {
-    _dao.setDone(id, done ? ref.read(clockProvider).nowUtc() : null);
-    _reload();
-  }
+  void setDone(String id, bool done) =>
+      _logged('Ticking a todo', setDoneStored(id, done));
+
+  /// [setDone], answering the todo as stored. Throws `DataRefused`.
+  Future<Todo> setDoneStored(String id, bool done) =>
+      _repository.setDone(id, done: done, at: ref.read(clockProvider).nowUtc());
 
   /// Rewrites the line. An empty edit is ignored rather than deleting the row:
   /// clearing the text of a todo is not how anybody asks for it to be gone.
   void edit(String id, String body) {
-    final trimmed = body.trim();
-    if (trimmed.isEmpty) return;
-    _dao.updateBody(id, trimmed);
-    _reload();
+    if (todoBodyOf(body) == null) return;
+    _logged('Editing a todo', _repository.edit(id, body));
   }
 
   /// Files [id] under [projectId], or unfiles it when that is null.
-  void setProject(String id, String? projectId) {
-    _dao.setProject(id, projectId);
-    _reload();
-  }
+  void setProject(String id, String? projectId) =>
+      _logged('Filing a todo', _repository.file(id, projectId));
 
   /// Moves [id] one place up or down among the **open** todos. Menu items rather
   /// than a drag: at 240px a drag is a fiddle, and a keyboard can do this.
-  void move(String id, {required bool up}) {
-    final open = [
-      for (final todo in state)
-        if (!todo.isDone) todo,
-    ];
-    final index = open.indexWhere((todo) => todo.id == id);
-    if (index == -1) return;
-    final target = up ? index - 1 : index + 1;
-    if (target < 0 || target >= open.length) return;
-    final ids = [for (final todo in open) todo.id];
-    ids[index] = ids[target];
-    ids[target] = id;
-    _dao.reposition(ids);
-    _reload();
-  }
+  void move(String id, {required bool up}) =>
+      _logged('Moving a todo', _repository.move(id, up: up));
 
-  void delete(String id) {
-    _dao.delete(id);
-    _reload();
-  }
+  void delete(String id) => _logged('Deleting a todo', deleteStored(id));
+
+  /// [delete], answering how the server took it. Throws `DataRefused`.
+  Future<void> deleteStored(String id) => _repository.delete(id);
 
   /// Removes what is ticked off in [scope] — the finished rows the panel shows,
   /// so a filtered panel never clears another project's. Returns how many went.
   int clearDone({ProjectScope scope = ProjectScope.all}) {
-    final removed = _dao.deleteDone(
-      ids: [
-        for (final todo in state)
-          if (todo.isDone && scope.contains(todo.projectId)) todo.id,
-      ],
-    );
-    _reload();
-    return removed;
+    final ids = [
+      for (final todo in state)
+        if (todo.isDone && scope.contains(todo.projectId)) todo.id,
+    ];
+    if (ids.isEmpty) return 0;
+    _logged('Clearing done todos', _repository.clearDone(ids));
+    return ids.length;
   }
 
-  /// Re-reads the list rather than patching it in place: every write here can
-  /// change the *order*, so the SQL that defines it is what decides it.
-  void _reload() => state = _dao.list();
-
-  /// Re-reads the table for a change **this controller did not make** — a write
-  /// to the file from outside this process. Asked on panel open and on focus.
-  void refresh() {
-    final rows = _dao.list();
-    if (!listEquals(rows, state)) state = rows;
-  }
+  void _logged(String what, Future<Object?> write) => unawaited(
+    write.then<void>(
+      (_) {},
+      onError: (Object error) => _log.warning('$what failed: $error'),
+    ),
+  );
 
   /// Unique within a run and sortable: a counter rides along with the clock,
   /// because two adds in one millisecond is a fast typist or a fixed clock.

@@ -22,6 +22,8 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
+import 'package:karmashala_notes/store.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 
 void main() {
   /// The panel this lives in, at the width it actually gets on a desktop.
@@ -176,7 +178,10 @@ void main() {
     // Rendering a 60-line note in a 320px panel must not overflow.
     expect(tester.takeException(), isNull);
     // Clipping is a display choice; the stored note is whole.
-    expect(container.read(noteDaoProvider).getById(note.id)!.body, long);
+    expect(
+      NoteDao(container.read(databaseProvider)).getById(note.id)!.body,
+      long,
+    );
   });
 
   testWidgets('the menu opens a note in its own tab', (tester) async {
@@ -207,7 +212,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(container.read(notesProvider), hasLength(1));
-    expect(container.read(noteDaoProvider).list(), hasLength(1));
+    expect(NoteDao(container.read(databaseProvider)).list(), hasLength(1));
   });
 
   testWidgets('a note is deleted once the delete is confirmed', (tester) async {
@@ -220,7 +225,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(notesProvider), isEmpty);
-    expect(container.read(noteDaoProvider).list(), isEmpty);
+    expect(NoteDao(container.read(databaseProvider)).list(), isEmpty);
     expect(find.textContaining('No notes yet.'), findsOneWidget);
   });
 

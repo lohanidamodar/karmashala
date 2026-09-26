@@ -8,10 +8,10 @@ import '../../projects/application/project_providers.dart';
 import '../../todos/application/todos_providers.dart';
 
 /// The desktop's notes and todo list, for `notes.get` — the same builder the
-/// session host answers with, over this app's providers.
+/// session host answers with, over this app's copies of the server's lists.
 Future<RemoteNotesSnapshot> remoteNotesSnapshot(Ref ref) async => notesSnapshot(
-  notes: ref.read(noteDaoProvider),
-  todos: ref.read(todoDaoProvider),
+  notes: ref.read(notesRepositoryProvider).list(),
+  todos: ref.read(todosRepositoryProvider).list(),
   projectNames: {
     for (final project in ref.read(projectDaoProvider).getAll())
       project.id: project.name,

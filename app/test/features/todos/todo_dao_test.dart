@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 
 import '../../support/fixtures.dart';
+import 'package:karmashala_notes/store.dart';
 
 void main() {
   late AppDatabase db;

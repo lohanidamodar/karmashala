@@ -1,12 +1,13 @@
 import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../support/stored_preferences.dart';
 import '../../support/temp_directory.dart';
+import 'package:karmashala/src/core/data/metadata_keys.dart';
 
 void main() {
   late AppDatabase db;
@@ -96,26 +97,17 @@ void main() {
   });
 
   group('bootstrapMetadata', () {
-    test('marks the first run and records the schema version', () {
-      final result = bootstrapMetadata(db);
-
-      expect(result.isFirstRun, isTrue);
-      expect(result.schemaVersion, db.schemaVersion);
-      expect(
-        db.readMetadata(MetadataKeys.schemaVersion),
-        db.schemaVersion.toString(),
-      );
-      expect(db.readMetadata(MetadataKeys.firstRunAt), isNotNull);
-    });
-
-    test('is not a first run on the second bootstrap', () {
-      final first = bootstrapMetadata(db);
+    test('marks the first run, once', () {
+      final preferences = StoredPreferences(db);
+      expect(bootstrapMetadata(preferences), isTrue);
       final firstRunAt = db.readMetadata(MetadataKeys.firstRunAt);
+      expect(firstRunAt, isNotNull);
+      expect(
+        db.readMetadata(MetadataKeys.environmentHealthOnboarding),
+        'pending',
+      );
 
-      final second = bootstrapMetadata(db);
-
-      expect(first.isFirstRun, isTrue);
-      expect(second.isFirstRun, isFalse);
+      expect(bootstrapMetadata(preferences), isFalse);
       // The original first-run timestamp is preserved.
       expect(db.readMetadata(MetadataKeys.firstRunAt), firstRunAt);
     });

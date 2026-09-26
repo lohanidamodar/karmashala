@@ -11,6 +11,7 @@ import 'package:agent_cli/usage.dart'
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_notes/store.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart';

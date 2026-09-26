@@ -5,12 +5,13 @@ library;
 
 import 'dart:convert';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show PreferenceStore;
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 
-/// Where the list lives in the `app_metadata` key/value table.
+/// The preference the list lives under.
 const String kSshRelaysMetadataKey = 'remote.ssh_relays.v1';
 
 /// One SSH host used as a relay.
@@ -107,11 +108,11 @@ String redactRelayUrl(Uri url) =>
 
 class SshRelaysController extends Notifier<List<SshRelayEntry>> {
   @override
-  List<SshRelayEntry> build() => readFrom(ref.watch(databaseProvider));
+  List<SshRelayEntry> build() => readFrom(ref.watch(appPreferencesProvider));
 
   /// What a fresh launch loads. A garbled entry costs itself and nothing else.
-  static List<SshRelayEntry> readFrom(AppDatabase db) {
-    final raw = db.readMetadata(kSshRelaysMetadataKey);
+  static List<SshRelayEntry> readFrom(PreferenceStore preferences) {
+    final raw = preferences.read(kSshRelaysMetadataKey);
     if (raw == null) return const [];
     try {
       final decoded = jsonDecode(raw);
@@ -156,8 +157,8 @@ class SshRelaysController extends Notifier<List<SshRelayEntry>> {
   void _save(List<SshRelayEntry> entries) {
     state = List.unmodifiable(entries);
     ref
-        .read(databaseProvider)
-        .writeMetadata(
+        .read(appPreferencesProvider)
+        .write(
           kSshRelaysMetadataKey,
           jsonEncode([for (final entry in entries) entry.toJson()]),
         );

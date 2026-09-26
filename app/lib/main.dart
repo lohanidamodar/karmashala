@@ -11,6 +11,10 @@ import 'src/app/karmashala_app.dart';
 import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
 import 'package:karmashala_store/database.dart';
+import 'src/core/data/app_preferences.dart';
+import 'src/core/data/data_providers.dart';
+import 'src/core/data/metadata_keys.dart';
+import 'src/core/data/server_data_connection.dart';
 import 'src/core/database/database_providers.dart';
 import 'src/core/lifecycle/app_binding.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
@@ -37,6 +41,7 @@ import 'src/features/sessions/application/host_lifecycle/host_lifecycle_provider
 import 'src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'src/features/settings/application/settings_controller.dart';
+import 'src/features/terminal/application/local_host_providers.dart';
 import 'src/features/system/system_integration_service.dart';
 import 'src/features/verification/application/verification_providers.dart';
 
@@ -106,11 +111,20 @@ Future<void> _bootstrap(AppLogger logger) async {
   // backfills the buffer. Awaited: the directory below asks the same question.
   await attachDefaultLogFile(Diagnostics.instance);
   // The server's database, in the server's data folder (`~/.karmashala`, or a
-  // probe's own): this app is a client of the local server, and opens the
-  // same file beside it — no second database. The app resolves the
-  // directory; `AppDatabase` only opens in it.
+  // probe's own), still opened here for the domains that do not yet go
+  // through the server's data API (docs/daemon-architecture.md, slice 1).
   final database = AppDatabase.open(await serverDataDirectory());
-  bootstrapMetadata(database, logger: logger);
+
+  // Notes, todos and preferences go through this machine's server, dialled
+  // (and started, as the launch would) before anything reads a setting.
+  final hostAccess = localHostSessionAccessFor(probe);
+  final data = await connectLocalServerData(
+    database: database,
+    access: hostAccess,
+    logger: logger,
+  );
+  final preferences = AppPreferences(data);
+  bootstrapMetadata(preferences, logger: logger);
 
   // The verification artifact root, before the first frame: a Riverpod provider
   // that threw stays errored for the life of the process. Best-effort.
@@ -144,6 +158,8 @@ Future<void> _bootstrap(AppLogger logger) async {
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(database),
+      dataClientProvider.overrideWithValue(data),
+      localHostSessionAccessProvider.overrideWithValue(hostAccess),
       envVaultProvider.overrideWithValue(envVault),
       probeModeProvider.overrideWithValue(probe),
       // What `karmashala_devices` cannot know: this app's clock, its SSH-aware
@@ -174,8 +190,8 @@ Future<void> _bootstrap(AppLogger logger) async {
 
   // First run, or one that never completed: probe every environment once, in
   // the background. The controller's state updates when it finishes.
-  if (database.readMetadata(MetadataKeys.agentsDiscoveredAt) == null) {
-    unawaited(_discoverAgentsOnFirstRun(container, database, clock, logger));
+  if (preferences.read(MetadataKeys.agentsDiscoveredAt) == null) {
+    unawaited(_discoverAgentsOnFirstRun(container, preferences, clock, logger));
   }
 
   // One owner for everything below, so quitting is an ordered teardown rather
@@ -296,7 +312,7 @@ Future<void> _bootstrap(AppLogger logger) async {
 /// the flag unset so the next launch retries.
 Future<void> _discoverAgentsOnFirstRun(
   ProviderContainer container,
-  AppDatabase database,
+  AppPreferences preferences,
   Clock clock,
   AppLogger logger,
 ) async {
@@ -304,7 +320,7 @@ Future<void> _discoverAgentsOnFirstRun(
     final report = await container
         .read(agentInstallationsControllerProvider.notifier)
         .discoverAll();
-    database.writeMetadata(
+    preferences.write(
       MetadataKeys.agentsDiscoveredAt,
       clock.nowUtc().toIso8601String(),
     );

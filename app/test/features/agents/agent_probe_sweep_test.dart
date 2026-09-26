@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/stored_preferences.dart';
 
 /// The owner's machine, in miniature: `agy` is on the login PATH inside WSL and
 /// nowhere on Windows, and `claude`/`codex` are found by neither call because
@@ -157,7 +158,9 @@ void main() {
       reason: 'a miss is recorded, so the next launch spawns nothing at all',
     );
     expect(
-      AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'windows'),
+      AgentProbeLog(
+        StoredPreferences(db),
+      ).hasProbed(AgentIds.antigravity, 'windows'),
       isTrue,
     );
   });
@@ -176,7 +179,9 @@ void main() {
       // unrecorded because it was skipped, not searched — "Discover agents" on
       // that environment still has work to do.
       expect(
-        AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'ssh:h1'),
+        AgentProbeLog(
+          StoredPreferences(db),
+        ).hasProbed(AgentIds.antigravity, 'ssh:h1'),
         isFalse,
       );
     },

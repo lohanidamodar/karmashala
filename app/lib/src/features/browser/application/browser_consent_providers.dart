@@ -1,17 +1,18 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
+import '../../../core/data/data_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/project_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
-import '../data/database_consent_journal.dart';
+import '../data/preferences_consent_journal.dart';
 import 'package:karmashala_browser/browser.dart';
 
 /// The recorded browser-consent grants.
 final browserConsentStoreProvider = Provider<BrowserConsentStore>(
-  (ref) =>
-      BrowserConsentStore(DatabaseConsentJournal(ref.watch(databaseProvider))),
+  (ref) => BrowserConsentStore(
+    PreferencesConsentJournal(ref.watch(appPreferencesProvider)),
+  ),
 );
 
 /// Bumped whenever a grant is made or taken back, so the settings list

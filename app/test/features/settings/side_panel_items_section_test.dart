@@ -22,6 +22,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../../support/stored_preferences.dart';
 
 /// Settings › Appearance › Side panel: the rail's checklist where a person who
 /// never right-clicks the rail will look for it.
@@ -82,7 +83,7 @@ void main() {
       .value!;
 
   List<String> stored() =>
-      SettingsRepository(db).load().hiddenSidePanelSurfaces;
+      SettingsRepository(StoredPreferences(db)).load().hiddenSidePanelSurfaces;
 
   testWidgets('the Explorer\'s project details are a switch here, on until '
       'turned off', (tester) async {
@@ -107,7 +108,10 @@ void main() {
       container.read(settingsControllerProvider).explorerProjectDetails,
       isFalse,
     );
-    expect(SettingsRepository(db).load().explorerProjectDetails, isFalse);
+    expect(
+      SettingsRepository(StoredPreferences(db)).load().explorerProjectDetails,
+      isFalse,
+    );
   });
 
   testWidgets('lists each surface checked, and a tap hides and shows it', (

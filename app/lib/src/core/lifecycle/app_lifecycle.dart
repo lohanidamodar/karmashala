@@ -23,6 +23,8 @@ import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/local_host_startup.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../data/data_providers.dart';
+import '../data/metadata_keys.dart';
 import '../database/database_providers.dart';
 import '../logging/memory_census_source.dart';
 import '../probe/probe_mode.dart';
@@ -330,11 +332,16 @@ class AppLifecycle {
           ..start();
   }
 
+  bool get _agentsDiscovered =>
+      _container
+          .read(appPreferencesProvider)
+          .read(MetadataKeys.agentsDiscoveredAt) !=
+      null;
+
   /// Looks in the background for agents this workspace has never searched for.
   /// Skipped on a never-discovered workspace: its first-run scan is doing this.
   void startAgentDiscovery() {
-    final database = _container.read(databaseProvider);
-    if (database.readMetadata(MetadataKeys.agentsDiscoveredAt) == null) return;
+    if (!_agentsDiscovered) return;
     unawaited(
       _container
           .read(agentInstallationsControllerProvider.notifier)
@@ -364,12 +371,7 @@ class AppLifecycle {
   Future<void>? _pathRepair;
 
   Future<void> _repairAgentPaths(Future<void> Function()? gate) async {
-    if (_container
-            .read(databaseProvider)
-            .readMetadata(MetadataKeys.agentsDiscoveredAt) ==
-        null) {
-      return;
-    }
+    if (!_agentsDiscovered) return;
     if (gate != null) {
       try {
         await gate();
@@ -411,12 +413,7 @@ class AppLifecycle {
     // Same rule as [startAgentDiscovery] and the path check: a workspace that
     // has never discovered anything has its own first-run scan writing these
     // very rows, and racing it would probe everything twice.
-    if (_container
-            .read(databaseProvider)
-            .readMetadata(MetadataKeys.agentsDiscoveredAt) ==
-        null) {
-      return;
-    }
+    if (!_agentsDiscovered) return;
     try {
       final changed = await _container
           .read(agentInstallationsControllerProvider.notifier)
@@ -631,6 +628,9 @@ class AppLifecycle {
           : Future<void>.value(),
       () => _container.exists(sshConnectionPoolProvider)
           ? _container.read(sshConnectionPoolProvider).closeAll()
+          : Future<void>.value(),
+      () => _container.exists(dataClientProvider)
+          ? _container.read(dataClientProvider).close()
           : Future<void>.value(),
     ]) {
       try {
