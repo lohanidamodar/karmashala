@@ -136,7 +136,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Keeps [message] as a note, word for word, remembering where it was taken
   /// from. One tap: no dialog, no title, nothing rewritten.
   void _saveNote(ChatMessage message, int ordinal) {
-    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     ref
         .read(notesProvider.notifier)
         .capture(
@@ -154,7 +154,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Translates a path the agent wrote into one this process can open, or null
   /// when the environment is unknown: a WSL `/mnt/c/…` has to become `C:\…`.
   String? Function(String)? _hostPathResolver() {
-    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     if (session == null) return null;
     final environmentId = ref
         .read(agentInstallationDaoProvider)
@@ -185,7 +185,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Where this session's agent was standing. Null means **unknown**, never
   /// "the repository root", so the fallback is made here and out loud.
   EnvironmentPath? _workingDirectory() {
-    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     if (session == null) return null;
     return session.workingDirectory ??
         ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
@@ -292,7 +292,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _takeQueuedNote();
     });
-    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript
     // (see `SessionTranscriptLocator`): stdout carries no structured stream.
     final fromPty = session?.surface == SessionSurface.pane;
@@ -697,7 +697,7 @@ class _OpenInTerminalButton extends ConsumerWidget {
 /// The pane [sessionId] can be *shown* in, or null when it has none. A row
 /// keeps its `pane_id` after the pane is gone, so an instance must still exist.
 String? sessionTerminalPane(WidgetRef ref, String sessionId) {
-  final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
   if (paneId == null) return null;
   final terminals = ref.read(terminalSessionsControllerProvider.notifier);
   return terminals.instanceFor(paneId) == null ? null : paneId;

@@ -7,8 +7,10 @@ import 'package:karmashala_session/events.dart';
 import 'session_decision_providers.dart';
 import 'session_providers.dart';
 
-/// The only way anything writes to a session's decision record. **Nothing here
-/// reads prose**, and every write is best-effort rather than throwing.
+/// The only way anything in this app writes to a session's decision record —
+/// through the server, which numbers each one. **Nothing here reads prose**,
+/// and every write is best-effort rather than throwing: each completes with
+/// the decision as stored, or null.
 class DecisionRecorder {
   DecisionRecorder(this._ref);
 
@@ -18,9 +20,11 @@ class DecisionRecorder {
   /// A prompt answered in one of this app's panes, already shaped by
   /// `approvalDecisionRecord` — the record the session host files for a
   /// session it holds. Appended as it is; best-effort.
-  DecisionRecord? file(DecisionRecord decision) {
+  Future<DecisionRecord?> file(DecisionRecord decision) async {
     try {
-      final appended = _ref.read(decisionRecordDaoProvider).append(decision);
+      final appended = await _ref
+          .read(sessionRecordsProvider)
+          .appendDecision(decision);
       _ref.read(decisionsRevisionProvider.notifier).bump();
       return appended;
     } catch (error, stack) {
@@ -35,7 +39,7 @@ class DecisionRecorder {
 
   /// A verification run reached a verdict — `verification_finish`, and nothing
   /// else. [attribution] says whether the verifier was also the author.
-  DecisionRecord? recordVerificationVerdict({
+  Future<DecisionRecord?> recordVerificationVerdict({
     required String sessionId,
     required String runId,
     required String verdict,
@@ -60,7 +64,7 @@ class DecisionRecorder {
 
   /// Somebody asked for a checkpoint **and said what it was for**: the label
   /// is what makes it a decision rather than a record that time passed.
-  DecisionRecord? recordCheckpoint({
+  Future<DecisionRecord?> recordCheckpoint({
     required String sessionId,
     required String checkpointId,
     required String label,
@@ -78,7 +82,7 @@ class DecisionRecorder {
 
   /// An agent recorded a decision deliberately, through the `decision_record`
   /// tool; the caller has already restricted [kind] to what it may assert.
-  DecisionRecord? recordFromAgent({
+  Future<DecisionRecord?> recordFromAgent({
     required String sessionId,
     required DecisionKind kind,
     required String summary,
@@ -98,7 +102,7 @@ class DecisionRecorder {
 
   /// A scheduled resume fired: the approval was given in advance, so the
   /// record says who armed it and what was typed with nobody there.
-  DecisionRecord? recordScheduledResume({
+  Future<DecisionRecord?> recordScheduledResume({
     required String sessionId,
     required String resumeId,
     required String summary,
@@ -116,7 +120,7 @@ class DecisionRecorder {
 
   /// The user wrote one down by hand — the only act whose author is a person
   /// typing, so the panel restricts [kind] to what they can assert alone.
-  DecisionRecord? recordByHand({
+  Future<DecisionRecord?> recordByHand({
     required String sessionId,
     required DecisionKind kind,
     required String summary,
@@ -142,13 +146,13 @@ class DecisionRecorder {
   /// decision, and re-stamping it with now would say the new session made it.
   /// [recordedBySessionId] becomes the session it came from, which is where a
   /// reader goes to see the conversation around it.
-  int carryForward({required String from, required String into}) {
+  Future<int> carryForward({required String from, required String into}) async {
     if (from == into) return 0;
     try {
-      final dao = _ref.read(decisionRecordDaoProvider);
-      final source = dao.forSession(from);
+      final records = _ref.read(sessionRecordsProvider);
+      final source = records.decisionsFor(from);
       for (final decision in source) {
-        dao.append(
+        await records.appendDecision(
           DecisionRecord(
             sessionId: into,
             kind: decision.kind,
@@ -179,7 +183,7 @@ class DecisionRecorder {
 
   /// Stamps the decision with the clock and appends it. A blank summary is
   /// refused: it would count towards a total while telling the reader nothing.
-  DecisionRecord? _append({
+  Future<DecisionRecord?> _append({
     required String sessionId,
     required DecisionKind kind,
     required String summary,
@@ -188,12 +192,12 @@ class DecisionRecorder {
     String? decidedBy,
     String? recordedBySessionId,
     String? originId,
-  }) {
+  }) async {
     if (summary.trim().isEmpty) return null;
     try {
-      final appended = _ref
-          .read(decisionRecordDaoProvider)
-          .append(
+      final appended = await _ref
+          .read(sessionRecordsProvider)
+          .appendDecision(
             DecisionRecord(
               sessionId: sessionId,
               kind: kind,
@@ -223,7 +227,7 @@ class DecisionRecorder {
   /// The display name of the agent running [sessionId], or null — a name, not
   /// an id the packet's reader could not look up, and never a guess.
   String? _agentNameFor(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final agentId = _ref
         .read(agentInstallationDaoProvider)

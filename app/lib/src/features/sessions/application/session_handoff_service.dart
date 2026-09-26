@@ -79,7 +79,7 @@ class SessionHandoffService {
   /// The agents [sessionId] could be continued in, in registry order. Empty
   /// when the session, its repository or its own installation is gone.
   List<HandoffTarget> targetsFor(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return const [];
     final repo = _ref
         .read(workspaceDataProvider)
@@ -135,7 +135,7 @@ class SessionHandoffService {
 
   /// What forking [sessionId] would actually do.
   SessionForkPlan forkPlanFor(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       return SessionForkPlan.decide(descriptor: null, agentName: 'this agent');
     }
@@ -167,7 +167,7 @@ class SessionHandoffService {
     HandoffRecapBudget budget = const HandoffRecapBudget(),
     HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
   }) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     final registry = _ref.read(agentRegistryProvider);
     final agentId = _ref
@@ -261,7 +261,7 @@ class SessionHandoffService {
   })
   _decisionsFor(String sessionId, HandoffDecisionBudget budget) {
     try {
-      final rows = _ref.read(decisionRecordDaoProvider).forSession(sessionId);
+      final rows = _ref.read(sessionRecordsProvider).decisionsFor(sessionId);
       final trimmed = trimDecisions([
         for (final row in rows)
           HandoffDecision(
@@ -408,7 +408,7 @@ class SessionHandoffService {
     required String sessionId,
     num? timeoutSeconds,
   }) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     final agentId = _ref
         .read(agentInstallationDaoProvider)
@@ -522,7 +522,7 @@ class SessionHandoffService {
     bool intoNewWorktree = false,
     PermissionSelection? permissionMode,
   }) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     final plan = forkPlanFor(sessionId);
     if (plan.isRefused) throw StateError(plan.explanation);
@@ -575,7 +575,7 @@ class SessionHandoffService {
         );
     // A native fork inherits the conversation from the CLI itself, but nothing
     // outside the CLI: the decision record is Karmashala's, so it is copied.
-    _ref
+    await _ref
         .read(decisionRecorderProvider)
         .carryForward(from: sessionId, into: launched.session.id);
     return launched;
@@ -592,7 +592,7 @@ class SessionHandoffService {
     PermissionSelection? permissionMode,
     HandoffSourceBrief? sourceBrief,
   }) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     if (instruction.trim().isEmpty) {
       throw StateError(
@@ -670,7 +670,7 @@ class SessionHandoffService {
     // The record follows the work. The packet quotes these too, but a quote is
     // read once by one agent: the rows are what `decision_record` and the next
     // handoff after this one can read.
-    _ref
+    await _ref
         .read(decisionRecorderProvider)
         .carryForward(from: sessionId, into: launched.session.id);
     return launched;
@@ -761,7 +761,7 @@ class SessionHandoffService {
   /// branch, counted off the parent so two branches are told apart in a list.
   String _forkTitle(String parentId, String title) {
     final existing = _ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .childrenOf(parentId)
         .where((child) => child.parentLink == SessionLink.fork)
         .length;

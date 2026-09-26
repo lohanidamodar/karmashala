@@ -1,9 +1,9 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
-import 'package:karmashala/src/features/follow_ups/domain/follow_up_policy.dart';
+import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_verification/verification.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 /// The whole rule, with no database, no agent and no window — the shape
 /// `detach_policy.dart` uses, and for the same reason: the interesting part of

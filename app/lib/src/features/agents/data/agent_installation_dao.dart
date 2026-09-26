@@ -101,24 +101,11 @@ class AgentInstallationDao {
     _db.execute('DELETE FROM agent_installations WHERE id = ?;', [id]);
   }
 
-  /// Moves every session recorded against installation [from] onto [to]:
-  /// `sessions.agent_installation_id` is `ON DELETE RESTRICT`.
-  void repointSessions({required String from, required String to}) {
-    _db.execute(
-      'UPDATE sessions SET agent_installation_id = ? '
-      'WHERE agent_installation_id = ?;',
-      [to, from],
-    );
-  }
-
   /// Deletes [id] unless something still points at it, and says whether it
-  /// went. Asked first: that `ON DELETE RESTRICT` raise aborted whole sweeps.
+  /// went. The caller asks the sessions first ([sessionsName] it); the
+  /// schema's `ON DELETE RESTRICT` is the backstop, caught rather than
+  /// raised: it aborted whole sweeps.
   bool deleteIfUnreferenced(String id) {
-    final referencing = _db.query(
-      'SELECT 1 FROM sessions WHERE agent_installation_id = ? LIMIT 1;',
-      [id],
-    );
-    if (referencing.isNotEmpty) return false;
     try {
       delete(id);
       return true;

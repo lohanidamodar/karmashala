@@ -9,7 +9,6 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -24,6 +23,8 @@ import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// The owner: *"I've only 3 sessions running here, but in the sessions explorer
 /// other sessions are also showing as running — for example the
@@ -73,22 +74,20 @@ harness() async {
 
 void main() {
   group('the launch sweep', () {
-    late AppDatabase db;
-    late SessionDao dao;
+    // Rows seeded at the server; the reconciler reads and writes the app's
+    // copy, and a write lands in the copy at once.
+    late FakeDataServer server;
+    late SessionsData dao;
 
-    setUp(() {
-      db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    setUp(() async {
+      server = FakeDataServer();
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
-      dao = SessionDao(db);
+      dao = await sessionsOf(server);
     });
-    tearDown(() => db.close());
 
     test('a row left running by a previous run is no longer running', () {
-      dao.insert(session(id: 'old', status: SessionStatus.running));
+      server.sessionRows.insert(session(id: 'old', status: SessionStatus.running));
 
       expect(markSessionsLostOnLaunch(dao), 1);
 
@@ -98,7 +97,7 @@ void main() {
     });
 
     test('so is one left mid-turn as idle', () {
-      dao.insert(session(id: 'old', status: SessionStatus.idle));
+      server.sessionRows.insert(session(id: 'old', status: SessionStatus.idle));
       expect(markSessionsLostOnLaunch(dao), 1);
       expect(dao.getById('old')!.status, SessionStatus.unknown);
     });
@@ -113,7 +112,7 @@ void main() {
         SessionStatus.failed,
         SessionStatus.cancelled,
       ]) {
-        dao.insert(session(id: status.name, status: status));
+        server.sessionRows.insert(session(id: status.name, status: status));
       }
 
       expect(markSessionsLostOnLaunch(dao), 0);
@@ -133,7 +132,7 @@ void main() {
     // that. Without it a rename in the CLI never reached the row, because the
     // title sync only follows a session that is running.
     test('a row whose pane runs its agent again is running again', () {
-      dao.insert(
+      server.sessionRows.insert(
         session(
           id: 'hosted',
           status: SessionStatus.running,
@@ -153,7 +152,7 @@ void main() {
     // A pane with no host facts that starts the same conversation again after
     // the row was settled `completed`: the agent is running again.
     test('a completed row whose pane runs its agent again is running', () {
-      dao.insert(
+      server.sessionRows.insert(
         session(
           id: 'resumed',
           status: SessionStatus.completed,
@@ -169,13 +168,13 @@ void main() {
     });
 
     test('a pane running somebody else, or an archived row, is left alone', () {
-      dao.insert(
+      server.sessionRows.insert(
         session(
           id: 'old',
           status: SessionStatus.unknown,
         ).copyWith(paneId: 'pane-1'),
       );
-      dao.insert(
+      server.sessionRows.insert(
         session(
           id: 'shelved',
           status: SessionStatus.completed,
@@ -196,7 +195,7 @@ void main() {
     // A hosted row's status is its host's facts (host_lifecycle_test.dart):
     // neither pane edge may guess over them.
     test('a row that follows its host is moved by neither pane edge', () {
-      dao
+      server.sessionRows
         ..insert(
           session(
             id: 'hosted',
@@ -224,7 +223,7 @@ void main() {
     });
 
     test('the launch pass can be narrowed to rows no host speaks for', () {
-      dao
+      server.sessionRows
         ..insert(session(id: 'here', status: SessionStatus.running))
         ..insert(session(id: 'there', status: SessionStatus.running));
 
@@ -245,13 +244,13 @@ void main() {
     });
 
     test('a live pane of ours is the one thing that keeps a claim', () {
-      dao.insert(
+      server.sessionRows.insert(
         session(
           id: 'here',
           status: SessionStatus.running,
         ).copyWith(paneId: 'pane-1'),
       );
-      dao.insert(
+      server.sessionRows.insert(
         session(
           id: 'gone',
           status: SessionStatus.running,
@@ -271,7 +270,7 @@ void main() {
         // `SessionSurface.external` is only a record of where it was *started*.
         // The app cannot see that window at all, so after a restart the honest
         // answer is that we do not know — never "still running".
-        dao.insert(
+        server.sessionRows.insert(
           session(
             id: 'out-there',
             status: SessionStatus.running,
@@ -285,15 +284,9 @@ void main() {
   });
 
   group('a pane that stops', () {
-    test('only the rows it was hosting, and only live claims', () {
-      final db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
-      addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      server.projectRows.insert(project());
-      server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
-      final dao = SessionDao(db)
+    test('only the rows it was hosting, and only live claims', () async {
+      final server = FakeDataServer();
+      server.sessionRows
         ..insert(
           session(
             id: 'in-pane',
@@ -313,6 +306,7 @@ void main() {
           ).copyWith(paneId: 'pane-2'),
         );
 
+      final dao = await sessionsOf(server);
       final moved = <String>[];
       final reconciler = SessionLivenessReconciler(
         sessionDao: dao,
@@ -385,7 +379,9 @@ void main() {
               purpose: SessionPurpose.newSession,
             ),
           );
-      final dao = SessionDao(db);
+      // The app's copy: the reconciler's write lands there at once, and at
+      // the server after.
+      final dao = container.read(sessionsDataProvider);
       expect(dao.getById(launched.session.id)!.status, SessionStatus.running);
 
       final before = container.read(sessionSignalsProvider).revision;
@@ -397,6 +393,11 @@ void main() {
       instance.livenessNotifier.value = PaneLiveness.exited;
 
       expect(dao.getById(launched.session.id)!.status, SessionStatus.unknown);
+      await dao.settled();
+      expect(
+        serverOf(container).sessionRows.getById(launched.session.id)!.status,
+        SessionStatus.unknown,
+      );
       // And it is announced, so the Explorer card redraws rather than keeping
       // the play glyph until something else happens to wake it.
       expect(
@@ -414,21 +415,9 @@ void main() {
       expect(endingOfStatus(SessionStatus.unknown), isNull);
     });
 
-    test('a status word this build cannot read is unknown, not a crash', () {
-      final db = AppDatabase.memory();
-      final server = FakeDataServer()..mirrorInto(db);
-      addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      server.projectRows.insert(project());
-      server.repositoryRows.insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation());
-      final dao = SessionDao(db)..insert(session());
-      db.execute("UPDATE sessions SET status = 'hibernating' WHERE id = 's1';");
-
-      // The last `values.byName` in `_fromRow`: one unreadable word used to
-      // throw the whole `SELECT * FROM sessions` away.
-      expect(dao.getById('s1')!.status, SessionStatus.unknown);
-      expect(dao.getAll(), hasLength(1));
-    });
+    // An unreadable status word reading as `unknown` is the store's rule and
+    // the wire's: packages/karmashala_session_engine/test/store/
+    // session_dao_test.dart and packages/karmashala_session/test/
+    // session_patch_test.dart.
   });
 }

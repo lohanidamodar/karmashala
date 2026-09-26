@@ -3,4 +3,6 @@
 library;
 
 export 'src/decision_record.dart';
+export 'src/follow_up.dart';
+export 'src/session_relay.dart';
 export 'src/session_event.dart';

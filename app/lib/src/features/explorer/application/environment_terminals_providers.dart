@@ -79,7 +79,7 @@ final panesByEnvironmentProvider =
             repository.id: repository.path.environmentId,
         };
         for (final session
-            in ref.read(sessionDaoProvider).getByPaneIds(unresolved)) {
+            in ref.read(sessionsDataProvider).getByPaneIds(unresolved)) {
           final environmentId = repositories[session.repositoryId];
           final paneId = session.paneId;
           if (environmentId == null || paneId == null) continue;

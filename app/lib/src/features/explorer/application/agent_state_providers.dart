@@ -6,7 +6,6 @@ import 'package:karmashala_notifications/attention.dart';
 import 'package:riverpod/riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 
-import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_status_registry.dart';
@@ -151,7 +150,7 @@ final workspaceSessionsProvider =
       };
       final lastActiveOf = ref.read(sessionLastActiveProvider);
       final entries = <WorkspaceSessionEntry>[];
-      for (final session in ref.read(sessionDaoProvider).getAll()) {
+      for (final session in ref.read(sessionsDataProvider).getAll()) {
         final repository = repositories[session.repositoryId];
         entries.add(
           WorkspaceSessionEntry(
@@ -165,7 +164,7 @@ final workspaceSessionsProvider =
           ),
         );
       }
-      for (final imported in ref.read(importedSessionDaoProvider).getAll()) {
+      for (final imported in ref.read(importedSessionsProvider).getAll()) {
         // A subagent's conversation is part of its parent's chat, not one of
         // the user's own.
         if (imported.isSubagent) continue;

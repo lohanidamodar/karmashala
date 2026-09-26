@@ -12,13 +12,14 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/session_outcome_writer.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// **A finished session's row said `running`, for ever.**
 ///
@@ -212,29 +213,35 @@ void main() {
 
   group('writing the row', () {
     late AppDatabase db;
-    late SessionDao dao;
+    // The writer's own copy of the server's rows; seeded at the server.
+    late SessionsData dao;
     late SessionOutcomeWriter writer;
     late FakeDataServer server;
 
-    setUp(() {
+    setUp(() async {
       db = AppDatabase.memory();
       server = FakeDataServer()..mirrorInto(db);
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
-      dao = SessionDao(db);
+      dao = await sessionsOf(server);
       writer = SessionOutcomeWriter(sessionDao: dao);
     });
 
     tearDown(() => db.close());
 
-    void live(String id, {SessionStatus status = SessionStatus.running}) {
-      dao.insert(session(id: id, status: status));
-      dao.updateExternalSessionId(id, 'cli-$id');
-    }
+    void live(String id, {SessionStatus status = SessionStatus.running}) =>
+        server.sessionRows.insert(
+          session(
+            id: id,
+            status: status,
+          ).copyWith(externalSessionId: 'cli-$id'),
+        );
 
-    SessionStatus statusOf(String id) => dao.getById(id)!.status;
+    /// What [via] — the writer's copy unless a container's is named — holds.
+    SessionStatus statusOf(String id, [SessionsData? via]) =>
+        (via ?? dao).getById(id)!.status;
 
     test('a stated ending is what moves the row', () {
       live('s1');
@@ -346,7 +353,10 @@ void main() {
       );
 
       expect(report.ending, AgentSessionEnding.completed);
-      expect(statusOf('s1'), SessionStatus.completed);
+      expect(
+        statusOf('s1', container.read(sessionsDataProvider)),
+        SessionStatus.completed,
+      );
     });
 
     test('a hosted row is not settled by a hook', () {
@@ -413,7 +423,11 @@ void main() {
           final report = sessionEnd('cli-s-$reason', reason);
           // Still an ending to the rebind and to automations.
           expect(report.ending, isNotNull, reason: reason);
-          expect(statusOf('s-$reason'), SessionStatus.running, reason: reason);
+          expect(
+            statusOf('s-$reason', container.read(sessionsDataProvider)),
+            SessionStatus.running,
+            reason: reason,
+          );
         }
       });
 
@@ -422,7 +436,7 @@ void main() {
           live('s-$reason');
           sessionEnd('cli-s-$reason', reason);
           expect(
-            statusOf('s-$reason'),
+            statusOf('s-$reason', container.read(sessionsDataProvider)),
             SessionStatus.completed,
             reason: reason,
           );

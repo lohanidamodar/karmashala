@@ -3,12 +3,9 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_adoption_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +15,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// Adopting a session the user started by hand in one of our panes.
 ///
@@ -37,8 +35,8 @@ class _MovableClock implements Clock {
 typedef Harness = ({
   AppDatabase db,
   SessionAdoptionService service,
-  SessionDao sessions,
-  ImportedSessionDao imported,
+  SessionsData sessions,
+  ImportedSessionsData imported,
   List<AdoptablePane> panes,
   List<DetectedSession> store,
   Map<String, List<String>> screens,
@@ -92,6 +90,11 @@ DetectedSession detected(
 late FakeDataServer server;
 late WorkspaceData workspace;
 
+/// This app's copy of the sessions, as every harness's service reads and
+/// writes them — one client, as one app has.
+late SessionsData sessions;
+late ImportedSessionsData imported;
+
 Harness harness({AppDatabase? database, bool installAgents = true}) {
   final db = database ?? AppDatabase.memory();
   if (database == null) {
@@ -123,12 +126,11 @@ Harness harness({AppDatabase? database, bool installAgents = true}) {
   final counters = _Counters();
   final clock = _MovableClock(testTime);
   final service = SessionAdoptionService(
-    sessionDao: SessionDao(db),
-    importedSessionDao: ImportedSessionDao(db),
+    sessionDao: sessions,
+    importedSessionDao: imported,
     workspace: workspace,
     environmentDao: ExecutionEnvironmentDao(db),
     installationDao: AgentInstallationDao(db),
-    linkDao: SessionRepositoryDao(db),
     agents: AgentRegistry.builtIn,
     ids: SequentialIdGenerator('adopted-'),
     clock: clock,
@@ -149,8 +151,8 @@ Harness harness({AppDatabase? database, bool installAgents = true}) {
   return (
     db: db,
     service: service,
-    sessions: SessionDao(db),
-    imported: ImportedSessionDao(db),
+    sessions: sessions,
+    imported: imported,
     panes: panes,
     store: store,
     screens: screens,
@@ -187,6 +189,9 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     workspace = await workspaceOf(server);
+    final client = await server.connect();
+    sessions = SessionsData(client);
+    imported = ImportedSessionsData(client, sessions);
   });
 
   group('a pane that starts an agent', () {
@@ -508,7 +513,7 @@ void main() {
 
     test('a row with no pane is rejoined and goes back to running', () {
       final h = harness();
-      SessionDao(h.db).insert(
+      mirroredServer(h.db).sessionRows.insert(
         session(
           id: 'old',
           status: SessionStatus.completed,
@@ -526,7 +531,7 @@ void main() {
 
     test('a row already naming a pane is left where it is', () {
       final h = harness();
-      SessionDao(h.db).insert(
+      mirroredServer(h.db).sessionRows.insert(
         session(
           id: 'live',
           status: SessionStatus.running,

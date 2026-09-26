@@ -11,11 +11,9 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_session/session.dart';
@@ -48,7 +46,7 @@ void main() {
       repository(id: 'r1', name: 'hub', path: r'C:\hub'),
     );
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 'n0',
         repositoryId: 'r1',
@@ -59,7 +57,7 @@ void main() {
         createdAt: testTime,
       ),
     );
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i0',
         repositoryId: 'r1',
@@ -181,7 +179,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
       await tester.pumpAndSettle();
 
-      expect(SessionDao(db).getById('n0')!.title, 'Fix sign-in');
+      expect(mirroredServer(db).sessionRows.getById('n0')!.title, 'Fix sign-in');
       expect(find.text('Fix sign-in'), findsOneWidget);
     });
 
@@ -195,7 +193,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
       await tester.pumpAndSettle();
 
-      expect(ImportedSessionDao(db).getById('i0')!.title, 'Older chat');
+      expect(mirroredServer(db).importedRows.getById('i0')!.title, 'Older chat');
     });
 
     testWidgets('opens Edit project on a focused project, which says so', (

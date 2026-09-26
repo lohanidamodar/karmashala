@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/git/application/checkout_probe_queue.dar
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -64,7 +63,7 @@ branch refs/heads/feature/login
       ),
     );
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', title: 'Work'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Work'));
 
     git = FakeCommandRunner(
       responder: (request) {

@@ -1,7 +1,6 @@
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/git.dart';
@@ -248,8 +247,8 @@ final projectSessionLocationsProvider = Provider.autoDispose
         SessionChangeKind.workspace,
       });
       final workspace = ref.read(workspaceDataProvider);
-      final sessionDao = ref.read(sessionDaoProvider);
-      final importedDao = ref.read(importedSessionDaoProvider);
+      final sessionDao = ref.read(sessionsDataProvider);
+      final importedDao = ref.read(importedSessionsProvider);
 
       final locations = <SessionLocation>[];
       for (final repo in workspace.repositoriesOf(projectId)) {

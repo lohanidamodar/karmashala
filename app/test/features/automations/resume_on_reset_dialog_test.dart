@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fixtures.dart';
@@ -136,7 +135,7 @@ void main() {
   testWidgets('a mode that asks disables the button with the gate\'s sentence, '
       'and picking one that does not enables it', (tester) async {
     h.usage.answer = limited();
-    SessionDao(h.db).updatePermissionMode('s1', null);
+    h.server.sessionRows.updatePermissionMode('s1', null);
     await open(tester, ['s1']);
 
     expect(find.textContaining('stops and asks'), findsOneWidget);
@@ -162,7 +161,7 @@ void main() {
         path: '/usr/bin/codex',
       ),
     );
-    SessionDao(h.db).insert(
+    h.server.sessionRows.insert(
       session(id: 's-ssh', title: 'Remote work', agentInstallationId: 'a-ssh'),
     );
     await open(tester, ['s-ssh']);
@@ -213,7 +212,7 @@ void main() {
   testWidgets('survives the window matrix, single and several', (tester) async {
     h.usage.answer = limited();
     h.addSession(id: 's2', title: 'Second');
-    SessionDao(h.db).updatePermissionMode('s2', null);
+    h.server.sessionRows.updatePermissionMode('s2', null);
     await expectSurvivesWindowMatrix(
       tester,
       build: () => app(['s2']),

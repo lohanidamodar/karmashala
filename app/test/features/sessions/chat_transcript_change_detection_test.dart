@@ -10,7 +10,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
@@ -51,7 +50,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',

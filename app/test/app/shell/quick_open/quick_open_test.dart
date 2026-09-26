@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -41,7 +40,7 @@ void main() {
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(session(id: 's1', title: 'Fix login redirect'))
       ..insert(session(id: 's2', title: 'Write the release notes'));
   });
@@ -419,7 +418,7 @@ void main() {
           terminalSessionsControllerProvider.notifier,
         );
         terminals.openTab(TerminalProfile.powerShell);
-        SessionDao(db).updatePaneId(
+        mirroredServer(db).sessionRows.updatePaneId(
           's1',
           container
               .read(terminalSessionsControllerProvider)
@@ -448,7 +447,7 @@ void main() {
           terminalSessionsControllerProvider.notifier,
         );
         terminals.openTab(TerminalProfile.powerShell);
-        SessionDao(db).updatePaneId(
+        mirroredServer(db).sessionRows.updatePaneId(
           's1',
           container
               .read(terminalSessionsControllerProvider)
@@ -742,7 +741,7 @@ void main() {
         tester,
         before: (container) {
           select(container);
-          SessionDao(db).updatePermissionMode('s1', 'mode=bypassPermissions');
+          mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=bypassPermissions');
           container
               .read(scheduledResumeControllerProvider)
               .schedule(

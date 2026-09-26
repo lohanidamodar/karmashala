@@ -31,6 +31,8 @@ import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 class _StaticSettings extends SettingsController {
   @override
@@ -51,7 +53,7 @@ void main() {
   late AppDatabase db;
   late FakeDataServer server;
   late DataClient data;
-  late SessionDao dao;
+  late FakeSessionRows dao;
   late FakeHostLifecycle host;
   late ProviderContainer container;
   late List<String> presenceAsked;
@@ -66,7 +68,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    dao = SessionDao(db);
+    dao = server.sessionRows;
     // Writes nothing: what the rows say is set by each test, so a write by
     // the app is the only thing that could change them.
     host = FakeHostLifecycle();
@@ -102,6 +104,9 @@ void main() {
     });
   });
 
+  /// The rows as this app holds them — where its own writes land at once.
+  SessionsData rows() => container.read(sessionsDataProvider);
+
   /// What the daemon's launcher writes: a running row naming its own id as
   /// its conversation, which Claude has not written a line of yet.
   void daemonRow(String id) {
@@ -135,7 +140,7 @@ void main() {
       expect(result['sessionId'], 'd1');
       // Never asked whether the conversation exists: nothing was resumed.
       expect(presenceAsked, isEmpty);
-      final row = dao.getById('d1')!;
+      final row = rows().getById('d1')!;
       expect(row.status, SessionStatus.running);
       expect(row.paneId, isNotNull);
       // The pane is the row's own — its host session is `karmashala_d1`, the
@@ -179,8 +184,8 @@ void main() {
 
       expect(launched.session.id, 'd1');
       expect(presenceAsked, isEmpty);
-      expect(dao.getAll(), hasLength(1));
-      expect(dao.getById('d1')!.status, SessionStatus.running);
+      expect(rows().getAll(), hasLength(1));
+      expect(rows().getById('d1')!.status, SessionStatus.running);
     });
 
     test('session_end asks the host to end it, and writes no status', () async {
@@ -196,7 +201,7 @@ void main() {
       expect(result['ended'], isTrue);
       expect(result.containsKey('paneId'), isFalse);
       expect(endedAtHost, ['d1']);
-      expect(dao.getById('d1')!.status, SessionStatus.running);
+      expect(rows().getById('d1')!.status, SessionStatus.running);
       // Asked to end, so nothing attaches to it while the host finishes.
       expect(
         container.read(sessionLauncherProvider).heldByHostOnly('d1'),
@@ -215,7 +220,7 @@ void main() {
 
       expect(result['reattached'], isFalse);
       expect(presenceAsked, ['d1']);
-      final pane = terminals().instanceFor(dao.getById('d1')!.paneId!)!;
+      final pane = terminals().instanceFor(rows().getById('d1')!.paneId!)!;
       expect(
         pane.agentLaunch!.arguments,
         containsAllInOrder(['--resume', 'd1']),
@@ -268,7 +273,7 @@ void main() {
 
       await expectLater(openSession('d1'), throwsA(anything));
 
-      expect(dao.getById('d1')!.status, SessionStatus.running);
+      expect(rows().getById('d1')!.status, SessionStatus.running);
     });
 
     test('a row no host knows is still marked failed, as before', () async {
@@ -277,7 +282,7 @@ void main() {
 
       await expectLater(openSession('d1'), throwsA(anything));
 
-      expect(dao.getById('d1')!.status, SessionStatus.failed);
+      expect(rows().getById('d1')!.status, SessionStatus.failed);
     });
   });
 
@@ -302,6 +307,6 @@ void main() {
 
     expect(shown, isTrue);
     expect(terminals().state.tabs, hasLength(1));
-    expect(dao.getById(launched.session.id)!.paneId, launched.paneId);
+    expect(rows().getById(launched.session.id)!.paneId, launched.paneId);
   });
 }

@@ -5,7 +5,6 @@ import 'package:xterm2/xterm.dart';
 import '../../workspaces/data/workspace_data.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/database/database_providers.dart';
 import '../../../core/util/agent_cli_bridge.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -37,7 +36,6 @@ import 'package:karmashala_agent_reporting/status.dart'
     show TerminalGridStatusSource;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show PermissionCycleOutcome, cyclePermissionTo, kPermissionCycleSettle;
-import '../data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
@@ -140,7 +138,7 @@ class SessionLauncher {
   SessionDepth depthForChildOf(String? parentSessionId) =>
       SessionDepth.forChildOf(
         parentSessionId,
-        _ref.read(sessionDaoProvider).parentOf,
+        _ref.read(sessionsDataProvider).parentOf,
       );
 
   void _publish(SessionChange change) =>

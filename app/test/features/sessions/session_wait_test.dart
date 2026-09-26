@@ -13,7 +13,6 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_wait.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -62,7 +61,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', title: 'Helper'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Helper'));
 
     reports = StreamController<AgentStatusReport>.broadcast();
     deadline = Completer<void>();
@@ -107,7 +106,7 @@ void main() {
         .layout
         .panes
         .first;
-    SessionDao(db).updatePaneId(sessionId, paneId);
+    mirroredServer(db).sessionRows.updatePaneId(sessionId, paneId);
     return paneId;
   }
 

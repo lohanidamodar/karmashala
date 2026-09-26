@@ -25,7 +25,7 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
   // The panes that exist, not every session ever opened: the pane index makes
   // this proportional to the tabs on screen rather than a full table scan.
   final titles = <String, String>{
-    for (final record in ref.read(sessionDaoProvider).getByPaneIds([
+    for (final record in ref.read(sessionsDataProvider).getByPaneIds([
       for (final tab in terminals.tabs) ...tab.layout.panes,
     ]))
       if (record.paneId != null) record.paneId!: record.title,

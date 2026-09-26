@@ -171,7 +171,7 @@ void main() {
     final sessions = await startFour(first);
     // The CLI never named this conversation, so resuming it would open a *new*
     // one wearing this row's title — the one thing every resume path refuses.
-    first.read(sessionDaoProvider).updateExternalSessionId(sessions[1], '');
+    first.read(sessionsDataProvider).updateExternalSessionId(sessions[1], '');
     final panes = [for (final id in sessions) paneOf(first, id)];
     first.read(terminalSessionsControllerProvider.notifier).persistLayout();
     first.dispose();

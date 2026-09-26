@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:flutter/material.dart';
@@ -347,7 +346,7 @@ void main() {
       tester,
     ) async {
       insertAllCheckouts();
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 's-hub',
           repositoryId: 'hub',
@@ -389,7 +388,7 @@ void main() {
     // terminal tabs put the panel back on the hub — which reads exactly like
     // the pick never happened.
     insertAllCheckouts();
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 's-hub',
         repositoryId: 'hub',

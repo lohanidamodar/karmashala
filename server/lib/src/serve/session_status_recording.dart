@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     as engine;
+import 'package:karmashala_session_engine/store.dart' as store;
 import 'package:karmashala_store/database.dart';
 
 import '../protocol/messages.dart';
@@ -9,17 +10,21 @@ import 'lifecycle_feed.dart';
 
 /// The daemon writing its own sessions' lifecycle status to the shared store:
 /// the snapshot at start, each event after it, and — each time a client
-/// watches — the rows it does not hold. Every write is published to watchers
-/// as a `sessionChanged`.
+/// watches — the rows it does not hold. Every row written is handed to
+/// [onWritten] — the data service, which tells every client of it on the
+/// data channel.
 class SessionStatusRecording {
   SessionStatusRecording(
     this._feed,
     AppDatabase database, {
     required DateTime Function() clock,
-  }) : _keeper = engine.HostedSessionStatusKeeper(database),
-       _now = clock;
+    void Function(String sessionId)? onWritten,
+  }) : _keeper = store.keeperOver(database),
+       _now = clock,
+       _onWritten = onWritten;
 
   final LifecycleFeed _feed;
+  final void Function(String sessionId)? _onWritten;
   final engine.HostedSessionStatusKeeper _keeper;
   final DateTime Function() _now;
 
@@ -30,10 +35,7 @@ class SessionStatusRecording {
   void start() {
     _subscriptions
       ..add(
-        _keeper.changes.listen(
-          (change) =>
-              _feed.publishSessionChanged(change.sessionId, change.to.name),
-        ),
+        _keeper.changes.listen((change) => _onWritten?.call(change.sessionId)),
       )
       ..add(_feed.events.listen((e) => _keeper.applyEvent(eventOf(e))));
     final observedAt = _now();

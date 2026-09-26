@@ -42,7 +42,7 @@ final agentUsageProvider = FutureProvider.autoDispose
 final usageInstallationForSessionProvider = Provider.autoDispose
     .family<AgentInstallation?, String>((ref, sessionId) {
       ref.watchSessionKinds(const {SessionChangeKind.membership});
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) return null;
       for (final installation in ref.watch(
         agentInstallationsControllerProvider,

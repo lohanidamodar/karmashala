@@ -19,7 +19,6 @@ class HostLifecycleWatch {
   final _parser = FrameParser();
   final _events = StreamController<LifecycleEvent>();
   final _hooks = StreamController<AgentHookEvent>();
-  final _sessionChanges = StreamController<SessionChangedMessage>();
   final _mcpCalls = StreamController<McpCallMessage>();
   final _companionCalls = StreamController<CompanionCallMessage>();
   final _companionEvents = StreamController<CompanionEventMessage>();
@@ -73,10 +72,6 @@ class HostLifecycleWatch {
   /// Every hook after [hookSnapshot], buffered like [events]. One with an
   /// [AgentHookEvent.holdId] keeps its agent waiting until [replyHook].
   Stream<AgentHookEvent> get hooks => _hooks.stream;
-
-  /// Each session row the host wrote a lifecycle status to, buffered like
-  /// [events].
-  Stream<SessionChangedMessage> get sessionChanges => _sessionChanges.stream;
 
   /// Each agent tool call the daemon forwards, once this client has offered
   /// tools with [offerMcpTools]; answer each with [answerMcpCall].
@@ -349,10 +344,6 @@ class HostLifecycleWatch {
       if (!_hooks.isClosed) _hooks.add(message.hook);
       return;
     }
-    if (message is SessionChangedMessage) {
-      if (!_sessionChanges.isClosed) _sessionChanges.add(message);
-      return;
-    }
     if (message is McpCallMessage) {
       if (!_mcpCalls.isClosed) _mcpCalls.add(message);
       return;
@@ -429,7 +420,6 @@ class HostLifecycleWatch {
     }
     if (!_events.isClosed) unawaited(_events.close());
     if (!_hooks.isClosed) unawaited(_hooks.close());
-    if (!_sessionChanges.isClosed) unawaited(_sessionChanges.close());
     if (!_mcpCalls.isClosed) unawaited(_mcpCalls.close());
     if (!_companionCalls.isClosed) unawaited(_companionCalls.close());
     if (!_companionEvents.isClosed) unawaited(_companionEvents.close());

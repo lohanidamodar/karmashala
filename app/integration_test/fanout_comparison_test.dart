@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart
 import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
@@ -26,6 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// A fan-out comparison end to end, against **real agent CLIs, real Git
 /// worktrees and a real SQLite file** — then a restart, a merge and a discard,
@@ -267,7 +267,10 @@ void main() {
     );
     List<String> panes() => [
       for (final result in launched.started)
-        ?SessionDao(db).getById(result.session.id)?.paneId,
+        ?container
+            .read(sessionsDataProvider)
+            .getById(result.session.id)
+            ?.paneId,
     ];
 
     expect(

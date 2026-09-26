@@ -1,7 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'fanout_harness.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// Parallel worktree fan-out: run one prompt on several agents at once, compare
 /// their diffs, merge one, discard the rest.
@@ -21,7 +21,7 @@ import 'fanout_harness.dart';
 void main() {
   group('validation refuses before anything is created', () {
     late Harness h;
-    setUp(() => h = harness());
+    setUp(() async => h = await connectedHarness());
     tearDown(() {
       h.container.dispose();
       h.db.close();
@@ -41,7 +41,7 @@ void main() {
     test('an empty prompt is refused', () async {
       await expectLater(run(prompt: ''), throwsA(isA<ArgumentError>()));
       expect(h.git.requests, isEmpty);
-      expect(SessionDao(h.db).getAll(), isEmpty);
+      expect(h.server.sessionRows.getAll(), isEmpty);
     });
 
     test('a whitespace-only prompt is refused', () async {
@@ -82,7 +82,7 @@ void main() {
     test(
       'gives every agent its own worktree on its own session branch',
       () async {
-        final h = harness();
+        final h = await connectedHarness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -123,7 +123,7 @@ void main() {
     );
 
     test('sends the trimmed prompt to every agent', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -139,7 +139,10 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       for (final result in launched.started) {
-        final paneId = SessionDao(h.db).getById(result.session.id)!.paneId!;
+        final paneId = h.container
+            .read(sessionsDataProvider)
+            .getById(result.session.id)!
+            .paneId!;
         final instance =
             controller.instanceFor(paneId)! as FakeTerminalInstance;
         expect(instance.agentLaunch!.arguments, contains('compare these'));
@@ -149,7 +152,7 @@ void main() {
 
   group('a partial launch keeps what started', () {
     test('the agents that started are returned, not discarded', () async {
-      final h = harness(paneFailsFor: {'flakyCli'});
+      final h = await connectedHarness(paneFailsFor: {'flakyCli'});
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -171,7 +174,7 @@ void main() {
     });
 
     test('the failure names the installation and carries the error', () async {
-      final h = harness(paneFailsFor: {'flakyCli'});
+      final h = await connectedHarness(paneFailsFor: {'flakyCli'});
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -191,7 +194,7 @@ void main() {
     test(
       'the started sessions are running rows; the failed one is failed',
       () async {
-        final h = harness(paneFailsFor: {'flakyCli'});
+        final h = await connectedHarness(paneFailsFor: {'flakyCli'});
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -203,7 +206,7 @@ void main() {
               prompt: 'go',
             );
 
-        final dao = SessionDao(h.db);
+        final dao = h.container.read(sessionsDataProvider);
         expect(
           dao.getById(launched.started.single.session.id)!.status,
           SessionStatus.running,
@@ -218,7 +221,9 @@ void main() {
     test(
       'every agent failing is a launch with no results, not a throw',
       () async {
-        final h = harness(paneFailsFor: {'roverCli', 'flakyCli'});
+        final h = await connectedHarness(
+          paneFailsFor: {'roverCli', 'flakyCli'},
+        );
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -239,7 +244,7 @@ void main() {
 
   group('diff', () {
     test('asks git for the worktree\'s diff', () async {
-      final h = harness(
+      final h = await connectedHarness(
         git: (request) => request.arguments.contains('diff')
             ? const CommandResult(
                 exitCode: 0,
@@ -269,7 +274,7 @@ void main() {
     test(
       'a result with no worktree diffs to nothing rather than throwing',
       () async {
-        final h = harness();
+        final h = await connectedHarness();
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
 
@@ -285,7 +290,7 @@ void main() {
 
   group('mergeWinner', () {
     test('refuses a winner with uncommitted changes', () async {
-      final h = harness(git: _gitWithStatus(' M lib/main.dart'));
+      final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -314,7 +319,7 @@ void main() {
     });
 
     test('merges the session branch when the worktree is clean', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -336,7 +341,7 @@ void main() {
     });
 
     test('refuses a result that has no worktree', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -355,7 +360,7 @@ void main() {
     });
 
     test('merging alone removes nothing', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
@@ -390,7 +395,10 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       for (final result in launched.started) {
-        final paneId = SessionDao(h.db).getById(result.session.id)!.paneId!;
+        final paneId = h.container
+            .read(sessionsDataProvider)
+            .getById(result.session.id)!
+            .paneId!;
         (controller.instanceFor(paneId)! as FakeTerminalInstance)
                 .livenessNotifier
                 .value =
@@ -400,7 +408,7 @@ void main() {
     }
 
     test('removes the losers and keeps the winner', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final (service, launched) = await launchedAndStopped(h);
@@ -430,7 +438,7 @@ void main() {
     });
 
     test('keeps a loser that still has uncommitted work', () async {
-      final h = harness(git: _gitWithStatus(' M lib/main.dart'));
+      final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final (service, launched) = await launchedAndStopped(h);
@@ -452,7 +460,7 @@ void main() {
     });
 
     test('removes uncommitted work only for the session named', () async {
-      final h = harness(git: _gitWithStatus(' M lib/main.dart'));
+      final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final (service, launched) = await launchedAndStopped(h);
@@ -474,7 +482,7 @@ void main() {
     });
 
     test('confirming one session does not license another', () async {
-      final h = harness(git: _gitWithStatus(' M lib/main.dart'));
+      final h = await connectedHarness(git: _gitWithStatus(' M lib/main.dart'));
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final service = h.container.read(fanOutServiceProvider);
@@ -487,7 +495,10 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       for (final result in launched.started) {
-        final paneId = SessionDao(h.db).getById(result.session.id)!.paneId!;
+        final paneId = h.container
+            .read(sessionsDataProvider)
+            .getById(result.session.id)!
+            .paneId!;
         (controller.instanceFor(paneId)! as FakeTerminalInstance)
                 .livenessNotifier
                 .value =
@@ -510,7 +521,7 @@ void main() {
     });
 
     test('refuses to delete a worktree an agent is still working in', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final service = h.container.read(fanOutServiceProvider);
@@ -535,7 +546,7 @@ void main() {
     });
 
     test('a git failure is reported, and does not stop the others', () async {
-      final h = harness(
+      final h = await connectedHarness(
         git: (request) => request.arguments.contains('remove')
             ? const CommandResult(
                 exitCode: 128,
@@ -556,7 +567,10 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       for (final result in launched.started) {
-        final paneId = SessionDao(h.db).getById(result.session.id)!.paneId!;
+        final paneId = h.container
+            .read(sessionsDataProvider)
+            .getById(result.session.id)!
+            .paneId!;
         (controller.instanceFor(paneId)! as FakeTerminalInstance)
                 .livenessNotifier
                 .value =
@@ -579,7 +593,7 @@ void main() {
     });
 
     test('a result with no worktree is nothing to discard', () async {
-      final h = harness();
+      final h = await connectedHarness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final service = h.container.read(fanOutServiceProvider);

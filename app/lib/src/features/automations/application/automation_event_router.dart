@@ -118,7 +118,7 @@ class AutomationEventRouter extends Notifier<int> {
     String sessionId, {
     bool consume = false,
   }) {
-    final session = ref.read(sessionDaoProvider).getById(sessionId);
+    final session = ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final lifetime = _dao.originOfSession(sessionId);
     final messaged = _dao.messagedOrigin(sessionId, consume: consume);
@@ -186,7 +186,7 @@ class AutomationEventRouter extends Notifier<int> {
 
   String _describeAction(Automation rule, AutomationEvent event) {
     final title =
-        ref.read(sessionDaoProvider).getById(event.sessionId)?.title ??
+        ref.read(sessionsDataProvider).getById(event.sessionId)?.title ??
         'that session';
     return switch (rule.trigger?.action) {
       AutomationEventAction.messageSession =>
@@ -198,7 +198,7 @@ class AutomationEventRouter extends Notifier<int> {
   String? _refusalFor(Automation rule, AutomationEvent event) {
     if (rule.trigger?.action == AutomationEventAction.messageSession) {
       return messageRefusal(
-        ref.read(sessionDaoProvider).getById(event.sessionId),
+        ref.read(sessionsDataProvider).getById(event.sessionId),
       )?.reason;
     }
     return ref.read(unattendedPreflightProvider).refusalFor(rule)?.reason;
@@ -206,7 +206,7 @@ class AutomationEventRouter extends Notifier<int> {
 
   Future<void> _act(EventRuleVerdict verdict, AutomationEvent event) async {
     final rule = verdict.automation;
-    final session = ref.read(sessionDaoProvider).getById(event.sessionId);
+    final session = ref.read(sessionsDataProvider).getById(event.sessionId);
     final run = AutomationRun(
       id: ref.read(idGeneratorProvider).newId(),
       automationId: rule.id,

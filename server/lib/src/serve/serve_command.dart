@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DecisionRecorded;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
-    show SessionDao;
+    show hostSessionIdOf;
+import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
@@ -222,10 +225,20 @@ Future<int> runServe(
     publish: (sessionId, body) =>
         server.lifecycle.publishAgentStatus(sessionId, body),
   );
-  final prompts = DaemonPromptAnswers(status: status, database: database);
-  // Every client's notes, todos, preferences and workspace: the desktop app
-  // reads and writes them here, and a phone's new project is written here.
-  final data = DataService(database);
+  // Every client's notes, todos, preferences, workspace and sessions: the
+  // desktop app reads and writes them here, a phone's new project is written
+  // here, and every row this server writes itself is told through it. The
+  // lifecycle status of a session it runs is its own to record.
+  final data = DataService(
+    database,
+    runsSession: (sessionId) =>
+        registry.find(hostSessionIdOf(sessionId)) != null,
+  );
+  final prompts = DaemonPromptAnswers(
+    status: status,
+    database: database,
+    onDecision: (decision) => data.announce([DecisionRecorded(decision)]),
+  );
   final companion = DaemonCompanion(
     database: database,
     data: data,
@@ -253,6 +266,7 @@ Future<int> runServe(
     server.lifecycle,
     database,
     clock: () => DateTime.now().toUtc(),
+    onWritten: (sessionId) => data.announceSessions([sessionId]),
   )..start();
   final companionServing = await _startCompanion(
     companion,
@@ -284,6 +298,7 @@ Future<int> runServe(
   );
   final automations = await _startAutomations(
     database: database,
+    data: data,
     recording: recording,
     registry: registry,
     server: server,
@@ -505,6 +520,7 @@ AppDatabase? _openStore(String dataDirectory, IOSink errSink) {
 /// there is no store or they cannot start: sessions do not need automations.
 Future<DaemonAutomations?> _startAutomations({
   required AppDatabase? database,
+  required DataService data,
   required SessionStatusRecording? recording,
   required SessionRegistry registry,
   required HostServer server,
@@ -524,6 +540,7 @@ Future<DaemonAutomations?> _startAutomations({
       configDirectory: p.join(dataDirectory, 'mcp'),
     ),
     announce: server.lifecycle.publishAutomationsChanged,
+    sessionWritten: (sessionId) => data.announceSessions([sessionId]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   try {

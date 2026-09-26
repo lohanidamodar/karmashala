@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -149,7 +148,7 @@ void main() {
         .layout
         .panes
         .single;
-    final dao = SessionDao(db)..insert(session(id: id, title: title));
+    final dao = server.sessionRows..insert(session(id: id, title: title));
     dao.updatePaneId(id, paneId);
     return tabId;
   }
@@ -220,7 +219,7 @@ void main() {
 
   testWidgets('07 a session with no pane of ours', (tester) async {
     terminals().openTab(TerminalProfile.powerShell);
-    SessionDao(db).insert(session(id: 's9', title: 'Ended yesterday'));
+    server.sessionRows.insert(session(id: 's9', title: 'Ended yesterday'));
     await pump(tester);
     container.read(selectedSessionIdProvider.notifier).select('s9');
     await tester.pumpAndSettle();

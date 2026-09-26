@@ -8,7 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,7 +50,7 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.antigravity));
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -117,7 +116,7 @@ void main() {
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    expect(SessionDao(db).getById('s1')!.title, 'test me now');
+    expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'test me now');
   });
 
   test('a phantom row learns its id and its name in one slot', () async {
@@ -130,8 +129,8 @@ void main() {
     File(
       p.join(storeHome, 'conversations', '$conversation.db'),
     ).setLastModifiedSync(testTime.add(const Duration(seconds: 5)));
-    SessionDao(db).delete('s1');
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.delete('s1');
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 's2',
         repositoryId: 'r1',
@@ -151,7 +150,7 @@ void main() {
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    final row = SessionDao(db).getById('s2')!;
+    final row = mirroredServer(db).sessionRows.getById('s2')!;
     expect(row.externalSessionId, conversation);
     expect(row.title, 'test me now');
   });
@@ -167,6 +166,6 @@ void main() {
 
     await ref.read(cliStoreSyncRunnerProvider)();
 
-    expect(SessionDao(db).getById('s1')!.title, 'New session');
+    expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'New session');
   });
 }

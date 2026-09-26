@@ -6,11 +6,10 @@ import 'dart:math' as math;
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import '../../agents/data/agent_installation_dao.dart';
-import '../../cli_detection/data/imported_session_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// Every session worth holding a status for. [load] never touches the disk: it
 /// reads the sampler's last answer, so any workspace size costs no stat.
@@ -28,8 +27,8 @@ class WatchedSessionLoader {
     this.coldRecheck = const Duration(minutes: 1),
   });
 
-  final SessionDao sessionDao;
-  final ImportedSessionDao importedSessionDao;
+  final SessionsData sessionDao;
+  final ImportedSessionsData importedSessionDao;
   final AgentInstallationDao installationDao;
   final AgentHookReports hookReports;
   final Clock clock;

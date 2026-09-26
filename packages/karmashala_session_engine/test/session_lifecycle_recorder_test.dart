@@ -2,6 +2,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 final _t0 = DateTime.utc(2026, 9, 25, 12);
 

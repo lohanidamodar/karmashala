@@ -53,7 +53,7 @@ final sessionIsHostedLiveProvider = Provider<bool Function(String)>(
 final sessionHostedPaneProvider =
     Provider<HostedTerminalInstance? Function(String)>(
       (ref) => (sessionId) {
-        final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+        final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
         if (paneId == null) return null;
         final instance = ref
             .read(terminalSessionsControllerProvider.notifier)
@@ -143,7 +143,7 @@ class QuitResumeService {
     final registry = _ref.read(agentRegistryProvider);
 
     final live = <InterruptedSession>[];
-    for (final session in _ref.read(sessionDaoProvider).getClaimingLive()) {
+    for (final session in _ref.read(sessionsDataProvider).getClaimingLive()) {
       if (!isLive(session.id)) continue;
       final agentId = installations
           .getById(session.agentInstallationId)
@@ -243,7 +243,7 @@ class QuitResumeService {
       );
     }
 
-    final dao = _ref.read(sessionDaoProvider);
+    final dao = _ref.read(sessionsDataProvider);
     final isLive = _ref.read(sessionIsHostedLiveProvider);
     final resume = <String>[];
     final skipped = <ResumeSkip>[];

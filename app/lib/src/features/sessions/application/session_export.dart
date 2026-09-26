@@ -72,7 +72,7 @@ class SessionExporter {
 
   /// Builds the export for [sessionId]. Throws only when the session is gone.
   Future<SessionExport> build(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
 
     final now = _ref.read(clockProvider).nowUtc();
@@ -225,7 +225,7 @@ class SessionExporter {
 
   List<DecisionRecord> _decisions(String sessionId) {
     try {
-      return _ref.read(decisionRecordDaoProvider).forSession(sessionId);
+      return _ref.read(sessionRecordsProvider).decisionsFor(sessionId);
     } on Object {
       return const [];
     }

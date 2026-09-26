@@ -6,7 +6,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -28,6 +27,7 @@ import '../../support/fakes.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Every provider the chip's tree caused to exist**, by name — the bill
 /// `session_switch_cost_test.dart` counts the same way.
@@ -90,18 +90,20 @@ void main() {
     service = FakeAgentUsageService(clock: clock);
   });
 
-  ProviderContainer containerFor({
+  Future<ProviderContainer> containerFor({
     String agentId = AgentIds.claudeCode,
     _Subscriptions? observer,
     void Function(AppDatabase db)? seed,
-  }) {
+  }) async {
     final db = seedUsageDatabase(agentId: agentId);
     seed?.call(db);
     addTearDown(db.close);
+    final data = await mirroredServer(db).override();
     final container = ProviderContainer(
       observers: [?observer],
       overrides: [
         databaseProvider.overrideWithValue(db),
+        data,
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
         // Settings opens on a tap; nothing here may probe a real machine.
@@ -131,7 +133,7 @@ void main() {
     WidgetTester tester, {
     String agentId = AgentIds.claudeCode,
   }) async {
-    final container = containerFor(agentId: agentId);
+    final container = await containerFor(agentId: agentId);
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
     return container;
@@ -337,7 +339,7 @@ void main() {
       fetchedAt: testTime,
     );
     final watched = _Subscriptions();
-    final container = containerFor(observer: watched);
+    final container = await containerFor(observer: watched);
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
     expect(find.text('62% · 2h11m'), findsOneWidget);
@@ -566,7 +568,7 @@ void main() {
     // a pane switch causes — and the first failure after coming back then had
     // nothing to fall back on.
     service.answer = usageSnapshot(percent: 62);
-    final container = containerFor();
+    final container = await containerFor();
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
     expect(find.text('62% · 2h11m'), findsOneWidget);
@@ -875,12 +877,12 @@ void main() {
     // its timer must stop — a chip that retained on every build and only
     // released its latest policy kept it running.
     service.answer = usageSnapshot(percent: 62);
-    final container = containerFor(
+    final container = await containerFor(
       seed: (db) {
         AgentInstallationDao(
           db,
         ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
-        SessionDao(db)
+        mirroredServer(db).sessionRows
           ..insert(session(id: 's2', agentInstallationId: 'a2'))
           ..insert(session(id: 's3'));
       },

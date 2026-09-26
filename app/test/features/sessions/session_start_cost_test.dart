@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/sessions/application/session_resume_prov
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -33,6 +32,8 @@ import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/counting_sessions.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// **What starting one session costs.**
 ///
@@ -130,7 +131,6 @@ void main() {
     final statements = <int, int>{};
     final rowReads = <int, int>{};
     final rowsScanned = <int, int>{};
-    final cellsScanned = <int, int>{};
     final statusSubscriptions = <int, int>{};
     final notifications = <int, int>{};
     final encodes = <int, int>{};
@@ -148,7 +148,6 @@ void main() {
         statements[count] = measured.statements;
         rowReads[count] = measured.rowReads;
         rowsScanned[count] = measured.rowsScanned;
-        cellsScanned[count] = measured.cellsScanned;
         statusSubscriptions[count] = measured.statusSubscriptions;
         notifications[count] = measured.notifications;
         encodes[count] = measured.encodes;
@@ -160,7 +159,6 @@ void main() {
           'reads=${measured.reads} writes=${measured.writes} '
           'rowReads=${measured.rowReads} scans=${measured.tableScans} '
           'rowsScanned=${measured.rowsScanned} '
-          'cellsScanned=${measured.cellsScanned} '
           'statusStreams=${measured.statusSubscriptions} '
           'notified=${measured.notifications} encodes=${measured.encodes} '
           'screenScans=${measured.screenScans} spawns=${measured.spawns}',
@@ -217,22 +215,10 @@ void main() {
             'a start may re-read the session list a fixed number of times, '
             'and that number is three: $rowsScanned',
       );
-      // **Columns, which the row count cannot see.** Three reads of the same
-      // rows are not three equal costs: two of them want the whole session and
-      // one wants its placement, which is two columns. 21 + 21 + 2 is the
-      // slope, and it was 21 x 3 while the placement map decoded a `Session`
-      // it then read `id` and `repositoryId` off.
-      expect(
-        [
-          (cellsScanned[10]! - cellsScanned[1]!) / 9,
-          (cellsScanned[100]! - cellsScanned[10]!) / 90,
-        ],
-        everyElement(44),
-        reason:
-            'an extra session costs a start 21 columns for the Explorer list, '
-            '21 for the ending sweep and 2 for the placement map — never 21 '
-            'for a reader that wants 2: $cellsScanned',
-      );
+      // The columns decoded per row were counted here while sessions were
+      // read from SQLite. Since slice 1c the app reads its copy of the
+      // server's rows: nothing is decoded on a read, so there is no column
+      // cost left to pin.
       expect(
         encodes.values.toSet(),
         orderedEquals([1]),
@@ -317,11 +303,18 @@ void main() {
         ),
       );
       expect(
-        workspace.db.query('SELECT pane_id FROM sessions WHERE id = ?;', [
-          result.session.id,
-        ]).single['pane_id'],
+        workspace.container
+            .read(sessionsDataProvider)
+            .getById(result.session.id)!
+            .paneId,
         result.paneId,
         reason: 'the row must record the pane it claimed',
+      );
+      await workspace.container.read(sessionsDataProvider).settled();
+      expect(
+        workspace.server.sessionRows.getById(result.session.id)!.paneId,
+        result.paneId,
+        reason: 'and the server must have it',
       );
     });
 
@@ -408,16 +401,9 @@ void main() {
   });
 }
 
-/// A read with no `WHERE` against the sessions table.
-///
-/// Either spelling: the Explorer's list orders its rows, and the placement map
-/// asks for two columns of every row and does not. Both are scans, and a
-/// pattern that only recognised the ordered one stopped counting the placement
-/// map the moment it was narrowed.
-final _unfilteredSessionScan = RegExp(r'FROM\s+sessions\s*(;|ORDER\s+BY)');
-
-/// One session row by id — what `sessionWhereaboutsProvider` asks per card.
-final _oneRowRead = RegExp(r'FROM\s+sessions\s+WHERE\s+id\s+=');
+/// A read of every session — the Explorer's list asks for whole rows, the
+/// placement map for each row's repository. Both are scans of the copy.
+const _wholeList = {'getAll', 'repositoryIdsById'};
 
 /// The number the permission chip reads: it watches only
 /// [SessionChangeKind.settings].
@@ -438,7 +424,6 @@ class _StartCost {
     required this.rowReads,
     required this.tableScans,
     required this.rowsScanned,
-    required this.cellsScanned,
     required this.statusSubscriptions,
     required this.notifications,
     required this.encodes,
@@ -450,7 +435,7 @@ class _StartCost {
   final int reads;
   final int writes;
 
-  /// `SELECT * FROM sessions WHERE id = ?` — one per per-row watcher that woke.
+  /// A `getById` of the sessions copy — one per per-row watcher that woke.
   /// The Explorer builds a card per session, so this is the number that used to
   /// track the size of the workspace.
   final int rowReads;
@@ -459,17 +444,11 @@ class _StartCost {
   /// shape of every list, so these are legitimate — but they must not multiply.
   final int tableScans;
 
-  /// **Rows decoded** out of the sessions table, which is the unit a statement
-  /// count hides: one `getAll()` is one statement and N `Session` objects, and
+  /// **Rows handed back** by the sessions copy, which is the unit a read count
+  /// hides: one `getAll()` is one read and N sessions, and
   /// `SessionEndingObserver` answers every membership-or-status signal with
   /// exactly that.
   final int rowsScanned;
-
-  /// **Column values decoded** out of the sessions table — rows times their
-  /// width. What tells a narrow read from a `SELECT *` over the same rows,
-  /// which [rowsScanned] cannot: the placement map asks for two columns and the
-  /// Explorer's own list asks for twenty-one, and only this number says so.
-  final int cellsScanned;
 
   /// Streams `agentSessionStatusProvider` had to build. The observer re-arms
   /// one `ref.listen` per running row on every rebuild, so a start that made
@@ -496,7 +475,7 @@ class _StartCost {
 class _StartWorkspace {
   _StartWorkspace._({
     required this.sessions,
-    required FakeDataServer server,
+    required this.server,
     required Override data,
   }) {
     server.mirrorInto(db);
@@ -508,6 +487,8 @@ class _StartWorkspace {
     container = ProviderContainer(
       overrides: [
         data,
+        // Session reads, counted: the unit this file prices since 1c.
+        ...countedSessionsOverrides(log),
         ...fakeTerminalOverrides(
           database: db,
           instanceFactory:
@@ -575,16 +556,15 @@ class _StartWorkspace {
       // `sessionWhereaboutsProvider` that scans the pane's screen, so a coarse
       // signal costs terminal text as well as SQL.
       final stopped = i % 3 == 0;
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         session(
           id: 's$i',
           title: 'Session $i',
           status: stopped
               ? (i == 0 ? SessionStatus.failed : SessionStatus.completed)
               : SessionStatus.running,
-        ),
+        ).copyWith(paneId: opened.paneId),
       );
-      SessionDao(db).updatePaneId('s$i', opened.paneId);
       if (stopped) {
         final instance =
             controller.instanceFor(opened.paneId)! as FakeTerminalInstance;
@@ -606,7 +586,11 @@ class _StartWorkspace {
   }
 
   final int sessions;
-  final db = _RowCountingDatabase();
+  final FakeDataServer server;
+  final db = CountingDatabase();
+
+  /// Every read of the sessions copy.
+  final log = SessionReadLog();
   final git = FakeCommandRunner();
   final Map<String, _CountingScreen> terminals = {};
 
@@ -666,6 +650,7 @@ class _StartWorkspace {
   /// One start, priced.
   Future<_StartCost> start() async {
     db.reset();
+    log.reset();
     git.requests.clear();
     processes = 0;
     statusSubscriptions = 0;
@@ -683,10 +668,9 @@ class _StartWorkspace {
       statements: db.count,
       reads: db.reads.length,
       writes: db.writes.length,
-      rowReads: db.reads.where(_oneRowRead.hasMatch).length,
-      tableScans: db.reads.where(_unfilteredSessionScan.hasMatch).length,
-      rowsScanned: db.sessionRowsScanned,
-      cellsScanned: db.sessionCellsScanned,
+      rowReads: log.reads.where((read) => read == 'getById').length,
+      tableScans: log.reads.where(_wholeList.contains).length,
+      rowsScanned: log.rows,
       statusSubscriptions: statusSubscriptions,
       notifications: notifications,
       // The new pane's own terminal is built during the measurement, so its
@@ -701,51 +685,6 @@ class _StartWorkspace {
   void dispose() {
     container.dispose();
     db.close();
-  }
-}
-
-/// A [CountingDatabase] that also counts the *rows* and the *columns* the
-/// sessions table gave back.
-///
-/// A statement count hides the whole of `SessionEndingObserver`: one `getAll()`
-/// is one statement and N decoded rows, and the observer answers every
-/// membership-or-status signal with one. Counting rows is what tells a scan
-/// that is O(1) in statements from one that is O(sessions) in work.
-///
-/// **And counting cells is what tells `SELECT *` from a narrow read**, which
-/// the row count is blind to: `SELECT id, repository_id` and
-/// `SELECT *` return the same rows, and one of them builds a two-entry map per
-/// row while the other builds twenty-one and parses an ISO timestamp out of
-/// two of them. That difference is invisible in every other number on this
-/// page and is most of the work a placement map actually does.
-class _RowCountingDatabase extends CountingDatabase {
-  int sessionRowsScanned = 0;
-
-  /// Column values handed back from the sessions table — rows x their width.
-  int sessionCellsScanned = 0;
-
-  static final _sessionTable = RegExp(r'FROM\s+sessions\b');
-
-  @override
-  void reset() {
-    super.reset();
-    sessionRowsScanned = 0;
-    sessionCellsScanned = 0;
-  }
-
-  @override
-  List<Map<String, Object?>> query(
-    String sql, [
-    List<Object?> params = const [],
-  ]) {
-    final rows = super.query(sql, params);
-    if (_sessionTable.hasMatch(sql)) {
-      sessionRowsScanned += rows.length;
-      for (final row in rows) {
-        sessionCellsScanned += row.length;
-      }
-    }
-    return rows;
   }
 }
 

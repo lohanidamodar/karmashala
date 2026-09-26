@@ -1,6 +1,5 @@
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
@@ -24,6 +23,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **What the account quota costs the window's own row — which is now
 /// nothing.**
@@ -105,7 +105,7 @@ void main() {
             title: 'Session',
           ),
         );
-    SessionDao(seeded).updatePaneId('s1', opened.paneId);
+    mirroredServer(seeded).sessionRows.updatePaneId('s1', opened.paneId);
     container.read(selectedSessionIdProvider.notifier).select(null);
   }
 

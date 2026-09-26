@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
@@ -64,7 +63,7 @@ void main() {
   );
 
   void insertSession({SessionStatus status = SessionStatus.idle}) =>
-      SessionDao(db).insert(session(id: 's1', status: status));
+      mirroredServer(db).sessionRows.insert(session(id: 's1', status: status));
 
   /// A run against session `s1`, open unless [verdict] is given.
   void insertRun({

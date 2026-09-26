@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -19,7 +18,6 @@ import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala/src/features/projects/application/cli_store_purge.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
@@ -66,7 +64,7 @@ void main() {
       File(p.join(claudeHome(), 'sessions', '$id.json'))
         ..createSync(recursive: true)
         ..writeAsStringSync(jsonEncode({'sessionId': id}));
-      ImportedSessionDao(db).insertIfAbsent(
+      mirroredServer(db).importedRows.insertIfAbsent(
         ImportedSession(
           id: 's$i',
           repositoryId: 'r1',
@@ -127,7 +125,7 @@ void main() {
       // already been refreshed — no frame is waiting on the filesystem.
       expect(container.read(projectsControllerProvider), isEmpty);
       expect(server.projectRows.getById('p1'), isNull);
-      expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
+      expect(mirroredServer(db).importedRows.getByRepository('r1'), isEmpty);
       // …and the store work has genuinely not finished yet. This is the
       // assertion that would fail if the purge were awaited inline again.
       expect(runner.pending, 1);
@@ -223,7 +221,7 @@ void main() {
         // project cleanly — no half-deleted project, and nothing silent.
         expect(server.projectRows.getById('p1'), isNull);
         expect(server.repositoryRows.getByProject('p1'), isEmpty);
-        expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
+        expect(mirroredServer(db).importedRows.getByRepository('r1'), isEmpty);
         expect(container.read(projectsControllerProvider), isEmpty);
         expect(transcriptsRemain(4), isTrue);
 
@@ -253,7 +251,7 @@ void main() {
     test('deleting the selected project clears the selection', () async {
       final db = seed(2);
       addTearDown(db.close);
-      SessionDao(db).insert(session(id: 'n1'));
+      mirroredServer(db).sessionRows.insert(session(id: 'n1'));
       final container = await mount(db);
       container.read(selectedProjectIdProvider.notifier).select('p1');
       container.read(selectedRepositoryIdProvider.notifier).select('r1');
@@ -357,7 +355,7 @@ void main() {
         });
 
         final mutator = CliSessionMutator();
-        final sessions = ImportedSessionDao(db).getByRepository('r1');
+        final sessions = mirroredServer(db).importedRows.getByRepository('r1');
         final report = await mutator.deleteAll([
           for (final s in sessions)
             DetectedSession(

@@ -6,11 +6,15 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:agent_cli/read.dart';
+import 'package:karmashala_session/events.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/transcript.dart';
 
 import 'keyed_replica.dart';
 
 /// The domains this app reads through the server.
-enum DataDomain { notes, todos, preferences, workspace }
+enum DataDomain { notes, todos, preferences, workspace, sessions }
 
 /// How this app reaches the server's data now.
 enum DataLinkState {
@@ -38,7 +42,8 @@ class DataConnection {
 }
 
 /// This app's client of the server's data: one link, a copy of each domain
-/// the server keeps up to date ([notes], [todos], [preferences]), and the
+/// the server keeps up to date ([notes], [todos], [preferences], the
+/// workspace, [sessions] and their records), and the
 /// writes, which land in the copy at once and at the server after. Reading
 /// never waits; before a server has answered, nothing is known (the copies
 /// are not primed) and the app says so rather than guessing.
@@ -107,6 +112,27 @@ class DataClient {
   final repositories = KeyedReplica<Repository>();
   final sections = KeyedReplica<StoredSection>();
 
+  /// The sessions domain: the rows, each one's checkouts (primary first),
+  /// the imported history (superseded records too), and the records kept
+  /// whole — decisions (by id), recaps (by session) and follow-ups (by id).
+  final sessions = KeyedReplica<Session>();
+  final sessionLinks = KeyedReplica<List<SessionRepositoryLink>>(_sameLinks);
+  final imported = KeyedReplica<ImportedSession>();
+  final decisions = KeyedReplica<DecisionRecord>();
+  final recaps = KeyedReplica<SessionRecap>();
+  final followUps = KeyedReplica<FollowUp>();
+
+  static bool _sameLinks(
+    List<SessionRepositoryLink> a,
+    List<SessionRepositoryLink> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   DataConnection get connection => _connection;
 
   Stream<DataConnection> get connectionChanges => _connectionChanges.stream;
@@ -134,6 +160,17 @@ class DataClient {
   /// changed as the app quits must still reach the server.
   final _inFlight = <Future<Object?>>{};
 
+  /// Completes once every write sent so far is answered (or refused) — for a
+  /// caller that wrote without waiting and now needs the server to have it.
+  Future<void> settled() async {
+    while (_inFlight.isNotEmpty) {
+      await Future.wait([
+        for (final write in [..._inFlight])
+          write.then<void>((_) {}, onError: (Object _) {}),
+      ]);
+    }
+  }
+
   Future<R> _write<R>(
     DataRequest<R> request,
     DataDomain domain,
@@ -142,7 +179,12 @@ class DataClient {
     try {
       final reply = await send(request);
       apply?.call(reply.value, reply.revision);
-      _onChanges(DataChanges(reply.revision, reply.changes));
+      _ownAnswer = true;
+      try {
+        _onChanges(DataChanges(reply.revision, reply.changes));
+      } finally {
+        _ownAnswer = false;
+      }
       return reply.value;
     } on DataRefused catch (refusal) {
       // A server that is away is re-read whole when it is back.
@@ -196,6 +238,8 @@ class DataClient {
         _replacePreferences(await send(const PreferencesGet()));
       case DataDomain.workspace:
         _replaceWorkspace(await send(const WorkspaceList()));
+      case DataDomain.sessions:
+        _replaceSessions(await send(const SessionsList()));
     }
   }
 
@@ -242,6 +286,69 @@ class DataClient {
     projects.replaceAll({for (final row in p) row.id: row}, reply.revision);
   }
 
+  void _replaceSessions(DataReply<SessionsSnapshot> reply) =>
+      _batch(() => _replaceSessionsNow(reply));
+
+  void _replaceSessionsNow(DataReply<SessionsSnapshot> reply) {
+    final snapshot = reply.value;
+    final revision = reply.revision;
+    // The records first and the rows last: a reader primed by the rows finds
+    // the rest in place.
+    sessionLinks.replaceAll(snapshot.links, revision);
+    imported.replaceAll({for (final r in snapshot.imported) r.id: r}, revision);
+    decisions.replaceAll({
+      for (final d in snapshot.decisions) '${d.id}': d,
+    }, revision);
+    recaps.replaceAll({
+      for (final r in snapshot.recaps) r.sessionId: r,
+    }, revision);
+    followUps.replaceAll({
+      for (final f in snapshot.followUps) '${f.id}': f,
+    }, revision);
+    sessions.replaceAll({for (final s in snapshot.sessions) s.id: s}, revision);
+  }
+
+  /// Applies a sessions-domain change the server made at [revision].
+  void applySessionChange(
+    SessionDomainChange change,
+    int revision,
+  ) => switch (change) {
+    SessionRowChanged(:final session) => sessions.applyAt(
+      session.id,
+      session,
+      revision,
+    ),
+    SessionRowRemoved(:final id) => sessions.applyAt(id, null, revision),
+    SessionLinksChanged(:final sessionId, :final links) => sessionLinks.applyAt(
+      sessionId,
+      links.isEmpty ? null : links,
+      revision,
+    ),
+    ImportedChanged(:final session) => imported.applyAt(
+      session.id,
+      session,
+      revision,
+    ),
+    ImportedRemoved(:final id) => imported.applyAt(id, null, revision),
+    DecisionRecorded(:final decision) => decisions.applyAt(
+      '${decision.id}',
+      decision,
+      revision,
+    ),
+    DecisionRemoved(:final id) => decisions.applyAt('$id', null, revision),
+    RecapChanged(:final recap) => recaps.applyAt(
+      recap.sessionId,
+      recap,
+      revision,
+    ),
+    RecapRemoved(:final sessionId) => recaps.applyAt(sessionId, null, revision),
+    FollowUpChanged(:final followUp) => followUps.applyAt(
+      '${followUp.id}',
+      followUp,
+      revision,
+    ),
+  };
+
   /// Applies a workspace-domain row the server wrote at [revision].
   void applyRow(RowChange change, int revision) => switch (change) {
     WorkspaceChanged(:final workspace) => workspaces.applyAt(
@@ -270,7 +377,36 @@ class DataClient {
     SectionRemoved(:final id) => sections.applyAt(id, null, revision),
   };
 
-  void _onChanges(DataChanges batch) {
+  var _batchDepth = 0;
+  var _ownAnswer = false;
+  final _batchEnds = StreamController<void>.broadcast(sync: true);
+
+  /// Whether the copies are taking in one batch from the server now: a whole
+  /// change batch, or a snapshot. A reader that turns each row into a signal
+  /// holds them until [batchEnds], so N rows one write moved wake watchers
+  /// once.
+  bool get applyingBatch => _batchDepth > 0;
+
+  /// Whether the batch being taken in is the answer to this app's own write —
+  /// every row it moved, side effects included — which the writer announces
+  /// itself.
+  bool get applyingOwnAnswer => _ownAnswer;
+
+  /// Fires, synchronously, when a batch has been taken in whole.
+  Stream<void> get batchEnds => _batchEnds.stream;
+
+  void _batch(void Function() apply) {
+    _batchDepth++;
+    try {
+      apply();
+    } finally {
+      if (--_batchDepth == 0 && !_batchEnds.isClosed) _batchEnds.add(null);
+    }
+  }
+
+  void _onChanges(DataChanges batch) => _batch(() => _applyChanges(batch));
+
+  void _applyChanges(DataChanges batch) {
     for (final change in batch.changes) {
       switch (change) {
         case NoteChanged(:final note):
@@ -285,6 +421,8 @@ class DataClient {
           preferences.applyAt(key, value, batch.revision);
         case final RowChange row:
           applyRow(row, batch.revision);
+        case final SessionDomainChange change:
+          applySessionChange(change, batch.revision);
       }
     }
   }
@@ -308,11 +446,13 @@ class DataClient {
       endpoint.send(const TodosList()),
       endpoint.send(const PreferencesGet()),
       endpoint.send(const WorkspaceList()),
+      endpoint.send(const SessionsList()),
     ]);
     _replaceNotes(snapshot[0] as DataReply<List<Note>>);
     _replaceTodos(snapshot[1] as DataReply<List<Todo>>);
     _replacePreferences(snapshot[2] as DataReply<Map<String, String>>);
     _replaceWorkspace(snapshot[3] as DataReply<WorkspaceSnapshot>);
+    _replaceSessions(snapshot[4] as DataReply<SessionsSnapshot>);
     _setConnection(const DataConnection(DataLinkState.connected));
   }
 
@@ -426,10 +566,22 @@ class DataClient {
     // Not awaited: a listener that paused (a provider nobody watches now)
     // would hold the done event, and close would never return.
     unawaited(_connectionChanges.close());
+    unawaited(_batchEnds.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());
-    for (final replica in [workspaces, projects, repositories, sections]) {
+    for (final replica in <KeyedReplica<Object>>[
+      workspaces,
+      projects,
+      repositories,
+      sections,
+      sessions,
+      sessionLinks,
+      imported,
+      decisions,
+      recaps,
+      followUps,
+    ]) {
       unawaited(replica.dispose());
     }
   }

@@ -11,9 +11,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_providers.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
@@ -28,6 +25,7 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// What quitting has to end, beyond the components the lifecycle owner builds
 /// itself.
@@ -43,8 +41,8 @@ void main() {
   late AppDatabase db;
   late FakeDataServer server;
   late Override data;
-  late SessionDao sessionDao;
-  late SessionEventDao eventDao;
+  late SessionsData sessions;
+  late SessionRecordsData records;
 
   setUp(() async {
     db = AppDatabase.memory();
@@ -54,15 +52,15 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    sessionDao = SessionDao(db);
-    eventDao = SessionEventDao(db);
+    final client = await server.connect();
+    sessions = SessionsData(client);
+    records = SessionRecordsData(client);
   });
   tearDown(() => db.close());
 
   SessionEngine buildEngine(ChatProtocolResolver resolver) => SessionEngine(
-    sessionDao: sessionDao,
-    eventDao: eventDao,
-    sessionRepositoryDao: SessionRepositoryDao(db),
+    sessions: sessions,
+    records: records,
     worktreeService: WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(),
       environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
@@ -103,16 +101,18 @@ void main() {
         title: 'Work',
         permission: ResolvedPermission.none,
       );
-      final eventsBefore = eventDao.countForSession(session.id);
+      await sessions.settled();
+      final eventsBefore = server.eventRows.countForSession(session.id);
 
       await engine.dispose();
+      await sessions.settled();
 
       expect(
-        sessionDao.getById(session.id)!.status,
+        server.sessionRows.getById(session.id)!.status,
         SessionStatus.running,
         reason: 'a run that was interrupted by a quit was not cancelled',
       );
-      expect(eventDao.countForSession(session.id), eventsBefore);
+      expect(server.eventRows.countForSession(session.id), eventsBefore);
     });
 
     test('is idempotent', () async {

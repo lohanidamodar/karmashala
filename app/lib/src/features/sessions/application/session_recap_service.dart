@@ -33,7 +33,7 @@ class SessionRecapService {
   /// Reads [sessionId]'s conversation, asks its CLI to recap it, and stores the
   /// answer. Throws [SessionRecapRefusal] with the reason otherwise.
   Future<SessionRecap> write(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       throw SessionRecapRefusal('This session no longer exists.');
     }
@@ -142,7 +142,7 @@ class SessionRecapService {
       turnCount: turns.length,
       writtenAt: _ref.read(clockProvider).nowUtc(),
     );
-    _ref.read(sessionRecapDaoProvider).write(written);
+    _ref.read(sessionRecordsProvider).writeRecap(written);
     _ref.invalidate(sessionRecapProvider(sessionId));
     return written;
   }
@@ -153,7 +153,7 @@ class SessionRecapService {
     String sessionId,
     String agentId,
   ) async {
-    final row = _ref.read(sessionDaoProvider).getById(sessionId);
+    final row = _ref.read(sessionsDataProvider).getById(sessionId);
     final externalId = row?.externalSessionId;
     if (externalId == null || externalId.isEmpty) return const [];
     final path = await _ref
@@ -191,8 +191,14 @@ final sessionRecapServiceProvider = Provider<SessionRecapService>(
   SessionRecapService.new,
 );
 
-/// The recap [sessionId] holds, or null when nobody has asked for one — a
-/// plain read of the stored row, invalidated by the service after a write.
-final sessionRecapProvider = Provider.autoDispose.family<SessionRecap?, String>(
-  (ref, sessionId) => ref.watch(sessionRecapDaoProvider).forSession(sessionId),
-);
+/// The recap [sessionId] holds, or null when nobody has asked for one — read
+/// from the copy, and again whenever a recap changes here or elsewhere.
+final sessionRecapProvider = Provider.autoDispose.family<SessionRecap?, String>((
+  ref,
+  sessionId,
+) {
+  final records = ref.watch(sessionRecordsProvider);
+  final changed = records.recapChanges.listen((_) => ref.invalidateSelf());
+  ref.onDispose(changed.cancel);
+  return records.recapFor(sessionId);
+});

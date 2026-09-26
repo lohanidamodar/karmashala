@@ -86,7 +86,7 @@ extension TerminalPaneTitles on TerminalSessionsController {
   /// The current name of session [id], or null when there is no such session.
   String? _sessionTitle(String id) {
     try {
-      final title = ref.read(sessionDaoProvider).getById(id)?.title.trim();
+      final title = ref.read(sessionsDataProvider).getById(id)?.title.trim();
       return (title == null || title.isEmpty) ? null : title;
     } catch (_) {
       // No database in this container — a terminal-only test. The pane keeps

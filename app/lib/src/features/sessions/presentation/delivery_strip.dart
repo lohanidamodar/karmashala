@@ -126,7 +126,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
 
   /// Where this session's git lives — its worktree, or the repository itself.
   EnvironmentPath? _directory() {
-    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     if (session == null) return null;
     return session.worktree ??
         ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
@@ -144,7 +144,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
   Future<void> _archive() => _run(() async {
     final messenger = ScaffoldMessenger.of(context);
     final worktree = ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .getById(widget.sessionId)
         ?.worktree;
     if (worktree == null) return;

@@ -29,11 +29,12 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 25, 10, 0, 30);
 
   test('the feed\'s frame types, and the bump that reshaped `watch`', () {
-    expect(kProtocolVersion, 12);
+    expect(kProtocolVersion, 13);
     expect(MessageType.watch.code, 0x17);
     expect(MessageType.watching.code, 0x18);
     expect(MessageType.lifecycle.code, 0x19);
-    expect(MessageType.sessionChanged.code, 0x1c);
+    // 0x1c, `sessionChanged`, retired in 13: the data channel tells it.
+    expect(MessageType.values.where((type) => type.code == 0x1c), isEmpty);
   });
 
   test('watch carries its request id and the sessions the client runs', () {
@@ -41,14 +42,6 @@ void main() {
     expect(watch.requestId, 7);
     expect(watch.runByClient, ['a', 'b.c']);
     expect(roundTrip(const WatchMessage(8)).runByClient, isEmpty);
-  });
-
-  test('sessionChanged round-trips the row and the status written', () {
-    final changed = roundTrip(
-      const SessionChangedMessage(sessionId: 's.1', status: 'completed'),
-    );
-    expect(changed.sessionId, 's.1');
-    expect(changed.status, 'completed');
   });
 
   test('each event kind round-trips with the facts it carries', () {

@@ -56,7 +56,7 @@ SessionOfferOutcome offerToSession(
   required String sessionId,
   required String text,
 }) {
-  final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
   // Answered before the terminals are read at all: a session in no pane has no
   // face to follow, and mounting the controller to find that out would start
   // the pane machinery for a panel that never needed it.

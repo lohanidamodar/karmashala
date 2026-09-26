@@ -9,8 +9,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,21 +66,22 @@ void main() {
   });
   tearDown(() => db.close());
 
-  void addSession({EnvironmentPath? at = worktree}) => SessionDao(db).insert(
-    Session(
-      id: 's1',
-      repositoryId: 'r1',
-      agentInstallationId: 'a1',
-      title: 'Fix the login',
-      useWorktree: at != null,
-      worktree: at,
-      status: SessionStatus.completed,
-      createdAt: testTime,
-    ),
-  );
+  void addSession({EnvironmentPath? at = worktree}) =>
+      server.sessionRows.insert(
+        Session(
+          id: 's1',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Fix the login',
+          useWorktree: at != null,
+          worktree: at,
+          status: SessionStatus.completed,
+          createdAt: testTime,
+        ),
+      );
 
   void addHistory() {
-    SessionEventDao(db).append(
+    server.eventRows.append(
       SessionEvent(
         sessionId: 's1',
         seq: 0,
@@ -128,10 +127,11 @@ void main() {
   test('removes the worktree and records when', () async {
     addSession();
     final outcome = await build().service.archive('s1');
+    await data.settled();
 
     expect(outcome.isArchived, isTrue);
-    expect(SessionDao(db).getById('s1')!.isArchived, isTrue);
-    expect(SessionDao(db).getById('s1')!.archivedAt, testTime);
+    expect(server.sessionRows.getById('s1')!.isArchived, isTrue);
+    expect(server.sessionRows.getById('s1')!.archivedAt, testTime);
     expect(
       requests.map((r) => r.arguments).where((a) => a.contains('worktree')),
       [
@@ -147,13 +147,13 @@ void main() {
     expect((await build().service.archive('s1')).isArchived, isTrue);
 
     // The session row itself is still there — archiving is not deleting.
-    final session = SessionDao(db).getById('s1');
+    final session = server.sessionRows.getById('s1');
     expect(session, isNotNull);
     expect(session!.title, 'Fix the login');
     // And it still says what the agent did, which is the whole point.
     expect(session.status, SessionStatus.completed);
     expect(
-      SessionEventDao(db).listForSession('s1').single.payload,
+      server.eventRows.listForSession('s1').single.payload,
       '{"text":"fix the login"}',
     );
     expect(CheckpointDao(db).forSession('s1').single.treeSha, 'tree');
@@ -173,12 +173,12 @@ void main() {
         .tabs
         .single
         .focusedPaneId;
-    SessionDao(db).updatePaneId('s1', paneId);
+    server.sessionRows.updatePaneId('s1', paneId);
 
     final outcome = await harness.service.archive('s1');
     expect(outcome.refusal, ArchiveRefusal.stillRunning);
     expect(outcome.message, contains('still running'));
-    expect(SessionDao(db).getById('s1')!.isArchived, isFalse);
+    expect(server.sessionRows.getById('s1')!.isArchived, isFalse);
     expect(requests.any((r) => r.arguments.contains('remove')), isFalse);
   });
 
@@ -190,7 +190,7 @@ void main() {
     expect(outcome.refusal, ArchiveRefusal.uncommittedChanges);
     expect(outcome.changes.length, 2);
     expect(outcome.message, contains('2 uncommitted changes'));
-    expect(SessionDao(db).getById('s1')!.isArchived, isFalse);
+    expect(server.sessionRows.getById('s1')!.isArchived, isFalse);
     expect(
       requests.any((r) => r.arguments.contains('remove')),
       isFalse,
@@ -253,7 +253,7 @@ void main() {
       final outcome = await build().service.archive('s1');
       expect(outcome.isArchived, isFalse);
       expect(outcome.message, contains('cannot remove working tree'));
-      expect(SessionDao(db).getById('s1')!.isArchived, isFalse);
+      expect(server.sessionRows.getById('s1')!.isArchived, isFalse);
     },
   );
 

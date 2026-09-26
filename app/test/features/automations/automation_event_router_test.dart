@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/automations/application/automation_event
 import 'package:karmashala/src/features/automations/application/automation_scheduler.dart';
 import 'package:karmashala/src/features/automations/application/usage_limit_watcher.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/events.dart';
 import 'package:karmashala_automations/persistence.dart';
@@ -33,7 +32,7 @@ class _StartingFiring implements AutomationFiring {
   }) async {
     final id = 'started-${started.length + 1}';
     started.add(id);
-    SessionDao(_harness.db).insert(session(id: id, title: automation.name));
+    _harness.server.sessionRows.insert(session(id: id, title: automation.name));
     AutomationDao(_harness.db).updateRun(
       queued!.copyWith(state: AutomationRunState.running, sessionId: id),
     );
@@ -228,7 +227,7 @@ void main() {
   test('a burst of events is rate-limited per rule', () async {
     final automation = rule(action: AutomationEventAction.startSession);
     for (var i = 2; i <= 6; i++) {
-      SessionDao(h.db).insert(session(id: 's$i', title: 'Other $i'));
+      h.server.sessionRows.insert(session(id: 's$i', title: 'Other $i'));
     }
     // Five sessions finish within the same second.
     for (var i = 2; i <= 6; i++) {
@@ -338,7 +337,7 @@ void main() {
 
     test('an ended session is not restarted to take a message', () async {
       final automation = rule();
-      SessionDao(h.db).updatePaneId('s1', null);
+      h.server.sessionRows.updatePaneId('s1', null);
       await turn('s1');
       final run = dao().runsFor(automation.id).single;
       expect(run.state, AutomationRunState.missed);

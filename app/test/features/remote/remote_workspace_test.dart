@@ -15,7 +15,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,7 +279,7 @@ void main() {
 
       expect(sent.last.type, FrameType.result);
       final started = RemoteSessionStarted.fromJson(sent.last.payload);
-      final session = SessionDao(db).getById(started.sessionId);
+      final session = mirroredServer(db).sessionRows.getById(started.sessionId);
       expect(session, isNotNull);
       expect(session!.title, 'From the phone');
       expect(session.repositoryId, 'r1');
@@ -298,7 +297,7 @@ void main() {
 
       final started = RemoteSessionStarted.fromJson(sent.last.payload);
       expect(
-        SessionDao(db).getById(started.sessionId)!.permissionMode,
+        mirroredServer(db).sessionRows.getById(started.sessionId)!.permissionMode,
         bypassStored,
       );
     });
@@ -312,7 +311,7 @@ void main() {
       expect(sent.last.type, FrameType.error);
       expect(sent.last.payload['code'], ErrorCode.badRequest.wire);
       expect(sent.last.payload['message'], contains('Rover CLI'));
-      expect(SessionDao(db).getAll(), isEmpty);
+      expect(mirroredServer(db).sessionRows.getAll(), isEmpty);
     });
 
     test('refuses a mode that does not exist here', () async {
@@ -326,7 +325,7 @@ void main() {
       await start(repositoryId: 'gone');
 
       expect(sent.last.payload['code'], ErrorCode.notFound.wire);
-      expect(SessionDao(db).getAll(), isEmpty);
+      expect(mirroredServer(db).sessionRows.getAll(), isEmpty);
     });
 
     test('refuses an agent installed somewhere else', () async {
@@ -346,14 +345,14 @@ void main() {
         sent.last.payload['message'],
         contains('not installed where that checkout lives'),
       );
-      expect(SessionDao(db).getAll(), isEmpty);
+      expect(mirroredServer(db).sessionRows.getAll(), isEmpty);
     });
 
     test('the same key twice leaves one row behind', () async {
       await start(title: 'Once');
       await start(title: 'Once');
 
-      expect(SessionDao(db).getAll(), hasLength(1));
+      expect(mirroredServer(db).sessionRows.getAll(), hasLength(1));
       expect(sent.last.payload['replayed'], isTrue);
     });
   });

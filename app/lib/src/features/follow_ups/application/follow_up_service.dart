@@ -7,13 +7,14 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
 import '../../verification/application/verification_providers.dart';
 import 'package:karmashala_verification/verification.dart';
-import '../data/follow_up_dao.dart';
-import '../domain/follow_up.dart';
-import '../domain/follow_up_policy.dart';
-import 'follow_up_providers.dart';
+import 'package:karmashala_session/events.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import '../../sessions/data/sessions_data.dart';
 
 /// The only thing that raises and retires follow-ups. It may read the workspace
-/// and write its own table — **it holds no path to anything that starts a process**.
+/// and write follow-ups through the server — **it holds no path to anything
+/// that starts a process**. The server keeps one open per session; this
+/// decides which endings are worth one.
 class FollowUpService {
   FollowUpService(this._ref);
 
@@ -22,9 +23,9 @@ class FollowUpService {
 
   /// `'<sessionId>/<ending>'` for every ending that has **ever** produced a
   /// follow-up. Resolved rows included, or a dismissed one is re-raised at once.
-  late final Set<String> _considered = _dao.raisedEndings();
+  late final Set<String> _considered = _followUps.raisedEndings();
 
-  FollowUpDao get _dao => _ref.read(followUpDaoProvider);
+  FollowUpsData get _followUps => _ref.read(followUpsDataProvider);
 
   /// One pass over the workspace the caller has already read, so raise and retire
   /// see the same list. Returns whether anything actually changed.
@@ -47,16 +48,18 @@ class FollowUpService {
     return _retireWhatMovedOn(sessions, carriedForward) || changed;
   }
 
-  /// A session ended. Raise a follow-up if the rule says one is owed; null in
-  /// the ordinary case. [carriedForward] is passed in because [sweep] knows it.
-  FollowUp? notice({
+  /// A session ended. Raise a follow-up if the rule says one is owed — the
+  /// server's answer, null when that session already has one open; null, with
+  /// nothing sent, in the ordinary case. [carriedForward] is passed in because
+  /// [sweep] knows it.
+  Future<FollowUp?>? notice({
     required String sessionId,
     required SessionEnding ending,
     bool carriedForward = false,
     Session? session,
   }) {
     try {
-      final row = session ?? _ref.read(sessionDaoProvider).getById(sessionId);
+      final row = session ?? _ref.read(sessionsDataProvider).getById(sessionId);
       // The same silence every other action in this app gives for a session
       // that no longer resolves. Never an exception, and never a launch.
       if (row == null) return null;
@@ -82,7 +85,7 @@ class FollowUpService {
         return null;
       }
 
-      final raised = _dao.raise(
+      final raised = _followUps.raise(
         FollowUp(
           sessionId: sessionId,
           reason: reason,
@@ -92,7 +95,10 @@ class FollowUpService {
         ),
       );
       _considered.add(mark);
-      return raised;
+      return raised.catchError((Object error) {
+        _log.warning('Could not raise a follow-up for $sessionId.', error);
+        return null;
+      });
     } catch (error, stack) {
       // A notice that cannot be raised must never break the thing it was
       // describing. This runs off a status stream and a revision bump; throwing
@@ -112,9 +118,9 @@ class FollowUpService {
 
   /// The user dismissed the follow-up stored at [rowId]. Resolving straight from
   /// the id keeps the read off the path that runs under the user's cursor.
-  void dismissRow(int rowId) => _dao.resolve(
+  void dismissRow(int rowId) => _followUps.resolve(
     rowId,
-    resolution: FollowUpResolution.dismissed,
+    FollowUpResolution.dismissed,
     at: _ref.read(clockProvider).nowUtc(),
   );
 
@@ -131,7 +137,7 @@ class FollowUpService {
   /// Closes follow-ups whose session has since been handed on or deleted — the
   /// notice has to leave when the work does.
   bool _retireWhatMovedOn(List<Session> sessions, Set<String> carriedForward) {
-    final open = _dao.open();
+    final open = _followUps.open();
     if (open.isEmpty) return false;
     final present = {for (final session in sessions) session.id};
     var retired = false;
@@ -150,11 +156,7 @@ class FollowUpService {
   void _resolve(FollowUp followUp, FollowUpResolution resolution) {
     final id = followUp.id;
     if (id == null) return;
-    _dao.resolve(
-      id,
-      resolution: resolution,
-      at: _ref.read(clockProvider).nowUtc(),
-    );
+    _followUps.resolve(id, resolution, at: _ref.read(clockProvider).nowUtc());
   }
 
   List<VerificationRun> _runsFor(String sessionId) =>
@@ -184,7 +186,7 @@ class FollowUpService {
   /// The last thing the session wrote down before it stopped. An empty record
   /// yields null: nobody wrote anything, which is not evidence about the session.
   String? _lastDecision(String sessionId) {
-    final record = _ref.read(decisionRecordDaoProvider).forSession(sessionId);
+    final record = _ref.read(sessionRecordsProvider).decisionsFor(sessionId);
     if (record.isEmpty) return null;
     final last = record.last;
     return 'Last recorded decision — ${last.kind.label}: ${last.summary}';

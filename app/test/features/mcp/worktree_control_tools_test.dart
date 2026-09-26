@@ -8,7 +8,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -107,7 +106,7 @@ branch refs/heads/$worktreeBranch
       repository(id: 'r2', name: 'app-feature', path: worktreeRowPath),
     );
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(
         id: 's1',
         title: 'Work',
@@ -477,7 +476,7 @@ branch refs/heads/$worktreeBranch
           .layout
           .panes
           .first;
-      SessionDao(db).updatePaneId('s1', paneId);
+      mirroredServer(db).sessionRows.updatePaneId('s1', paneId);
 
       final result = await callTool('worktree_remove', {'repositoryId': 'r2'});
 

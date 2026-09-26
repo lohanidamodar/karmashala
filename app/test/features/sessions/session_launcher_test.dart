@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -26,6 +25,7 @@ import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// An agent that exists only as a registry entry: no adapter code, no protocol
 /// adapter, no store. If this can run, "adding an agent is a data entry" is
@@ -115,7 +115,9 @@ void main() {
 
     return launched.then((result) {
       // The row exists, knows its pane, and says it is a pane session.
-      final stored = SessionDao(h.db).getById(result.session.id)!;
+      final stored = h.container
+          .read(sessionsDataProvider)
+          .getById(result.session.id)!;
       expect(stored.surface, SessionSurface.pane);
       expect(stored.paneId, isNotNull);
       expect(stored.paneId, result.paneId);
@@ -213,7 +215,10 @@ void main() {
     // setting. Stamping the resolved default here is what froze every session
     // at whatever Settings said the day it started.
     expect(
-      SessionDao(h.db).getById(defaulted.session.id)!.permissionMode,
+      h.container
+          .read(sessionsDataProvider)
+          .getById(defaulted.session.id)!
+          .permissionMode,
       isNull,
     );
     expect(
@@ -225,7 +230,10 @@ void main() {
     // A caller that resolved a mode for this session *is* a choice, and it is
     // recorded so the next resume runs under it.
     expect(
-      SessionDao(h.db).getById(chosen.session.id)!.permissionMode,
+      h.container
+          .read(sessionsDataProvider)
+          .getById(chosen.session.id)!
+          .permissionMode,
       bypassStored,
     );
   });
@@ -260,7 +268,10 @@ void main() {
       launcher.permissionFor(
         'roverCli',
         SessionPurpose.existingSession,
-        sessionMode: SessionDao(h.db).getById(id)!.permissionMode,
+        sessionMode: h.container
+            .read(sessionsDataProvider)
+            .getById(id)!
+            .permissionMode,
       ),
       askSelection,
     );
@@ -298,7 +309,10 @@ void main() {
     ]);
 
     expect(
-      SessionDao(h.db).getById(launched.session.id)!.permissionMode,
+      h.container
+          .read(sessionsDataProvider)
+          .getById(launched.session.id)!
+          .permissionMode,
       isNull,
     );
     final effective = launcher.effectivePermissionFor(launched.session.id)!;
@@ -330,11 +344,18 @@ void main() {
     expect(child.session.parentSessionId, root.session.id);
     // Read back from storage: the chain is the only record of depth.
     expect(
-      SessionDao(h.db).getById(grandchild.session.id)!.parentSessionId,
+      h.container
+          .read(sessionsDataProvider)
+          .getById(grandchild.session.id)!
+          .parentSessionId,
       child.session.id,
     );
     expect(
-      SessionDao(h.db).childrenOf(root.session.id).single.id,
+      h.container
+          .read(sessionsDataProvider)
+          .childrenOf(root.session.id)
+          .single
+          .id,
       child.session.id,
     );
 
@@ -343,7 +364,7 @@ void main() {
       throwsA(isA<SessionDepthRefused>()),
     );
     // And nothing was created for the refused call.
-    expect(SessionDao(h.db).getAll().length, 3);
+    expect(h.container.read(sessionsDataProvider).getAll().length, 3);
   });
 
   test('a spawned session names its parent in its opening prompt', () async {
@@ -547,7 +568,7 @@ void main() {
       throwsA(isA<SessionLaunchRefused>()),
     );
     expect(
-      SessionDao(h.db).getAll(),
+      h.container.read(sessionsDataProvider).getAll(),
       isEmpty,
       reason: 'refused before anything was written',
     );
@@ -572,7 +593,10 @@ void main() {
           ),
         );
 
-    expect(SessionDao(h.db).getById(result.session.id), isNotNull);
+    expect(
+      h.container.read(sessionsDataProvider).getById(result.session.id),
+      isNotNull,
+    );
   });
 
   group('the directory a session runs in', () {
@@ -585,7 +609,7 @@ void main() {
     /// A session adopted out of a terminal pane: a real row, in a
     /// subdirectory, with the CLI's own id and no pane of its own.
     void adoptedIn(AppDatabase db, EnvironmentPath directory) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(
           id: 'adopted-1',
           title: 'Adopted',
@@ -612,7 +636,9 @@ void main() {
 
       // The same fact as an adopted session's, from the one place that already
       // knew it. Two sources for it would drift.
-      final stored = SessionDao(h.db).getById(launched.session.id)!;
+      final stored = h.container
+          .read(sessionsDataProvider)
+          .getById(launched.session.id)!;
       expect(stored.workingDirectory, repository().path);
       expect(stored.worktree, isNull);
       expect(stored.useWorktree, isFalse);
@@ -639,7 +665,9 @@ void main() {
             ),
           );
 
-      final stored = SessionDao(h.db).getById(launched.session.id)!;
+      final stored = h.container
+          .read(sessionsDataProvider)
+          .getById(launched.session.id)!;
       expect(stored.workingDirectory, worktree);
       // And the worktree still says it is one, which the cwd never does.
       expect(stored.worktree, worktree);
@@ -681,7 +709,7 @@ void main() {
       final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      SessionDao(h.db).insert(
+      h.server.sessionRows.insert(
         session(
           id: 'old-1',
           title: 'Before v22',
@@ -719,7 +747,7 @@ void main() {
         environmentId: 'windows',
         path: r'C:\src\demo\.karmashala-worktrees\app-old',
       );
-      SessionDao(h.db).insert(
+      h.server.sessionRows.insert(
         session(
           id: 'wt-1',
           title: 'In a worktree',
@@ -769,7 +797,10 @@ void main() {
           .instanceFor(launched.paneId!)!;
       expect(instance.agentLaunch!.workingDirectory, subdirectory);
       expect(
-        SessionDao(h.db).getById(launched.session.id)!.workingDirectory,
+        h.container
+            .read(sessionsDataProvider)
+            .getById(launched.session.id)!
+            .workingDirectory,
         elsewhere,
       );
     });
@@ -806,7 +837,10 @@ void main() {
       // drive, a WSL distro that is not running — and overwriting it would turn
       // that into permanent data loss.
       expect(
-        SessionDao(h.db).getById('adopted-1')!.workingDirectory,
+        h.container
+            .read(sessionsDataProvider)
+            .getById('adopted-1')!
+            .workingDirectory,
         elsewhere,
       );
     });
@@ -899,10 +933,15 @@ void main() {
     // tree drawing both and the double-writer check choosing between them.
     expect(restarted.session.id, id);
     expect(
-      SessionDao(h.db).getAllByExternalSessionId('external-1'),
+      h.container
+          .read(sessionsDataProvider)
+          .getAllByExternalSessionId('external-1'),
       hasLength(1),
     );
-    expect(SessionDao(h.db).getById(id)!.status, SessionStatus.running);
+    expect(
+      h.container.read(sessionsDataProvider).getById(id)!.status,
+      SessionStatus.running,
+    );
 
     // A different process, and the old one is gone rather than detached: this
     // is an end, not a tab being closed.
@@ -939,7 +978,10 @@ void main() {
       ),
     );
     final id = started.session.id;
-    expect(SessionDao(h.db).getById(id)!.permissionMode, isNull);
+    expect(
+      h.container.read(sessionsDataProvider).getById(id)!.permissionMode,
+      isNull,
+    );
 
     final restarted = await launcher.restartSession(id);
 
@@ -947,7 +989,10 @@ void main() {
     // writing that resolution back: the session would silently stop tracking
     // the Settings default, which is the half of the owner's report that says
     // "changing the default moved nothing".
-    expect(SessionDao(h.db).getById(id)!.permissionMode, isNull);
+    expect(
+      h.container.read(sessionsDataProvider).getById(id)!.permissionMode,
+      isNull,
+    );
     expect(
       h.container
           .read(terminalSessionsControllerProvider.notifier)
@@ -975,7 +1020,10 @@ void main() {
       ),
     );
     final id = started.session.id;
-    expect(SessionDao(h.db).getById(id)!.externalSessionId, isNull);
+    expect(
+      h.container.read(sessionsDataProvider).getById(id)!.externalSessionId,
+      isNull,
+    );
 
     await expectLater(
       launcher.restartSession(id),
@@ -992,7 +1040,10 @@ void main() {
     // blank conversation wearing this row's title, so the only safe answer is
     // to leave the agent that has the history running.
     expect(launcher.livePaneFor(id), started.paneId);
-    expect(SessionDao(h.db).getById(id)!.status, SessionStatus.running);
+    expect(
+      h.container.read(sessionsDataProvider).getById(id)!.status,
+      SessionStatus.running,
+    );
   });
 
   group('a working directory whose environment row is gone', () {

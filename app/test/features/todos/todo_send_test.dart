@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
@@ -88,7 +87,7 @@ void main() {
         .read(terminalSessionsControllerProvider)
         .activeTab!
         .focusedPaneId;
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(session(id: id, title: title))
       ..updatePaneId(id, paneId);
   }
@@ -203,7 +202,7 @@ void main() {
   ) async {
     await pump(tester);
     runSessionInATab('s1', title: 'Toolbar rework');
-    SessionDao(db).insert(session(id: 's2', title: 'Second look'));
+    mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Second look'));
     container.read(selectedSessionIdProvider.notifier).select('s2');
     container.read(todosProvider.notifier).add(body: 'Fix the resize');
     await tester.pumpAndSettle();

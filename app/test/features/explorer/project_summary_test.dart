@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -84,7 +83,7 @@ void main() {
   tearDown(() => db.close());
 
   void addSession(String id, String title, {EnvironmentPath? worktree}) =>
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',

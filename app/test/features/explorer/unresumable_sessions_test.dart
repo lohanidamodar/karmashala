@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/explorer/application/unresumable_session
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/resume.dart';
@@ -212,19 +211,17 @@ void main() {
     String title = 'Dead session',
     String installationId = 'a1',
   }) {
-    container
-        .read(sessionDaoProvider)
-        .insert(
-          session(
-            id: id,
-            title: title,
-            agentInstallationId: installationId,
-          ).copyWith(
-            externalSessionId: id,
-            status: SessionStatus.running,
-            createdAt: testTime.subtract(const Duration(hours: 2)),
-          ),
-        );
+    serverOf(container).sessionRows.insert(
+      session(
+        id: id,
+        title: title,
+        agentInstallationId: installationId,
+      ).copyWith(
+        externalSessionId: id,
+        status: SessionStatus.running,
+        createdAt: testTime.subtract(const Duration(hours: 2)),
+      ),
+    );
     return id;
   }
 
@@ -351,7 +348,7 @@ void main() {
       );
       // A Codex-shaped row: an external id the CLI chose, not one we promised.
       container
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .insert(
             session(id: 'codex-row', agentInstallationId: 'a2').copyWith(
               externalSessionId: 'thread-99',
@@ -416,7 +413,7 @@ void main() {
       final container = await containerOver(db);
       final dead = seedDeadRow(container, id: 'dead-1');
       container
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .insert(
             session(id: 'elsewhere').copyWith(
               externalSessionId: 'elsewhere',
@@ -443,7 +440,7 @@ void main() {
       // Both ids offered; only the judged one may go.
       notifier.remove(['dead-1', 'elsewhere']);
 
-      final dao = SessionDao(db);
+      final dao = container.read(sessionsDataProvider);
       expect(dao.getById(dead), isNull);
       expect(dao.getById('elsewhere'), isNotNull);
       expect(container.read(unresumableSessionsProvider).removable, isEmpty);
@@ -467,7 +464,7 @@ void main() {
         await notifier.refresh();
         notifier.remove([live, 'dead-1']);
 
-        final dao = SessionDao(db);
+        final dao = container.read(sessionsDataProvider);
         expect(
           dao.getById(live),
           isNotNull,
@@ -488,7 +485,7 @@ void main() {
 
       notifier.remove(const []);
 
-      expect(SessionDao(db).getById('dead-1'), isNotNull);
+      expect(container.read(sessionsDataProvider).getById('dead-1'), isNotNull);
     });
   });
 
@@ -508,10 +505,13 @@ void main() {
       expect(started.id, id);
       expect(started.title, 'Refactor the parser');
       expect(started.createdAt, testTime.subtract(const Duration(hours: 2)));
-      expect(SessionDao(db).getAll().where((s) => s.id == id), hasLength(1));
+      expect(
+        container.read(sessionsDataProvider).getAll().where((s) => s.id == id),
+        hasLength(1),
+      );
       // The promise, made again — and it is the same string, because the
       // conversation id a `--session-id` agent gets *is* the row id.
-      final row = SessionDao(db).getById(id)!;
+      final row = container.read(sessionsDataProvider).getById(id)!;
       expect(row.externalSessionId, id);
       expect(row.status, SessionStatus.running);
       expect(row.paneId, isNotNull);
@@ -633,7 +633,7 @@ void main() {
             );
 
         expect(launched.session.id, isNot(live));
-        expect(SessionDao(db).getById(live), isNotNull);
+        expect(container.read(sessionsDataProvider).getById(live), isNotNull);
       },
     );
 
@@ -653,7 +653,7 @@ void main() {
       );
 
       await expectLater(notifier.restart(id), throwsA(isA<StateError>()));
-      expect(SessionDao(db).getById(id)!.paneId, isNull);
+      expect(container.read(sessionsDataProvider).getById(id)!.paneId, isNull);
     });
 
     test('a restart naming nothing is an ordinary create', () async {

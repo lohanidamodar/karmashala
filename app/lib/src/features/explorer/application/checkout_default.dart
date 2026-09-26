@@ -62,7 +62,7 @@ Repository? checkoutContaining(
 /// elsewhere moves the tree out from under the user.
 List<Repository> _subagentCheckouts(Ref ref, Session parent, Repository? own) {
   if (own == null) return const [];
-  final children = ref.read(sessionDaoProvider).childrenOf(parent.id);
+  final children = ref.read(sessionsDataProvider).childrenOf(parent.id);
   if (children.isEmpty) return const [];
   final workspace = ref.read(workspaceDataProvider);
 

@@ -18,7 +18,6 @@ import 'package:karmashala/src/features/sessions/application/session_archive_ser
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
@@ -112,7 +111,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -763,7 +762,7 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'i-$id', agentId: agentId));
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r1',
@@ -774,7 +773,7 @@ void main() {
         createdAt: testTime,
       ),
     );
-    if (model != null) SessionDao(db).updateModel(id, model);
+    if (model != null) server.sessionRows.updateModel(id, model);
   }
 
   testWidgets('a session that named no model is not given one', (tester) async {
@@ -793,7 +792,7 @@ void main() {
   testWidgets('the model the launcher resolves is named, and claims no more', (
     tester,
   ) async {
-    SessionDao(db).updateModel('s1', 'opus');
+    server.sessionRows.updateModel('s1', 'opus');
     final container = lineContainer();
     await tester.pumpWidget(line(container));
     await tester.pumpAndSettle();
@@ -854,7 +853,7 @@ void main() {
   testWidgets('a model change repaints the mark and not the line', (
     tester,
   ) async {
-    SessionDao(db).updateModel('s1', 'opus');
+    server.sessionRows.updateModel('s1', 'opus');
     final container = lineContainer();
     await tester.pumpWidget(line(container));
     await tester.pumpAndSettle();
@@ -899,7 +898,7 @@ void main() {
   testWidgets('a rename reaches neither the line nor the mark', (tester) async {
     // The CLI store sweep renames rows on a timer, without the user doing
     // anything at all — the narrowing `sessionModelProvider` was written for.
-    SessionDao(db).updateModel('s1', 'opus');
+    server.sessionRows.updateModel('s1', 'opus');
     final container = lineContainer();
     await tester.pumpWidget(line(container));
     await tester.pumpAndSettle();
@@ -923,9 +922,10 @@ void main() {
       // raw, because dropping it would leave the line naming a model the
       // session is not on) beside a branch name of the shape the app's own
       // worktrees make.
-      SessionDao(
-        db,
-      ).updateModel('s1', 'claude-opus-4-6-20260115-extended-thinking');
+      server.sessionRows.updateModel(
+        's1',
+        'claude-opus-4-6-20260115-extended-thinking',
+      );
       final container = lineContainer(
         delivery: const SessionDelivery(
           branch: 'agent/2026-09-03-delivery-strip-model-fact-long-branch-name',
@@ -954,9 +954,10 @@ void main() {
     // strip's own history is `Commit` stranded up beside the branch name when
     // facts and actions shared one run. They do not share one now, and a fact
     // added above them must not put them back together.
-    SessionDao(
-      db,
-    ).updateModel('s1', 'claude-opus-4-6-20260115-extended-thinking');
+    server.sessionRows.updateModel(
+      's1',
+      'claude-opus-4-6-20260115-extended-thinking',
+    );
     final container = lineContainer(
       delivery: const SessionDelivery(
         branch: 'agent/2026-09-03-delivery-strip-model-fact-long-branch-name',

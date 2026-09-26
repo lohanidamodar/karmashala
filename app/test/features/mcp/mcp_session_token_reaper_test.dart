@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'package:karmashala/src/features/mcp/mcp_session_token_reaper.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +29,7 @@ import '../../support/workspace_mirror.dart';
 /// it.
 void main() {
   late AppDatabase db;
-  late SessionDao sessions;
+  late FakeSessionRows sessions;
   late ProviderContainer container;
   late McpCallerRegistry callers;
   late McpSessionTokenReaper reaper;
@@ -43,7 +42,7 @@ void main() {
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    sessions = SessionDao(db);
+    sessions = fake.sessionRows;
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

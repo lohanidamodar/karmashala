@@ -6,11 +6,8 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
-import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
-import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -26,6 +23,7 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala_session/events.dart';
 
 /// The third signal: **a pane's own process stopped**.
 ///
@@ -40,7 +38,7 @@ import '../terminal/fake_instance.dart';
 void main() {
   late AppDatabase db;
   late Override data;
-  late FollowUpDao followUps;
+  late FakeFollowUpRows followUps;
   late StreamController<AgentStatusReport> reports;
 
   AgentStatusReport report(AgentActivityStatus status) => AgentStatusReport(
@@ -59,8 +57,8 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', status: SessionStatus.running));
-    followUps = FollowUpDao(db);
+    server.sessionRows.insert(session(id: 's1', status: SessionStatus.running));
+    followUps = server.followUpRows;
     reports = StreamController<AgentStatusReport>.broadcast();
     addTearDown(reports.close);
   });
@@ -113,7 +111,12 @@ void main() {
     sessionId: sessionId,
   );
 
-  Future<void> settle() => Future<void>.delayed(Duration.zero);
+  /// Long enough for a follow-up the app raised to be answered by the server.
+  Future<void> settle() async {
+    for (var i = 0; i < 5; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
 
   group('the rule', () {
     test('only a clean exit is a finish', () {
@@ -318,6 +321,7 @@ void main() {
 
       final raised = followUps.open().single;
       first.read(followUpServiceProvider).dismiss(raised);
+      await settle();
       expect(followUps.open(), isEmpty);
 
       final second = observing();

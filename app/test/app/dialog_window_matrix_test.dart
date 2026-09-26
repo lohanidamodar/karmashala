@@ -7,7 +7,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/general_pages.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_prompt_controller.dart';
@@ -223,7 +222,7 @@ void main() {
     // A session row points at an agent installation; without one the insert
     // fails the foreign key rather than the layout.
     AgentInstallationDao(db).insert(agentInstallation());
-    final sessions = SessionDao(db);
+    final sessions = mirroredServer(db).sessionRows;
     for (var i = 0; i < 6; i++) {
       sessions.insert(
         session(id: 's$i', title: 'refactor the terminal ingest path, part $i'),

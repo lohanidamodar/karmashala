@@ -498,7 +498,7 @@ class _Answers extends ConsumerWidget {
 /// Reveals the pane so the user can answer anything we could not represent.
 /// Shared by both halves of the card: the terminal is the complete answer.
 void _openTerminal(WidgetRef ref, String sessionId) {
-  final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
   if (paneId != null) {
     ref.read(terminalSessionsControllerProvider.notifier)
       ..reattachSession(paneId)

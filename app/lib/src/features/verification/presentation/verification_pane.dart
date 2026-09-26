@@ -363,7 +363,7 @@ class _SessionRow extends ConsumerWidget {
     // A deleted session must not blank the row: the evidence outlives it.
     // Watched through its signal, so a rename reaches this row.
     ref.watchSession(id);
-    final session = ref.read(sessionDaoProvider).getById(id);
+    final session = ref.read(sessionsDataProvider).getById(id);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -402,7 +402,7 @@ class _VerifierRow extends ConsumerWidget {
       );
     }
     ref.watchSession(id);
-    final session = ref.read(sessionDaoProvider).getById(id);
+    final session = ref.read(sessionsDataProvider).getById(id);
     return _MetaRow(
       label: 'Verifier',
       value: '${session?.title ?? id} · ${run.attribution.label}',

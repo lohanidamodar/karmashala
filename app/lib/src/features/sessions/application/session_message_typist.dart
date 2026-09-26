@@ -145,7 +145,7 @@ final sessionMessageTypistProvider = Provider<SessionMessageTypist>((ref) {
       return terminalTailLines(instance.terminal, lines: kMenuScreenRows);
     },
     markersFor: (sessionId) {
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) return null;
       return sessionDescriptor(
         ref,

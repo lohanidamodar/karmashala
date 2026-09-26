@@ -9,14 +9,12 @@ import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import '../../sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
-import '../data/imported_session_dao.dart';
 import 'package:agent_cli/launch.dart';
 import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// How many store sweeps one armed pane is worth before adoption gives up — a
 /// pane that only *looks* like an agent must not buy a scan every 10s forever.
@@ -74,7 +72,6 @@ class SessionAdoptionService {
     required this.workspace,
     required this.environmentDao,
     required this.installationDao,
-    required this.linkDao,
     required this.agents,
     required this.ids,
     required this.clock,
@@ -88,12 +85,11 @@ class SessionAdoptionService {
     this.mtimeSlack = kAdoptionMtimeSlack,
   });
 
-  final SessionDao sessionDao;
-  final ImportedSessionDao importedSessionDao;
+  final SessionsData sessionDao;
+  final ImportedSessionsData importedSessionDao;
   final WorkspaceData workspace;
   final ExecutionEnvironmentDao environmentDao;
   final AgentInstallationDao installationDao;
-  final SessionRepositoryDao linkDao;
   final AgentRegistry agents;
   final IdGenerator ids;
   final Clock clock;
@@ -441,14 +437,10 @@ class SessionAdoptionService {
       // Permission deliberately null: the user chose the mode by typing it, and
       // stamping a default would claim a policy this session may not be under.
     );
+    // The row and its primary link, in one write at the server.
     sessionDao.insert(session);
-    linkDao.link(
-      session.id,
-      repository.id,
-      role: SessionRepositoryRole.primary,
-    );
     // A read-only history row for the same conversation is not deleted: this
-    // row supersedes it, and `ImportedSessionDao` resolves that for readers.
+    // row supersedes it, and `ImportedSessionsData` resolves that for readers.
     _bound[candidate.paneId] = session.id;
     _settled.add(key);
     adoptions++;

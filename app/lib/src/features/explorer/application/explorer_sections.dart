@@ -5,7 +5,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/id_generator_provider.dart';
 import '../../workspaces/data/workspace_data.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/github.dart';
@@ -223,7 +222,7 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
       repository.id: repository,
   };
   return List.unmodifiable(<SectionCandidate>[
-    for (final session in ref.read(sessionDaoProvider).getAll())
+    for (final session in ref.read(sessionsDataProvider).getAll())
       SectionCandidate(
         id: session.id,
         title: session.title,
@@ -234,7 +233,7 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
         repositoryPath: repositories[session.repositoryId]?.path,
         worktree: session.worktree,
       ),
-    for (final session in ref.read(importedSessionDaoProvider).getAll())
+    for (final session in ref.read(importedSessionsProvider).getAll())
       SectionCandidate(
         id: session.id,
         title: session.displayTitle,

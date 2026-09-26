@@ -9,11 +9,9 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/conversation_index_backfill.dart';
 import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../../support/fake_data_server.dart';
@@ -72,7 +70,7 @@ void main() {
   }
 
   void importedRow(String externalId, String filePath) {
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i-$externalId',
         repositoryId: 'r1',
@@ -89,7 +87,7 @@ void main() {
   }
 
   void nativeRow(String id, String externalId) {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r1',
@@ -154,7 +152,7 @@ void main() {
 
   test('a superseded record still supplies the only path there is', () async {
     // History imported first, then resumed — so a native row now represents
-    // the conversation and `ImportedSessionDao` hides the record from every
+    // the conversation and the supersession rule hides the record from every
     // list. It is still the only place that transcript's path is written down,
     // which is why the backfill reads the table unfiltered.
     importedRow('c1', transcript('c1.jsonl', 'the superseded decision'));

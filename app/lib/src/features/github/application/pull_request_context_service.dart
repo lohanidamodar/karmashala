@@ -83,7 +83,7 @@ class PullRequestContextService {
 
   /// This session's open review conversations, as lines.
   Future<List<ReviewCommentLine>> _reviews(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return const [];
     final repositoryId = _ref
         .read(workspaceDataProvider)
@@ -119,24 +119,25 @@ class PullRequestContextService {
     // Filed **before** the send: a card that failed to reach the agent is
     // still something the user tried, and a record written only on success
     // would leave the one case worth investigating with no trace.
-    _record(
+    await _record(
       sessionId: sessionId,
       prompt: prompt,
       parts: parts,
       pullRequestNumber: pullRequestNumber,
     );
+    _ref.invalidate(sentContextCardsProvider(sessionId));
     await _ref.read(sessionActionsProvider).continueSession(sessionId, prompt);
   }
 
-  void _record({
+  Future<void> _record({
     required String sessionId,
     required String prompt,
     required Set<PullRequestContextPart> parts,
     int? pullRequestNumber,
-  }) {
+  }) async {
     try {
-      _ref
-          .read(sessionEventDaoProvider)
+      await _ref
+          .read(sessionRecordsProvider)
           .append(
             SessionEvent(
               sessionId: sessionId,
@@ -160,11 +161,12 @@ class PullRequestContextService {
   }
 
   /// Every card sent in [sessionId], newest first.
-  List<SentContextCard> sentIn(String sessionId) {
+  Future<List<SentContextCard>> sentIn(String sessionId) async {
     final cards = <SentContextCard>[];
     try {
-      for (final event
-          in _ref.read(sessionEventDaoProvider).listForSession(sessionId)) {
+      for (final event in await _ref
+          .read(sessionRecordsProvider)
+          .listForSession(sessionId)) {
         if (event.type != kPullRequestContextEvent) continue;
         final decoded = jsonDecode(event.payload);
         if (decoded is! Map<String, Object?>) continue;
@@ -191,9 +193,9 @@ final pullRequestContextServiceProvider = Provider<PullRequestContextService>(
   PullRequestContextService.new,
 );
 
-/// One session's sent cards, for the panel that shows them.
-final sentContextCardsProvider = Provider.autoDispose
-    .family<List<SentContextCard>, String>(
-      (ref, sessionId) =>
-          ref.read(pullRequestContextServiceProvider).sentIn(sessionId),
-    );
+/// One session's sent cards, for the panel that shows them — read from the
+/// server's event log once per session, and again after a send.
+final sentContextCardsProvider = FutureProvider.family<
+  List<SentContextCard>,
+  String
+>((ref, sessionId) => ref.read(pullRequestContextServiceProvider).sentIn(sessionId));

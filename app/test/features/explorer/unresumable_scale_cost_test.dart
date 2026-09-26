@@ -14,7 +14,6 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/unresumable_sessions.dart';
-import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -221,7 +220,9 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final dao = container.read(sessionDaoProvider);
+    // Seeded at the server, as the store would hold them, so nothing lands
+    // (and is mirrored) while the reading is being counted.
+    final dao = server.sessionRows;
     for (var i = 0; i < rows; i++) {
       dao.insert(
         session(id: 'dead-$i', title: 'Session $i').copyWith(
@@ -339,7 +340,9 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final dao = container.read(sessionDaoProvider);
+      // Seeded at the server, as the store would hold them, so nothing lands
+      // (and is mirrored) while the reading is being counted.
+      final dao = server.sessionRows;
       for (var i = 0; i < 120; i++) {
         // An id the CLI chose for itself, which is not a promise of ours.
         dao.insert(

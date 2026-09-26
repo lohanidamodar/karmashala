@@ -2,12 +2,12 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_launch_refusal.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// **Takes a row out of `running` when nothing we can see is running it**: a
 /// live pane of ours, observed not inferred, and only ever moved to `unknown`.
@@ -19,7 +19,7 @@ class SessionLivenessReconciler {
     this.followsHost,
   });
 
-  final SessionDao sessionDao;
+  final SessionsData sessionDao;
 
   /// Whether a row's status is its host's facts, so no pane edge may move it.
   final bool Function(Session session)? followsHost;
@@ -95,7 +95,7 @@ class SessionLivenessReconciler {
 /// one we lost sight of. Called before any pane exists, which is the point.
 /// [where] narrows it to the rows no host feed will speak for.
 int markSessionsLostOnLaunch(
-  SessionDao dao, {
+  SessionsData dao, {
   bool Function(Session session)? where,
 }) => SessionLivenessReconciler(sessionDao: dao).sweep(const {}, where: where);
 
@@ -131,7 +131,7 @@ Set<String> panesThatStartedRunning(
 /// read**: Riverpod 3 pauses a provider nobody listens to, silently.
 final sessionLivenessReconcilerProvider = Provider<void>((ref) {
   final reconciler = SessionLivenessReconciler(
-    sessionDao: ref.read(sessionDaoProvider),
+    sessionDao: ref.read(sessionsDataProvider),
     onChanged: (sessionId) => ref
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.statusChanged(sessionId)),

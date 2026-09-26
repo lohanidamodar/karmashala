@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -96,7 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NewSessionDialog), findsNothing);
-    final started = SessionDao(db).getByRepository('r1');
+    final started = mirroredServer(db).sessionRows.getByRepository('r1');
     expect(started, hasLength(1));
     expect(
       started.single.agentInstallationId,
@@ -130,7 +129,7 @@ void main() {
 
     expect(find.byType(NewSessionDialog), findsOneWidget);
     expect(
-      SessionDao(db).getByRepository('r1'),
+      mirroredServer(db).sessionRows.getByRepository('r1'),
       isEmpty,
       reason: 'the dialog has not been told to start anything yet',
     );
@@ -158,7 +157,7 @@ void main() {
           'the defaults could not answer "which agent", so the button asks '
           'rather than guessing',
     );
-    expect(SessionDao(db).getByRepository('r1'), isEmpty);
+    expect(mirroredServer(db).sessionRows.getByRepository('r1'), isEmpty);
     expect(find.textContaining('No agent is installed in'), findsOneWidget);
   });
 }

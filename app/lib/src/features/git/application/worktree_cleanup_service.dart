@@ -110,7 +110,7 @@ class WorktreeCleanupService {
   final Iterable<String> Function() liveTerminalDirectories;
 
   /// The newest recorded event of any of these sessions.
-  final DateTime? Function(Iterable<String> sessionIds) lastEventAt;
+  final Future<DateTime?> Function(Iterable<String> sessionIds) lastEventAt;
 
   /// When this app recorded creating [worktree], if it did.
   final DateTime? Function(EnvironmentPath worktree) createdAt;
@@ -411,7 +411,7 @@ class WorktreeCleanupService {
     for (final session in recorded) {
       candidates.add((at: session.createdAt, source: 'session started'));
     }
-    final event = lastEventAt([for (final s in recorded) s.id]);
+    final event = await lastEventAt([for (final s in recorded) s.id]);
     if (event != null) {
       candidates.add((at: event, source: 'session activity'));
     }

@@ -82,7 +82,7 @@ final worktreeCleanupServiceProvider = Provider<WorktreeCleanupService>((ref) {
     gitFor: (repo) => ref.read(worktreeServiceProvider).gitFor(repo),
     removeIfClean: (repo, worktree) =>
         ref.read(worktreeServiceProvider).removeIfClean(repo, worktree),
-    sessions: () => ref.read(sessionDaoProvider).getAll(),
+    sessions: () => ref.read(sessionsDataProvider).getAll(),
     // A status that claims a run counts even with no pane behind it: "we lost
     // track of it" is not evidence that nothing is working in the directory.
     isLive: (session) =>
@@ -96,17 +96,8 @@ final worktreeCleanupServiceProvider = Provider<WorktreeCleanupService>((ref) {
             entry.value!,
       ];
     },
-    lastEventAt: (ids) {
-      final list = ids.toList();
-      if (list.isEmpty) return null;
-      final rows = db().query(
-        'SELECT MAX(created_at) AS at FROM session_events '
-        'WHERE session_id IN (${List.filled(list.length, '?').join(', ')});',
-        list,
-      );
-      final at = rows.firstOrNull?['at'];
-      return at == null ? null : dateFromIso(at);
-    },
+    lastEventAt: (ids) =>
+        ref.read(sessionRecordsProvider).lastEventAt(ids.toList()),
     createdAt: (worktree) {
       final rows = db().query(
         'SELECT worktree_path, ran_at FROM worktree_setup_runs '
@@ -127,7 +118,7 @@ final worktreeCleanupServiceProvider = Provider<WorktreeCleanupService>((ref) {
       // The same record the archive action leaves: the row and transcript
       // survive, and nothing offers to resume into a directory that is gone.
       for (final id in sessionIds) {
-        ref.read(sessionDaoProvider).markArchived(id, entry.at);
+        ref.read(sessionsDataProvider).markArchived(id, entry.at);
         ref
             .read(sessionsRevisionProvider.notifier)
             .changed(SessionChange.archived(id));

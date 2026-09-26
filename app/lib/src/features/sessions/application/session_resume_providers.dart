@@ -29,7 +29,7 @@ final sessionWhereaboutsProvider = Provider.autoDispose
       // whole revision meant a `getById` per visible row on every rename.
       ref.watchSession(sessionId);
 
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) return const SessionWhereabouts();
 
       final external = session.surface == SessionSurface.external;

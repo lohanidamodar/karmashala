@@ -14,6 +14,7 @@ import '../domain/session_registry.dart';
 import '../pty/pty.dart';
 import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// The environment variable a hook and the MCP bridge read the session from.
 const String kSessionIdEnvironmentVariable = 'KARMASHALA_SESSION_ID';
@@ -65,6 +66,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.agents = const DaemonAgents(),
     this.worktrees,
     this.onLaunched,
+    this.onRowWritten,
     Map<String, String>? hostEnvironment,
   }) : _hostEnvironment = hostEnvironment ?? Platform.environment;
 
@@ -83,6 +85,10 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// start for a question nobody is there to answer.
   final void Function(String sessionId, String agentId, String directory)?
   onLaunched;
+
+  /// Told of each row written — created, or its status moved — so every
+  /// client hears of it on the data channel.
+  final void Function(String sessionId)? onRowWritten;
 
   final Map<String, String> _hostEnvironment;
 
@@ -147,6 +153,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     if (resuming != null) {
       session = resuming.copyWith(status: SessionStatus.running);
       sessions.updateStatus(id, SessionStatus.running);
+      onRowWritten?.call(id);
     } else {
       final title = launch.title.trim();
       session = Session(
@@ -165,6 +172,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         permissionMode: launch.permissionMode,
       );
       sessions.insertWithPrimaryRepository(session);
+      onRowWritten?.call(id);
     }
 
     final access = mcp.accessFor(
@@ -201,6 +209,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       // The row must not outlive a launch that never happened; a resumed one
       // goes back to how it had ended.
       sessions.updateStatus(id, resuming?.status ?? SessionStatus.failed);
+      onRowWritten?.call(id);
       rethrow;
     }
     settleWorktree?.call(null);

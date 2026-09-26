@@ -1,7 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -60,8 +59,8 @@ class SessionBulkDelete {
   /// The rows behind [ids], each looked up in the table that owns it. An id
   /// matching neither is dropped rather than carried as a phantom.
   BulkDeleteTargets resolve(Iterable<String> ids) {
-    final sessionDao = _ref.read(sessionDaoProvider);
-    final importedDao = _ref.read(importedSessionDaoProvider);
+    final sessionDao = _ref.read(sessionsDataProvider);
+    final importedDao = _ref.read(importedSessionsProvider);
     final natives = <Session>[];
     final imported = <ImportedSession>[];
     for (final id in ids) {

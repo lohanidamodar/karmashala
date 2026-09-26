@@ -109,7 +109,7 @@ final sessionVerdictProvider = Provider.family<SessionVerdict, String>((
   ref.watch(verificationRevisionProvider);
   // The row's status decides recorded-vs-abandoned; narrowed to that row.
   ref.watchSession(sessionId);
-  final session = ref.watch(sessionDaoProvider).getById(sessionId);
+  final session = ref.watch(sessionsDataProvider).getById(sessionId);
   return SessionVerdict.of(
     ref.watch(verificationDaoProvider).listRuns(sessionId: sessionId),
     // A session that has gone is one nothing will finish a run for either.

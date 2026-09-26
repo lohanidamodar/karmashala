@@ -61,7 +61,7 @@ void main() {
         armedAt: testTime,
       ),
     );
-    SessionDao(db).insert(session(status: SessionStatus.running));
+    server.sessionRows.insert(session(status: SessionStatus.running));
     AutomationDao(db).insertRun(
       AutomationRun(
         id: 'run1',
@@ -74,7 +74,7 @@ void main() {
       ),
     );
     reports = StreamController<AgentStatusReport>.broadcast();
-    host = FakeHostLifecycle(db)
+    host = FakeHostLifecycle(server)
       ..snapshot = [hostFacts('s1', HostSessionState.running)];
     addTearDown(() async {
       await reports.close();
@@ -148,7 +148,7 @@ void main() {
       );
       await host.link.close();
       await settle();
-      expect(SessionDao(db).getById('s1')!.status, SessionStatus.unknown);
+      expect(server.sessionRows.getById('s1')!.status, SessionStatus.unknown);
       paneExits(container, exitCode: 0);
       await settle();
       expect(theRun().state, AutomationRunState.running);

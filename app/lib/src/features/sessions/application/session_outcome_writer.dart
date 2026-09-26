@@ -1,11 +1,11 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// **Writes a session row's ending from what the agent said, and nothing
 /// else** — never from a pane's exit code, and never over a terminal word.
@@ -18,7 +18,7 @@ class SessionOutcomeWriter {
     this.followsHost,
   });
 
-  final SessionDao sessionDao;
+  final SessionsData sessionDao;
 
   /// Whether the row's status is its host's facts, which no hook may settle.
   final bool Function(Session session)? followsHost;
@@ -58,7 +58,7 @@ class SessionOutcomeWriter {
 
 final sessionOutcomeWriterProvider = Provider<SessionOutcomeWriter>(
   (ref) => SessionOutcomeWriter(
-    sessionDao: ref.watch(sessionDaoProvider),
+    sessionDao: ref.watch(sessionsDataProvider),
     onChanged: (sessionId) => ref
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.statusChanged(sessionId)),

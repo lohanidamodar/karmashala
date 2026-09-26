@@ -4,7 +4,8 @@ import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import 'package:karmashala/src/core/data/data_client.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/ingest.dart';
@@ -675,9 +676,7 @@ void main() {
 
       for (final n in scale) {
         final database = AppDatabase.memory();
-        final dao = _ProbeSessionDao(database, [
-          for (var i = 0; i < n; i++) sessionRow(i),
-        ]);
+        final dao = _ProbeSessions([for (var i = 0; i < n; i++) sessionRow(i)]);
         // Built with the override in it rather than layered on a child
         // container: this codebase declares no provider `dependencies`, so a
         // child's override never reaches a provider the parent already
@@ -685,7 +684,7 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             ...fakeTerminalOverrides(database: database),
-            sessionDaoProvider.overrideWithValue(dao),
+            sessionsDataProvider.overrideWithValue(dao),
           ],
         );
         final controller = container.read(
@@ -913,12 +912,11 @@ void main() {
   });
 }
 
-/// A [SessionDao] that counts what `activePaneSessionIdProvider` asks of it.
-///
-/// Subclassed rather than faked so the rest of the dao behaves exactly as the
-/// app's does; only the active-tab query is instrumented.
-class _ProbeSessionDao extends SessionDao {
-  _ProbeSessionDao(super.database, this._rows);
+/// The app's [SessionsData], counting what `activePaneSessionIdProvider` asks
+/// of it. Subclassed rather than faked so the rest behaves as the app's does
+/// (with no server, nothing); only the active-tab query is instrumented.
+class _ProbeSessions extends SessionsData {
+  _ProbeSessions(this._rows) : super(DataClient.unavailable('a probe'));
 
   final List<Session> _rows;
 

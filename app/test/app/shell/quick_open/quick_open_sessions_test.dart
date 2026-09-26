@@ -15,14 +15,12 @@ import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../../../features/terminal/fake_instance.dart';
@@ -77,7 +75,7 @@ void main() {
     String id, {
     required String title,
     Duration createdAgo = Duration.zero,
-  }) => SessionDao(db).insert(
+  }) => mirroredServer(db).sessionRows.insert(
     Session(
       id: id,
       repositoryId: 'r1',
@@ -215,7 +213,7 @@ void main() {
   });
 
   testWidgets('imported history is dated by its own file', (tester) async {
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i1',
         repositoryId: 'r1',

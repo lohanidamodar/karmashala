@@ -9,9 +9,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,29 +18,34 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 void main() {
   late AppDatabase db;
   late FakeDataServer server;
-  late SessionDao sessionDao;
-  late SessionEventDao eventDao;
+  // The app's copy, where the engine's writes land at once.
+  late SessionsData sessionDao;
+  late SessionRecordsData records;
+  // The server's log, where each event lands once it is answered.
+  late FakeEventRows eventDao;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     server = FakeDataServer()..mirrorInto(db);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    sessionDao = SessionDao(db);
-    eventDao = SessionEventDao(db);
+    final client = await server.connect();
+    sessionDao = SessionsData(client);
+    records = SessionRecordsData(client);
+    eventDao = server.eventRows;
   });
   tearDown(() => db.close());
 
   SessionEngine buildEngine({ChatProtocolResolver? resolver}) => SessionEngine(
-    sessionDao: sessionDao,
-    eventDao: eventDao,
-    sessionRepositoryDao: SessionRepositoryDao(db),
+    sessions: sessionDao,
+    records: records,
     worktreeService: WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(),
       environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
@@ -65,7 +67,7 @@ void main() {
   List<String> typesOf(String sessionId) =>
       eventDao.listForSession(sessionId).map((e) => e.type).toList();
 
-  String textOf(SessionEventDao dao, String sessionId, int seq) =>
+  String textOf(FakeEventRows dao, String sessionId, int seq) =>
       jsonDecode(dao.listForSession(sessionId)[seq].payload)['text'] as String;
 
   test('start records session.started then the agent greeting', () async {
@@ -209,7 +211,7 @@ void main() {
       additionalRepositories: [repository(id: 'r2', name: 'api')],
     );
 
-    final links = SessionRepositoryDao(db).linksFor(s.id);
+    final links = server.sessionLinks.linksFor(s.id);
     expect(links.first.isPrimary, isTrue);
     expect(links.map((l) => l.repositoryId).toSet(), {'r1', 'r2'});
   });

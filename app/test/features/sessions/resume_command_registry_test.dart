@@ -5,12 +5,10 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -113,9 +111,9 @@ Future<Harness> harness(AgentDescriptor agent) async {
   AgentInstallationDao(
     db,
   ).insert(agentInstallation(agentId: agent.id, path: r'C:\bin\agent.exe'));
-  SessionDao(db).insert(session(id: 'n1', title: 'Native work'));
-  SessionDao(db).updateExternalSessionId('n1', 'ext-1');
-  ImportedSessionDao(db).insertIfAbsent(_imported(agent));
+  mirroredServer(db).sessionRows.insert(session(id: 'n1', title: 'Native work'));
+  mirroredServer(db).sessionRows.updateExternalSessionId('n1', 'ext-1');
+  mirroredServer(db).importedRows.insertIfAbsent(_imported(agent));
 
   final terminals = _RecordingTerminals();
   final container = ProviderContainer(
@@ -198,7 +196,7 @@ void main() {
         addTearDown(h.container.dispose);
 
         ExecutionEnvironmentDao(h.db).upsert(wslEnv());
-        SessionDao(h.db).insert(
+        mirroredServer(h.db).sessionRows.insert(
           session(
             id: 'n2',
             title: 'Worktree work',
@@ -208,7 +206,7 @@ void main() {
             ),
           ),
         );
-        SessionDao(h.db).updateExternalSessionId('n2', 'ext-2');
+        mirroredServer(h.db).sessionRows.updateExternalSessionId('n2', 'ext-2');
 
         final line = h.container
             .read(sessionActionsProvider)

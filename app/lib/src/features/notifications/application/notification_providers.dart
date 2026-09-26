@@ -150,8 +150,8 @@ final notificationDispatcherProvider = Provider<NotificationDispatcher>((ref) {
 final Provider<WatchedSessionLoader>
 watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
   (ref) => WatchedSessionLoader(
-    sessionDao: ref.watch(sessionDaoProvider),
-    importedSessionDao: ref.watch(importedSessionDaoProvider),
+    sessionDao: ref.watch(sessionsDataProvider),
+    importedSessionDao: ref.watch(importedSessionsProvider),
     installationDao: ref.watch(agentInstallationDaoProvider),
     hookReports: ref.watch(agentHookReportsProvider),
     clock: ref.watch(clockProvider),
@@ -266,14 +266,14 @@ Set<String> visibleAgentSessionIds(ProviderContainer container) {
   final nativeId = read(selectedSessionIdProvider);
   if (nativeId != null) {
     ids.add(nativeId);
-    final native = read(sessionDaoProvider).getById(nativeId);
+    final native = read(sessionsDataProvider).getById(nativeId);
     final externalId = native?.externalSessionId;
     if (externalId != null) ids.add(externalId);
   }
   final importedId = read(selectedImportedSessionIdProvider);
   if (importedId != null) {
     ids.add(importedId);
-    final imported = read(importedSessionDaoProvider).getById(importedId);
+    final imported = read(importedSessionsProvider).getById(importedId);
     if (imported != null) ids.add(imported.externalId);
   }
   return ids;
@@ -288,8 +288,8 @@ void focusWatchedSession(
 }) {
   final read = container.read;
   final repositoryId = imported
-      ? read(importedSessionDaoProvider).getById(openId)?.repositoryId
-      : read(sessionDaoProvider).getById(openId)?.repositoryId;
+      ? read(importedSessionsProvider).getById(openId)?.repositoryId
+      : read(sessionsDataProvider).getById(openId)?.repositoryId;
   if (repositoryId == null) return;
   final repository = read(workspaceDataProvider).repository(repositoryId);
   if (repository == null) return;

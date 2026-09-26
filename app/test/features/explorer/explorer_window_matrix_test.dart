@@ -24,7 +24,6 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -161,7 +160,7 @@ void main() {
     server.mirrorInto(db);
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < 4; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(
           id: 's$i',
           title: 'A session title long enough to need truncating, number $i',

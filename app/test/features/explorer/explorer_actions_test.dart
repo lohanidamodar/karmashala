@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/sessions/application/session_launcher.da
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -154,7 +153,7 @@ Future<String> launchLive(
       );
   if (externalId != null) {
     h.container
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .updateExternalSessionId(launched.session.id, externalId);
   }
   return launched.session.id;
@@ -162,7 +161,7 @@ Future<String> launchLive(
 
 String? paneCwd(Harness h, String sessionId) {
   final paneId = h.container
-      .read(sessionDaoProvider)
+      .read(sessionsDataProvider)
       .getById(sessionId)
       ?.paneId;
   if (paneId == null) return null;
@@ -181,7 +180,7 @@ void main() {
         addTearDown(h.db.close);
         addTearDown(h.container.dispose);
         final id = await launchLive(h);
-        final before = h.container.read(sessionDaoProvider).getAll().length;
+        final before = h.container.read(sessionsDataProvider).getAll().length;
 
         final result = await h.container
             .read(explorerActionsProvider)
@@ -189,7 +188,7 @@ void main() {
 
         expect(result.outcome, ExplorerOutcome.reattached);
         expect(
-          h.container.read(sessionDaoProvider).getAll().length,
+          h.container.read(sessionsDataProvider).getAll().length,
           before,
           reason: 'nothing was spawned',
         );
@@ -205,7 +204,7 @@ void main() {
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final worktree = path(r'C:\src\demo\.karmashala-worktrees\wt-a');
-      SessionDao(h.db).insert(stopped(worktree: worktree));
+      serverOf(h.container).sessionRows.insert(stopped(worktree: worktree));
 
       final result = await h.container
           .read(explorerActionsProvider)
@@ -214,8 +213,8 @@ void main() {
       expect(result.outcome, ExplorerOutcome.resumed);
       // Loop 66: the resume continues the row it was asked to continue rather
       // than minting a second one for the same conversation.
-      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
-      final resumed = SessionDao(h.db).getById('old')!;
+      expect(h.container.read(sessionsDataProvider).getAll(), hasLength(1));
+      final resumed = h.container.read(sessionsDataProvider).getById('old')!;
       expect(resumed.status, SessionStatus.running);
       expect(resumed.worktree, worktree);
       expect(resumed.useWorktree, isTrue);
@@ -232,12 +231,12 @@ void main() {
       final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      SessionDao(h.db).insert(stopped());
+      serverOf(h.container).sessionRows.insert(stopped());
 
       await h.container.read(explorerActionsProvider).openNative('old');
 
-      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
-      final resumed = SessionDao(h.db).getById('old')!;
+      expect(h.container.read(sessionsDataProvider).getAll(), hasLength(1));
+      final resumed = h.container.read(sessionsDataProvider).getById('old')!;
       expect(resumed.worktree, isNull);
       expect(paneCwd(h, resumed.id), repository().path.path);
     });
@@ -248,14 +247,14 @@ void main() {
       final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      SessionDao(h.db).insert(stopped(externalId: ''));
+      serverOf(h.container).sessionRows.insert(stopped(externalId: ''));
 
       final result = await h.container
           .read(explorerActionsProvider)
           .openNative('old');
 
       expect(result.outcome, ExplorerOutcome.selected);
-      expect(h.container.read(sessionDaoProvider).getAll().length, 1);
+      expect(h.container.read(sessionsDataProvider).getAll().length, 1);
     });
 
     test('clicking the older row of a duplicated conversation reveals the live '
@@ -267,9 +266,9 @@ void main() {
       final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      SessionDao(h.db).insert(stopped());
+      serverOf(h.container).sessionRows.insert(stopped());
       await launchLive(h, externalId: 'ext-1');
-      final after = h.container.read(sessionDaoProvider).getAll().length;
+      final after = h.container.read(sessionsDataProvider).getAll().length;
       expect(after, 2);
 
       final result = await h.container
@@ -278,7 +277,7 @@ void main() {
 
       expect(result.outcome, ExplorerOutcome.reattached);
       expect(
-        h.container.read(sessionDaoProvider).getAll().length,
+        h.container.read(sessionsDataProvider).getAll().length,
         after,
         reason: 'a second click must not put a third agent on the transcript',
       );
@@ -291,7 +290,7 @@ void main() {
       // A pane of ours died showing the agent's own refusal — the only certain
       // knowledge we ever get about a process we do not own.
       final id = await launchLive(h, externalId: 'ext-9', agentId: 'exclusive');
-      final paneId = SessionDao(h.db).getById(id)!.paneId!;
+      final paneId = h.container.read(sessionsDataProvider).getById(id)!.paneId!;
       final instance =
           h.container
                   .read(terminalSessionsControllerProvider.notifier)
@@ -305,7 +304,7 @@ void main() {
         isTrue,
         reason: 'the fixture has to reach the state the assertion is about',
       );
-      final before = h.container.read(sessionDaoProvider).getAll().length;
+      final before = h.container.read(sessionsDataProvider).getAll().length;
 
       final result = await h.container
           .read(explorerActionsProvider)
@@ -314,7 +313,7 @@ void main() {
       expect(result.outcome, ExplorerOutcome.blocked);
       expect(result.message, contains('will not resume a conversation'));
       expect(
-        h.container.read(sessionDaoProvider).getAll().length,
+        h.container.read(sessionsDataProvider).getAll().length,
         before,
         reason: 'refused means nothing was started',
       );
@@ -348,7 +347,7 @@ void main() {
           .startSession(repository: repository());
 
       expect(result.outcome, ExplorerOutcome.started);
-      final started = h.container.read(sessionDaoProvider).getAll().single;
+      final started = h.container.read(sessionsDataProvider).getAll().single;
       expect(started.agentInstallationId, 'a1');
       expect(paneCwd(h, started.id), repository().path.path);
     });
@@ -367,7 +366,7 @@ void main() {
           .startSession(repository: repository(), existingWorktree: worktree);
 
       expect(result.outcome, ExplorerOutcome.started);
-      final started = h.container.read(sessionDaoProvider).getAll().single;
+      final started = h.container.read(sessionsDataProvider).getAll().single;
       expect(started.repositoryId, 'r1');
       expect(started.worktree, worktree);
       expect(paneCwd(h, started.id), worktree.path);
@@ -384,7 +383,7 @@ void main() {
 
       expect(result.outcome, ExplorerOutcome.failed);
       expect(result.message, contains('Discover agents'));
-      expect(h.container.read(sessionDaoProvider).getAll(), isEmpty);
+      expect(h.container.read(sessionsDataProvider).getAll(), isEmpty);
     });
 
     test('installationsFor lists what the "…with" menu may offer', () async {

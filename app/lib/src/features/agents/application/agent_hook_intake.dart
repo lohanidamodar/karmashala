@@ -229,7 +229,7 @@ void recordAgentDirectoryFromHook(
   final cwd = hookStringAt(path, body);
   if (cwd.isEmpty) return;
   final session = container
-      .read(sessionDaoProvider)
+      .read(sessionsDataProvider)
       .getByExternalSessionId(agentSessionId);
   if (session == null) return;
   final environmentId = container

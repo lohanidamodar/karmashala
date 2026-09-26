@@ -3,10 +3,10 @@ import 'package:agent_cli/process.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// How long after a session row is written its CLI's conversation may have
 /// begun and still be that session's — the row is written before the spawn.
@@ -32,7 +32,7 @@ class LaunchedSessionAttributionService {
     this.onAttributed,
   });
 
-  final SessionDao sessionDao;
+  final SessionsData sessionDao;
   final AgentInstallationDao installationDao;
   final WorkspaceData workspace;
   final ExecutionEnvironmentDao environmentDao;

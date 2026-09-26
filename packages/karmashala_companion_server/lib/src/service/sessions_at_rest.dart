@@ -42,7 +42,9 @@ class SessionsAtRest {
   /// support, and whether a path here is one it can open. Null: none may.
   final RemoteAttachmentSupport Function(Session row)? attachmentSupportOf;
 
-  final SessionDao sessions;
+  /// The rows — the server's store, read through the same interface a
+  /// client's copy answers.
+  final SessionReads sessions;
   final WorkspaceNames names;
   final CompanionScreens screens;
 

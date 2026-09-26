@@ -197,7 +197,7 @@ class TypedCommandRunner {
   /// `session_end`'s path: the live pane, or the session host's session when
   /// no pane shows it, ended through the launcher.
   Future<void> _end(EndCommand command) async {
-    if (_container.read(sessionDaoProvider).getById(command.sessionId) ==
+    if (_container.read(sessionsDataProvider).getById(command.sessionId) ==
         null) {
       say('That session no longer exists.');
       return;

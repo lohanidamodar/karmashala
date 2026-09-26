@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/sessions/application/pending_live_switch
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -129,7 +128,7 @@ void main() {
 
     expect(outcome, RemoteConfigureOutcome.now);
     expect(session.keys, ['\x1b[Z', '\x1b[Z']);
-    expect(SessionDao(db).getById(session.id)!.permissionMode, 'mode=plan');
+    expect(mirroredServer(db).sessionRows.getById(session.id)!.permissionMode, 'mode=plan');
   });
 
   test('bypass from the phone is refused and nothing is recorded', () async {
@@ -145,7 +144,7 @@ void main() {
     );
     expect(session.keys, isEmpty);
     expect(
-      SessionDao(db).getById(session.id)!.permissionMode,
+      mirroredServer(db).sessionRows.getById(session.id)!.permissionMode,
       isNot('mode=bypassPermissions'),
     );
   });

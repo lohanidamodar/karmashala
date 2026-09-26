@@ -4,7 +4,7 @@ import 'package:karmashala_session/session.dart';
 
 import '../domain/lifecycle_status.dart';
 import '../domain/session_facts.dart';
-import '../store/session_dao.dart';
+import '../domain/session_reads.dart';
 
 /// One status the recorder wrote.
 class SessionLifecycleChange {
@@ -43,7 +43,7 @@ class SessionLifecycleChange {
 class SessionLifecycleRecorder {
   SessionLifecycleRecorder(this._sessions);
 
-  final SessionDao _sessions;
+  final SessionStatusStore _sessions;
   final Map<String, DateTime> _lastObserved = {};
   final StreamController<SessionLifecycleChange> _changes =
       StreamController.broadcast(sync: true);

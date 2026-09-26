@@ -1,4 +1,5 @@
 import 'package:agent_cli/process.dart';
+import 'record_json.dart';
 import 'session_launch.dart';
 import 'session_lineage.dart';
 import 'session_status.dart';
@@ -85,6 +86,62 @@ class Session {
   /// Whether the user typed this title in the app — the only reason the rename
   /// sync leaves a row alone. Recorded, not remembered: a restart forgot it.
   final bool titleByUser;
+
+  /// The row on the wire, as the server's data API carries it.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'repositoryId': repositoryId,
+    'agentInstallationId': agentInstallationId,
+    'title': title,
+    'useWorktree': useWorktree,
+    if (worktree case final worktree?) 'worktree': jsonPath(worktree),
+    if (workingDirectory case final directory?)
+      'workingDirectory': jsonPath(directory),
+    'status': status.name,
+    'createdAt': jsonDate(createdAt),
+    'externalSessionId': ?externalSessionId,
+    'parentSessionId': ?parentSessionId,
+    'parentLink': ?parentLink?.name,
+    'paneId': ?paneId,
+    'surface': surface.name,
+    'view': view.name,
+    'permissionMode': ?permissionMode,
+    'modelId': ?modelId,
+    if (archivedAt case final at?) 'archivedAt': jsonDate(at),
+    'titleByUser': titleByUser,
+  };
+
+  /// Throws [FormatException] on a row out of shape. A word this build does
+  /// not know reads as the store reads it: `unknown`, `external`, `terminal`.
+  static Session fromJson(Map<String, Object?> json) => Session(
+    id: jsonString(json, 'id'),
+    repositoryId: jsonString(json, 'repositoryId'),
+    agentInstallationId: jsonString(json, 'agentInstallationId'),
+    title: jsonString(json, 'title'),
+    useWorktree: jsonBool(json, 'useWorktree'),
+    worktree: jsonOptionalPathOf(json, 'worktree'),
+    workingDirectory: jsonOptionalPathOf(json, 'workingDirectory'),
+    status: jsonEnum(
+      SessionStatus.values,
+      json['status'],
+      SessionStatus.unknown,
+    ),
+    createdAt: jsonDateOf(json, 'createdAt'),
+    externalSessionId: jsonOptionalString(json, 'externalSessionId'),
+    parentSessionId: jsonOptionalString(json, 'parentSessionId'),
+    parentLink: SessionLink.parse(jsonOptionalString(json, 'parentLink')),
+    paneId: jsonOptionalString(json, 'paneId'),
+    surface: jsonEnum(
+      SessionSurface.values,
+      json['surface'],
+      SessionSurface.external,
+    ),
+    view: jsonEnum(SessionView.values, json['view'], SessionView.terminal),
+    permissionMode: jsonOptionalString(json, 'permissionMode'),
+    modelId: jsonOptionalString(json, 'modelId'),
+    archivedAt: jsonOptionalDateOf(json, 'archivedAt'),
+    titleByUser: jsonBool(json, 'titleByUser'),
+  );
 
   bool get isArchived => archivedAt != null;
 

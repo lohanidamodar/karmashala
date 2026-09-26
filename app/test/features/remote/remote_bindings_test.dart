@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/sessions/application/session_prompt_answ
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
@@ -29,11 +28,9 @@ import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
@@ -53,6 +50,7 @@ import '../../support/temp_directory.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// The store scan, answered from a map, so nothing here walks the owner's own
 /// `~/.claude` — and so an Antigravity session can be given a store that keeps
@@ -259,15 +257,17 @@ void main() {
         ),
       );
       final original = result.session.id;
-      SessionDao(db).updateExternalSessionId(original, 'external-1');
-      final paneId = SessionDao(db).getById(original)!.paneId!;
+      await container.read(sessionsDataProvider).settled();
+      server.sessionRows.updateExternalSessionId(original, 'external-1');
+      final paneId = server.sessionRows.getById(original)!.paneId!;
       container
           .read(terminalSessionsControllerProvider.notifier)
           .endSession(paneId);
       final resumed = await bindings.resumeSession(original);
+      await container.read(sessionsDataProvider).settled();
       expect(resumed.sessionId, result.session.id);
-      expect(SessionDao(db).getAll(), hasLength(1));
-      final resumedRow = SessionDao(db).getById(original)!;
+      expect(server.sessionRows.getAll(), hasLength(1));
+      final resumedRow = server.sessionRows.getById(original)!;
       expect(resumedRow.externalSessionId, 'external-1');
       expect(
         resumedRow.permissionMode,
@@ -285,9 +285,10 @@ void main() {
       );
       expect(instance.agentLaunch?.workingDirectory, workDir.path);
       final again = await bindings.resumeSession(original);
+      await container.read(sessionsDataProvider).settled();
       expect(again.sessionId, original);
-      expect(SessionDao(db).getAll(), hasLength(1));
-      expect(SessionDao(db).getById(original)!.paneId, resumedPane);
+      expect(server.sessionRows.getAll(), hasLength(1));
+      expect(server.sessionRows.getById(original)!.paneId, resumedPane);
       expect(
         container
             .read(terminalSessionsControllerProvider.notifier)
@@ -302,7 +303,7 @@ void main() {
     String title = 'Fix the build',
     String? parentSessionId,
   }) {
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r1',
@@ -318,7 +319,7 @@ void main() {
   }
 
   void appendEvent(String sessionId, String type, Map<String, Object?> data) {
-    SessionEventDao(db).append(
+    server.eventRows.append(
       SessionEvent(
         sessionId: sessionId,
         seq: 0,
@@ -448,7 +449,7 @@ void main() {
       () async {
         seedWorkspace();
         installAgent('claudeCode');
-        ImportedSessionDao(db).insertIfAbsent(
+        server.importedRows.insertIfAbsent(
           ImportedSession(
             id: 'imp1',
             repositoryId: 'r1',
@@ -475,7 +476,7 @@ void main() {
   test('imported CLI sessions are listed, flagged, and read-only', () async {
     seedWorkspace();
     seedSession('s1');
-    ImportedSessionDao(db).insertIfAbsent(
+    server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imp1',
         repositoryId: 'r1',
@@ -548,7 +549,7 @@ void main() {
   test('an imported transcript whose store file is gone reads empty, '
       'never throws', () async {
     seedWorkspace();
-    ImportedSessionDao(db).insertIfAbsent(
+    server.importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imp2',
         repositoryId: 'r1',
@@ -592,7 +593,7 @@ void main() {
           createdAt: now,
         ),
       );
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -952,7 +953,7 @@ void main() {
           createdAt: now,
         ),
       );
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -1114,7 +1115,7 @@ void main() {
     required String externalId,
     String title = 'Old CLI chat',
   }) {
-    ImportedSessionDao(db).insertIfAbsent(
+    server.importedRows.insertIfAbsent(
       ImportedSession(
         id: id,
         repositoryId: 'r1',
@@ -1136,7 +1137,7 @@ void main() {
   /// `LaunchedSessionAttributionService` does on a store sweep — the moment
   /// the imported record becomes superseded.
   void attribute(String sessionId, String externalId) =>
-      SessionDao(db).updateExternalSessionId(sessionId, externalId);
+      server.sessionRows.updateExternalSessionId(sessionId, externalId);
 
   group('a conversation the desktop has reconciled', () {
     test('is listed once, as the live row', () {
@@ -1310,7 +1311,7 @@ void main() {
           createdAt: now,
         ),
       );
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -1457,7 +1458,7 @@ void main() {
 
   test('a session carries the model the desktop launched it on', () {
     seedWorkspace();
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: 'mod1',
         repositoryId: 'r1',
@@ -1527,7 +1528,7 @@ void main() {
           createdAt: now,
         ),
       );
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -1678,7 +1679,7 @@ void main() {
         createdAt: now,
       ),
     );
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: 'q9',
         repositoryId: 'r1',
@@ -1802,7 +1803,7 @@ void main() {
           createdAt: now,
         ),
       );
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: 's-rev',
           repositoryId: 'r1',

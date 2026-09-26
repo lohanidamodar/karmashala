@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -102,7 +101,7 @@ void main() {
         .layout
         .panes
         .single;
-    final dao = SessionDao(db);
+    final dao = mirroredServer(db).sessionRows;
     dao.insert(session(id: id, title: 'Session $id'));
     dao.updatePaneId(id, paneId);
     return tabId;
@@ -431,7 +430,7 @@ void main() {
       final groups = splitAndMove(b);
       terminals().activateTab(a);
       await pump(tester);
-      SessionDao(db).insert(session(id: 's3', title: 'Read the report'));
+      mirroredServer(db).sessionRows.insert(session(id: 's3', title: 'Read the report'));
 
       container.read(selectedSessionIdProvider.notifier).select('s3');
       await tester.pumpAndSettle();

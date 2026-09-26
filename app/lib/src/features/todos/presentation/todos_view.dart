@@ -276,7 +276,7 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     if (id == null) return null;
     return (
       id: id,
-      title: ref.read(sessionDaoProvider).getById(id)?.title ?? 'the session',
+      title: ref.read(sessionsDataProvider).getById(id)?.title ?? 'the session',
     );
   }
 

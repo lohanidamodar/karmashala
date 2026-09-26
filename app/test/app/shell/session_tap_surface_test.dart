@@ -8,14 +8,12 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -213,7 +211,7 @@ void main() {
   testWidgets('(a) a native session with no live pane never shows chat', (
     tester,
   ) async {
-    SessionDao(db).insert(stopped());
+    mirroredServer(db).sessionRows.insert(stopped());
     await mount(tester);
 
     final seen = await framesDuring(
@@ -246,7 +244,7 @@ void main() {
             .livenessNotifier
             .value =
         PaneLiveness.exited;
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(stopped())
       ..updatePaneId('old', paneId);
     await mount(tester);
@@ -261,7 +259,7 @@ void main() {
   });
 
   testWidgets('(c) an imported session never shows chat', (tester) async {
-    ImportedSessionDao(db).insertIfAbsent(imported());
+    mirroredServer(db).importedRows.insertIfAbsent(imported());
     await mount(tester);
 
     final seen = await framesDuring(
@@ -280,7 +278,7 @@ void main() {
     // undo: the CLI never told us this conversation's id, so `openNative`
     // selects the row and starts nothing. Under the old rule that was a
     // permanent landing on the chat interface.
-    SessionDao(db).insert(stopped(externalId: ''));
+    mirroredServer(db).sessionRows.insert(stopped(externalId: ''));
     await mount(tester);
 
     final seen = await framesDuring(
@@ -301,7 +299,7 @@ void main() {
   testWidgets('chat is still one labelled tap away', (tester) async {
     // The fix must not be "chat is unreachable". Nothing *lands* there; the
     // toggle still goes there, and stays there.
-    SessionDao(db).insert(stopped());
+    mirroredServer(db).sessionRows.insert(stopped());
     await mount(tester);
     await framesDuring(
       tester,

@@ -5,7 +5,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -56,7 +55,7 @@ void main() {
     // The row says "hub" — that is the repository it was created against — but
     // the agent is working in the clone underneath. The deeper checkout is the
     // one whose diff, branch and remote the user means.
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(
         repositoryId: 'hub',
         useWorktree: true,
@@ -73,7 +72,7 @@ void main() {
   test('a session no checkout contains keeps its own repository', () {
     // A different environment: paths are never compared across two, so nothing
     // contains this and the row's own repository is the honest answer.
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(
         repositoryId: 'nested',
         useWorktree: true,
@@ -88,7 +87,7 @@ void main() {
   });
 
   test('a session with no worktree resolves through its repository', () {
-    SessionDao(db).insert(session(repositoryId: 'nested'));
+    mirroredServer(db).sessionRows.insert(session(repositoryId: 'nested'));
 
     expect(context().follow('s1')?.id, 'nested');
   });
@@ -111,7 +110,7 @@ void main() {
         .layout
         .panes
         .single;
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(session(repositoryId: 'nested'))
       ..updatePaneId('s1', paneId);
 
@@ -138,7 +137,7 @@ void main() {
         .layout
         .panes
         .single;
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(session(repositoryId: 'nested'))
       ..updatePaneId('s1', paneId);
 

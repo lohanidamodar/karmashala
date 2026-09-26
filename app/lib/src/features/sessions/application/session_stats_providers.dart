@@ -70,7 +70,7 @@ class SessionStatsService {
   final Ref _ref;
 
   Future<SessionStatsView> statsFor(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       return const SessionStatsView.unavailable(
         SessionStatsUnavailable.unknownSession,

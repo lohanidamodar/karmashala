@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -61,7 +60,7 @@ void main() {
     );
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < 4; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -391,7 +390,7 @@ void main() {
       expect(find.text('Delete 2 sessions?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(SessionDao(db).getById('n0'), isNotNull);
+      expect(mirroredServer(db).sessionRows.getById('n0'), isNotNull);
     });
   });
 

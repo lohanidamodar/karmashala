@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/cli_store_purge.dart';
@@ -22,7 +21,6 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
 
 /// **What deleting a project costs, counted.**
@@ -65,7 +63,9 @@ void main() {
   _CountingDatabase seed(int count) {
     final db = _CountingDatabase();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    server = FakeDataServer(clock: () => testTime)..mirrorInto(db);
+    // Not mirrored: the rows are the server's, and every `DELETE` counted
+    // below is one this app issued itself.
+    server = FakeDataServer(clock: () => testTime);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
@@ -90,7 +90,7 @@ void main() {
           ..writeAsStringSync('{}\n');
         codexIndex.add(jsonEncode({'id': id, 'thread_name': 'Session $i'}));
       }
-      ImportedSessionDao(db).insertIfAbsent(
+      server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 's$i',
           repositoryId: 'r1',
@@ -144,6 +144,7 @@ void main() {
         // own first read is not counted as delete cost.
         container.read(projectsControllerProvider);
         db.reset();
+        final asked = server.requests.length;
 
         await container
             .read(projectsControllerProvider.notifier)
@@ -155,12 +156,16 @@ void main() {
           indexEntriesRead: mutator.indexEntriesRead,
           indexWrites: mutator.indexWrites,
           rowDeletes: db.rowDeletes,
+          serverDeletes: server.requests
+              .skip(asked)
+              .where((kind) => kind.endsWith('.delete'))
+              .length,
           publishes: publishes,
         );
 
         // The work itself still happened: every transcript is gone.
         expect(mutator.transcriptsDeleted, count);
-        expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
+        expect(server.importedRows.getByRepository('r1'), isEmpty);
         expect(server.projectRows.getById('p1'), isNull);
       });
     }
@@ -194,13 +199,18 @@ void main() {
         );
       }
 
-      // The cascade already removes every session row, so the delete issues no
-      // per-session `DELETE` of its own.
+      // The server's cascade removes every session and history row, so the
+      // delete is one request — and no per-session `DELETE` of this app's own.
       for (final count in scale) {
+        expect(
+          measured[count]!.serverDeletes,
+          1,
+          reason: 'at $count sessions: the project, whose cascade is the rest',
+        );
         expect(
           measured[count]!.rowDeletes,
           lessThanOrEqualTo(2),
-          reason: 'at $count sessions: the project row, and the cascade',
+          reason: 'at $count sessions: nothing per session in this app',
         );
       }
 
@@ -223,6 +233,7 @@ class _Cost {
     required this.indexEntriesRead,
     required this.indexWrites,
     required this.rowDeletes,
+    required this.serverDeletes,
     required this.publishes,
   });
 
@@ -230,12 +241,14 @@ class _Cost {
   final int indexEntriesRead;
   final int indexWrites;
   final int rowDeletes;
+  final int serverDeletes;
   final int publishes;
 
   @override
   String toString() =>
       '(scans: $storeScans, entries: $indexEntriesRead, '
       'indexWrites: $indexWrites, rowDeletes: $rowDeletes, '
+      'serverDeletes: $serverDeletes, '
       'publishes: $publishes)';
 }
 

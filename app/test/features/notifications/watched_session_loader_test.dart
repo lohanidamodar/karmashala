@@ -5,12 +5,11 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/watched_session_loader.dart';
 import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,20 +31,25 @@ class _MovableClock implements Clock {
 void main() {
   late AppDatabase db;
   late Directory temp;
-  late SessionDao sessions;
-  late ImportedSessionDao imported;
+  late FakeSessionRows sessions;
+  late FakeImportedRows imported;
+  late SessionsData sessionsData;
+  late ImportedSessionsData importedData;
   late AgentInstallationDao installations;
   late AgentHookReports reports;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    FakeDataServer().mirrorInto(db)
+    final server = FakeDataServer().mirrorInto(db)
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     temp = Directory.systemTemp.createTempSync('watched-sessions');
-    sessions = SessionDao(db);
-    imported = ImportedSessionDao(db);
+    sessions = server.sessionRows;
+    imported = server.importedRows;
+    final client = await server.connect();
+    sessionsData = SessionsData(client);
+    importedData = ImportedSessionsData(client, sessionsData);
     installations = AgentInstallationDao(db);
     reports = AgentHookReports();
     installations.insert(agentInstallation());
@@ -65,8 +69,8 @@ void main() {
     Clock? clock,
     String? Function(String sessionId)? transcriptPathFor,
   }) => WatchedSessionLoader(
-    sessionDao: sessions,
-    importedSessionDao: imported,
+    sessionDao: sessionsData,
+    importedSessionDao: importedData,
     installationDao: installations,
     hookReports: reports,
     clock: clock ?? FixedClock(testTime),
@@ -169,8 +173,8 @@ void main() {
       }
       final clock = _MovableClock(testTime);
       final subject = WatchedSessionLoader(
-        sessionDao: sessions,
-        importedSessionDao: imported,
+        sessionDao: sessionsData,
+        importedSessionDao: importedData,
         installationDao: installations,
         hookReports: reports,
         clock: clock,
@@ -334,8 +338,8 @@ void main() {
       );
     livePanes.add('pane-1');
     final subject = WatchedSessionLoader(
-      sessionDao: sessions,
-      importedSessionDao: imported,
+      sessionDao: sessionsData,
+      importedSessionDao: importedData,
       installationDao: installations,
       hookReports: reports,
       clock: FixedClock(testTime),
@@ -354,8 +358,8 @@ void main() {
       // archived sessions; the cost is this much latency waking one back up.
       final clock = _MovableClock(testTime);
       final subject = WatchedSessionLoader(
-        sessionDao: sessions,
-        importedSessionDao: imported,
+        sessionDao: sessionsData,
+        importedSessionDao: importedData,
         installationDao: installations,
         hookReports: reports,
         clock: clock,

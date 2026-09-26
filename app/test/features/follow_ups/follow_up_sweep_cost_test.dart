@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,8 +13,11 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
-/// What one sweep costs, counted in database round trips rather than timed.
+/// What one sweep costs, counted in round trips rather than timed — to the
+/// server (the follow-ups and sessions are this app's copy of its rows since
+/// slice 1c) and to the database (what is left there: verification).
 ///
 /// It matters because the bindings are synchronous: a sweep runs on the calling
 /// isolate, so a query per ended session would put the whole history of the
@@ -27,8 +29,8 @@ import '../../support/workspace_mirror.dart';
 ///
 /// * a `childrenOf` per session, to find out whether it was handed on — it is
 ///   read from the session list instead, in one pass;
-/// * a "have I already raised this?" query per ended session — it is one read
-///   of the whole table, kept in memory for the run;
+/// * a "have I already raised this?" request per ended session — it is one
+///   read of the copy, kept in memory for the run;
 /// * a verification read on the common path — a crash is a crash whatever it
 ///   verified, so only a *clean* finish pays for one.
 void main() {
@@ -43,7 +45,7 @@ void main() {
         server.projectRows.insert(project());
         server.repositoryRows.insert(repository());
         AgentInstallationDao(db).insert(agentInstallation());
-        final sessions = SessionDao(db);
+        final sessions = server.sessionRows;
         for (var i = 0; i < count; i++) {
           sessions.insert(session(id: 's$i', status: SessionStatus.failed));
         }
@@ -62,16 +64,24 @@ void main() {
         // is the once-per-ending cost the feature exists for; it is the *repeat*
         // that has to be free.
         service.sweep(sessions.getAll());
+        await container.read(sessionsDataProvider).settled();
+        expect(server.followUpRows.open(), hasLength(count.clamp(0, 200)));
 
         final rows = sessions.getAll();
         db.queries = 0;
+        final asked = server.requests.length;
         for (var pass = 0; pass < 5; pass++) {
           service.sweep(rows);
         }
 
-        // One read of the open list per pass, and nothing else. Not one per
-        // session, and not one per session per pass.
-        expect(db.queries, 5, reason: '$count sessions');
+        // A quiet pass reads the open list from the copy and asks nobody
+        // anything: not one request per session, not one query per pass.
+        expect(
+          server.requests.length - asked,
+          0,
+          reason: '$count sessions: ${server.requests.skip(asked)}',
+        );
+        expect(db.queries, 0, reason: '$count sessions');
       },
     );
   }

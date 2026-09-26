@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/checkpoints/application/session_checkpoi
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +18,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// [GitFiles] that keeps everything in a map, so nothing here touches a disk.
 class _MemoryGitFiles implements GitFiles {
@@ -50,6 +50,7 @@ class _MemoryGitFiles implements GitFiles {
 /// writes a decision.
 void main() {
   late AppDatabase db;
+  late FakeDataServer server;
   late ProviderContainer container;
   late List<String> trees;
   late int ids;
@@ -90,11 +91,11 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    final server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer()..mirrorInto(db);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1'));
+    server.sessionRows.insert(session(id: 's1'));
     trees = ['tree1', 'tree2', 'tree3', 'tree4'];
     ids = 0;
 
@@ -139,7 +140,11 @@ void main() {
         decidedBySessionId: decidedBySessionId,
       );
 
-  List<DecisionRecord> record() => DecisionRecordDao(db).forSession('s1');
+  /// What the server holds, once the decisions sent are answered.
+  Future<List<DecisionRecord>> record() async {
+    await container.read(sessionsDataProvider).settled();
+    return server.decisionRows.forSession('s1');
+  }
 
   test('a checkpoint taken with a reason is a decision', () async {
     final checkpoint = await capture(
@@ -148,7 +153,7 @@ void main() {
     );
 
     expect(checkpoint, isNotNull);
-    final decision = record().single;
+    final decision = (await record()).single;
     expect(decision.kind, DecisionKind.checkpointMarked);
     // The label verbatim: it is the reason somebody gave, and the only part of
     // a checkpoint that says a state was chosen rather than merely reached.
@@ -169,7 +174,7 @@ void main() {
     // time would fill the record with the passage of time and drown the four
     // things somebody actually decided.
     expect(checkpoint, isNotNull);
-    expect(record(), isEmpty);
+    expect(await record(), isEmpty);
   });
 
   test('a manual checkpoint with nothing to say records nothing', () async {
@@ -177,7 +182,7 @@ void main() {
     expect(await capture(), isNotNull);
     // A snapshot with no reason attached is already fully described by the
     // checkpoint chain; a blank decision row would only inflate the count.
-    expect(record(), isEmpty);
+    expect(await record(), isEmpty);
   });
 
   test('an agent asking for one is attributed to the agent', () async {
@@ -186,7 +191,8 @@ void main() {
       decidedBy: 'an agent in session s1',
       decidedBySessionId: 's1',
     );
-    expect(record().single.recordedBySessionId, 's1');
-    expect(record().single.decidedBy, contains('s1'));
+    final decision = (await record()).single;
+    expect(decision.recordedBySessionId, 's1');
+    expect(decision.decidedBy, contains('s1'));
   });
 }

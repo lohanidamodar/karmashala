@@ -1,9 +1,9 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// What a phone is told about a row with no desktop connected. Found on a
 /// phone: an ended (cancelled) session's header read "Idle", the last thing

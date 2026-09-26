@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_vie
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/checkpoint_tools.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -237,7 +236,7 @@ void main() {
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
-      SessionDao(db).insert(session());
+      mirroredServer(db).sessionRows.insert(session());
       container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),

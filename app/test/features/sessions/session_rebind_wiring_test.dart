@@ -23,6 +23,7 @@ import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// **The row a `/clear` left behind.**
 ///
@@ -33,9 +34,14 @@ import '../../support/workspace_mirror.dart';
 /// any pane the app launched itself.
 void main() {
   late AppDatabase db;
-  late SessionDao sessions;
   late AgentHookReports reports;
   late FakeDataServer server;
+  ProviderContainer? current;
+
+  /// The rows as the app sees them — the last container's copy, where a
+  /// rebind lands at once — or, before any container, as the server has them.
+  SessionReads sessions() =>
+      current?.read(sessionsDataProvider) ?? server.sessionRows;
 
   setUp(() {
     db = AppDatabase.memory();
@@ -44,18 +50,20 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    sessions = SessionDao(db);
+    current = null;
     reports = AgentHookReports();
   });
 
   tearDown(() => db.close());
 
   /// A row in a pane the app launched, on conversation `cli-<id>`.
-  void launched(String id, {required String paneId}) {
-    sessions.insert(session(id: id, status: SessionStatus.running));
-    sessions.updateExternalSessionId(id, 'cli-$id');
-    sessions.updatePaneId(id, paneId);
-  }
+  void launched(String id, {required String paneId}) =>
+      server.sessionRows.insert(
+        session(
+          id: id,
+          status: SessionStatus.running,
+        ).copyWith(externalSessionId: 'cli-$id', paneId: paneId),
+      );
 
   void heardFrom(String conversationId, DateTime at, {bool ended = false}) =>
       reports.record(
@@ -95,7 +103,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    return container;
+    return current = container;
   }
 
   String? rebind(
@@ -120,9 +128,9 @@ void main() {
 
       expect(rebind(container, 'cli-new'), 's1');
       // The row keeps its identity; only the conversation it names changed.
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
-      expect(sessions.getById('s1')!.paneId, 'pane-1');
-      expect(sessions.getById('s1')!.title, 'Work');
+      expect(sessions().getById('s1')!.externalSessionId, 'cli-new');
+      expect(sessions().getById('s1')!.paneId, 'pane-1');
+      expect(sessions().getById('s1')!.title, 'Work');
     },
   );
 
@@ -132,7 +140,7 @@ void main() {
     final container = await containerWith(['pane-1']);
 
     expect(rebind(container, 'cli-new'), isNull);
-    expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+    expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
   });
 
   test('a conversation some row already holds is left alone', () async {
@@ -141,7 +149,7 @@ void main() {
     final container = await containerWith(['pane-1', 'pane-2']);
 
     expect(rebind(container, 'cli-s2'), isNull);
-    expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+    expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
   });
 
   test(
@@ -151,12 +159,16 @@ void main() {
       // names a row belongs to it — even while that row names something else,
       // which is how one wrong rebind turned into a chain of them.
       launched('s1', paneId: 'pane-1');
-      sessions.insert(session(id: 's2', status: SessionStatus.running));
-      sessions.updateExternalSessionId('s2', 'cli-elsewhere');
+      server.sessionRows.insert(
+        session(
+          id: 's2',
+          status: SessionStatus.running,
+        ).copyWith(externalSessionId: 'cli-elsewhere'),
+      );
       final container = await containerWith(['pane-1']);
 
       expect(rebind(container, 's2'), isNull);
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
     },
   );
 
@@ -166,8 +178,8 @@ void main() {
     final container = await containerWith(['pane-1', 'pane-2']);
 
     expect(rebind(container, 'cli-new'), isNull);
-    expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
-    expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+    expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
+    expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
   });
 
   test('one pane still reporting leaves the other unambiguous', () async {
@@ -215,8 +227,8 @@ void main() {
           ended: true,
         );
         expect(rebind(container, 'cli-new', paneSessionId: 's1'), 's1');
-        expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
-        expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+        expect(sessions().getById('s1')!.externalSessionId, 'cli-new');
+        expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
       },
     );
 
@@ -230,7 +242,7 @@ void main() {
       final container = await containerWith(['pane-1', 'pane-2']);
 
       expect(rebind(container, 'cli-new'), 's1');
-      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+      expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
     });
 
     test('without an identity or an ending, the idle pane is never handed '
@@ -240,8 +252,8 @@ void main() {
       final container = await containerWith(['pane-1', 'pane-2']);
 
       expect(rebind(container, 'cli-new'), isNull);
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
-      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+      expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
+      expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
     });
 
     test('a child agent that inherited the pane\'s id moves nothing', () async {
@@ -251,8 +263,8 @@ void main() {
       final container = await containerWith(['pane-1', 'pane-2']);
 
       expect(rebind(container, 'cli-child', paneSessionId: 's1'), isNull);
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
-      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+      expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
+      expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
     });
 
     test(
@@ -262,7 +274,7 @@ void main() {
         final container = await containerWith(['pane-1', 'pane-2']);
 
         expect(rebind(container, 'cli-new', paneSessionId: 'gone'), isNull);
-        expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+        expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
       },
     );
 
@@ -288,8 +300,8 @@ void main() {
           paneSessionId: 's1',
         );
 
-        expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
-        expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+        expect(sessions().getById('s1')!.externalSessionId, 'cli-new');
+        expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
       },
     );
 
@@ -319,22 +331,22 @@ void main() {
             'session_id': 'cli-s1',
             'reason': 'clear',
           }, paneSessionId: pane);
-          expect(sessions.getById('s1')!.status, SessionStatus.running);
+          expect(sessions().getById('s1')!.status, SessionStatus.running);
 
           hook(container, 'UserPromptSubmit', {
             'session_id': 'cli-new',
           }, paneSessionId: pane);
-          expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
-          expect(sessions.getById('s1')!.status, SessionStatus.running);
-          expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
-          expect(sessions.getById('s2')!.status, SessionStatus.running);
+          expect(sessions().getById('s1')!.externalSessionId, 'cli-new');
+          expect(sessions().getById('s1')!.status, SessionStatus.running);
+          expect(sessions().getById('s2')!.externalSessionId, 'cli-s2');
+          expect(sessions().getById('s2')!.status, SessionStatus.running);
 
           // And quitting afterwards still ends the row it moved to.
           hook(container, 'SessionEnd', {
             'session_id': 'cli-new',
             'reason': 'prompt_input_exit',
           }, paneSessionId: pane);
-          expect(sessions.getById('s1')!.status, SessionStatus.completed);
+          expect(sessions().getById('s1')!.status, SessionStatus.completed);
         });
       }
     });
@@ -357,7 +369,7 @@ void main() {
         final container = await containerWith(['pane-1']);
 
         expect(rebind(container, 'cli-ghost', event: event ?? ''), isNull);
-        expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+        expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
       });
     }
 
@@ -371,7 +383,7 @@ void main() {
         event: 'SessionEnd',
         body: jsonEncode({'session_id': 'cli-new', 'cwd': r'C:\src\demo\app'}),
       );
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
       // A moment later, well inside the retry floor: still looked at.
       applyAgentHookCallback(
         container,
@@ -379,7 +391,7 @@ void main() {
         event: 'UserPromptSubmit',
         body: jsonEncode({'session_id': 'cli-new', 'cwd': r'C:\src\demo\app'}),
       );
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+      expect(sessions().getById('s1')!.externalSessionId, 'cli-new');
     });
 
     test('a pane naming itself still needs a turn', () async {
@@ -395,7 +407,7 @@ void main() {
         ),
         isNull,
       );
-      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      expect(sessions().getById('s1')!.externalSessionId, 'cli-s1');
       expect(rebind(container, 'cli-ghost', paneSessionId: 's1'), 's1');
     });
   });

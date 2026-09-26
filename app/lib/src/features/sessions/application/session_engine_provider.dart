@@ -23,9 +23,8 @@ final chatProtocolResolverProvider = Provider<ChatProtocolResolver>((ref) {
 /// Provides the singleton [SessionEngine] for the app.
 final sessionEngineProvider = Provider<SessionEngine>((ref) {
   final engine = SessionEngine(
-    sessionDao: ref.watch(sessionDaoProvider),
-    eventDao: ref.watch(sessionEventDaoProvider),
-    sessionRepositoryDao: ref.watch(sessionRepositoryDaoProvider),
+    sessions: ref.watch(sessionsDataProvider),
+    records: ref.watch(sessionRecordsProvider),
     worktreeService: ref.watch(worktreeServiceProvider),
     resolveProtocol: ref.watch(chatProtocolResolverProvider),
     clock: ref.watch(clockProvider),

@@ -18,7 +18,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_session/session.dart';
@@ -95,7 +94,7 @@ void main() {
     server.projectRows.insert(project(environmentId: envId, path: hub));
     server.repositoryRows.insert(repository(environmentId: envId, path: hub));
     AgentInstallationDao(db).insert(agentInstallation(environmentId: envId));
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(
         session(
           status: SessionStatus.running,

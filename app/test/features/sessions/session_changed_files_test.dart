@@ -19,7 +19,6 @@ import 'package:agent_cli/read.dart' show FileEditKind;
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/sessions/application/session_changed_files_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 
 import '../../support/fake_data_server.dart';
@@ -162,7 +161,7 @@ void main() {
   /// filed under.
   void codexSession({String environmentId = 'windows'}) {
     installAgent(AgentIds.codex, environmentId: environmentId);
-    SessionDao(db).insert(session().copyWith(externalSessionId: 'thread-1'));
+    mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
   }
 
   group('Codex answers out of its own turns', () {
@@ -258,7 +257,7 @@ void main() {
       'a session that has not named a thread yet says that, not nothing',
       () async {
         codexSession();
-        SessionDao(db).updateExternalSessionId('s1', '');
+        mirroredServer(db).sessionRows.updateExternalSessionId('s1', '');
         final container = containerFor();
         addTearDown(container.dispose);
 
@@ -335,7 +334,7 @@ void main() {
   group('Claude Code answers out of its own transcript', () {
     setUp(() {
       installAgent(AgentIds.claudeCode);
-      SessionDao(db).insert(session().copyWith(externalSessionId: 'conv-1'));
+      mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'conv-1'));
     });
 
     String transcript(List<Map<String, Object?>> lines) {
@@ -419,7 +418,7 @@ void main() {
   group('an agent that keeps no record falls back to git', () {
     setUp(() {
       installAgent(AgentIds.antigravity);
-      SessionDao(db).insert(session().copyWith(externalSessionId: 'ag-1'));
+      mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'ag-1'));
     });
 
     test(
@@ -531,7 +530,7 @@ void main() {
   group('when the agent record fails, git still answers, and says why', () {
     test('Codex could not be read, so the checkpoints did', () async {
       installAgent(AgentIds.codex);
-      SessionDao(db).insert(session().copyWith(externalSessionId: 'thread-1'));
+      mirroredServer(db).sessionRows.insert(session().copyWith(externalSessionId: 'thread-1'));
       codex = FakeCodexAppServer(
         reply: (_, id, method, params) => jsonEncode({
           'error': {'code': -32600, 'message': 'thread not loaded'},

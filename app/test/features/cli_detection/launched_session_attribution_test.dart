@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/cli_detection/application/launched_sessi
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
@@ -13,6 +12,7 @@ import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// Learning which Codex conversation a session **we launched** is on.
 ///
@@ -29,7 +29,8 @@ import '../../support/workspace_mirror.dart';
 /// store. This service is the something.
 void main() {
   late AppDatabase db;
-  late SessionDao dao;
+  late FakeSessionRows dao;
+  late SessionsData sessions;
   late WorkspaceData workspace;
 
   const conversation = '01a05c73-912d-7bf3-84cc-a1bb591134aa';
@@ -49,7 +50,8 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
-    dao = SessionDao(db);
+    dao = server.sessionRows;
+    sessions = await sessionsOf(server);
     addTearDown(db.close);
   });
 
@@ -97,7 +99,7 @@ void main() {
 
   LaunchedSessionAttributionService service(List<DetectedSession> detected) =>
       LaunchedSessionAttributionService(
-        sessionDao: dao,
+        sessionDao: sessions,
         installationDao: AgentInstallationDao(db),
         workspace: workspace,
         environmentDao: ExecutionEnvironmentDao(db),
@@ -112,7 +114,7 @@ void main() {
     expect(subject.wantsStoreSweep, isTrue);
     expect(await subject.attribute(), 1);
 
-    expect(dao.getById('s1')!.externalSessionId, conversation);
+    expect(sessions.getById('s1')!.externalSessionId, conversation);
     // And having learned it, the row stops costing a scan.
     expect(subject.wantsStoreSweep, isFalse);
   });
@@ -121,7 +123,7 @@ void main() {
     insert();
     final seen = <String, String>{};
     final subject = LaunchedSessionAttributionService(
-      sessionDao: dao,
+      sessionDao: sessions,
       installationDao: AgentInstallationDao(db),
       workspace: workspace,
       environmentDao: ExecutionEnvironmentDao(db),
@@ -144,7 +146,7 @@ void main() {
     ]);
 
     expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
+    expect(sessions.getById('s1')!.externalSessionId, isNull);
     expect(subject.reasonFor('s1'), isNotNull);
   });
 
@@ -157,7 +159,7 @@ void main() {
       ]);
 
       expect(await subject.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
     },
   );
 
@@ -168,7 +170,7 @@ void main() {
     ]);
 
     expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
+    expect(sessions.getById('s1')!.externalSessionId, isNull);
   });
 
   test(
@@ -179,7 +181,7 @@ void main() {
       final subject = service([codexSession(conversation)]);
 
       expect(await subject.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
     },
   );
 
@@ -193,7 +195,7 @@ void main() {
       ]);
 
       expect(await subject.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
       expect(subject.reasonFor('s1'), contains('2'));
     },
   );
@@ -207,8 +209,8 @@ void main() {
     final subject = service([codexSession(conversation)]);
 
     expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
-    expect(dao.getById('s2')!.externalSessionId, isNull);
+    expect(sessions.getById('s1')!.externalSessionId, isNull);
+    expect(sessions.getById('s2')!.externalSessionId, isNull);
     expect(subject.reasonFor('s1'), isNotNull);
     expect(subject.reasonFor('s2'), isNotNull);
   });
@@ -235,7 +237,7 @@ void main() {
       final subject = service([codexSession(conversation, dated: false)]);
 
       expect(await subject.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
     },
   );
 
@@ -260,7 +262,7 @@ void main() {
   test('a store we cannot read changes nothing', () async {
     insert();
     final subject = LaunchedSessionAttributionService(
-      sessionDao: dao,
+      sessionDao: sessions,
       installationDao: AgentInstallationDao(db),
       workspace: workspace,
       environmentDao: ExecutionEnvironmentDao(db),
@@ -269,7 +271,7 @@ void main() {
     );
 
     expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
+    expect(sessions.getById('s1')!.externalSessionId, isNull);
   });
 
   test(
@@ -281,7 +283,7 @@ void main() {
       final subject = service([codexSession(conversation)]);
 
       expect(await subject.attribute(), 1);
-      expect(dao.getById('s1')!.externalSessionId, conversation);
+      expect(sessions.getById('s1')!.externalSessionId, conversation);
     },
   );
 }

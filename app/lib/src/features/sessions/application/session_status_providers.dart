@@ -50,7 +50,7 @@ final sessionStatusStreamProvider =
 /// **placement alone**, so the app's most frequent change never wakes a tab.
 final placedSessionIdsProvider = Provider<Map<String, String>>((ref) {
   ref.watchSessionKinds(const {SessionChangeKind.placement});
-  return ref.read(sessionDaoProvider).paneSessionIds();
+  return ref.read(sessionsDataProvider).paneSessionIds();
 });
 
 /// The panes on screen right now. Pane ids, not session ids: resolving them

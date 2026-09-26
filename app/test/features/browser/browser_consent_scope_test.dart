@@ -6,7 +6,6 @@ import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,7 +34,7 @@ void main() {
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1'));
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

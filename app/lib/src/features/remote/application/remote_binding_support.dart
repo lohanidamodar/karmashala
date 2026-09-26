@@ -8,7 +8,6 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
@@ -123,13 +122,13 @@ String? environmentNameFor(Ref ref, String? environmentId) {
 /// Which record represents [sessionId] **right now**: a phone can hold an
 /// imported id a native row has superseded, and it must reach the live session.
 ResolvedRemoteSession resolveRemoteSession(Ref ref, String sessionId) {
-  final sessions = ref.read(sessionDaoProvider);
+  final sessions = ref.read(sessionsDataProvider);
   final native = sessions.getById(sessionId);
   if (native != null) return (native: native, imported: null);
-  final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
+  final imported = ref.read(importedSessionsProvider).getById(sessionId);
   if (imported == null) return (native: null, imported: null);
   final liveId = ref
-      .read(importedSessionDaoProvider)
+      .read(importedSessionsProvider)
       .supersedingSessionId(imported.externalId);
   final live = liveId == null ? null : sessions.getById(liveId);
   // Nothing took it over — genuine history, opened read-only as before.

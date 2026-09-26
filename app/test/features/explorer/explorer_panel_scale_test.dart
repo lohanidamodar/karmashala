@@ -7,14 +7,12 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -71,7 +69,7 @@ void main() {
   void seed(int count) {
     final natives = count ~/ 16 + 1;
     for (var i = 0; i < natives; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -85,7 +83,7 @@ void main() {
       );
     }
     for (var i = natives; i < count; i++) {
-      ImportedSessionDao(db).insertIfAbsent(
+      mirroredServer(db).importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i$i',
           repositoryId: 'r1',

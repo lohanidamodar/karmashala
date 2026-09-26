@@ -6,13 +6,13 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../core/process/command_runner_providers.dart';
 import '../agents/application/agent_providers.dart';
-import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'agent_lookup.dart';
 import 'package:karmashala_mcp/launch.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// Opening several imported sessions as tmux windows in one terminal tab.
 /// `tmux_orchestration.dart` builds the script and knows nothing about this app.
@@ -37,7 +37,7 @@ class TmuxControlTools {
 
   Future<Object?> _openSessionsInTmux(List<String> ids, {String? name}) async {
     if (ids.isEmpty) throw ArgumentError('No session ids given.');
-    final importedDao = _container.read(importedSessionDaoProvider);
+    final importedDao = _container.read(importedSessionsProvider);
     final workspace = _container.read(workspaceDataProvider);
     final envDao = _container.read(executionEnvironmentDaoProvider);
 

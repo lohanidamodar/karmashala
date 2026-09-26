@@ -119,7 +119,7 @@ final sessionAgentPlanProvider = Provider.autoDispose
         SessionChangeKind.membership,
         SessionChangeKind.placement,
       });
-      final row = ref.read(sessionDaoProvider).getById(sessionId);
+      final row = ref.read(sessionsDataProvider).getById(sessionId);
       if (row == null) {
         return const AgentPlanReading.absent(AgentPlanAbsence.noRecord);
       }

@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:logging/logging.dart';
@@ -81,7 +80,7 @@ void main() {
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(agentId: AgentIds.codex));
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(title: 'Session 0').copyWith(externalSessionId: externalId),
       );
     }
@@ -129,7 +128,7 @@ void main() {
         linesOn(records, 'sessions.actions'),
         contains('store=no-conversation'),
       );
-      expect(SessionDao(db).getById('s1')!.title, 'Renamed');
+      expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'Renamed');
     });
   });
 
@@ -208,7 +207,7 @@ void main() {
     });
     tearDown(() => db.close());
 
-    void addSession({EnvironmentPath? at = worktree}) => SessionDao(db).insert(
+    void addSession({EnvironmentPath? at = worktree}) => mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',

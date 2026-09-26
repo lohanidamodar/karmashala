@@ -20,7 +20,7 @@ final agentStoreServersProvider = Provider<AgentStoreServers>((ref) {
     registry: ref.watch(agentRegistryProvider),
     clientVersion: appVersion.isEmpty ? '0.0.0' : appVersion,
     onNameUpdated: (agentId, update) {
-      final sessions = ref.read(sessionDaoProvider);
+      final sessions = ref.read(sessionsDataProvider);
       final installations = ref.read(agentInstallationDaoProvider);
       final agentIdsByInstallation = <String, String?>{};
       var changed = false;

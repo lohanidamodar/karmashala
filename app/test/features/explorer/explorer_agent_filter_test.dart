@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_agent_filter.dart';
@@ -18,7 +17,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_sections.d
 import 'package:karmashala/src/features/explorer/domain/agent_filter.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -85,7 +83,7 @@ void main() {
     agents.insert(
       agentInstallation(id: 'a-agy', agentId: AgentIds.antigravity),
     );
-    final sessions = SessionDao(db);
+    final sessions = mirroredServer(db).sessionRows;
     final status = failed ? SessionStatus.failed : SessionStatus.running;
     sessions.insert(
       session(
@@ -131,7 +129,7 @@ void main() {
         ),
       );
     }
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i-claude',
         repositoryId: 'r1',

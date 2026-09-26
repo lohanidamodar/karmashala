@@ -1,26 +1,17 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
-import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
-import '../../support/fixtures.dart';
+import 'package:karmashala_session_engine/store.dart';
+
+import '../support/store_fixtures.dart';
 
 void main() {
   late AppDatabase db;
-  late FakeDataServer server;
   late SessionEventDao dao;
 
   setUp(() {
     db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    server.projectRows.insert(project());
-    server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    seedWorkspace(db);
     SessionDao(db).insert(session());
     dao = SessionEventDao(db);
   });

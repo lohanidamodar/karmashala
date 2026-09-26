@@ -115,7 +115,7 @@ class AutomationRunObserver extends Notifier<int> {
       SessionChangeKind.status,
     });
 
-    final sessions = ref.read(sessionDaoProvider);
+    final sessions = ref.read(sessionsDataProvider);
     final atHost = ref.watch(automationsAtHostProvider);
     final followsHost = ref.watch(sessionFollowsHostFactsProvider);
     final onThisMachine = ref.watch(sessionRunsOnThisMachineProvider);

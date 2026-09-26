@@ -130,7 +130,7 @@ class UsageLimitWatcher extends Notifier<int> {
     if (_disposed) return;
     final behavior = ref.read(settingsControllerProvider).usageLimitBehavior;
     if (behavior == UsageLimitBehavior.nothing) return;
-    final session = ref.read(sessionDaoProvider).getById(entry.session.openId);
+    final session = ref.read(sessionsDataProvider).getById(entry.session.openId);
     if (session == null || session.isArchived) return;
 
     final hit = await detect(session, entry);
@@ -326,7 +326,7 @@ class UsageLimitWatcher extends Notifier<int> {
   }
 
   ScheduledResume? _schedule(UsageLimitHit hit, {required String scheduledBy}) {
-    final session = ref.read(sessionDaoProvider).getById(hit.sessionId);
+    final session = ref.read(sessionsDataProvider).getById(hit.sessionId);
     final agentId = session == null
         ? null
         : ref

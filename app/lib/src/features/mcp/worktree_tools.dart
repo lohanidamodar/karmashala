@@ -329,7 +329,7 @@ class WorktreeControlTools {
   /// there are asked: the path on the row, and the repository id.
   Session? _liveSessionIn(Repository worktree) {
     final launcher = _container.read(sessionLauncherProvider);
-    for (final session in _container.read(sessionDaoProvider).getAll()) {
+    for (final session in _container.read(sessionsDataProvider).getAll()) {
       final inHere =
           session.repositoryId == worktree.id ||
           (session.worktree != null &&

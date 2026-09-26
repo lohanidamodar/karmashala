@@ -1,3 +1,5 @@
+import 'record_json.dart';
+
 /// A single, immutable record in a session's **append-only** event log —
 /// normalized and protocol-agnostic. New state is expressed by appending.
 class SessionEvent {
@@ -26,6 +28,24 @@ class SessionEvent {
   final String payload;
 
   final DateTime createdAt;
+
+  Map<String, Object?> toJson() => {
+    'id': ?id,
+    'sessionId': sessionId,
+    'seq': seq,
+    'type': type,
+    'payload': payload,
+    'createdAt': jsonDate(createdAt),
+  };
+
+  static SessionEvent fromJson(Map<String, Object?> json) => SessionEvent(
+    id: jsonOptionalInt(json, 'id'),
+    sessionId: jsonString(json, 'sessionId'),
+    seq: jsonInt(json, 'seq'),
+    type: jsonString(json, 'type'),
+    payload: jsonString(json, 'payload'),
+    createdAt: jsonDateOf(json, 'createdAt'),
+  );
 
   SessionEvent copyWith({
     int? id,

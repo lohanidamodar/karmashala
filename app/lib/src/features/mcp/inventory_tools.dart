@@ -57,8 +57,8 @@ class InventoryTools {
     if (cliArg != null && cliArg.trim().isNotEmpty && cli == null) {
       throw ArgumentError('Unknown cli "$cliArg". list_agents has the ids.');
     }
-    final sessionDao = _container.read(sessionDaoProvider);
-    final importedDao = _container.read(importedSessionDaoProvider);
+    final sessionDao = _container.read(sessionsDataProvider);
+    final importedDao = _container.read(importedSessionsProvider);
     String? conversationId;
     final sessionId = (args['sessionId'] as String?)?.trim();
     if (sessionId != null && sessionId.isNotEmpty) {
@@ -157,11 +157,11 @@ class InventoryTools {
   List<Map<String, dynamic>> _listSessions({String? query, String? cli}) {
     final projects = _container.read(projectsControllerProvider);
     final workspace = _container.read(workspaceDataProvider);
-    final importedDao = _container.read(importedSessionDaoProvider);
+    final importedDao = _container.read(importedSessionsProvider);
     final needle = query?.trim().toLowerCase();
     final wantCli = parseCli(_container, cli);
 
-    final sessionDao = _container.read(sessionDaoProvider);
+    final sessionDao = _container.read(sessionsDataProvider);
     final registry = _container.read(agentRegistryProvider);
     final installDao = _container.read(agentInstallationDaoProvider);
 

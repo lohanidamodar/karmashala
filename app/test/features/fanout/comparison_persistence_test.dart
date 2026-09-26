@@ -4,7 +4,6 @@ import 'package:karmashala/src/features/fanout/application/comparison_providers.
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_verification/verification.dart';
@@ -14,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'fanout_harness.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// A fan-out that only exists in a dialog is a fan-out you lose by closing the
 /// dialog. These cover the record: that it is written, that it reads back after
@@ -69,7 +69,10 @@ void stopEverything(Harness h, FanOutLaunch launched) {
     terminalSessionsControllerProvider.notifier,
   );
   for (final result in launched.started) {
-    final paneId = SessionDao(h.db).getById(result.session.id)!.paneId!;
+    final paneId = h.container
+        .read(sessionsDataProvider)
+        .getById(result.session.id)!
+        .paneId!;
     (controller.instanceFor(paneId)! as FakeTerminalInstance)
             .livenessNotifier
             .value =
@@ -221,7 +224,7 @@ void main() {
       addTearDown(h.db.close);
       final launched = await launchTwo(h);
       final lost = launched.started.first.session.id;
-      SessionDao(h.db).delete(lost);
+      h.server.sessionRows.delete(lost);
       h.container.dispose();
 
       final restarted = await afterRestart(h);

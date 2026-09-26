@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/cli_detection/application/conversation_i
 import 'package:karmashala/src/features/cli_detection/application/session_search.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
@@ -245,7 +244,7 @@ void main() {
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
-      final sessions = SessionDao(db);
+      final sessions = mirroredServer(db).sessionRows;
       db.transaction(() {
         for (var i = 0; i < count; i++) {
           sessions.insert(

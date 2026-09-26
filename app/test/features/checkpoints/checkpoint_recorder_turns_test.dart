@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/notifications/application/notification_p
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_git/git.dart';
@@ -93,7 +92,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', status: SessionStatus.running));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', status: SessionStatus.running));
     tree = 1;
     fixedTree = null;
     failAdd = false;
@@ -183,7 +182,7 @@ void main() {
   test('a session started after the recorder is checkpointed too', () async {
     startRecorder();
     await pumpEventQueue();
-    SessionDao(db).insert(session(id: 's2', status: SessionStatus.running));
+    mirroredServer(db).sessionRows.insert(session(id: 's2', status: SessionStatus.running));
     container
         .read(sessionsRevisionProvider.notifier)
         .changed(const SessionChange.created('s2'));
@@ -252,7 +251,7 @@ void main() {
       // so it returned at once, the tool wrote, and the "before" snapshot was
       // taken of a tree that already held the change it exists to undo.
       // The hook route finds the session by the CLI's own id.
-      SessionDao(db).updateExternalSessionId('s1', 'cli-1');
+      mirroredServer(db).sessionRows.updateExternalSessionId('s1', 'cli-1');
       startRecorder();
       await pumpEventQueue();
       reports.record(
@@ -284,7 +283,7 @@ void main() {
   test('a session whose row is not `running` is checkpointed too', () async {
     // A pane restored after a restart can be live and hooked while its row
     // still carries what the liveness reconciler last wrote.
-    SessionDao(db).updateStatus('s1', SessionStatus.unknown);
+    mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.unknown);
     startRecorder();
     await pumpEventQueue();
     await hook('cli-1', AgentActivityStatus.working, 'UserPromptSubmit');
@@ -408,7 +407,7 @@ void main() {
   });
 
   test('turns are numbered and carry the prompt a hook sent', () async {
-    SessionDao(db).updateExternalSessionId('s1', 'cli-1');
+    mirroredServer(db).sessionRows.updateExternalSessionId('s1', 'cli-1');
     startRecorder();
     recordCheckpointHints(
       container,
@@ -458,7 +457,7 @@ void main() {
       server.repositoryRows.insert(
         repository(id: 'r2', environmentId: 'ssh:h1', path: '/srv/app'),
       );
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(id: 's3', repositoryId: 'r2', status: SessionStatus.running),
       );
       watched = [...watched, watch('s3', 'cli-3')];

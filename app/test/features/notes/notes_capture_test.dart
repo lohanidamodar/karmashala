@@ -90,7 +90,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.read(sessionDaoProvider).insert(session());
+    container.read(sessionsDataProvider).insert(session());
     container
         .read(settingsControllerProvider.notifier)
         .setNotesEnabled(notesEnabled);

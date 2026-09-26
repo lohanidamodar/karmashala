@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -126,7 +125,7 @@ void main() {
     add('mono', 'mono', '/w/mono', repositories: ['/w/mono/a', '/w/mono/b']);
     add('distro', 'distro', '/home/me/distro', environmentId: 'wsl:Ubuntu');
     add('relay', 'relay', '/srv/relay', environmentId: 'ssh:h1');
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r-app-0',

@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_mcp/catalogue.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_data_server.dart';
@@ -48,7 +47,7 @@ void main() {
           )
           ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', title: 'Fix login'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login'));
     final workspace = await data.override();
     container = ProviderContainer(
       overrides: [

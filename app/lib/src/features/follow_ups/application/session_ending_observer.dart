@@ -27,7 +27,7 @@ class SessionEndingObserver extends Notifier<int> {
       SessionChangeKind.status,
     });
 
-    final dao = ref.read(sessionDaoProvider);
+    final dao = ref.read(sessionsDataProvider);
     final sessions = dao.getAll();
     final service = ref.read(followUpServiceProvider);
     if (service.sweep(sessions)) _revision++;

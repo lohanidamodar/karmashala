@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/notifications/presentation/attention_inb
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
@@ -136,17 +135,17 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
   late Override workspace;
+  late FakeDataServer server;
   _RecordingService? service;
 
   setUp(() async {
     service = null;
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    workspace =
-        await (FakeDataServer().mirrorInto(db)
-              ..projectRows.insert(project())
-              ..repositoryRows.insert(repository()))
-            .override();
+    server = FakeDataServer().mirrorInto(db)
+      ..projectRows.insert(project())
+      ..repositoryRows.insert(repository());
+    workspace = await server.override();
     AgentInstallationDao(db).insert(agentInstallation());
   });
   tearDown(() => db.close());
@@ -205,9 +204,9 @@ void main() {
     await tester.pump();
   }
 
-  void insertCrashedSession() => SessionDao(
-    db,
-  ).insert(session(id: 's1', title: 'Fix login', status: SessionStatus.failed));
+  void insertCrashedSession() => server.sessionRows.insert(
+    session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
+  );
 
   /// The offer, found by its glyph rather than its words, so the wording can
   /// change without the test pretending the control has gone.
@@ -241,7 +240,7 @@ void main() {
     expect(service?.handoffs ?? const [], isEmpty);
     expect(service?.forks ?? const [], isEmpty);
     // And the session it came from is untouched — not restarted, not relisted.
-    expect(SessionDao(db).getById('s1')!.status, SessionStatus.failed);
+    expect(server.sessionRows.getById('s1')!.status, SessionStatus.failed);
   });
 
   testWidgets('confirming does what "Continue with…" does today', (
@@ -304,7 +303,7 @@ void main() {
     // Deliberately narrow: a follow-up is a session that *ended* and left
     // something behind, which is the case "Continue with…" answers. A turn
     // that finished belongs to a session that is still there to talk to.
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       session(id: 's1', title: 'Ship the parser', status: SessionStatus.idle),
     );
     await pump(tester);

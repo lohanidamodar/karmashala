@@ -64,7 +64,7 @@ class _NoPaneForSession extends ConsumerWidget {
   bool _canResume(WidgetRef ref) {
     if (!session.native) return true;
     final id = ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .getById(session.id)
         ?.externalSessionId;
     return id != null && id.isNotEmpty;
@@ -76,7 +76,7 @@ class _NoPaneForSession extends ConsumerWidget {
         ? await actions.openNative(session.id)
         : await () async {
             final record = ref
-                .read(importedSessionDaoProvider)
+                .read(importedSessionsProvider)
                 .getById(session.id);
             return record == null
                 ? const ExplorerResult(ExplorerOutcome.selected)

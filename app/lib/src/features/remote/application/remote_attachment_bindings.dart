@@ -92,7 +92,7 @@ Future<void> offerRemoteAttachment(
   } on AttachmentUploadException catch (failure) {
     throw RemoteApiRefusal(ErrorCode.badRequest, failure.message);
   }
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  final session = ref.read(sessionsDataProvider).getById(sessionId);
   final environmentId = session == null
       ? null
       : ref

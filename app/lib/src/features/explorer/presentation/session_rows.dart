@@ -290,9 +290,12 @@ class NativeSessionRow extends ConsumerWidget {
               label: 'Copy resume command',
               icon: AppIcons.copy,
             ),
-            // Read when the menu opens: offered only once something has been
-            // attached, because an empty dialog reads as a broken feature.
-            if (ref.read(sentContextCardsProvider(session.id)).isNotEmpty)
+            // Read when the menu opens: offered once something has been
+            // attached, because an empty dialog reads as a broken feature —
+            // and while the server's log is still being read, when the
+            // dialog says so itself if there is nothing.
+            if (ref.read(sentContextCardsProvider(session.id)).value?.isNotEmpty ??
+                true)
               DesktopMenuItem(
                 value: 'context-sent',
                 label: 'Context sent to this session…',

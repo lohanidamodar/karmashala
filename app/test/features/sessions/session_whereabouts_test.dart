@@ -7,7 +7,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -25,6 +24,7 @@ import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../../support/fake_command_runner.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// Captured from codex-cli 0.151.0 on 2026-08-30, by holding thread
 /// `01a051ab-…` open in one process and resuming it in a second (which exited
@@ -195,7 +195,7 @@ void main() {
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
-    final paneId = SessionDao(h.db).getById(id)!.paneId!;
+    final paneId = h.container.read(sessionsDataProvider).getById(id)!.paneId!;
     // The refusal as a narrow pane renders it: hard-wrapped, and the wrap falls
     // inside a word — the case a per-line substring match cannot see.
     writeToPane(h.container, paneId, _wrapped(_refusal, 24));
@@ -215,7 +215,7 @@ void main() {
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
-    final paneId = SessionDao(h.db).getById(id)!.paneId!;
+    final paneId = h.container.read(sessionsDataProvider).getById(id)!.paneId!;
     writeToPane(h.container, paneId, 'Done. Bye!\r\n');
     killProcess(h.container, paneId);
     h.container.invalidate(sessionWhereaboutsProvider(id));
@@ -288,7 +288,7 @@ void main() {
     addTearDown(container.dispose);
 
     final id = await launch(container);
-    final paneId = SessionDao(db).getById(id)!.paneId!;
+    final paneId = container.read(sessionsDataProvider).getById(id)!.paneId!;
     writeToPane(container, paneId, _refusal);
     killProcess(container, paneId);
     container.invalidate(sessionWhereaboutsProvider(id));
@@ -309,7 +309,7 @@ void main() {
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
-    final paneId = SessionDao(h.db).getById(id)!.paneId!;
+    final paneId = h.container.read(sessionsDataProvider).getById(id)!.paneId!;
     writeToPane(
       h.container,
       paneId,
@@ -360,7 +360,7 @@ void main() {
     addTearDown(container.dispose);
 
     final id = await launch(container);
-    final paneId = SessionDao(db).getById(id)!.paneId!;
+    final paneId = container.read(sessionsDataProvider).getById(id)!.paneId!;
     writeToPane(container, paneId, _noSuchConversation);
     killProcess(container, paneId);
     container.invalidate(sessionWhereaboutsProvider(id));
@@ -380,7 +380,7 @@ void main() {
     addTearDown(h.container.dispose);
 
     final id = await launch(h.container);
-    final paneId = SessionDao(h.db).getById(id)!.paneId!;
+    final paneId = h.container.read(sessionsDataProvider).getById(id)!.paneId!;
     writeToPane(h.container, paneId, _noSuchConversation);
     final instance =
         h.container
@@ -472,7 +472,10 @@ void main() {
       addTearDown(h.container.dispose);
 
       final id = await launch(h.container);
-      final paneId = SessionDao(h.db).getById(id)!.paneId!;
+      final paneId = h.container
+          .read(sessionsDataProvider)
+          .getById(id)!
+          .paneId!;
       writeToPane(
         h.container,
         paneId,

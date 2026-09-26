@@ -262,7 +262,7 @@ final sessionLocalDeliveryProvider = FutureProvider.autoDispose
       // One of these per drawn row. Only this session's own row decides what it
       // says; the git behind it is [checkoutDeliveryProvider]'s to invalidate.
       ref.watchSession(sessionId);
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) return SessionDelivery.unknown;
       final repository = ref
           .read(workspaceDataProvider)
@@ -295,7 +295,7 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
       // Every watch before the first await, and the local half started before
       // the pull request so the two run together rather than in series.
       final local = ref.watch(sessionLocalDeliveryProvider(sessionId).future);
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       final repository = session == null
           ? null
           : ref.read(workspaceDataProvider).repository(session.repositoryId);

@@ -1,6 +1,6 @@
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// The other half of karmashala_store's session_query_plan_test.dart, which
 /// asks the planner whether the CLI conversation lookup uses its index.

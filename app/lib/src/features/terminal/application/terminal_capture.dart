@@ -26,7 +26,7 @@ class TerminalSelectionSource {
 /// the menu opens rather than watched — nothing draws it.
 final terminalSelectionSourceProvider = Provider.autoDispose
     .family<TerminalSelectionSource, String>((ref, paneId) {
-      final rows = ref.read(sessionDaoProvider).getByPaneIds([paneId]);
+      final rows = ref.read(sessionsDataProvider).getByPaneIds([paneId]);
       if (rows.isEmpty) return TerminalSelectionSource.none;
       final session = rows.first;
       return TerminalSelectionSource(

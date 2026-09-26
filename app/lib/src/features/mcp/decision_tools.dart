@@ -3,6 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../sessions/application/decision_recorder.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_verification/verification.dart';
+import 'dart:async';
 
 /// `decision_record`: an agent writing down a decision, deliberately, because a
 /// paraphrase is not one. Only two [DecisionKind]s are writable, never approval.
@@ -31,7 +32,7 @@ class DecisionControlTools {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  Object? _record(Map<String, dynamic> args) {
+  Future<Object?> _record(Map<String, dynamic> args) async {
     final kind = writableKinds[(args['kind'] as String?)?.trim()];
     if (kind == null) {
       throw ArgumentError(
@@ -61,7 +62,7 @@ class DecisionControlTools {
       );
     }
 
-    final decision = _container
+    final decision = await _container
         .read(decisionRecorderProvider)
         .recordFromAgent(
           sessionId: sessionId,
@@ -164,7 +165,7 @@ void recordFinishedVerdict(ProviderContainer container, VerificationRun? run) {
   final subject = run.sessionId;
   final verdict = run.verdict;
   if (subject == null || verdict == null) return;
-  container
+  final recording = container
       .read(decisionRecorderProvider)
       .recordVerificationVerdict(
         sessionId: subject,
@@ -175,4 +176,5 @@ void recordFinishedVerdict(ProviderContainer container, VerificationRun? run) {
         attribution: 'Verdict ${run.attribution.phrase}.',
         producedBySessionId: run.producedBySessionId,
       );
+  unawaited(recording);
 }

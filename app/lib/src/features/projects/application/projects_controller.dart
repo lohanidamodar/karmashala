@@ -416,7 +416,7 @@ class ProjectsController extends Notifier<List<Project>> {
     final imported = deleteCliSessions
         ? [
             for (final repo in repos)
-              ...ref.read(importedSessionDaoProvider).getByRepository(repo.id),
+              ...ref.read(importedSessionsProvider).getByRepository(repo.id),
           ]
         : const <ImportedSession>[];
 
@@ -447,13 +447,13 @@ class ProjectsController extends Notifier<List<Project>> {
       session:
           session != null &&
           repoIds.contains(
-            ref.read(sessionDaoProvider).getById(session)?.repositoryId,
+            ref.read(sessionsDataProvider).getById(session)?.repositoryId,
           ),
       imported:
           imported != null &&
           repoIds.contains(
             ref
-                .read(importedSessionDaoProvider)
+                .read(importedSessionsProvider)
                 .getById(imported)
                 ?.repositoryId,
           ),

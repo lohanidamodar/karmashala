@@ -20,7 +20,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_project_r
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -65,7 +64,7 @@ void main() {
     }
     final projects = server.projectRows;
     final repositories = server.repositoryRows;
-    final sessions = SessionDao(db);
+    final sessions = mirroredServer(db).sessionRows;
     db.execute('BEGIN');
     for (var p = 0; p < _projects; p++) {
       final path = '/Users/me/Documents/projects/client-$p/workspace-$p';
@@ -271,7 +270,7 @@ void main() {
           card.title: identityHashCode(card),
       };
       final before = identities();
-      SessionDao(harness.db).updateStatus(target.id, SessionStatus.idle);
+      mirroredServer(harness.db).sessionRows.updateStatus(target.id, SessionStatus.idle);
       harness.db.reset();
       final tick = Stopwatch()..start();
       harness.container
@@ -284,7 +283,7 @@ void main() {
       // And nine more, there and back, because one frame is mostly noise.
       final ticks = Stopwatch()..start();
       for (var i = 0; i < 9; i++) {
-        SessionDao(harness.db).updateStatus(
+        mirroredServer(harness.db).sessionRows.updateStatus(
           target.id,
           i.isEven ? SessionStatus.completed : SessionStatus.idle,
         );

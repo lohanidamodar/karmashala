@@ -35,7 +35,7 @@ class BrowserConsentRevision extends Notifier<int> {
   String? repositoryId;
   if (callerSessionId != null && callerSessionId.isNotEmpty) {
     repositoryId = container
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .getById(callerSessionId)
         ?.repositoryId;
   }

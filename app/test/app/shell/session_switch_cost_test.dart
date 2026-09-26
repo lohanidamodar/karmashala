@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -135,7 +134,7 @@ void main() {
     // visible. All carry a CLI id, because that is what makes a chat rendering
     // possible and therefore what makes a transcript worth reading.
     for (final id in ['s1', 's2', 's3']) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -212,7 +211,7 @@ void main() {
   /// curve rather than as a constant.
   void seedIdleRows(int count) {
     for (var i = 0; i < count; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'idle$i',
           repositoryId: 'r1',
@@ -257,7 +256,7 @@ void main() {
           .layout
           .panes
           .single;
-      SessionDao(db).updatePaneId(id, paneId);
+      mirroredServer(db).sessionRows.updatePaneId(id, paneId);
     }
     for (var i = 0; i < deadPanes; i++) {
       controller.openTab(TerminalProfile.powerShell);
@@ -270,7 +269,7 @@ void main() {
       final instance = controller.instanceFor(paneId)! as FakeTerminalInstance;
       instance.terminal.write('a screenful of the run that ended\r\n' * 20);
       instance.livenessNotifier.value = PaneLiveness.exited;
-      SessionDao(db).updatePaneId('idle$i', paneId);
+      mirroredServer(db).sessionRows.updatePaneId('idle$i', paneId);
     }
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
 

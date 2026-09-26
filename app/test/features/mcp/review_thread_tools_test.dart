@@ -2,11 +2,11 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:karmashala/src/features/mcp/review_thread_tools.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 import '../git/review_thread_harness.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The MCP surface: what an agent can say about a review, and what it cannot.
 void main() {
@@ -18,7 +18,7 @@ void main() {
       shas: {'lib/a.dart': 'sha-one', 'lib/b.dart': 'sha-b'},
     );
     AgentInstallationDao(harness.db).insert(agentInstallation());
-    SessionDao(harness.db).insert(session(id: 's1'));
+    mirroredServer(harness.db).sessionRows.insert(session(id: 's1'));
     tools = ReviewThreadTools(harness.container, callerSessionId: 's1');
   });
   tearDown(() => harness.dispose());

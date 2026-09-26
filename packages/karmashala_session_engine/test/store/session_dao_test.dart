@@ -1,28 +1,20 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
-import '../../support/fake_data_server.dart';
-import '../../support/workspace_mirror.dart';
-import '../../support/fixtures.dart';
+import 'package:karmashala_session_engine/store.dart';
+
+import '../support/store_fixtures.dart';
 
 void main() {
   late AppDatabase db;
-  late FakeDataServer server;
   late SessionDao dao;
 
   setUp(() {
     db = AppDatabase.memory();
-    server = FakeDataServer()..mirrorInto(db);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    server.projectRows.insert(project());
-    server.repositoryRows.insert(repository());
-    AgentInstallationDao(db).insert(agentInstallation());
+    seedWorkspace(db);
     dao = SessionDao(db);
   });
   tearDown(() => db.close());
@@ -224,6 +216,15 @@ void main() {
       expect(dao.countsByRepositories(['r1']), (sessions: 1, running: 0));
     });
 
+    test('a status word this build cannot read is unknown, not a crash', () {
+      // Moved from the app's liveness test (slice 1c): one unreadable word
+      // used to throw the whole `SELECT * FROM sessions` away.
+      dao.insert(session(id: 's1'));
+      db.execute("UPDATE sessions SET status = 'hibernating' WHERE id = 's1';");
+      expect(dao.getById('s1')!.status, SessionStatus.unknown);
+      expect(dao.getAll(), hasLength(1));
+    });
+
     test('agrees with counting the rows one at a time', () {
       // The property the change has to preserve: whatever `getByRepository`
       // would have answered, this answers.
@@ -245,7 +246,7 @@ void main() {
 
   test('deleting the repository cascades to its sessions', () {
     dao.insert(session());
-    server.repositoryRows.delete('r1');
+    deleteRepository(db, 'r1');
     expect(dao.getById('s1'), isNull);
   });
 

@@ -1,7 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/read.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// The titles the app writes itself, and therefore the ones a CLI may replace.
 /// All of them mean "nobody has named this yet".
@@ -18,7 +18,7 @@ class SessionTitleSyncService {
     this.isRunningInPane = _nowhere,
   });
 
-  final SessionDao sessionDao;
+  final SessionsData sessionDao;
   final AgentRegistry agents;
 
   /// One pass over every CLI store — the same scan adoption uses.

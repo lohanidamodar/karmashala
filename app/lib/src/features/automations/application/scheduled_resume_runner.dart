@@ -66,7 +66,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
   }
 
   Future<void> _run(ScheduledResume resume, String note) async {
-    final session = _ref.read(sessionDaoProvider).getById(resume.sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(resume.sessionId);
     if (session == null) {
       _finish(
         resume,
@@ -422,10 +422,10 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
     String? sent,
   }) {
     final ended = _controller.end(resume, state, reason);
-    final session = _ref.read(sessionDaoProvider).getById(resume.sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(resume.sessionId);
     if (state == ScheduledResumeState.done) {
       final now = _now.toLocal();
-      _ref
+      final recording = _ref
           .read(decisionRecorderProvider)
           .recordScheduledResume(
             sessionId: resume.sessionId,
@@ -440,6 +440,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
                 '${resume.windowLabel == null ? 'a chosen time' : 'the '
                           '${resume.windowLabel} reset'}.',
           );
+      unawaited(recording);
     }
     _ref.read(resumeAnnouncerProvider).announce(ended, session);
     final repositoryId = session?.repositoryId;

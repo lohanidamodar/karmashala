@@ -5,13 +5,13 @@ import 'package:karmashala/src/features/cli_detection/application/session_title_
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// The rename the owner reported, and the hole it came out of.
 ///
@@ -28,9 +28,10 @@ import '../../support/workspace_mirror.dart';
 /// missing sync, and Antigravity is one of the agents that exercises it.
 void main() {
   late AppDatabase db;
-  late SessionDao dao;
+  late FakeSessionRows dao;
+  late SessionsData sessions;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final server = FakeDataServer()..mirrorInto(db);
@@ -39,7 +40,8 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.antigravity));
-    dao = SessionDao(db);
+    dao = server.sessionRows;
+    sessions = await sessionsOf(server);
   });
   tearDown(() => db.close());
 
@@ -84,7 +86,7 @@ void main() {
     void Function(String, String)? onRenamed,
     bool Function(String id)? isRunningInPane,
   }) => SessionTitleSyncService(
-    sessionDao: dao,
+    sessionDao: sessions,
     agents: AgentRegistry.builtIn,
     scanStores: () async => detected(),
     onRenamed: onRenamed,
@@ -103,7 +105,7 @@ void main() {
         );
 
         expect(await sync.sync(), 1);
-        expect(dao.getById('s1')!.title, 'test me now');
+        expect(sessions.getById('s1')!.title, 'test me now');
         expect(renamed, {'s1': 'test me now'});
       },
     );
@@ -117,7 +119,7 @@ void main() {
         );
 
         expect(await sync.sync(), 1);
-        expect(dao.getById('s1')!.title, 'Fix the crash');
+        expect(sessions.getById('s1')!.title, 'Fix the crash');
       },
     );
 
@@ -128,7 +130,7 @@ void main() {
       final sync = service(() => [found(title: 'test me now')]);
 
       expect(await sync.sync(), 1);
-      expect(dao.getById('s1')!.title, 'test me now');
+      expect(sessions.getById('s1')!.title, 'test me now');
     });
 
     test('so is a row with no title at all', () async {
@@ -136,7 +138,7 @@ void main() {
       final sync = service(() => [found(title: 'test me now')]);
 
       expect(await sync.sync(), 1);
-      expect(dao.getById('s1')!.title, 'test me now');
+      expect(sessions.getById('s1')!.title, 'test me now');
     });
   });
 
@@ -149,7 +151,7 @@ void main() {
       final sync = service(() => [found(title: 'test me now')]);
 
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'Ledger rewrite');
+      expect(sessions.getById('s1')!.title, 'Ledger rewrite');
       // And it costs nothing: with no row waiting for a name there is no
       // reason to read the disk at all.
       expect(sync.scans, 0);
@@ -166,7 +168,7 @@ void main() {
       );
 
       expect(await sync.sync(), 0);
-      final updated = dao.getById('s1')!;
+      final updated = sessions.getById('s1')!;
       expect(updated.title, 'Old app title');
       expect(updated.titleByUser, isTrue);
     });
@@ -180,7 +182,7 @@ void main() {
       final sync = service(() => [found(preview: 'wHAT ?')]);
 
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'New session');
+      expect(sessions.getById('s1')!.title, 'New session');
     });
 
     test('a row whose conversation the stores do not hold', () async {
@@ -188,7 +190,7 @@ void main() {
       final sync = service(() => [found(id: 'somebody-else')]);
 
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'New session');
+      expect(sessions.getById('s1')!.title, 'New session');
     });
 
     test('a row with no CLI id, which nothing can be matched to', () async {
@@ -197,19 +199,19 @@ void main() {
 
       expect(sync.wantsStoreSweep, isFalse);
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'New session');
+      expect(sessions.getById('s1')!.title, 'New session');
     });
 
     test('a store that threw is not a rename', () async {
       dao.insert(row());
       final sync = SessionTitleSyncService(
-        sessionDao: dao,
+        sessionDao: sessions,
         agents: AgentRegistry.builtIn,
         scanStores: () async => throw const FormatException('half-written'),
       );
 
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'New session');
+      expect(sessions.getById('s1')!.title, 'New session');
     });
   });
 
@@ -222,7 +224,7 @@ void main() {
       expect(await sync.sync(), 1);
       title = 'final answer';
       expect(await sync.sync(), 1);
-      expect(dao.getById('s1')!.title, 'final answer');
+      expect(sessions.getById('s1')!.title, 'final answer');
     });
 
     test('but an in-app rename settles the row for good', () async {
@@ -234,12 +236,12 @@ void main() {
       // What `SessionActions.renameNative` does — including recording that the
       // name is the user's, which is what settles the row rather than the
       // in-memory note the service used to keep.
-      dao.updateTitle('s1', 'Ledger rewrite', byUser: true);
+      sessions.updateTitle('s1', 'Ledger rewrite', byUser: true);
       title = 'final answer';
 
       expect(sync.wantsStoreSweep, isFalse);
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'Ledger rewrite');
+      expect(sessions.getById('s1')!.title, 'Ledger rewrite');
     });
 
     test('and a session that has stopped is no longer watched', () async {
@@ -252,12 +254,14 @@ void main() {
       final sync = service(() => [found(title: title)]);
 
       expect(await sync.sync(), 1);
+      // The rename reached the server before the host recorded the ending.
+      await sessions.settled();
       dao.updateStatus('s1', SessionStatus.completed);
       title = 'final answer';
 
       expect(sync.wantsStoreSweep, isFalse);
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'test me now');
+      expect(sessions.getById('s1')!.title, 'test me now');
     });
   });
 
@@ -284,7 +288,7 @@ void main() {
 
       expect(sync.wantsStoreSweep, isTrue, reason: 'the row is still the CLIs');
       expect(await sync.sync(), 1);
-      expect(dao.getById('s1')!.title, 'karmashala');
+      expect(sessions.getById('s1')!.title, 'karmashala');
     });
 
     test('but not once the user has renamed it in the app', () async {
@@ -292,7 +296,7 @@ void main() {
       final sync = service(() => [found(title: 'karmashala')]);
 
       expect(await sync.sync(), 0);
-      expect(dao.getById('s1')!.title, 'chitragupta');
+      expect(sessions.getById('s1')!.title, 'chitragupta');
       expect(sync.scans, 0, reason: 'and it does not even read the disk');
     });
 
@@ -322,7 +326,7 @@ void main() {
       ).sync();
 
       expect(renamed, 1);
-      expect(dao.getById('s1')!.title, 'karmashala enhanced');
+      expect(sessions.getById('s1')!.title, 'karmashala enhanced');
     });
 
     test('with nothing running it, a settled CLI name stays settled', () async {
@@ -335,7 +339,7 @@ void main() {
       ).sync();
 
       expect(renamed, 0);
-      expect(dao.getById('s1')!.title, 'karmashala revisits');
+      expect(sessions.getById('s1')!.title, 'karmashala revisits');
     });
   });
 }

@@ -1,10 +1,6 @@
-import 'package:karmashala_store/database.dart';
-import '../domain/follow_up.dart';
+import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
-
-/// How many open follow-ups are ever handed to the inbox at once. Bounded
-/// here, at the source: an evicted one would be re-filed by the next sync.
-const int kOpenFollowUpCap = 200;
+import 'package:karmashala_store/database.dart';
 
 /// Data-access for what sessions left behind. A follow-up can be raised, read
 /// and resolved — no update, and no delete, so a disappearance has an answer.
@@ -73,6 +69,20 @@ class FollowUpDao {
       'WHERE id = ? AND resolved_at IS NULL;',
       [isoFromDate(at), resolution.name, id],
     );
+  }
+
+  /// Every follow-up ever raised, open or resolved, oldest first — a client's
+  /// snapshot.
+  List<FollowUp> all() => _db
+      .query('SELECT * FROM session_follow_ups ORDER BY id;')
+      .map(_fromRow)
+      .toList();
+
+  FollowUp? getById(int id) {
+    final rows = _db.query('SELECT * FROM session_follow_ups WHERE id = ?;', [
+      id,
+    ]);
+    return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
   /// `'<sessionId>/<ending>'` for every ending that has ever produced a row,

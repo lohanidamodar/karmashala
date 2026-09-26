@@ -135,13 +135,13 @@ Future<String> startSession(
         ),
       );
   container
-      .read(sessionDaoProvider)
+      .read(sessionsDataProvider)
       .updateExternalSessionId(launched.session.id, externalId);
   return launched.session.id;
 }
 
 String paneOf(ProviderContainer container, String sessionId) =>
-    container.read(sessionDaoProvider).getById(sessionId)!.paneId!;
+    container.read(sessionsDataProvider).getById(sessionId)!.paneId!;
 
 void main() {
   test('a session restored from disk resumes in the pane it came back in, '
@@ -183,7 +183,7 @@ void main() {
     );
     expect(state.tabs.single.layout.panes, [paneId]);
     expect(state.livenessOf(paneId), PaneLiveness.live);
-    expect(next.read(sessionDaoProvider).getById(sessionId)!.paneId, paneId);
+    expect(next.read(sessionsDataProvider).getById(sessionId)!.paneId, paneId);
 
     final started =
         next
@@ -227,7 +227,7 @@ void main() {
     final state = container.read(terminalSessionsControllerProvider);
     expect(state.tabs, hasLength(2));
     expect(
-      container.read(sessionDaoProvider).getById(sessionId)!.paneId,
+      container.read(sessionsDataProvider).getById(sessionId)!.paneId,
       isNot(paneId),
     );
   });

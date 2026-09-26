@@ -12,8 +12,8 @@ import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/message_composer.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
-import '../application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// History for an imported CLI session, rendered like the chat transcript.
 /// Typing a message resumes it in place, replacing the imported entry.
@@ -51,7 +51,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
     // about it.
     ref.watchSession(widget.sessionId);
     final session = ref
-        .read(importedSessionDaoProvider)
+        .read(importedSessionsProvider)
         .getById(widget.sessionId);
 
     if (session == null) {

@@ -180,7 +180,7 @@ void main() {
 
     final first = await containerOver(db);
     final sessionId = await startSession(first);
-    final paneId = first.read(sessionDaoProvider).getById(sessionId)!.paneId!;
+    final paneId = first.read(sessionsDataProvider).getById(sessionId)!.paneId!;
     final next = await restart(first, db);
     expect(
       next.read(terminalSessionsControllerProvider).livenessOf(paneId),
@@ -201,7 +201,7 @@ void main() {
 
     // And what did *not* happen: no second row, no fresh conversation started
     // under the row that claims history, and the dormant pane left alone.
-    expect(next.read(sessionDaoProvider).getAll(), hasLength(1));
+    expect(next.read(sessionsDataProvider).getAll(), hasLength(1));
     expect(next.read(terminalSessionsControllerProvider).tabs, hasLength(1));
     expect(
       next.read(terminalSessionsControllerProvider).livenessOf(paneId),
@@ -210,7 +210,7 @@ void main() {
 
     // The row stops claiming to be running the moment we learn better. It is
     // kept, not deleted: its title, directory and lineage are still the user's.
-    final row = next.read(sessionDaoProvider).getById(sessionId)!;
+    final row = next.read(sessionsDataProvider).getById(sessionId)!;
     expect(row.status, SessionStatus.failed);
     expect(row.externalSessionId, sessionId);
     expect(row.title, 'New session');
@@ -223,7 +223,7 @@ void main() {
 
     final first = await containerOver(db);
     final sessionId = await startSession(first);
-    final paneId = first.read(sessionDaoProvider).getById(sessionId)!.paneId!;
+    final paneId = first.read(sessionsDataProvider).getById(sessionId)!.paneId!;
     writeConversation(sessionId);
     final next = await restart(first, db);
 
@@ -241,7 +241,7 @@ void main() {
         .agentLaunch!;
     expect(launch.arguments, containsAllInOrder(['--resume', sessionId]));
     expect(
-      next.read(sessionDaoProvider).getById(sessionId)!.status,
+      next.read(sessionsDataProvider).getById(sessionId)!.status,
       SessionStatus.running,
     );
   });
@@ -264,7 +264,7 @@ void main() {
 
     expect(result.outcome, ExplorerOutcome.resumed);
     expect(
-      next.read(sessionDaoProvider).getById(sessionId)!.status,
+      next.read(sessionsDataProvider).getById(sessionId)!.status,
       SessionStatus.running,
     );
   });
@@ -282,7 +282,7 @@ void main() {
       final first = await containerOver(db);
       final sessionId = await startSession(first);
       first
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .updateExternalSessionId(sessionId, 'observed-elsewhere');
       final next = await restart(first, db);
 
@@ -307,10 +307,10 @@ void main() {
       emptyStore();
       final first = await containerOver(db);
       final sessionId = await startSession(first);
-      final paneId = first.read(sessionDaoProvider).getById(sessionId)!.paneId!;
+      final paneId = first.read(sessionsDataProvider).getById(sessionId)!.paneId!;
       if (ownWritten) writeConversation(sessionId);
       first
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .updateExternalSessionId(sessionId, 'ghost');
       return (
         await restart(first, db, locatable: locatable),
@@ -335,10 +335,10 @@ void main() {
             .agentLaunch!;
         expect(launch.arguments, containsAllInOrder(['--resume', sessionId]));
         expect(launch.arguments, isNot(contains('ghost')));
-        final row = next.read(sessionDaoProvider).getById(sessionId)!;
+        final row = next.read(sessionsDataProvider).getById(sessionId)!;
         expect(row.externalSessionId, sessionId);
         expect(row.status, SessionStatus.running);
-        expect(next.read(sessionDaoProvider).getAll(), hasLength(1));
+        expect(next.read(sessionsDataProvider).getAll(), hasLength(1));
       },
     );
 
@@ -358,9 +358,9 @@ void main() {
         next.read(terminalSessionsControllerProvider).livenessOf(paneId),
         PaneLiveness.restored,
       );
-      expect(next.read(sessionDaoProvider).getAll(), hasLength(1));
+      expect(next.read(sessionsDataProvider).getAll(), hasLength(1));
       expect(
-        next.read(sessionDaoProvider).getById(sessionId)!.externalSessionId,
+        next.read(sessionsDataProvider).getById(sessionId)!.externalSessionId,
         'ghost',
       );
     });
@@ -410,7 +410,7 @@ void main() {
             ),
         throwsA(isA<SessionConversationMissing>()),
       );
-      expect(container.read(sessionDaoProvider).getAll(), hasLength(1));
+      expect(container.read(sessionsDataProvider).getAll(), hasLength(1));
     },
   );
 }

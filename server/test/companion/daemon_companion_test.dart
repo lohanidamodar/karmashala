@@ -19,6 +19,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:test/test.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// The phone companion served by the daemon, end to end: a real companion
 /// client dials the daemon's LAN listener, seals with the key a pairing row

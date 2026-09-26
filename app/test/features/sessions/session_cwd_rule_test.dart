@@ -15,7 +15,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -442,7 +441,7 @@ void main() {
     /// `SessionArchiveService` leaves behind — it removes the worktree and
     /// deliberately keeps everything else.
     void insertArchivedWorktreeSession(AppDatabase db) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'src-1',
           repositoryId: 'r1',
@@ -583,7 +582,7 @@ void main() {
         expect(result.workingDirectoryNotice, isNull);
         // A fork is a create: the source conversation is left where it is, and
         // the row that named it is untouched.
-        expect(SessionDao(h.db).getById('src-1')!.worktree!.path, worktreePath);
+        expect(mirroredServer(h.db).sessionRows.getById('src-1')!.worktree!.path, worktreePath);
       },
     );
 
@@ -598,9 +597,9 @@ void main() {
       insertArchivedWorktreeSession(h.db);
       h.server.repositoryRows.insert(repository(id: 'r2', name: 'api'));
 
-      final before = SessionDao(h.db).getById('src-1')!;
+      final before = mirroredServer(h.db).sessionRows.getById('src-1')!;
       h.container.read(checkoutPickerProvider).select(repository(id: 'r2'));
-      final after = SessionDao(h.db).getById('src-1')!;
+      final after = mirroredServer(h.db).sessionRows.getById('src-1')!;
 
       expect(after.workingDirectory, before.workingDirectory);
       expect(after.worktree, before.worktree);

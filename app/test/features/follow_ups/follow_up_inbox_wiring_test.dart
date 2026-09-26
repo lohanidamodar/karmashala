@@ -3,12 +3,10 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +17,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// The whole chain, from a session row that says `failed` to a line in the one
 /// list the app has for things that need the user.
@@ -26,7 +25,14 @@ void main() {
   late AppDatabase db;
   late Override data;
   late ProviderContainer container;
-  late SessionDao sessions;
+  late FakeDataServer server;
+  late FakeSessionRows sessions;
+
+  /// The follow-ups the app raised or resolved, answered by the server.
+  Future<void> settle() async {
+    await container.read(sessionsDataProvider).settled();
+    await Future<void>.delayed(Duration.zero);
+  }
 
   ProviderContainer mount() {
     final made = ProviderContainer(
@@ -50,16 +56,17 @@ void main() {
   setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    final server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    sessions = SessionDao(db);
+    sessions = server.sessionRows;
     sessions.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     container = mount();
+    await settle();
   });
   tearDown(() => db.close());
 
@@ -73,29 +80,34 @@ void main() {
     expect(inbox().unseen, 1);
   });
 
-  test('it is still there after a restart', () {
+  test('it is still there after a restart', () async {
     expect(inbox().items, hasLength(1));
     container = mount();
+    await settle();
     expect(inbox().items.single.kind, InboxItemKind.followUp);
   });
 
-  test('dismissing it resolves the record, so it does not come back', () {
+  test('dismissing it resolves the record, so it does not come back', () async {
     final item = inbox().items.single;
     container.read(attentionInboxProvider.notifier).dismiss(item.id);
     expect(inbox().items, isEmpty);
-    expect(FollowUpDao(db).open(), isEmpty);
+    await settle();
+    expect(server.followUpRows.open(), isEmpty);
 
     // A rebuild of the whole chain — the app's next launch — must not raise it
     // again. The session row still says `failed` and always will.
     container = mount();
+    await settle();
     expect(inbox().items, isEmpty);
   });
 
-  test('a new ending shows up without a restart', () {
+  test('a new ending shows up without a restart', () async {
+    // Another client's row, reaching this app as the server's change.
     sessions.insert(
       session(id: 's2', title: 'Ship the parser', status: SessionStatus.failed),
     );
-    container.read(sessionsRevisionProvider.notifier).bump();
+    inbox();
+    await settle();
 
     expect(
       inbox().items.map((i) => i.label),

@@ -8,8 +8,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_export.dart';
-import 'package:karmashala/src/features/sessions/application/session_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
@@ -54,7 +52,7 @@ void main() {
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       AgentInstallationDao(db!).insert(agentInstallation());
-      SessionDao(db!).insert(
+      server.sessionRows.insert(
         session(
           title: 'Port the importer',
         ).copyWith(externalSessionId: 'conv-1'),
@@ -172,7 +170,7 @@ void main() {
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       AgentInstallationDao(db!).insert(agentInstallation());
-      SessionDao(db!).insert(session(title: 'Fresh'));
+      server.sessionRows.insert(session(title: 'Fresh'));
 
       final export = await container!.read(sessionExporterProvider).build('s1');
       expect(export.transcriptRefusal, isNull);
@@ -194,19 +192,17 @@ void main() {
     'decisions travel as their own readable file, with attribution',
     () async {
       container = await build(transcriptPath: writeTranscript(1));
-      container!
-          .read(decisionRecordDaoProvider)
-          .append(
-            DecisionRecord(
-              sessionId: 's1',
-              kind: DecisionKind.approachRejected,
-              summary: 'The isolate pool deadlocked on Windows.',
-              decidedBy: 'Claude Code',
-              origin: DecisionOrigin.verificationRun,
-              originId: 'v-1',
-              recordedAt: testTime,
-            ),
-          );
+      server.decisionRows.append(
+        DecisionRecord(
+          sessionId: 's1',
+          kind: DecisionKind.approachRejected,
+          summary: 'The isolate pool deadlocked on Windows.',
+          decidedBy: 'Claude Code',
+          origin: DecisionOrigin.verificationRun,
+          originId: 'v-1',
+          recordedAt: testTime,
+        ),
+      );
       final export = await exportIt();
       final decisions = entry(export, 'decisions.md');
       expect(decisions, contains('isolate pool deadlocked'));

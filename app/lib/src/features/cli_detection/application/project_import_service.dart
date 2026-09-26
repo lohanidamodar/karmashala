@@ -4,8 +4,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../workspaces/data/workspace_data.dart';
-import '../data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// Counts of what an import added (duplicates are not counted).
 class ImportSummary {
@@ -38,7 +38,7 @@ class ProjectImportService {
   });
 
   final WorkspaceData workspace;
-  final ImportedSessionDao importedSessionDao;
+  final ImportedSessionsData importedSessionDao;
   final IdGenerator ids;
   final Clock clock;
 

@@ -20,7 +20,6 @@ import 'package:karmashala/src/features/notifications/application/notification_p
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -65,9 +64,9 @@ class ResumingLauncher extends SessionLauncher {
     requests.add(request);
     final failed = failure;
     if (failed != null) throw failed;
-    final resumed = SessionDao(
-      _harness.db,
-    ).getAllByExternalSessionId(request.resumeExternalSessionId!).first;
+    final resumed = _harness.server.sessionRows
+        .getAllByExternalSessionId(request.resumeExternalSessionId!)
+        .first;
     _harness.attachPane(resumed.id);
     return SessionLaunchResult(session: resumed);
   }
@@ -158,7 +157,7 @@ class ResumeHarness {
     String? permissionMode = 'approval=never;sandbox=danger-full-access',
     String repositoryId = 'r1',
   }) {
-    final dao = SessionDao(db);
+    final dao = server.sessionRows;
     dao.insert(session(id: id, title: title, repositoryId: repositoryId));
     dao.updateExternalSessionId(id, 'conv-$id');
     dao.updatePermissionMode(id, permissionMode);
@@ -175,7 +174,7 @@ class ResumeHarness {
         .layout
         .panes
         .first;
-    SessionDao(db).updatePaneId(sessionId, paneId);
+    server.sessionRows.updatePaneId(sessionId, paneId);
     panes.instanceFor(paneId)!.terminal.onOutput = (data) =>
         typed.putIfAbsent(sessionId, () => []).add(data);
     return paneId;

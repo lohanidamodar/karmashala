@@ -240,7 +240,7 @@ class ExplorerSelectionVerbs {
         await _delete();
       case resumeOnReset:
         // Imported rows have no session of ours to resume, so they sit out.
-        final sessions = ref.read(sessionDaoProvider);
+        final sessions = ref.read(sessionsDataProvider);
         await ResumeOnResetDialog.show(context, [
           for (final id in _selection.ids)
             if (sessions.getById(id) != null) id,

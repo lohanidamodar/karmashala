@@ -48,7 +48,7 @@ class SessionActions {
   Future<void> renameNative(String id, String title) async {
     // `byUser` is what stops the CLI rename sync taking the title back, for the
     // life of the row.
-    _ref.read(sessionDaoProvider).updateTitle(id, title, byUser: true);
+    _ref.read(sessionsDataProvider).updateTitle(id, title, byUser: true);
     // The narrowest signal on purpose: the coarse word cost 108 session reads
     // at a hundred sessions.
     _publish(SessionChange.renamed(id));
@@ -61,7 +61,7 @@ class SessionActions {
   /// store server needs only the conversation id; every other costs one pass
   /// over the stores. Never throws.
   Future<String> _propagateNativeRename(String id, String title) async {
-    final session = _ref.read(sessionDaoProvider).getById(id);
+    final session = _ref.read(sessionsDataProvider).getById(id);
     final externalId = session?.externalSessionId;
     if (session == null || externalId == null) return 'no-conversation';
     final installation = _ref
@@ -111,7 +111,7 @@ class SessionActions {
   /// asked. Returns what the user should be told beyond "it is gone", or null.
   /// Throws when nothing was deleted at all.
   Future<String?> deleteNative(String id, {bool deleteFromCli = true}) async {
-    final session = _ref.read(sessionDaoProvider).getById(id);
+    final session = _ref.read(sessionsDataProvider).getById(id);
     if (session == null) return null;
     var fromCliStore = deleteFromCli;
     String? notice;
@@ -170,7 +170,7 @@ class SessionActions {
   /// Takes one native row out of the workspace and nothing else. Publishes
   /// nothing — the caller does, so a batch can publish once.
   void _removeNativeRow(Session session, {required bool fromCliStore}) {
-    _ref.read(sessionDaoProvider).delete(session.id);
+    _ref.read(sessionsDataProvider).delete(session.id);
     if (_ref.read(selectedSessionIdProvider) == session.id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
@@ -183,7 +183,7 @@ class SessionActions {
   }
 
   void _removeImportedRow(ImportedSession session) {
-    _ref.read(importedSessionDaoProvider).delete(session.id);
+    _ref.read(importedSessionsProvider).delete(session.id);
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
@@ -216,7 +216,7 @@ class SessionActions {
   }
 
   Future<void> renameImported(ImportedSession session, String title) async {
-    _ref.read(importedSessionDaoProvider).updateTitle(session.id, title);
+    _ref.read(importedSessionsProvider).updateTitle(session.id, title);
     try {
       await _ref
           .read(cliSessionMutatorProvider)
@@ -378,7 +378,7 @@ class SessionActions {
   /// Drops the imported record and deselects it, leaving the CLI store file
   /// alone. Shared by both resume outcomes so they cannot tidy up differently.
   void _dropImported(ImportedSession session) {
-    _ref.read(importedSessionDaoProvider).delete(session.id);
+    _ref.read(importedSessionsProvider).delete(session.id);
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
@@ -413,7 +413,7 @@ class SessionActions {
 
     var resumed = false;
     if (!engine.isActive(sessionId)) {
-      final session = _ref.read(sessionDaoProvider).getById(sessionId);
+      final session = _ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) {
         throw StateError('This session no longer exists.');
       }
@@ -471,8 +471,8 @@ class SessionActions {
       final recent = messages.length > cap
           ? messages.sublist(messages.length - cap)
           : messages;
-      final eventDao = _ref.read(sessionEventDaoProvider);
       final now = _ref.read(clockProvider).nowUtc();
+      final events = <SessionEvent>[];
       for (final m in recent) {
         final type = switch (m.role) {
           'user' => SessionEventTypes.userMessage,
@@ -480,7 +480,7 @@ class SessionActions {
           _ => null,
         };
         if (type == null) continue;
-        eventDao.append(
+        events.add(
           SessionEvent(
             sessionId: sessionId,
             seq: 0,
@@ -489,6 +489,10 @@ class SessionActions {
             createdAt: now,
           ),
         );
+      }
+      // One request for the lot, numbered in this order.
+      if (events.isNotEmpty) {
+        await _ref.read(sessionRecordsProvider).appendAll(events);
       }
     } catch (_) {
       // History seeding is best-effort — resume still works without it.
@@ -566,7 +570,7 @@ class SessionActions {
   /// A shell command (cd + resume, with permission flags) for native
   /// [sessionId].
   String nativeResumeShellCommand(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     final repo = _ref
         .read(workspaceDataProvider)
@@ -702,7 +706,7 @@ class SessionActions {
     String sessionId,
     SystemTerminal terminal,
   ) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       throw StateError('This session no longer exists.');
     }
@@ -820,7 +824,7 @@ class SessionActions {
     // Recorded now, so the row names the conversation before anything else
     // asks.
     _ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .updateExternalSessionId(session.id, conversationId);
     return conversationId;
   }
@@ -833,8 +837,8 @@ class SessionActions {
     AgentInstallation installation,
   ) async {
     try {
-      final events = _ref
-          .read(sessionEventDaoProvider)
+      final events = await _ref
+          .read(sessionRecordsProvider)
           .listForSession(session.id);
       String? firstUserMessage;
       for (final event in events) {
@@ -866,7 +870,7 @@ class SessionActions {
           .where(
             (candidate) =>
                 _ref
-                    .read(sessionDaoProvider)
+                    .read(sessionsDataProvider)
                     .getByExternalSessionId(candidate.sessionId) ==
                 null,
           )
@@ -893,7 +897,7 @@ class SessionActions {
 
       final recovered = matches.single.sessionId;
       _ref
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .updateExternalSessionId(session.id, recovered);
       // Which conversation this row is on: a placement, not a name.
       _publish(SessionChange.moved(session.id));

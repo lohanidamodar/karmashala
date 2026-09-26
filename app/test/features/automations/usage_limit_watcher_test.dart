@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/notifications/application/session_status
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/usage_limit_settings.dart';
 
@@ -228,7 +227,7 @@ void main() {
         h.container
             .read(settingsControllerProvider.notifier)
             .setUsageLimitBehavior(UsageLimitBehavior.schedule);
-        SessionDao(h.db).updatePermissionMode('s1', null);
+        h.server.sessionRows.updatePermissionMode('s1', null);
         rollout = limited();
         changes.add(entry());
         await h.settle();
@@ -345,7 +344,7 @@ void main() {
 
     test('a renewal the gate refuses says why, rather than arming', () async {
       hadResumed();
-      SessionDao(h.db).updatePermissionMode('s1', null);
+      h.server.sessionRows.updatePermissionMode('s1', null);
       rollout = limited();
       changes.add(entry());
       await h.settle();

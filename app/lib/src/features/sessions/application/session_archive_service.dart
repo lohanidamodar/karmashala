@@ -111,7 +111,7 @@ class SessionArchiveService {
     String sessionId, {
     bool discardUncommitted = false,
   }) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       return const ArchiveOutcome.refused(ArchiveRefusal.sessionGone);
     }
@@ -154,7 +154,7 @@ class SessionArchiveService {
     }
 
     _ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .markArchived(sessionId, _ref.read(clockProvider).nowUtc());
     // The row's status moved and the worktree it named is gone — a workspace
     // fact as much as a session one. Its *name* did not change.

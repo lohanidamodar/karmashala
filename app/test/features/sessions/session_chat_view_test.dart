@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_view_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/launch.dart';
@@ -95,12 +94,13 @@ void main() {
     ).createSync(recursive: true);
   }
 
-  ({ProviderContainer container, _CountingLocator locator}) containerFor({
+  Future<({ProviderContainer container, _CountingLocator locator})>
+  containerFor({
     String agentId = AgentIds.claudeCode,
     String? externalSessionId = 'ext-1',
     String? located,
     AgentRegistry? registry,
-  }) {
+  }) async {
     final db = AppDatabase.memory();
     final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
@@ -108,7 +108,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -125,6 +125,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
         sessionTranscriptLocatorProvider.overrideWithValue(locator),
         if (registry != null) agentRegistryProvider.overrideWithValue(registry),
@@ -139,7 +140,7 @@ void main() {
     String? externalSessionId = 'ext-1',
     String? located,
   }) async {
-    final made = containerFor(
+    final made = await containerFor(
       agentId: agentId,
       externalSessionId: externalSessionId,
       located: located,
@@ -233,7 +234,7 @@ void main() {
 
   group('the allowlist is the prior, and for two agents it is the answer', () {
     test('Claude Code has a chat view and costs no scan', () async {
-      final made = containerFor();
+      final made = await containerFor();
       final reading = made.container.read(sessionChatViewProvider('s1'));
       expect(reading.hasChatView, isTrue);
       expect(reading.evidence, ChatViewEvidence.unread);
@@ -243,7 +244,7 @@ void main() {
     });
 
     test('Codex is unchanged too', () async {
-      final made = containerFor(agentId: AgentIds.codex);
+      final made = await containerFor(agentId: AgentIds.codex);
       expect(
         made.container.read(sessionChatViewProvider('s1')).hasChatView,
         isTrue,
@@ -264,7 +265,7 @@ void main() {
 
   group('what the screen answers for free', () {
     test('a session with no CLI id yet has nothing to look for', () async {
-      final made = containerFor(externalSessionId: null);
+      final made = await containerFor(externalSessionId: null);
       final reading = made.container.read(sessionChatViewProvider('s1'));
       expect(reading.evidence, ChatViewEvidence.noSessionRecord);
       expect(reading.hasChatView, isFalse);
@@ -286,7 +287,7 @@ void main() {
           binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
           store: AgentStoreSpec(homeDirectoryName: '.rover'),
         );
-        final made = containerFor(
+        final made = await containerFor(
           agentId: rover.id,
           registry: const AgentRegistry([DataOnlyAgentAdapter(rover)]),
         );
@@ -305,13 +306,13 @@ void main() {
       const id = 'conv-wsl';
       final record = conversationRecord(id);
       writeBrainTranscript(id);
-      final made = containerFor(
+      final made = await containerFor(
         agentId: AgentIds.antigravity,
         externalSessionId: id,
         located: record,
       );
       // A frame's worth of other work, with every surface that would ask shut.
-      made.container.read(sessionDaoProvider).getById('s1');
+      made.container.read(sessionsDataProvider).getById('s1');
       await Future<void>.delayed(Duration.zero);
       expect(made.locator.calls, 0);
     });
@@ -322,7 +323,7 @@ void main() {
         const id = 'conv-wsl';
         final record = conversationRecord(id);
         writeBrainTranscript(id);
-        final made = containerFor(
+        final made = await containerFor(
           agentId: AgentIds.antigravity,
           externalSessionId: id,
           located: record,

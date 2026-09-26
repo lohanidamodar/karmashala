@@ -28,7 +28,7 @@ final checkpointServiceProvider = Provider<CheckpointService>(
 /// The working tree a session's checkpoints are taken of. `null` when the
 /// session or its repository is gone — a reason not to checkpoint, not an error.
 EnvironmentPath? checkpointTargetFor(Ref ref, String sessionId) {
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  final session = ref.read(sessionsDataProvider).getById(sessionId);
   if (session == null) return null;
   final worktree = session.worktree;
   if (worktree != null) return worktree;

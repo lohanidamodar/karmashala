@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -91,7 +90,7 @@ void main() {
 
   /// A subagent of [parent] that recorded [directory] as the place it runs.
   void subagent(String id, String parent, {String? directory}) =>
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'hub',
@@ -111,7 +110,7 @@ void main() {
     String repositoryId = 'hub',
     String? worktree,
     String? workingDirectory,
-  }) => SessionDao(db).insert(
+  }) => mirroredServer(db).sessionRows.insert(
     Session(
       id: id,
       repositoryId: repositoryId,
@@ -209,7 +208,7 @@ void main() {
     test('a session no checkout contains keeps its own repository', () {
       // Paths are never compared across environments, so nothing contains this.
       insertAllCheckouts();
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(
           repositoryId: 'app',
           useWorktree: true,
@@ -293,7 +292,7 @@ void main() {
       subagent('b-app', 's1', directory: appPath);
 
       expect(follow('s1'), 'app');
-      expect(SessionDao(db).childrenOf('s1').first.id, 'a-inbox');
+      expect(mirroredServer(db).sessionRows.childrenOf('s1').first.id, 'a-inbox');
     });
   });
 

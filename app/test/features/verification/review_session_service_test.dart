@@ -2,7 +2,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -13,6 +12,7 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../fanout/fanout_harness.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The argv the reviewer's pane was actually launched with — the only place
 /// the brief can be observed leaving the app.
@@ -162,7 +162,7 @@ void main() {
         sessionId: subject,
         targetInstallationId: flakyInstall.id,
       );
-      final row = SessionDao(h.db).getById(launched.session.id)!;
+      final row = mirroredServer(h.db).sessionRows.getById(launched.session.id)!;
       expect(row.parentSessionId, subject);
       expect(row.parentLink, SessionLink.spawn);
       expect(row.agentInstallationId, flakyInstall.id);
@@ -172,7 +172,7 @@ void main() {
 
     test('runs in the same worktree as the work it reviews', () async {
       final subject = await work();
-      final subjectRow = SessionDao(h.db).getById(subject)!;
+      final subjectRow = mirroredServer(h.db).sessionRows.getById(subject)!;
       final launched = await service().startReview(
         sessionId: subject,
         targetInstallationId: flakyInstall.id,

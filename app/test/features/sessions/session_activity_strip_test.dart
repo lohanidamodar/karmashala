@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:agent_cli/stream.dart';
@@ -74,13 +73,14 @@ void main() {
     SessionStatus rowStatus = SessionStatus.running,
     SessionSurface surface = SessionSurface.pane,
     required AppDatabase db,
-  }) {
+  }) async {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    FakeDataServer().mirrorInto(db)
+    final server = FakeDataServer()..mirrorInto(db);
+    server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -95,6 +95,7 @@ void main() {
     );
     return [
       databaseProvider.overrideWithValue(db),
+      await server.override(),
       clockProvider.overrideWithValue(clock),
       agentSessionStatusProvider.overrideWith(
         (ref, id) => Stream.value(
@@ -129,7 +130,7 @@ void main() {
     final used = clock ?? FixedClock(issued.add(const Duration(seconds: 4)));
     await tester.pumpWidget(
       ProviderScope(
-        overrides: overridesFor(
+        overrides: await overridesFor(
           messages: messages,
           clock: used,
           status: status,
@@ -415,7 +416,7 @@ void main() {
           // No database here: `overridesFor` supplies it, and overriding one
           // provider twice is an error.
           ...fakeTerminalOverrides(),
-          ...overridesFor(
+          ...await overridesFor(
             messages: [call(id: 't1')],
             clock: FixedClock(issued.add(const Duration(seconds: 4))),
             db: db,
@@ -440,31 +441,32 @@ void main() {
   });
 
   testWidgets('survives the window matrix', (tester) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    final overrides = await overridesFor(
+      messages: [
+        call(
+          id: 't1',
+          subject:
+              'flutter test --exclude-tags=live-ssh,live-wsl '
+              '--concurrency=4 test/features/sessions',
+        ),
+        call(
+          id: 't2',
+          name: kSubagentToolName,
+          subject: 'review the whole diff and report back',
+          at: issued.add(const Duration(seconds: 30)),
+        ),
+      ],
+      clock: FixedClock(issued.add(const Duration(minutes: 2))),
+      db: db,
+    );
     await expectSurvivesWindowMatrix(
       tester,
       because: 'the chat view is already tight at 720 and the strip sits in it',
       build: () {
-        final db = AppDatabase.memory();
-        addTearDown(db.close);
         return ProviderScope(
-          overrides: overridesFor(
-            messages: [
-              call(
-                id: 't1',
-                subject:
-                    'flutter test --exclude-tags=live-ssh,live-wsl '
-                    '--concurrency=4 test/features/sessions',
-              ),
-              call(
-                id: 't2',
-                name: kSubagentToolName,
-                subject: 'review the whole diff and report back',
-                at: issued.add(const Duration(seconds: 30)),
-              ),
-            ],
-            clock: FixedClock(issued.add(const Duration(minutes: 2))),
-            db: db,
-          ),
+          overrides: overrides,
           child: const MaterialApp(
             home: Scaffold(
               body: Column(

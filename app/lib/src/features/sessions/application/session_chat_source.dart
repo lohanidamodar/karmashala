@@ -118,7 +118,7 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
       Duration interval() =>
           alive ? ref.read(chatTranscriptPollIntervalProvider) : Duration.zero;
 
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       final externalId = session?.externalSessionId;
       if (session == null || externalId == null || externalId.isEmpty) {
         yield const [];

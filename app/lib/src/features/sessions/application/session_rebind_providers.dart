@@ -91,7 +91,7 @@ String? rebindSessionFromHook(
   // still be looked at.
   if (turn && !attempts.mayTry(conversationId, now)) return null;
 
-  final sessions = container.read(sessionDaoProvider);
+  final sessions = container.read(sessionsDataProvider);
   // Already somebody's. The overwhelmingly common case, and one indexed read.
   if (sessions.getByExternalSessionId(conversationId) != null) return null;
   // A conversation named after a row **is** that row's: the app launches Claude

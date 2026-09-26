@@ -71,7 +71,7 @@ class AutomationScheduler extends Notifier<int> {
   }) => scheduling.AutomationScheduler(
     automations: ref.read(automationDaoProvider),
     resumes: ref.read(scheduledResumeDaoProvider),
-    sessionOf: (id) => ref.read(sessionDaoProvider).getById(id),
+    sessionOf: (id) => ref.read(sessionsDataProvider).getById(id),
     firing: _LateFiring(() => ref.read(automationFiringProvider)),
     resumeFiring: _LateResumeFiring(
       () => ref.read(scheduledResumeFiringProvider),
@@ -87,7 +87,7 @@ class AutomationScheduler extends Notifier<int> {
         ref.publishSessionChange(SessionChange.reconfigured(sessionId)),
     onResumeEnded: (ended) => ref
         .read(resumeAnnouncerProvider)
-        .announce(ended, ref.read(sessionDaoProvider).getById(ended.sessionId)),
+        .announce(ended, ref.read(sessionsDataProvider).getById(ended.sessionId)),
   );
 
   scheduling.AutomationScheduler get _core => _scheduler!;

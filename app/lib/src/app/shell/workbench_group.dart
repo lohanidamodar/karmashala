@@ -170,7 +170,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     if (hosted != null) {
       if (!hosted.native) {
         final imported = ref
-            .read(importedSessionDaoProvider)
+            .read(importedSessionsProvider)
             .getById(hosted.id);
         return _WorkbenchSession(
           id: hosted.id,
@@ -179,7 +179,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
           native: false,
         );
       }
-      final Session? row = ref.read(sessionDaoProvider).getById(hosted.id);
+      final Session? row = ref.read(sessionsDataProvider).getById(hosted.id);
       return _WorkbenchSession(
         id: hosted.id,
         title: row?.title ?? 'Session',
@@ -191,7 +191,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
         ? null
         : ref.watch(workspaceGroupSessionIdProvider(groupId));
     if (sessionId == null) return null;
-    final Session? record = ref.read(sessionDaoProvider).getById(sessionId);
+    final Session? record = ref.read(sessionsDataProvider).getById(sessionId);
     return _WorkbenchSession(
       id: sessionId,
       title: record?.title ?? 'Session',

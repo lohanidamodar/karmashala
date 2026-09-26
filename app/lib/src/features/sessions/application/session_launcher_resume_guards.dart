@@ -9,7 +9,7 @@ extension SessionResumeGuards on SessionLauncher {
   /// pane is live; one restored from disk is not, whatever its buffer shows.
   String? livePaneFor(String? sessionId) {
     if (sessionId == null) return null;
-    final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+    final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
     if (paneId == null) return null;
     final instance = _ref
         .read(terminalSessionsControllerProvider.notifier)
@@ -21,7 +21,7 @@ extension SessionResumeGuards on SessionLauncher {
   /// it holds this session's own scrollback but nothing running behind it.
   String? dormantPaneFor(String? sessionId) {
     if (sessionId == null) return null;
-    final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+    final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
     if (paneId == null) return null;
     final instance = _ref
         .read(terminalSessionsControllerProvider.notifier)
@@ -37,7 +37,7 @@ extension SessionResumeGuards on SessionLauncher {
     if (externalSessionId == null || externalSessionId.isEmpty) return null;
     for (final candidate
         in _ref
-            .read(sessionDaoProvider)
+            .read(sessionsDataProvider)
             .getAllByExternalSessionId(externalSessionId)) {
       if (livePaneFor(candidate.id) != null) return candidate;
       if (heldByHostOnly(candidate.id)) return candidate;
@@ -124,7 +124,7 @@ extension SessionResumeGuards on SessionLauncher {
         runningSessionWithExternalId(externalSessionId) ??
         (livePaneFor(sessionId) == null && !heldByHostOnly(sessionId)
             ? null
-            : _ref.read(sessionDaoProvider).getById(sessionId!));
+            : _ref.read(sessionsDataProvider).getById(sessionId!));
     throw SessionAlreadyRunning(
       agentName: agentDisplayName(agentId),
       sessionId: running?.id,
@@ -138,7 +138,7 @@ extension SessionResumeGuards on SessionLauncher {
   /// back from the agent: `sessions.id == external_session_id` is our promise.
   Session? rowThatMinted(String? externalSessionId) {
     if (externalSessionId == null || externalSessionId.isEmpty) return null;
-    final row = _ref.read(sessionDaoProvider).getById(externalSessionId);
+    final row = _ref.read(sessionsDataProvider).getById(externalSessionId);
     return row != null && row.externalSessionId == externalSessionId
         ? row
         : null;
@@ -178,7 +178,7 @@ extension SessionResumeGuards on SessionLauncher {
     if (await presenceOf(externalId) != ConversationPresence.absent) {
       return request;
     }
-    final dao = _ref.read(sessionDaoProvider);
+    final dao = _ref.read(sessionsDataProvider);
     if (minted == null) {
       final holder = dao.getByExternalSessionId(row.id);
       if ((holder == null || holder.id == row.id) &&
@@ -234,7 +234,7 @@ extension SessionResumeGuards on SessionLauncher {
     // The row that *holds* this conversation — for a fork the source session,
     // not the one being created, which is why the id is asked and not `reused`.
     final holder = _ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .getByExternalSessionId(conversationId);
     final recorded = holder?.workingDirectory ?? holder?.worktree;
     // A row that never recorded a directory (before schema v22) says nothing
@@ -252,7 +252,7 @@ extension SessionResumeGuards on SessionLauncher {
   /// The live terminal behind [sessionId], or null. Three things have to be
   /// true and each has been wrong on its own — see [livePaneFor].
   Terminal? _liveTerminalFor(String sessionId) {
-    final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+    final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
     if (paneId == null) return null;
     final instance = _ref
         .read(terminalSessionsControllerProvider.notifier)

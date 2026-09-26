@@ -60,7 +60,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    final sessions = container.read(sessionDaoProvider)
+    final sessions = container.read(sessionsDataProvider)
       ..insert(session(title: 'Toolbar rework'))
       ..insert(session(id: 's2', title: 'Diff panel'));
     expect(sessions.getById('s2')?.title, 'Diff panel');

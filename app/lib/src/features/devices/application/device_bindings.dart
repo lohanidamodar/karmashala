@@ -31,7 +31,7 @@ final deviceBindings = [
     (ref) => DeviceClaims(
       clock: ref.watch(clockProvider),
       holder: (sessionId) {
-        final session = ref.read(sessionDaoProvider).getById(sessionId);
+        final session = ref.read(sessionsDataProvider).getById(sessionId);
         if (session == null || session.isOver) return null;
         return session.title;
       },

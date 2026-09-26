@@ -7,7 +7,6 @@ import 'package:riverpod/riverpod.dart';
 import '../../automations/application/scheduled_resume_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../explorer/application/project_tree.dart';
@@ -267,7 +266,7 @@ List<RemoteSessionSnapshot> _rowSnapshots(
     sessions.native,
     isPinned: (id) => _isPinned(ref, id),
     lastActive: (id) {
-      final session = ref.read(sessionDaoProvider).getById(id);
+      final session = ref.read(sessionsDataProvider).getById(id);
       return session == null
           ? SessionLastActive.unknown
           : _lastActiveOfSession(ref, session);
@@ -355,12 +354,12 @@ List<RemoteSessionSnapshot> listRemoteSessions(Ref ref) {
   }
   // Nothing is ever dropped: a session whose repository or project row is
   // gone is appended rather than vanishing from the phone's list.
-  for (final session in ref.read(sessionDaoProvider).getAll()) {
+  for (final session in ref.read(sessionsDataProvider).getAll()) {
     if (placed.add(session.id)) out.add(remoteSessionSnapshot(ref, session));
   }
-  // One entry per conversation: `ImportedSessionDao` already excludes a record
+  // One entry per conversation: `ImportedSessionsData` already excludes a record
   // a native row represents, and a raw read here would list it twice.
-  for (final session in ref.read(importedSessionDaoProvider).getAll()) {
+  for (final session in ref.read(importedSessionsProvider).getAll()) {
     if (placed.add(session.id)) {
       out.add(remoteImportedSnapshot(ref, session));
     }

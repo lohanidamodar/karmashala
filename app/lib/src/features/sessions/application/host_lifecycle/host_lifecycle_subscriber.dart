@@ -10,15 +10,14 @@ import 'host_lifecycle_source.dart';
 import 'relayed_agent_hook.dart';
 
 /// The one link to a host's lifecycle feed. The host writes its sessions'
-/// lifecycle status itself; this follows what it holds, hands each row it
-/// wrote to [onStatusChanged] and each relayed agent hook to [onHook], and
-/// dials again when the host goes away.
+/// lifecycle status itself — and tells every client of each row it writes
+/// on the data channel, not here; this follows what it holds, hands each
+/// relayed agent hook to [onHook], and dials again when the host goes away.
 class HostLifecycleSubscriber {
   HostLifecycleSubscriber({
     required this.source,
-    required this.sessionDao,
+    required this.sessions,
     required this.hasLivePane,
-    required this.onStatusChanged,
     this.onHook,
     this.onAgentStatuses,
     this.onAgentStatus,
@@ -33,15 +32,12 @@ class HostLifecycleSubscriber {
   }) : _log = logger ?? AppLogger.named('sessions.host_lifecycle');
 
   final HostLifecycleSource source;
-  final SessionDao sessionDao;
+  /// The rows, read to tell the host which ones this app's panes run.
+  final SessionReads sessions;
 
   /// A live pane of this app's own runs its row, so the host is told to leave
   /// that row alone.
   final bool Function(String paneId) hasLivePane;
-
-  /// A row the host wrote; null when it may have written any, while no link
-  /// was open.
-  final void Function(String? sessionId) onStatusChanged;
 
   /// Each hook once: a snapshot hook already applied on an earlier link is not
   /// applied again. A held hook is replied to when this completes, or fails.
@@ -85,7 +81,6 @@ class HostLifecycleSubscriber {
   HostLifecycleFeed? _feed;
   StreamSubscription<SessionLifecycleEvent>? _events;
   StreamSubscription<RelayedAgentHook>? _hooks;
-  StreamSubscription<HostSessionChange>? _statusChanges;
   StreamSubscription<HostMcpCall>? _mcpCalls;
   StreamSubscription<HostAgentStatusChange>? _agentStatuses;
 
@@ -172,11 +167,6 @@ class HostLifecycleSubscriber {
       ]);
     _feed = feed;
     _events = feed.events.listen(_onEvent, onDone: _lost);
-    _statusChanges = feed.sessionChanges.listen(
-      (change) => onStatusChanged(change.sessionId),
-    );
-    // A host that started while no link was open wrote its snapshot then.
-    onStatusChanged(null);
     onAgentStatuses?.call(feed.statusSnapshot);
     _agentStatuses = feed.agentStatuses.listen(
       (change) => onAgentStatus?.call(change.sessionId, change.status),
@@ -254,8 +244,6 @@ class HostLifecycleSubscriber {
     _events = null;
     unawaited(_hooks?.cancel());
     _hooks = null;
-    unawaited(_statusChanges?.cancel());
-    _statusChanges = null;
     unawaited(_mcpCalls?.cancel());
     _mcpCalls = null;
     unawaited(_agentStatuses?.cancel());
@@ -272,7 +260,7 @@ class HostLifecycleSubscriber {
 
   /// Rows still claiming to run whose pane is live in this app.
   List<String> _runByThisApp() => [
-    for (final session in sessionDao.getClaimingLive())
+    for (final session in sessions.getClaimingLive())
       if (session.paneId case final paneId? when hasLivePane(paneId))
         session.id,
   ];
@@ -294,8 +282,6 @@ class HostLifecycleSubscriber {
     _events = null;
     await _hooks?.cancel();
     _hooks = null;
-    await _statusChanges?.cancel();
-    _statusChanges = null;
     await _mcpCalls?.cancel();
     _mcpCalls = null;
     await _agentStatuses?.cancel();

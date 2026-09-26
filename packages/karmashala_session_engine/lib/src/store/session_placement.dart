@@ -2,24 +2,32 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 
-/// Whether [session] runs on this machine — Windows, WSL or the local POSIX
-/// host — and so under this machine's session host. False for SSH, and for a
-/// row whose environment cannot be found: no local fact can speak for it.
-bool sessionRunsOnThisMachine(AppDatabase db, Session session) {
-  final environmentId =
-      session.workingDirectory?.environmentId ??
-      _firstValue(db, 'SELECT environment_id FROM repositories WHERE id = ?;', [
-        session.repositoryId,
-      ]);
-  if (environmentId == null) return false;
-  final kindName = _firstValue(
-    db,
-    'SELECT kind FROM execution_environments WHERE id = ?;',
-    [environmentId],
-  );
-  final kind = EnvironmentKind.values.asNameMap()[kindName];
-  return kind != null && kind != EnvironmentKind.ssh;
-}
+import '../domain/session_placement_rule.dart';
+import '../service/hosted_session_status_keeper.dart';
+import 'session_dao.dart';
+
+/// The daemon's [HostedSessionStatusKeeper] over the store.
+HostedSessionStatusKeeper keeperOver(AppDatabase db) =>
+    HostedSessionStatusKeeper(
+      SessionDao(db),
+      runsOnThisMachine: (session) => sessionRunsOnThisMachine(db, session),
+    );
+
+/// [runsOnThisMachine] over the store's own tables.
+bool sessionRunsOnThisMachine(AppDatabase db, Session session) =>
+    runsOnThisMachine(
+      session,
+      environmentOfRepository: (repositoryId) => _firstValue(
+        db,
+        'SELECT environment_id FROM repositories WHERE id = ?;',
+        [repositoryId],
+      ),
+      kindOf: (environmentId) => EnvironmentKind.values.asNameMap()[_firstValue(
+        db,
+        'SELECT kind FROM execution_environments WHERE id = ?;',
+        [environmentId],
+      )],
+    );
 
 String? _firstValue(AppDatabase db, String sql, List<Object?> params) {
   final rows = db.query(sql, params);

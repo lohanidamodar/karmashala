@@ -1,23 +1,25 @@
 import 'dart:async';
 
-import 'package:karmashala_store/database.dart';
+import 'package:karmashala_session/session.dart';
 
 import '../domain/lifecycle_status.dart';
 import '../domain/session_facts.dart';
-import '../store/session_dao.dart';
-import '../store/session_placement.dart';
+import '../domain/session_reads.dart';
 import 'session_lifecycle_recorder.dart';
 
-/// The daemon's side of the store: applies its own host's facts to the rows
+/// The daemon's side of the rows: applies its own host's facts to the rows
 /// they name, and marks the rows it does not hold. The only writer of a hosted
-/// row's lifecycle status; every write is on [changes].
+/// row's lifecycle status; every write is on [changes]. Over the server's
+/// store (`keeperOver` in `store.dart`), or any [SessionStatusStore].
 class HostedSessionStatusKeeper {
-  HostedSessionStatusKeeper(this._db)
-    : _sessions = SessionDao(_db),
-      _recorder = SessionLifecycleRecorder(SessionDao(_db));
+  HostedSessionStatusKeeper(
+    this._sessions, {
+    required bool Function(Session session) runsOnThisMachine,
+  }) : _runsHere = runsOnThisMachine,
+       _recorder = SessionLifecycleRecorder(_sessions);
 
-  final AppDatabase _db;
-  final SessionDao _sessions;
+  final SessionStatusStore _sessions;
+  final bool Function(Session session) _runsHere;
   final SessionLifecycleRecorder _recorder;
 
   Stream<SessionLifecycleChange> get changes => _recorder.changes;
@@ -39,7 +41,7 @@ class HostedSessionStatusKeeper {
       if (!session.isArchived &&
           !runByClient.contains(session.id) &&
           !heldHostSessionIds.contains(hostSessionIdOf(session.id)) &&
-          sessionRunsOnThisMachine(_db, session))
+          _runsHere(session))
         ?_recorder.recordUnseen(session.id),
   ];
 

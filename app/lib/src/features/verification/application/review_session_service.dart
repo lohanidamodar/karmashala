@@ -79,7 +79,7 @@ class ReviewSessionService {
 
   /// Who could review [sessionId]'s work, or why nobody can.
   ReviewOffer offerFor(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       return const ReviewOffer(
         targets: [],
@@ -189,7 +189,7 @@ class ReviewSessionService {
     String? permissionSummary,
     ReviewDiffBudget budget = const ReviewDiffBudget(),
   }) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     final registry = _ref.read(agentRegistryProvider);
     final authorAgentId = _ref
@@ -235,7 +235,7 @@ class ReviewSessionService {
     required String targetInstallationId,
     String? claim,
   }) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
     if (targetInstallationId == session.agentInstallationId) {
       throw StateError(

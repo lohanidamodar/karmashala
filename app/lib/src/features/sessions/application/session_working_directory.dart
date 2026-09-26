@@ -12,7 +12,7 @@ import 'session_providers.dart';
 /// The directory a session's agent actually runs in: what it recorded, then its
 /// worktree, then the repository root — decreasing certainty, `null` if gone.
 EnvironmentPath? sessionWorkingDirectory(Ref ref, String sessionId) {
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  final session = ref.read(sessionsDataProvider).getById(sessionId);
   if (session == null) return null;
   return sessionWorkingDirectoryOf(ref, session);
 }

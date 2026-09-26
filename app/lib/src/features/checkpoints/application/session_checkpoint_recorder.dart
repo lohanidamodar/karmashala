@@ -460,15 +460,17 @@ class SessionCheckpointRecorder extends Notifier<int> {
     if (checkpoint.reason != CheckpointReason.manual) return;
     final label = checkpoint.label;
     if (label == null || label.trim().isEmpty) return;
-    ref
-        .read(decisionRecorderProvider)
-        .recordCheckpoint(
-          sessionId: checkpoint.sessionId,
-          checkpointId: checkpoint.id,
-          label: label,
-          decidedBy: decidedBy,
-          decidedBySessionId: decidedBySessionId,
-        );
+    unawaited(
+      ref
+          .read(decisionRecorderProvider)
+          .recordCheckpoint(
+            sessionId: checkpoint.sessionId,
+            checkpointId: checkpoint.id,
+            label: label,
+            decidedBy: decidedBy,
+            decidedBySessionId: decidedBySessionId,
+          ),
+    );
   }
 }
 

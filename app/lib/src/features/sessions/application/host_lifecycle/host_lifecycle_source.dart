@@ -22,7 +22,6 @@ class HostLifecycleFeed {
     this.hookSnapshot = const [],
     Stream<RelayedAgentHook>? hooks,
     void Function(int holdId)? replyHook,
-    Stream<HostSessionChange>? sessionChanges,
     Stream<HostMcpCall>? mcpCalls,
     void Function(List<Map<String, Object?>> tools)? offerMcpTools,
     void Function(int callId, {Object? result, String? error})? answerMcpCall,
@@ -46,7 +45,6 @@ class HostLifecycleFeed {
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
        replyHook = replyHook ?? _noReply,
-       sessionChanges = sessionChanges ?? const Stream.empty(),
        mcpCalls = mcpCalls ?? const Stream.empty(),
        offerMcpTools = offerMcpTools ?? _noOffer,
        answerMcpCall = answerMcpCall ?? _noAnswer,
@@ -132,9 +130,6 @@ class HostLifecycleFeed {
   /// Every hook after [hookSnapshot].
   final Stream<RelayedAgentHook> hooks;
 
-  /// Each row the host wrote a lifecycle status to. The row is the record.
-  final Stream<HostSessionChange> sessionChanges;
-
   /// Agents' tool calls the host took, once this app has offered its tools.
   final Stream<HostMcpCall> mcpCalls;
 
@@ -210,9 +205,6 @@ typedef CompanionPair =
       String relay,
       bool relayIsLocal,
     });
-
-/// The host wrote [status] to the row [sessionId].
-typedef HostSessionChange = ({String sessionId, String status});
 
 /// What the agent in the row [sessionId] is doing now, or — [status] null —
 /// that the host stopped keeping it.

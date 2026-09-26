@@ -9,7 +9,7 @@ extension SessionInputVerbs on SessionLauncher {
   /// `null` — naming a sender we cannot read would be inventing provenance.
   SessionAttribution? attributionFor(String? senderSessionId) {
     if (senderSessionId == null) return null;
-    final sender = _ref.read(sessionDaoProvider).getById(senderSessionId);
+    final sender = _ref.read(sessionsDataProvider).getById(senderSessionId);
     if (sender == null) return null;
     return SessionAttribution(sessionId: sender.id, title: sender.title);
   }

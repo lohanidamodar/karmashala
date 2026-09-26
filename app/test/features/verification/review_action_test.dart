@@ -1,7 +1,6 @@
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:karmashala/src/features/verification/presentation/review_action.dart';
@@ -21,7 +20,7 @@ void main() {
   setUp(() async {
     h = await connectedHarness();
     // The work under review: an ordinary row, run by the first installation.
-    SessionDao(h.db).insert(
+    h.server.sessionRows.insert(
       session(
         id: 's-work',
         agentInstallationId: roverInstall.id,
@@ -53,9 +52,9 @@ void main() {
     await tester.tap(find.byType(OutlinedButton));
     await tester.pumpAndSettle();
 
-    final review = SessionDao(
-      h.db,
-    ).getAll().firstWhere((s) => s.id != 's-work');
+    final review = h.server.sessionRows.getAll().firstWhere(
+      (s) => s.id != 's-work',
+    );
     expect(review.parentSessionId, 's-work');
     expect(review.parentLink, SessionLink.spawn);
     expect(review.agentInstallationId, flakyInstall.id);
@@ -77,7 +76,7 @@ void main() {
 
     await tester.tap(find.text('Flaky CLI'));
     await tester.pumpAndSettle();
-    expect(SessionDao(h.db).getAll(), hasLength(2));
+    expect(h.server.sessionRows.getAll(), hasLength(2));
   });
 
   testWidgets('the reviewer menu draws the house two-line row', (tester) async {
@@ -120,7 +119,7 @@ void main() {
 
     await tester.tap(find.byType(OutlinedButton));
     await tester.pumpAndSettle();
-    expect(SessionDao(h.db).getAll(), hasLength(1));
+    expect(h.server.sessionRows.getAll(), hasLength(1));
   });
 
   testWidgets('the tooltip says the review is capped before it is pressed', (

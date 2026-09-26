@@ -137,7 +137,7 @@ class _NoteCard extends ConsumerWidget {
     // out: [_sendBack] resolves the target on the click. See [_sendLabel].
     final source = note.sourceSessionId == null
         ? null
-        : ref.read(sessionDaoProvider).getById(note.sourceSessionId!);
+        : ref.read(sessionsDataProvider).getById(note.sourceSessionId!);
     final menuLabel = 'Actions for “${note.displayTitle}”';
     void act(String value) => _act(context, ref, value);
 
@@ -269,7 +269,7 @@ class _NoteCard extends ConsumerWidget {
   /// Offers the note to a session, deciding which — and where in it — only now.
   /// **Read, never watched**: Send is on every card, so watching costs the panel.
   void _sendBack(BuildContext context, WidgetRef ref) {
-    final sessions = ref.read(sessionDaoProvider);
+    final sessions = ref.read(sessionsDataProvider);
     final source = note.sourceSessionId == null
         ? null
         : sessions.getById(note.sourceSessionId!);

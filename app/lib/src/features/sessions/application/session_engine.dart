@@ -8,32 +8,29 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import '../data/session_event_dao.dart';
-import '../data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/events.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// Resolves the [AgentChatProtocol] for an `AgentDescriptor.id`. Agents with a
 /// protocol adapter get theirs; anything else gets the generic one.
 typedef ChatProtocolResolver = AgentChatProtocol Function(String agentId);
 
 /// Runs agent sessions: the normalized, append-only event log and the session
-/// status. Protocol-agnostic — it speaks only [AgentChatProtocol]/[AgentSession].
+/// status, both written through the server. Protocol-agnostic — it speaks only
+/// [AgentChatProtocol]/[AgentSession].
 class SessionEngine {
   SessionEngine({
-    required this.sessionDao,
-    required this.eventDao,
-    required this.sessionRepositoryDao,
+    required this.sessions,
+    required this.records,
     required this.worktreeService,
     required this.resolveProtocol,
     required this.clock,
     required this.ids,
   });
 
-  final SessionDao sessionDao;
-  final SessionEventDao eventDao;
-  final SessionRepositoryDao sessionRepositoryDao;
+  final SessionsData sessions;
+  final SessionRecordsData records;
   final WorktreeService worktreeService;
   final ChatProtocolResolver resolveProtocol;
   final Clock clock;
@@ -92,15 +89,12 @@ class SessionEngine {
       createdAt: clock.nowUtc(),
       externalSessionId: resumeSessionId,
     );
-    sessionDao.insert(session);
-    sessionRepositoryDao.link(
-      id,
-      repository.id,
-      role: SessionRepositoryRole.primary,
+    // Awaited: the log's first event names this row, and the server refuses
+    // an event for a session it has not got.
+    await sessions.create(
+      session,
+      repositories: [for (final extra in additionalRepositories) extra.id],
     );
-    for (final extra in additionalRepositories) {
-      sessionRepositoryDao.link(id, extra.id);
-    }
 
     _attach(
       sessionId: id,
@@ -125,7 +119,7 @@ class SessionEngine {
     String? resumeSessionId,
   }) async {
     if (_runtimes.containsKey(session.id)) return;
-    sessionDao.updateStatus(session.id, SessionStatus.running);
+    sessions.updateStatus(session.id, SessionStatus.running);
     _attach(
       sessionId: session.id,
       title: session.title,
@@ -158,7 +152,7 @@ class SessionEngine {
         ),
       );
     } on Object {
-      sessionDao.updateStatus(sessionId, SessionStatus.failed);
+      sessions.updateStatus(sessionId, SessionStatus.failed);
       rethrow;
     }
 
@@ -174,7 +168,9 @@ class SessionEngine {
       (event) {
         final externalId = event.data['sessionId'];
         if (externalId is String && externalId.isNotEmpty) {
-          sessionDao.updateExternalSessionId(sessionId, externalId);
+          if (sessions.getById(sessionId)?.externalSessionId != externalId) {
+            sessions.updateExternalSessionId(sessionId, externalId);
+          }
         }
         // A CLI that exited non-zero reports it as an event before its stream
         // closes; the close alone would read as completed.
@@ -212,7 +208,11 @@ class SessionEngine {
     await runtime.agent?.stop();
   }
 
-  SessionEvent _emit(
+  /// Appends one event through the server, in the order emitted, and hands
+  /// it — numbered — to the run's watchers once stored. A write that fails is
+  /// logged by nothing but the watcher's silence: the log is best-effort, the
+  /// run is not.
+  void _emit(
     _Runtime runtime,
     String sessionId,
     String type,
@@ -224,28 +224,39 @@ class SessionEngine {
     final payload = text is String
         ? {...data, 'text': boundedText(text).$1}
         : data;
-    final stored = eventDao.append(
+    final appended = records.append(
       SessionEvent(
         sessionId: sessionId,
-        seq: 0, // assigned by the DAO
+        seq: 0, // assigned by the server
         type: type,
         payload: jsonEncode(payload),
         createdAt: clock.nowUtc(),
       ),
     );
-    if (!runtime.controller.isClosed) runtime.controller.add(stored);
-    return stored;
+    runtime.tail = runtime.tail.then((_) async {
+      try {
+        final stored = await appended;
+        if (!runtime.controller.isClosed) runtime.controller.add(stored);
+      } on Object {
+        // Not stored: nothing to show a watcher.
+      }
+    });
   }
 
   void _finish(String sessionId, SessionStatus defaultStatus) {
     final runtime = _runtimes.remove(sessionId);
     if (runtime == null) return;
     final status = runtime.finalStatus ?? defaultStatus;
-    sessionDao.updateStatus(sessionId, status);
+    sessions.updateStatus(sessionId, status);
     _emit(runtime, sessionId, _lifecycleType(status), const {});
-    runtime.subscription?.cancel();
-    if (!runtime.controller.isClosed) runtime.controller.close();
-    if (!runtime.done.isCompleted) runtime.done.complete();
+    unawaited(runtime.subscription?.cancel());
+    // After the events already sent are stored and handed on.
+    unawaited(
+      runtime.tail.then((_) {
+        if (!runtime.controller.isClosed) runtime.controller.close();
+        if (!runtime.done.isCompleted) runtime.done.complete();
+      }),
+    );
   }
 
   /// Ends every active run and releases what it holds; nothing else does. It
@@ -286,6 +297,9 @@ class _Runtime {
 
   final StreamController<SessionEvent> controller;
   final Completer<void> done = Completer<void>();
+
+  /// The events sent and not yet handed to watchers, in order.
+  Future<void> tail = Future.value();
   AgentSession? agent;
   StreamSubscription<AgentEvent>? subscription;
   SessionStatus? finalStatus;

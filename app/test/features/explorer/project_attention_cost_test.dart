@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,7 +44,7 @@ void main() {
               path: 'C:\\workspace\\p$i',
             ),
           );
-          SessionDao(db).insert(
+          server.sessionRows.insert(
             Session(
               id: 's$i',
               repositoryId: 'r$i',
@@ -66,9 +65,13 @@ void main() {
           ],
         );
         addTearDown(container.dispose);
+        final published = <String>[];
         final subscriptions = [
           for (var i = 0; i < count; i++)
-            container.listen(projectSummaryProvider('p$i'), (_, _) {}),
+            container.listen(
+              projectSummaryProvider('p$i'),
+              (_, _) => published.add('p$i'),
+            ),
         ];
         addTearDown(() {
           for (final subscription in subscriptions) {
@@ -99,13 +102,18 @@ void main() {
         await container.pump();
 
         // ignore: avoid_print
-        print('PROJECT-ATTENTION-COST projects=$count queries=${db.queries}');
-        // The two session counts. Its repositories are not re-read: a waiting
-        // session is not a repository fact (`projectRepositoriesProvider`).
+        print(
+          'PROJECT-ATTENTION-COST projects=$count queries=${db.queries} '
+          'published=${published.length}',
+        );
+        // The session counts come from this app's copy of the server's rows
+        // since slice 1c, so no summary asks the database anything; what is
+        // left to count is which headers moved.
+        expect(db.queries, 0, reason: 'the sessions are read from the copy');
         expect(
-          db.queries,
-          2,
-          reason: 'one project changed, so unrelated summaries must not query',
+          published,
+          ['p0'],
+          reason: 'one project changed, so unrelated summaries must not move',
         );
       },
     );

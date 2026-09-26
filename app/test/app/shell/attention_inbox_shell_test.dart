@@ -16,7 +16,6 @@ import 'package:karmashala_notifications/policy.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter/material.dart';
@@ -68,7 +67,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', title: 'Fix login'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix login'));
   });
   tearDown(() => db.close());
 

@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_keyboard.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
@@ -51,7 +50,7 @@ void main() {
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final (i, title) in ['Alpha fix', 'Bravo fix', 'Delta fix'].indexed) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(
           id: 'f$i',
           title: title,
@@ -59,7 +58,7 @@ void main() {
         ).copyWith(createdAt: testTime.subtract(Duration(minutes: i))),
       );
     }
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(id: 'r0', title: 'Kept close', status: SessionStatus.completed),
     );
   });

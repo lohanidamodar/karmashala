@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,7 +66,7 @@ void main() {
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(session(id: 's1', title: 'Fix the login flow'))
       ..insert(session(id: 's2', title: 'Check the release build'));
 
@@ -265,7 +264,7 @@ void main() {
   group('a holder that goes away', () {
     test('a session that ended does not keep the device', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
-      SessionDao(db).updateStatus('s1', SessionStatus.completed);
+      mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.completed);
 
       final second = await callAs('s2', 'device_tap', {'x': 100, 'y': 100});
       expect(second.isError, isFalse, reason: second.text);
@@ -274,7 +273,7 @@ void main() {
     test('a session we merely lost sight of keeps it', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
       // `unknown` is our blind spot, not an ending — see Session.isOver.
-      SessionDao(db).updateStatus('s1', SessionStatus.unknown);
+      mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.unknown);
 
       final second = await callAs('s2', 'device_tap', {'x': 100, 'y': 100});
       expect(second.isError, isTrue);
@@ -291,7 +290,7 @@ void main() {
 
     test('the ending the app does see frees the device at once', () async {
       await callAs('s1', 'device_tap', {'x': 540, 'y': 780});
-      SessionDao(db).updateStatus('s1', SessionStatus.completed);
+      mirroredServer(db).sessionRows.updateStatus('s1', SessionStatus.completed);
 
       // The same event that retires the session's MCP token — a change to the
       // session list, not a timer. Nothing polls for this.

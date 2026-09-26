@@ -1,5 +1,5 @@
 import 'package:karmashala_verification/verification.dart';
-import 'follow_up.dart';
+import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 
 /// What a session's verification runs still owe the reader, derived from typed

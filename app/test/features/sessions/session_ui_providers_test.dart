@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -69,7 +68,7 @@ void main() {
     expect(sessions.single.id, session.id);
 
     // The engine persisted the started + greeting events.
-    final eventDao = SessionEventDao(db);
+    final eventDao = mirroredServer(db).eventRows;
     for (var i = 0; i < 200; i++) {
       if (eventDao.countForSession(session.id) >= 2) break;
       await Future<void>.delayed(const Duration(milliseconds: 5));

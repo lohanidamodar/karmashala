@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_actions.da
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -53,7 +52,7 @@ void main() {
     server.projectRows.insert(project(name: 'Karmashala'));
     server.repositoryRows.insert(repository(name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db)
+    mirroredServer(db).sessionRows
       ..insert(session(id: 's1', title: 'Fix login redirect'))
       ..insert(session(id: 's2', title: 'Write the release notes'));
   });

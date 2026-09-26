@@ -10,27 +10,29 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_decision_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/sessions/presentation/decision_record_panel.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 
-/// A DAO that counts the reads the panel costs.
+/// The records, counting the decision reads the panel costs.
 ///
 /// The number, not a proxy for it: every row the surface draws comes through
-/// [forSession], so a closed panel that reads zero has subscribed to nothing.
-class _CountingDecisionDao extends DecisionRecordDao {
-  _CountingDecisionDao(super.db);
+/// [decisionsFor], so a closed panel that reads zero has subscribed to nothing.
+class _CountingRecords extends SessionRecordsData {
+  _CountingRecords(super.client);
 
   int reads = 0;
 
   @override
-  List<DecisionRecord> forSession(String sessionId) {
+  List<DecisionRecord> decisionsFor(String sessionId) {
     reads++;
-    return super.forSession(sessionId);
+    return super.decisionsFor(sessionId);
   }
 }
 
@@ -43,17 +45,19 @@ class _CountingDecisionDao extends DecisionRecordDao {
 void main() {
   final recordedAt = testTime.add(const Duration(hours: 1));
   late AppDatabase db;
-  late _CountingDecisionDao dao;
+  late FakeDataServer server;
+  _CountingRecords? counting;
+  int reads() => counting?.reads ?? 0;
 
   setUp(() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    dao = _CountingDecisionDao(db);
+    server = FakeDataServer()..sessionRows.insert(session());
   });
   tearDown(() => db.close());
 
   void seed() {
-    dao.append(
+    server.decisionRows.append(
       DecisionRecord(
         sessionId: 's1',
         kind: DecisionKind.constraintAccepted,
@@ -63,7 +67,7 @@ void main() {
         recordedAt: recordedAt,
       ),
     );
-    dao.append(
+    server.decisionRows.append(
       DecisionRecord(
         sessionId: 's1',
         kind: DecisionKind.approachRejected,
@@ -74,14 +78,16 @@ void main() {
         recordedAt: recordedAt,
       ),
     );
-    dao.reads = 0;
   }
 
   Future<ProviderContainer> pumpApp(WidgetTester tester) async {
+    final client = await server.connect();
+    final records = counting = _CountingRecords(client);
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
-        decisionRecordDaoProvider.overrideWithValue(dao),
+        dataClientProvider.overrideWithValue(client),
+        sessionRecordsProvider.overrideWithValue(records),
         decisionsPanelSessionIdProvider.overrideWithValue('s1'),
         // Two hours after the writing, so the age on each row is the test's own
         // arithmetic rather than the wall clock's.
@@ -183,7 +189,7 @@ void main() {
   testWidgets('a person can record one, and it lands through the recorder', (
     tester,
   ) async {
-    final container = await pumpApp(tester);
+    await pumpApp(tester);
 
     await tester.tap(railButton());
     await tester.pumpAndSettle();
@@ -199,7 +205,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Record'));
     await tester.pumpAndSettle();
 
-    final stored = container.read(decisionRecordDaoProvider).forSession('s1');
+    final stored = server.decisionRows.forSession('s1');
     expect(stored, hasLength(1));
     expect(
       stored.single.summary,
@@ -249,20 +255,20 @@ void main() {
     final container = await pumpApp(tester);
 
     // The panel opens on Changes, so Decisions has never been built.
-    expect(dao.reads, 0);
+    expect(reads(), 0);
     expect(container.exists(sessionDecisionsProvider('s1')), isFalse);
 
     await tester.tap(railButton());
     await tester.pumpAndSettle();
-    expect(dao.reads, greaterThan(0));
+    expect(reads(), greaterThan(0));
 
     // Closing it disposes the subscription again — nothing keeps reading behind
     // a panel nobody is looking at.
     await tester.tap(railButton());
     await tester.pumpAndSettle();
-    final settled = dao.reads;
+    final settled = reads();
     expect(container.exists(sessionDecisionsProvider('s1')), isFalse);
     await tester.pump(const Duration(seconds: 30));
-    expect(dao.reads, settled, reason: 'nothing polls');
+    expect(reads(), settled, reason: 'nothing polls');
   });
 }

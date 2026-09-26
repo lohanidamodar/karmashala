@@ -24,7 +24,7 @@ Future<List<EnvironmentPath>> checkpointTargetsFor(
   String sessionId, {
   Iterable<String> touched = const [],
 }) async {
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  final session = ref.read(sessionsDataProvider).getById(sessionId);
   if (session == null) return const [];
   final primary = checkpointTargetFor(ref, sessionId);
   final workspace = ref.read(workspaceDataProvider);

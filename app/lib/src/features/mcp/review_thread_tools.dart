@@ -150,7 +150,7 @@ class ReviewThreadTools {
     final sessionId = callerSessionId;
     final session = sessionId == null
         ? null
-        : _container.read(sessionDaoProvider).getById(sessionId);
+        : _container.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       throw ArgumentError(
         'No repositoryId, and this caller is not running inside a session, so '

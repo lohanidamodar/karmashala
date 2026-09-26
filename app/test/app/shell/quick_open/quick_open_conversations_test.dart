@@ -7,7 +7,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -15,7 +14,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
@@ -85,7 +83,7 @@ void main() {
     String title = 'The worktree loop',
     String conversation = 'conv-1',
     EnvironmentPath? worktree,
-  }) => SessionDao(db).insert(
+  }) => mirroredServer(db).sessionRows.insert(
     Session(
       id: id,
       repositoryId: 'r1',
@@ -103,7 +101,7 @@ void main() {
     String id = 'i1',
     String conversation = 'conv-2',
     String title = 'Old history',
-  }) => ImportedSessionDao(db).insertIfAbsent(
+  }) => mirroredServer(db).importedRows.insertIfAbsent(
     ImportedSession(
       id: id,
       repositoryId: 'r1',

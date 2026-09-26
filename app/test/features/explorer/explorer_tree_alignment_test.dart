@@ -17,7 +17,6 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -95,7 +94,7 @@ void main() {
       ('s-done', 'Finished session', SessionStatus.completed),
       ('s-unread', 'Unread session', SessionStatus.completed),
     ]) {
-      SessionDao(db).insert(session(id: id, title: title, status: status));
+      mirroredServer(db).sessionRows.insert(session(id: id, title: title, status: status));
     }
     return db;
   }

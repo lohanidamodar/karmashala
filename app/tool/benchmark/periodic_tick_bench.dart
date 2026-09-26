@@ -6,16 +6,16 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala/src/features/notifications/application/watched_session_loader.dart';
-import 'package:karmashala_projects/store.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+
+import '../../test/support/fake_data_server.dart';
 import '../../test/support/fixtures.dart';
 
 /// Benchmark — NOT part of `flutter test`'s default run. Run it on demand:
@@ -69,17 +69,22 @@ void main() {
 
   late Directory temp;
   late AppDatabase db;
-  late SessionDao sessions;
-  late ImportedSessionDao imported;
+  late FakeDataServer server;
+  late SessionsData sessions;
+  late ImportedSessionsData imported;
   late AgentInstallationDao installations;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
-    sessions = SessionDao(db);
-    imported = ImportedSessionDao(db);
+    // The workspace and the sessions are the server's: seeded at a fake one,
+    // read through the app's copy, as the loader reads them.
+    server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    final client = await server.connect();
+    sessions = SessionsData(client);
+    imported = ImportedSessionsData(client, sessions);
     installations = AgentInstallationDao(db)..insert(agentInstallation());
     temp = Directory.systemTemp.createTempSync('periodic-tick');
     addTearDown(() {

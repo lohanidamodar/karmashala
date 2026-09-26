@@ -16,7 +16,6 @@ import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -115,7 +114,7 @@ void main() {
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     AutomationDao(db).insert(automation());
-    SessionDao(db).insert(session(status: SessionStatus.running));
+    mirroredServer(db).sessionRows.insert(session(status: SessionStatus.running));
     AutomationDao(db).insertRun(
       AutomationRun(
         id: 'run1',

@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/sessions/application/host_lifecycle/host
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_host_lifecycle.dart';
@@ -40,7 +39,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', title: 'Work'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Work'));
     host = FakeHostLifecycle();
     container = ProviderContainer(
       overrides: [

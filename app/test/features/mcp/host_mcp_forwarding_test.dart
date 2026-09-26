@@ -5,7 +5,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fake_host_lifecycle.dart';
@@ -14,6 +13,7 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 Future<void> _settle() async {
   for (var i = 0; i < 10; i++) {
@@ -25,7 +25,7 @@ Future<void> _settle() async {
 /// lifecycle link; the app runs it with the caller the host's token named.
 void main() {
   late AppDatabase db;
-  late SessionDao dao;
+  late FakeSessionRows dao;
   late FakeHostLifecycle host;
   late ProviderContainer container;
 
@@ -36,7 +36,7 @@ void main() {
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    dao = SessionDao(db)
+    dao = fake.sessionRows
       ..insert(session(id: 's1', title: 'Work'))
       ..insert(session(id: 's2', title: 'Other'));
     host = FakeHostLifecycle();
@@ -78,6 +78,7 @@ void main() {
     expect(answer.callId, 4);
     expect(answer.error, isNull);
     expect((answer.result! as Map)['sessionId'], 's1');
+    await container.read(sessionsDataProvider).settled();
     expect(dao.getById('s1')!.title, 'Renamed by its own agent');
     expect(dao.getById('s2')!.title, 'Other');
   });

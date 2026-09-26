@@ -49,8 +49,8 @@ enum MessageType {
   // client → host: the app has done what a held hook waited for (its
   // checkpoint); the agent's request is answered.
   hookReply(0x1b),
-  // host → client: the daemon wrote a session row's lifecycle status.
-  sessionChanged(0x1c),
+  // 0x1c: `sessionChanged`, retired in protocol 13 — a status the daemon
+  // records reaches clients as a change on the data channel (slice 1c).
   // Protocol 3: the daemon serves agents' MCP and the app runs the tools.
   // client → host: the tool catalogue; host → client: one call; client →
   // host: its answer.

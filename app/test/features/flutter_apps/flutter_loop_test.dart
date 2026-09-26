@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_app_pro
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 
@@ -513,8 +512,8 @@ void main() {
     test(
       "another session's claim refuses the launch in the claim's words",
       () async {
-        SessionDao(db).insert(session(id: 's1', title: 'Fixing the list'));
-        SessionDao(db).insert(session(id: 's2', title: 'Something else'));
+        mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fixing the list'));
+        mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Something else'));
         final held = await loop().run(
           project: _wslProject,
           deviceId: 'emulator-5554',

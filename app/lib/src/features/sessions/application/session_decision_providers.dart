@@ -21,5 +21,5 @@ final decisionsRevisionProvider =
 final sessionDecisionsProvider = Provider.autoDispose
     .family<List<DecisionRecord>, String>((ref, sessionId) {
       ref.watch(decisionsRevisionProvider);
-      return ref.watch(decisionRecordDaoProvider).forSession(sessionId);
+      return ref.watch(sessionRecordsProvider).decisionsFor(sessionId);
     });

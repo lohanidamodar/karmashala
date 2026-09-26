@@ -29,7 +29,6 @@ export 'src/protocol/messages.dart'
         PromptAnsweredMessage,
         PromptRefusalKind,
         ServerMethod,
-        SessionChangedMessage,
         WelcomeMessage;
 export 'src/transport/socket_transport.dart' show SocketHostConnection;
 export 'src/transport/transport.dart' show HostConnection;

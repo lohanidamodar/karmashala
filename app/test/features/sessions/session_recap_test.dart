@@ -18,7 +18,6 @@ import 'package:karmashala/src/features/sessions/application/session_chat_source
 import 'package:karmashala/src/features/sessions/application/session_chat_view_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_recap_service.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_recap_card.dart';
@@ -142,7 +141,7 @@ void main() {
         kSessionRecapRequest,
       ]);
       expect(
-        h.container.read(sessionRecapDaoProvider).forSession('s1')!.model,
+        h.container.read(sessionRecordsProvider).recapFor('s1')!.model,
         'haiku',
       );
     });
@@ -187,7 +186,7 @@ void main() {
 
       // End.
       h.container
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .updateStatus('s1', SessionStatus.completed);
       expect(h.container.read(sessionRecapProvider('s1')), isNull);
       h.container.dispose();
@@ -387,7 +386,9 @@ AppDatabase _seededDb({String agentId = AgentIds.claudeCode}) {
   AgentInstallationDao(
     db,
   ).insert(agentInstallation(id: 'a1', agentId: agentId));
-  SessionDao(db).insert(session(id: 's1').copyWith(externalSessionId: 'cli-1'));
+  server.sessionRows.insert(
+    session(id: 's1').copyWith(externalSessionId: 'cli-1'),
+  );
   return db;
 }
 
@@ -445,30 +446,24 @@ class _FakeLocator implements SessionTranscriptLocator {
       path == null ? const {} : {'claudeCode/cli-1': path!};
 }
 
-/// Writes a recap straight into the store, so the card's tests are about what
-/// it renders rather than about how a row got there.
+/// Writes a recap straight into the server, so the card's tests are about
+/// what it renders rather than about how a row got there.
 abstract final class SessionRecapDaoWriter {
   static void seed(
     AppDatabase db, {
     required int turnCount,
     required DateTime writtenAt,
   }) {
-    final container = ProviderContainer(
-      overrides: [...fakeTerminalOverrides(database: db)],
+    _serverOf[db]!.recapRows.write(
+      SessionRecap(
+        sessionId: 's1',
+        text: 'Concluded: we settled on B\nLeft: nothing\nDo not: A',
+        agentId: AgentIds.claudeCode,
+        model: 'haiku',
+        turnCount: turnCount,
+        writtenAt: writtenAt,
+      ),
     );
-    addTearDown(container.dispose);
-    container
-        .read(sessionRecapDaoProvider)
-        .write(
-          SessionRecap(
-            sessionId: 's1',
-            text: 'Concluded: we settled on B\nLeft: nothing\nDo not: A',
-            agentId: AgentIds.claudeCode,
-            model: 'haiku',
-            turnCount: turnCount,
-            writtenAt: writtenAt,
-          ),
-        );
   }
 }
 

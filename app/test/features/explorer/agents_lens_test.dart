@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -53,7 +52,7 @@ void main() {
     SessionStatus status = SessionStatus.running,
     String? worktree,
     Duration age = Duration.zero,
-  }) => SessionDao(db).insert(
+  }) => mirroredServer(db).sessionRows.insert(
     Session(
       id: id,
       repositoryId: 'r1',

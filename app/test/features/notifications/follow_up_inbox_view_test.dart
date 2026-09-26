@@ -5,12 +5,10 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
@@ -70,7 +68,7 @@ void main() {
   }
 
   testWidgets('a crashed session is listed with what it left', (tester) async {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -87,7 +85,7 @@ void main() {
   testWidgets('an unfinished check is quoted in the run\'s own words', (
     tester,
   ) async {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(
         id: 's1',
         title: 'Ship the parser',
@@ -113,7 +111,7 @@ void main() {
   });
 
   testWidgets('dismissing it empties the list for good', (tester) async {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -122,11 +120,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('Nothing needs you.'), findsOneWidget);
-    expect(FollowUpDao(db).open(), isEmpty);
+    expect(mirroredServer(db).followUpRows.open(), isEmpty);
   });
 
   testWidgets('reading the inbox does not clear a follow-up', (tester) async {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -141,7 +139,7 @@ void main() {
   });
 
   testWidgets('tapping it opens the session it came from', (tester) async {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
     );
     await pump(tester);
@@ -152,7 +150,7 @@ void main() {
     // Opened, and nothing else: the offer is a way in, never a relaunch.
     expect(container.read(selectedSessionIdProvider), 's1');
     expect(container.read(attentionInboxProvider).items.single.seen, isTrue);
-    expect(SessionDao(db).getById('s1')!.status, SessionStatus.failed);
+    expect(mirroredServer(db).sessionRows.getById('s1')!.status, SessionStatus.failed);
   });
 
   /// The same rule the Todos and Notes panes keep, on the pane whose rows
@@ -164,7 +162,7 @@ void main() {
   /// row's own tap performs.
   group('the row menu', () {
     testWidgets('a right-click opens it', (tester) async {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
       );
       await pump(tester);
@@ -177,7 +175,7 @@ void main() {
     });
 
     testWidgets('Shift+F10 opens it from the focused row', (tester) async {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
       );
       await pump(tester);
@@ -196,7 +194,7 @@ void main() {
     testWidgets('so does the Menu key, and Dismiss on it clears the row', (
       tester,
     ) async {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
       );
       await pump(tester);
@@ -211,7 +209,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Nothing needs you.'), findsOneWidget);
-      expect(FollowUpDao(db).open(), isEmpty);
+      expect(mirroredServer(db).followUpRows.open(), isEmpty);
     });
   });
 }

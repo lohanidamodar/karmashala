@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -28,7 +27,7 @@ final sessionsForSelectedRepositoryProvider =
       });
       final repoId = ref.watch(selectedRepositoryIdProvider);
       if (repoId == null) return const [];
-      return ref.read(sessionDaoProvider).getByRepository(repoId);
+      return ref.read(sessionsDataProvider).getByRepository(repoId);
     });
 
 /// Imported CLI sessions for the selected repository. Placement is on the list
@@ -42,7 +41,7 @@ final importedSessionsForSelectedRepositoryProvider =
       });
       final repoId = ref.watch(selectedRepositoryIdProvider);
       if (repoId == null) return const [];
-      return ref.read(importedSessionDaoProvider).getByRepository(repoId);
+      return ref.read(importedSessionsProvider).getByRepository(repoId);
     });
 
 /// The native session whose transcript is shown, or `null`.
@@ -61,7 +60,7 @@ final selectedSessionIdProvider =
 /// polled, so a session running elsewhere streams into the app.
 final importedTranscriptProvider = StreamProvider.autoDispose
     .family<List<TranscriptMessage>, String>((ref, sessionId) async* {
-      final session = ref.read(importedSessionDaoProvider).getById(sessionId);
+      final session = ref.read(importedSessionsProvider).getById(sessionId);
       if (session == null) {
         yield const [];
         return;
@@ -125,16 +124,16 @@ final sessionTranscriptProvider = StreamProvider.autoDispose
       // Re-subscribe when *this* session is (re)started; another session
       // starting used to tear this stream down and rebuild it from the log.
       ref.watchSession(id);
-      final eventDao = ref.read(sessionEventDaoProvider);
+      final records = ref.read(sessionRecordsProvider);
       final engine = ref.read(sessionEngineProvider);
 
-      yield eventDao.listForSession(id);
       final live = engine.watch(id);
+      yield await records.listForSession(id);
       if (live != null) {
         await for (final _ in live) {
-          yield eventDao.listForSession(id);
+          yield await records.listForSession(id);
         }
         // Final read once the run ends (captures the lifecycle event).
-        yield eventDao.listForSession(id);
+        yield await records.listForSession(id);
       }
     });

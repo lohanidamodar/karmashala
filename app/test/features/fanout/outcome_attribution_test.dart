@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala/src/features/verification/presentation/attribution_mark.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import 'comparison_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// A comparison's *outcome* is a verdict being acted on.
 ///
@@ -201,7 +201,9 @@ void main() {
     AppDatabase seedMergeable(String? producerSessionId) {
       final db = seedDatabase(merged: false, server: server);
       AgentInstallationDao(db).insert(agentInstallation());
-      SessionDao(db).insert(session(id: 's-win', title: 'The winner'));
+      mirroredServer(
+        db,
+      ).sessionRows.insert(session(id: 's-win', title: 'The winner'));
       ComparisonDao(db).updateEvidence(
         'cand-win',
         CandidateEvidence(

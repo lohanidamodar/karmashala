@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -121,7 +120,7 @@ void main() {
         .layout
         .panes
         .single;
-    final dao = SessionDao(db);
+    final dao = mirroredServer(db).sessionRows;
     dao.insert(session(id: id, agentInstallationId: installation));
     dao.updatePaneId(id, paneId);
   }

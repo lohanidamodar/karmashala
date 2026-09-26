@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -28,6 +27,7 @@ import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// **The two refusals this has actually cost us**, verbatim from the two Codex
 /// builds on the owner's machine. One flag, two versions, opposite directions:
@@ -120,7 +120,10 @@ Future<({String id, String pane})> _launch(
       );
   return (
     id: launched.session.id,
-    pane: SessionDao(db).getById(launched.session.id)!.paneId!,
+    pane: container
+        .read(sessionsDataProvider)
+        .getById(launched.session.id)!
+        .paneId!,
   );
 }
 

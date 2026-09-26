@@ -4,8 +4,8 @@ import '../../agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// Writes the conversation id onto the session row that is on it, for an agent
 /// whose store records the last conversation per directory
@@ -23,7 +23,7 @@ class DirectoryConversationAttributionService {
     this.onAttributed,
   });
 
-  final SessionDao sessionDao;
+  final SessionsData sessionDao;
   final AgentInstallationDao installationDao;
   final WorkspaceData workspace;
   final AgentRegistry agents;

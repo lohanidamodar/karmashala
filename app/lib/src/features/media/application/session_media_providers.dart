@@ -4,7 +4,6 @@ import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../agents/application/agent_providers.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../editor/application/code_editor_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/session_context.dart';
@@ -75,7 +74,7 @@ final sessionMediaSourceProvider = Provider.autoDispose
       // at the session's previous incarnation.
       ref.watch(sessionsRevisionProvider);
 
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session != null) {
         final installation = ref
             .read(agentInstallationDaoProvider)
@@ -90,7 +89,7 @@ final sessionMediaSourceProvider = Provider.autoDispose
 
       // An imported CLI session names its own file, so there is nothing to
       // locate.
-      final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
+      final imported = ref.read(importedSessionsProvider).getById(sessionId);
       if (imported == null) return null;
       return SessionMediaSource(
         cli: imported.cli,

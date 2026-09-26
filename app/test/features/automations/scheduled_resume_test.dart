@@ -8,8 +8,6 @@ import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/schedules.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/sessions/application/session_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_session/launch.dart';
 
@@ -101,7 +99,7 @@ void main() {
     });
 
     test('a mode that stops and asks is refused, in the gate\'s own words', () {
-      SessionDao(h.db).updatePermissionMode('s1', null);
+      h.server.sessionRows.updatePermissionMode('s1', null);
       expect(
         arm,
         throwsA(
@@ -155,9 +153,8 @@ void main() {
       await h.settle();
       expect(h.launcher.requests, hasLength(1));
 
-      final decisions = h.container
-          .read(decisionRecordDaoProvider)
-          .forSession('s1');
+      await h.settle();
+      final decisions = h.server.decisionRows.forSession('s1');
       expect(decisions.single.summary, contains('sent "continue"'));
       expect(decisions.single.decidedBy, 'the user');
       expect(h.presenter.shown.single.title, 'Session resumed');
@@ -193,7 +190,7 @@ void main() {
       'an open session in a mode that asks is restarted in the armed one',
       () async {
         h.scheduler();
-        SessionDao(h.db).updatePermissionMode('s1', null);
+        h.server.sessionRows.updatePermissionMode('s1', null);
         h.attachPane('s1');
         const armed = 'approval=never;sandbox=danger-full-access';
         final resume = h.controller.schedule(
@@ -210,7 +207,7 @@ void main() {
         final request = h.launcher.requests.single;
         expect(request.firstMessage, 'continue');
         expect(request.permissionOverride?.canonical, armed);
-        expect(SessionDao(h.db).getById('s1')!.permissionMode, armed);
+        expect(h.server.sessionRows.getById('s1')!.permissionMode, armed);
         expect(h.dao.getById(resume.id)!.state, ScheduledResumeState.done);
       },
     );
@@ -277,7 +274,7 @@ void main() {
       () async {
         h.scheduler();
         final resume = arm();
-        SessionDao(h.db).updatePermissionMode('s1', null);
+        h.server.sessionRows.updatePermissionMode('s1', null);
         await comeDue(resume);
         expect(h.launcher.requests, isEmpty);
         final failed = h.dao.getById(resume.id)!;
@@ -509,7 +506,7 @@ void main() {
 
     test('an archived session is left alone', () async {
       arm();
-      SessionDao(h.db).markArchived('s1', h.now);
+      h.server.sessionRows.markArchived('s1', h.now);
       h.observe();
       await h.settle();
       expect(h.live('s1'), isNull);

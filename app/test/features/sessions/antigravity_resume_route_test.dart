@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_actions.da
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -145,7 +144,7 @@ void main() {
   /// A stopped Antigravity session with no CLI id — what every app-launched
   /// Antigravity session used to become the moment its pane died.
   void insertPhantom({String id = 'phantom', String? externalId}) {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r1',
@@ -181,7 +180,7 @@ void main() {
         // And the row is no longer a phantom, so the *next* click is an ordinary
         // resume of a row that knows its own conversation.
         expect(
-          SessionDao(db).getById('phantom')!.externalSessionId,
+          mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
           _conversation,
         );
       },
@@ -200,7 +199,7 @@ void main() {
         expect(result.outcome, ExplorerOutcome.selected);
         expect(result.message, contains(_repoPath));
         expect(result.message, isNot(contains('No resumable CLI session id')));
-        expect(SessionDao(db).getById('phantom')!.externalSessionId, isNull);
+        expect(mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId, isNull);
       },
     );
 
@@ -217,7 +216,7 @@ void main() {
 
         expect(result.outcome, ExplorerOutcome.selected);
         expect(result.message, contains('another session'));
-        expect(SessionDao(db).getById('phantom')!.externalSessionId, isNull);
+        expect(mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId, isNull);
       },
     );
 
@@ -227,7 +226,7 @@ void main() {
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'claude-phantom',
           repositoryId: 'r1',
@@ -274,7 +273,7 @@ void main() {
         _conversation,
       ]);
       expect(
-        SessionDao(db).getById('phantom')!.externalSessionId,
+        mirroredServer(db).sessionRows.getById('phantom')!.externalSessionId,
         _conversation,
       );
     });

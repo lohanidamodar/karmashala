@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -124,7 +123,7 @@ Future<ProviderContainer> harness(AppDatabase db, FakeDataServer server) async {
 /// Puts a running session row in [paneId], the way a launch or an adoption
 /// would.
 void placeSession(AppDatabase db, String id, String paneId) {
-  SessionDao(db).insert(
+  mirroredServer(db).sessionRows.insert(
     session(id: id, status: SessionStatus.running).copyWith(paneId: paneId),
   );
 }

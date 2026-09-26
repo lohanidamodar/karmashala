@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/explorer/application/session_row_attenti
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -66,7 +65,7 @@ void main() {
         ),
       );
       for (final id in sessions) {
-        SessionDao(db).insert(
+        mirroredServer(db).sessionRows.insert(
           Session(
             id: id,
             repositoryId: 'r-$projectId',

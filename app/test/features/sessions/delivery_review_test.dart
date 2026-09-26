@@ -10,7 +10,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
@@ -90,7 +89,7 @@ void main() {
   );
 
   void insertSession({SessionStatus status = SessionStatus.idle}) =>
-      SessionDao(db).insert(session(id: 's1', status: status));
+      mirroredServer(db).sessionRows.insert(session(id: 's1', status: status));
 
   /// A run against session `s1`, open unless [verdict] is given.
   void insertRun({
@@ -251,7 +250,7 @@ void main() {
 
     // The standing rule, asserted where it is easiest to break: the offer is
     // computed on every rebuild and starts nothing by existing.
-    expect(SessionDao(db).getAll(), hasLength(1));
+    expect(mirroredServer(db).sessionRows.getAll(), hasLength(1));
   });
 
   testWidgets('the press is the say-so, and it goes through the one review '
@@ -264,7 +263,7 @@ void main() {
 
     // Launched by `ReviewSessionService`, not by anything the strip invented:
     // the row it writes is the one that carries the capped permission.
-    final review = SessionDao(db).getAll().firstWhere((s) => s.id != 's1');
+    final review = mirroredServer(db).sessionRows.getAll().firstWhere((s) => s.id != 's1');
     expect(review.parentSessionId, 's1');
     expect(review.parentLink, SessionLink.spawn);
     expect(review.agentInstallationId, 'a2');

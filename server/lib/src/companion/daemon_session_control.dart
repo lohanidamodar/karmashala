@@ -17,6 +17,7 @@ import '../automations/daemon_agents.dart';
 import '../automations/daemon_checkout_facts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../domain/session_registry.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// Asks an agent's own store whether it holds a conversation: `present`,
 /// `absent` when the store was read to the end without it, else `unknown`.
@@ -43,10 +44,15 @@ class DaemonSessionControl implements HostedSessionControl {
     this.statusOf,
     this.press,
     this.screenOf,
+    this.onRowWritten,
     this.agents = const DaemonAgents(),
   });
 
   final CheckoutRows rows;
+
+  /// Told of each row whose model or mode this wrote, so every client hears
+  /// of it on the data channel.
+  final void Function(String sessionId)? onRowWritten;
   final DaemonCheckoutFacts facts;
   final SessionDao sessions;
   final SessionRegistry registry;
@@ -233,6 +239,7 @@ class DaemonSessionControl implements HostedSessionControl {
     var outcome = RemoteConfigureOutcome.recorded;
     if (model != null) {
       sessions.updateModel(row.id, model.id);
+      onRowWritten?.call(row.id);
       outcome = await _switchModel(row.id, descriptor, model.id);
     }
     if (permission != null) {
@@ -247,6 +254,7 @@ class DaemonSessionControl implements HostedSessionControl {
         );
       }
       sessions.updatePermissionMode(row.id, selection?.canonical);
+      onRowWritten?.call(row.id);
       outcome = await _switchPermission(row.id, modes, selection);
     }
     return outcome;

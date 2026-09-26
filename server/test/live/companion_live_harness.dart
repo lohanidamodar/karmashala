@@ -8,8 +8,8 @@ import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// The pieces a live companion test drives a real `karmashala_host serve`
 /// with: the store the app would have written, the app's own lifecycle link,

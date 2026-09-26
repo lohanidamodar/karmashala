@@ -11,7 +11,6 @@ import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,8 +55,8 @@ void main() {
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1'));
-    SessionDao(db).updatePaneId('s1', 'pane-1');
+    mirroredServer(db).sessionRows.insert(session(id: 's1'));
+    mirroredServer(db).sessionRows.updatePaneId('s1', 'pane-1');
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

@@ -139,7 +139,7 @@ void main() {
         sessions: sessionsOf ?? () => sessions,
         isLive: (s) => live.contains(s.id),
         liveTerminalDirectories: () => const [],
-        lastEventAt: (_) => null,
+        lastEventAt: (_) async => null,
         createdAt: (_) => null,
         clock: clock,
         onRemoved: (entry, ids) {

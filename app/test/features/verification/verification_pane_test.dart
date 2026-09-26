@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/verification/presentation/verification_p
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -27,6 +26,7 @@ import '../../support/window_matrix.dart';
 import 'verification_harness.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 final _t0 = DateTime.utc(2026, 8, 30, 12);
 
@@ -152,11 +152,13 @@ void main() {
   Future<void> pump(
     WidgetTester tester, {
     VerificationEvidenceReader reader = const _SyncEvidenceReader(),
+    List<Override> data = const [],
   }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(h.db),
+          ...data,
           verificationRootProvider.overrideWithValue(h.root),
           verificationEvidenceReaderProvider.overrideWithValue(reader),
           // Without this the pane waits on path_provider, which has no
@@ -239,11 +241,12 @@ void main() {
     tester,
   ) async {
     ExecutionEnvironmentDao(h.db).upsert(windowsEnv());
-    FakeDataServer().mirrorInto(h.db)
+    final server = FakeDataServer()..mirrorInto(h.db);
+    server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     AgentInstallationDao(h.db).insert(agentInstallation());
-    SessionDao(h.db)
+    server.sessionRows
       ..insert(session(id: 's-1', title: 'Before the rename'))
       ..insert(session(id: 's-2', title: 'The verifier'));
     seed(
@@ -253,14 +256,17 @@ void main() {
       sessionId: 's-1',
       producedBySessionId: 's-2',
     );
-    await pump(tester);
+    final data = await tester.runAsync(server.override);
+    await pump(tester, data: [data!]);
     await tapAndSettle(tester, find.text('a run about a session'));
     expect(find.text('Before the rename'), findsOneWidget);
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(VerificationPane)),
     );
-    SessionDao(h.db)
+    // Renamed at the server — another client's write, which reaches the pane
+    // as a change.
+    server.sessionRows
       ..updateTitle('s-1', 'After the rename')
       ..updateTitle('s-2', 'The renamed verifier');
     container

@@ -463,7 +463,7 @@ class _ConsoleStatus extends ConsumerWidget {
     ref.read(composerDraftProvider.notifier).queue(sessionId, text);
     ref.read(selectedSessionIdProvider.notifier).select(sessionId);
     final title =
-        ref.read(sessionDaoProvider).getById(sessionId)?.title ?? 'the session';
+        ref.read(sessionsDataProvider).getById(sessionId)?.title ?? 'the session';
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content: Text('Waiting in $title\'s message box.')),
     );

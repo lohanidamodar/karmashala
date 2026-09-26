@@ -12,7 +12,6 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -135,7 +134,7 @@ void main() {
   ) async {
     arm();
     arm(nightly(id: 'auto2', name: 'Paused sweep', enabled: false));
-    SessionDao(db).insert(session(title: 'Fix the login'));
+    mirroredServer(db).sessionRows.insert(session(title: 'Fix the login'));
     container
         .read(scheduledResumeDaoProvider)
         .replaceFor(

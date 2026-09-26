@@ -138,7 +138,7 @@ class AutomationCheckRunner {
   /// its agent works in, as **one** verification run against it — produced
   /// by Karmashala even when the session asked. Null when there are none.
   Future<SessionChecks?> runForSession(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('No session $sessionId.');
     return _runner.runForSession(
       session,
@@ -158,7 +158,7 @@ final sessionHasProjectChecksProvider = Provider.family<bool, String>((
   sessionId,
 ) {
   final repositoryId = ref
-      .watch(sessionDaoProvider)
+      .watch(sessionsDataProvider)
       .getById(sessionId)
       ?.repositoryId;
   if (repositoryId == null) return false;

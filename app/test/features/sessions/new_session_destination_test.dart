@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -254,13 +253,13 @@ void main() {
       await tester.tap(startButton());
       await tester.pumpAndSettle();
 
-      final started = SessionDao(db).getByRepository('r2');
+      final started = mirroredServer(db).sessionRows.getByRepository('r2');
       expect(
         started,
         hasLength(1),
         reason: 'the session was created in the checkout the picker named',
       );
-      expect(SessionDao(db).getByRepository('r1'), isEmpty);
+      expect(mirroredServer(db).sessionRows.getByRepository('r1'), isEmpty);
       expect(find.byType(NewSessionDialog), findsNothing);
 
       // Now — and only now — the app follows: a pane describing one checkout
@@ -287,7 +286,7 @@ void main() {
       await tester.tap(startButton());
       await tester.pumpAndSettle();
 
-      expect(SessionDao(db).getByRepository('wt1'), hasLength(1));
+      expect(mirroredServer(db).sessionRows.getByRepository('wt1'), hasLength(1));
     });
   });
 
@@ -319,7 +318,7 @@ void main() {
       (paneId) => paneId != shellPane,
     );
     expect(terminals.instanceFor(agentPane)?.agentLaunch, isNotNull);
-    expect(SessionDao(db).getByRepository('r1').single.paneId, agentPane);
+    expect(mirroredServer(db).sessionRows.getByRepository('r1').single.paneId, agentPane);
   });
 
   testWidgets('an external session opens in the first terminal found', (

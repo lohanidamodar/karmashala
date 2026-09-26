@@ -202,7 +202,7 @@ Future<void> recordDecisionDialog(
     builder: (context) => const _RecordDecisionDialog(),
   );
   if (entry == null) return;
-  ref
+  await ref
       .read(decisionRecorderProvider)
       .recordByHand(
         sessionId: sessionId,

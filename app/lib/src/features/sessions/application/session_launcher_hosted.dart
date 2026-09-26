@@ -46,7 +46,7 @@ extension SessionHostedVerbs on SessionLauncher {
   /// ended in the moment between this check and the attach.
   Future<SessionLaunchResult?> attachHosted(String sessionId) async {
     if (!heldByHostOnly(sessionId)) return null;
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final repository = _ref
         .read(workspaceDataProvider)
@@ -136,7 +136,7 @@ extension SessionHostedVerbs on SessionLauncher {
     }
     for (final candidate
         in _ref
-            .read(sessionDaoProvider)
+            .read(sessionsDataProvider)
             .getAllByExternalSessionId(externalId)) {
       if (candidate.isArchived) continue;
       if (candidate.repositoryId != request.repository.id) continue;

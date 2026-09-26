@@ -35,6 +35,7 @@ import '../../support/fake_host_lifecycle.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 DateTime _at(int second) => testTime.add(Duration(seconds: second));
 
@@ -69,7 +70,7 @@ void main() {
   late AppDatabase db;
   late FakeDataServer server;
   late DataClient data;
-  late SessionDao dao;
+  late FakeSessionRows dao;
   late FakeHostLifecycle host;
   late ProviderContainer container;
   late _RecordingRecorder recorder;
@@ -88,10 +89,10 @@ void main() {
         repository(id: 'r-ssh', environmentId: 'ssh:h1', path: '/srv/app'),
       );
     AgentInstallationDao(db).insert(agentInstallation());
-    dao = SessionDao(db);
-    // Also the daemon writing to the store, as `serve` does: these groups
-    // follow a row end to end, host write to app signal.
-    host = FakeHostLifecycle(db);
+    dao = server.sessionRows;
+    // Also the daemon writing to the server's rows, as `serve` does: these
+    // groups follow a row end to end, host write to app signal.
+    host = FakeHostLifecycle(server);
     container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
@@ -179,26 +180,25 @@ void main() {
       expect(client.read(hostLifecycleSubscriberProvider)!.knows('s1'), isTrue);
     });
 
-    test('a sessionChanged is a status change for that row, and the row is '
-        'not written', () async {
+    test('a status the server records reaches this app on the data channel, '
+        'as a status change for that row alone', () async {
       row('s1');
+      row('s2');
       await watch();
+      client.read(sessionsDataProvider);
       final before = signal('s1');
       final other = signal('s2');
 
-      feedOnly.changeLink.add((sessionId: 's1', status: 'completed'));
+      // The daemon writes the row; every client is told the row.
+      dao.updateStatus('s1', SessionStatus.completed);
       await _settle();
 
       expect(signal('s1'), greaterThan(before));
       expect(signal('s2'), other);
-      expect(statusOf('s1'), SessionStatus.running);
-    });
-
-    test('attaching wakes every status watcher: the host may have written '
-        'while no link was open', () async {
-      final before = signal('any');
-      await watch();
-      expect(signal('any'), greaterThan(before));
+      expect(
+        client.read(sessionsDataProvider).getById('s1')!.status,
+        SessionStatus.completed,
+      );
     });
 
     test('the rows this app runs in its own live panes are named on each '
@@ -209,9 +209,8 @@ void main() {
       dao.updatePaneId('hosted', 'pane-2');
       final subscriber = HostLifecycleSubscriber(
         source: feedOnly,
-        sessionDao: dao,
+        sessions: dao,
         hasLivePane: (paneId) => paneId == 'pane-1',
-        onStatusChanged: (_) {},
       );
       addTearDown(subscriber.dispose);
       subscriber.start();
@@ -226,7 +225,12 @@ void main() {
       host.snapshot = [hostFacts('s1', HostSessionState.running)];
       // The launch pass leaves this machine's rows to the feed.
       final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
-      expect(markSessionsLostOnLaunch(dao, where: (s) => !onThisMachine(s)), 0);
+      final sessions = container.read(sessionsDataProvider);
+      expect(
+        markSessionsLostOnLaunch(sessions, where: (s) => !onThisMachine(s)),
+        0,
+      );
+      await sessions.settled();
       expect(statusOf('s1'), SessionStatus.running);
 
       await startWatching();
@@ -269,7 +273,12 @@ void main() {
 
       // And the launch pass still speaks for it, as before.
       final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
-      expect(markSessionsLostOnLaunch(dao, where: (s) => !onThisMachine(s)), 1);
+      final sessions = container.read(sessionsDataProvider);
+      expect(
+        markSessionsLostOnLaunch(sessions, where: (s) => !onThisMachine(s)),
+        1,
+      );
+      await sessions.settled();
       expect(statusOf('remote'), SessionStatus.unknown);
     });
   });
@@ -859,7 +868,7 @@ void main() {
     });
   });
 
-  test('without a feed, a hook ending still settles the row', () {
+  test('without a feed, a hook ending still settles the row', () async {
     // An in-app or external-terminal session: the hook is all there is.
     final plain = ProviderContainer(
       overrides: [
@@ -877,6 +886,7 @@ void main() {
       event: 'SessionEnd',
       body: jsonEncode({'session_id': 'cli-s1', 'reason': 'other'}),
     );
+    await plain.read(sessionsDataProvider).settled();
     expect(statusOf('s1'), SessionStatus.completed);
   });
 }

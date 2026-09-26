@@ -13,8 +13,6 @@ import 'package:karmashala/src/features/sessions/application/session_handoff_ser
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_recap_dao.dart';
 import 'package:karmashala/src/features/sessions/presentation/agent_status_badge.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
@@ -54,7 +52,7 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
-    final dao = SessionDao(db)
+    final dao = mirroredServer(db).sessionRows
       ..insert(
         Session(
           id: 's1',
@@ -74,7 +72,7 @@ void main() {
         ),
       );
     if (busy) {
-      SessionRecapDao(db).write(
+      mirroredServer(db).recapRows.write(
         SessionRecap(
           sessionId: 's1',
           text: List.filled(

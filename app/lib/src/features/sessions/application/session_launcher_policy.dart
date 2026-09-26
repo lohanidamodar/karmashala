@@ -54,7 +54,7 @@ extension SessionPolicyVerbs on SessionLauncher {
     bool unrecognised,
   })?
   effectivePermissionFor(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final installation = _ref
         .read(agentInstallationDaoProvider)
@@ -89,7 +89,7 @@ extension SessionPolicyVerbs on SessionLauncher {
   /// [selection] follows the per-agent default. Never touches a live process.
   void setPermissionMode(String sessionId, PermissionSelection? selection) {
     _ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .updatePermissionMode(sessionId, selection?.canonical);
     // One row's own policy. Only the chip that draws it is watching.
     _publish(SessionChange.reconfigured(sessionId));
@@ -109,7 +109,7 @@ extension SessionPolicyVerbs on SessionLauncher {
     bool inherited,
   })?
   effectiveModelFor(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final installation = _ref
         .read(agentInstallationDaoProvider)
@@ -147,7 +147,7 @@ extension SessionPolicyVerbs on SessionLauncher {
     String sessionId,
     String? modelId,
   ) {
-    _ref.read(sessionDaoProvider).updateModel(sessionId, modelId);
+    _ref.read(sessionsDataProvider).updateModel(sessionId, modelId);
     // One row's own policy, exactly as a permission change publishes it.
     _publish(SessionChange.reconfigured(sessionId));
 

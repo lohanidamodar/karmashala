@@ -7,7 +7,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -20,6 +19,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// An agent with one flag per mode, so a flag on the command line names the
 /// winning mode with nothing else in the way.
@@ -135,8 +135,8 @@ extension on ProviderContainer {
 
 /// A stopped session with a CLI id, which is exactly what the resume path
 /// reuses rather than duplicating.
-void seedStopped(AppDatabase db, {PermissionSelection? mode}) {
-  SessionDao(db).insert(
+void seedStopped(FakeDataServer server, {PermissionSelection? mode}) {
+  server.sessionRows.insert(
     session(
       id: 'src',
       status: SessionStatus.completed,
@@ -189,7 +189,10 @@ void main() {
 
     expect(h.container.argumentsOf(launched.paneId!), contains('--careful'));
     expect(
-      SessionDao(h.db).getById(launched.session.id)!.permissionMode,
+      h.container
+          .read(sessionsDataProvider)
+          .getById(launched.session.id)!
+          .permissionMode,
       _careful.canonical,
     );
   });
@@ -199,7 +202,7 @@ void main() {
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     h.container.setDefaults(forExisting: _trust);
-    seedStopped(h.db, mode: _careful);
+    seedStopped(h.server, mode: _careful);
 
     final launched = await resume(h.container);
 
@@ -214,7 +217,10 @@ void main() {
       'cli-1',
     ]);
     // And it must not have overwritten the choice on its way past.
-    expect(SessionDao(h.db).getById('src')!.permissionMode, _careful.canonical);
+    expect(
+      h.container.read(sessionsDataProvider).getById('src')!.permissionMode,
+      _careful.canonical,
+    );
   });
 
   test(
@@ -223,7 +229,7 @@ void main() {
       final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      seedStopped(h.db, mode: _edits);
+      seedStopped(h.server, mode: _edits);
 
       h.container.setDefaults(forExisting: _trust);
 
@@ -239,7 +245,7 @@ void main() {
       final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      seedStopped(h.db);
+      seedStopped(h.server);
 
       h.container.setDefaults(forExisting: _edits);
       expect(
@@ -270,7 +276,10 @@ void main() {
     // default here is what froze every session at whatever the setting said on
     // the day it started.
     expect(
-      SessionDao(h.db).getById(launched.session.id)!.permissionMode,
+      h.container
+          .read(sessionsDataProvider)
+          .getById(launched.session.id)!
+          .permissionMode,
       isNull,
     );
 
@@ -289,7 +298,7 @@ void main() {
       final h = await harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      seedStopped(h.db);
+      seedStopped(h.server);
       h.container.setDefaults(forExisting: _edits);
 
       final launched = await resume(h.container);
@@ -299,7 +308,10 @@ void main() {
         '--continue',
         'cli-1',
       ]);
-      expect(SessionDao(h.db).getById('src')!.permissionMode, isNull);
+      expect(
+        h.container.read(sessionsDataProvider).getById('src')!.permissionMode,
+        isNull,
+      );
     },
   );
 
@@ -307,8 +319,10 @@ void main() {
     final first = await harness();
     addTearDown(first.db.close);
     first.container.setDefaults(forExisting: _trust);
-    seedStopped(first.db);
+    seedStopped(first.server);
     first.container.launcher.setPermissionMode('src', _careful);
+    // The choice reaches the server before this client goes.
+    await first.container.read(sessionsDataProvider).settled();
     first.container.dispose();
 
     // A new container over the same database is what a restart is: settings
@@ -332,7 +346,7 @@ void main() {
     final h = await harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    seedStopped(h.db, mode: _careful);
+    seedStopped(h.server, mode: _careful);
     h.container.setDefaults(forExisting: _edits);
 
     // Null is a value here, not a missing argument: "follow the setting" is a
@@ -340,7 +354,10 @@ void main() {
     // irreversible.
     h.container.launcher.setPermissionMode('src', null);
 
-    expect(SessionDao(h.db).getById('src')!.permissionMode, isNull);
+    expect(
+      h.container.read(sessionsDataProvider).getById('src')!.permissionMode,
+      isNull,
+    );
     final effective = h.container.launcher.effectivePermissionFor('src')!;
     expect(effective.selection, _edits);
     expect(effective.inherited, isTrue);

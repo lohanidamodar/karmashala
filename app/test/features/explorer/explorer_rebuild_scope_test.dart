@@ -13,14 +13,12 @@ import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -77,7 +75,7 @@ void main() {
     );
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < 6; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -91,7 +89,7 @@ void main() {
       );
     }
     for (var i = 0; i < 6; i++) {
-      ImportedSessionDao(db).insertIfAbsent(
+      mirroredServer(db).importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i$i',
           repositoryId: 'r1',
@@ -166,7 +164,7 @@ void main() {
         .tabs
         .firstWhere((tab) => tab.id == tabId)
         .focusedPaneId;
-    SessionDao(db).updatePaneId('n0', paneId);
+    mirroredServer(db).sessionRows.updatePaneId('n0', paneId);
     container
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.moved('n0'));
@@ -198,7 +196,7 @@ void main() {
     final panelBefore = panel(tester);
     expect(before.length, 12, reason: 'every card must be on screen to count');
 
-    SessionDao(db).updateStatus('n3', SessionStatus.idle);
+    mirroredServer(db).sessionRows.updateStatus('n3', SessionStatus.idle);
     harness.container
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.statusChanged('n3'));
@@ -233,7 +231,7 @@ void main() {
 
   group('a scheduled resume', () {
     ScheduledResume arm(ProviderContainer container, String sessionId) {
-      SessionDao(db).updatePermissionMode(sessionId, 'mode=bypassPermissions');
+      mirroredServer(db).sessionRows.updatePermissionMode(sessionId, 'mode=bypassPermissions');
       return container
           .read(scheduledResumeControllerProvider)
           .schedule(

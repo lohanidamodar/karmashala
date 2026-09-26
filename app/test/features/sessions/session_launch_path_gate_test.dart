@@ -34,7 +34,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -162,7 +161,7 @@ void main() {
 
       final result = await _launch(h, row);
 
-      expect(SessionDao(h.db).getById(result.session.id), isNotNull);
+      expect(mirroredServer(h.db).sessionRows.getById(result.session.id), isNotNull);
       // Counted, not timed: the whole claim to running on every launch is that
       // a workspace with nothing wrong costs one stat and no processes.
       expect(h.runner.requests, isEmpty);
@@ -229,9 +228,9 @@ void main() {
       expect(instance.agentLaunch!.executable, _real);
 
       // Written once: a repair must not leave a second session behind it.
-      expect(SessionDao(h.db).getAll(), hasLength(1));
+      expect(mirroredServer(h.db).sessionRows.getAll(), hasLength(1));
       expect(
-        SessionDao(h.db).getById(result.session.id)!.status,
+        mirroredServer(h.db).sessionRows.getById(result.session.id)!.status,
         SessionStatus.running,
       );
 
@@ -272,7 +271,7 @@ void main() {
 
       // Refused before the row: a failed launch must not leave a half-made
       // session for the user to find and wonder about.
-      expect(SessionDao(h.db).getAll(), isEmpty);
+      expect(mirroredServer(h.db).sessionRows.getAll(), isEmpty);
     });
 
     test('a junction the OS will not read refuses as unreachable', () async {
@@ -303,7 +302,7 @@ void main() {
         ),
       );
 
-      expect(SessionDao(h.db).getAll(), isEmpty);
+      expect(mirroredServer(h.db).sessionRows.getAll(), isEmpty);
       // §20's first rule: an unreachable row is never deleted.
       expect(AgentInstallationDao(h.db).getById('codex-row'), isNotNull);
     });
@@ -317,7 +316,7 @@ void main() {
           installations: [row],
           responder: (_) => _notOnPath,
         );
-        final dao = SessionDao(h.db)
+        final dao = mirroredServer(h.db).sessionRows
           ..insert(
             session(id: 'conv-1', status: SessionStatus.completed).copyWith(
               externalSessionId: 'conv-1',
@@ -370,7 +369,7 @@ void main() {
       final launcher = h.container.read(sessionLauncherProvider);
       expect(launcher.livePaneFor(started.session.id), paneId);
       expect(
-        SessionDao(h.db).getById(started.session.id)!.status,
+        mirroredServer(h.db).sessionRows.getById(started.session.id)!.status,
         SessionStatus.running,
       );
     });

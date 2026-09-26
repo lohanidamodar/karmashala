@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/explorer/application/explorer_view_mode.
 import 'package:karmashala/src/features/explorer/presentation/activity_by_day_view.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
@@ -60,7 +59,7 @@ void main() {
       );
     }
     void insert(String id, String repo, DateTime created, {String? worktree}) =>
-        SessionDao(db).insert(
+        mirroredServer(db).sessionRows.insert(
           Session(
             id: id,
             repositoryId: repo,

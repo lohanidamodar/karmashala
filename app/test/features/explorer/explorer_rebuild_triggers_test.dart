@@ -7,15 +7,12 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -91,7 +88,7 @@ void main() {
     AgentInstallationDao(db).insert(agentInstallation());
     // The owner's own database, as reported: 7 native, 107 imported.
     for (var i = 0; i < 7; i++) {
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',
@@ -105,7 +102,7 @@ void main() {
       );
     }
     for (var i = 0; i < 107; i++) {
-      ImportedSessionDao(db).insertIfAbsent(
+      server.importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i$i',
           repositoryId: 'r1',
@@ -191,7 +188,7 @@ void main() {
         .focusedPaneId;
     // Bind the pane to a session, so every per-session provider the cards read
     // has a live terminal behind it — the worst case for fan-out.
-    SessionDao(db).updatePaneId('n0', paneId);
+    server.sessionRows.updatePaneId('n0', paneId);
     await tester.pumpAndSettle();
     return (container: container, pane: terminals.instanceFor(paneId)!);
   }
@@ -283,18 +280,26 @@ void main() {
     tester,
   ) async {
     // The control: without it, "nothing rebuilt" could just mean the counter
-    // cannot see a rebuild. The sessions revision is what the panel watches
-    // directly, and bumping it must move every card on screen.
-    final harness = await pump(tester);
+    // cannot see a rebuild. Every row the panel draws changing at the server —
+    // renamed by another client — reaches the copy, and must move every card
+    // on screen. (A bare revision bump no longer does: since slice 1c the
+    // rows it re-reads are the same, equal values — imported ones included —
+    // so no card is rebuilt for nothing.)
+    await pump(tester);
     final before = cardIdentities(tester);
 
-    harness.container.read(sessionsRevisionProvider.notifier).bump();
+    for (var i = 0; i < 7; i++) {
+      server.sessionRows.updateTitle('n$i', 'Renamed $i');
+    }
+    for (var i = 0; i < 107; i++) {
+      server.importedRows.updateTitle('i$i', 'Renamed imported $i');
+    }
     await tester.pump();
 
     final after = cardIdentities(tester);
     // ignore: avoid_print
     print(
-      'EXPLORER-TRIGGER sessions-revision cards=${before.length} '
+      'EXPLORER-TRIGGER rows-renamed cards=${before.length} '
       'rebuilt=${changed(before, after)}',
     );
     expect(changed(before, after), before.length);

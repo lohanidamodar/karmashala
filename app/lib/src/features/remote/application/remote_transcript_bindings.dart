@@ -166,7 +166,7 @@ Future<RemoteSessionRecord> remoteTranscriptFor(
       // `session.id`, not the id asked with: a superseded imported id has no
       // event log of its own.
       : (
-          messages: _eventLogMessages(ref, session.id),
+          messages: await _eventLogMessages(ref, session.id),
           absence: null,
           turns: null,
           path: null,
@@ -355,8 +355,13 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
 }
 
 /// The engine's event log, mapped exactly as the desktop chat view maps it.
-List<RemoteTranscriptMessage> _eventLogMessages(Ref ref, String sessionId) {
-  final events = ref.read(sessionEventDaoProvider).listForSession(sessionId);
+Future<List<RemoteTranscriptMessage>> _eventLogMessages(
+  Ref ref,
+  String sessionId,
+) async {
+  final events = await ref
+      .read(sessionRecordsProvider)
+      .listForSession(sessionId);
   final messages = <RemoteTranscriptMessage>[];
   for (final event in events) {
     switch (event.type) {
@@ -395,7 +400,7 @@ void _addText(List<RemoteTranscriptMessage> out, String role, String payload) {
 SessionAttribution? _attributionOf(Ref ref, Session session) {
   final parentId = session.parentSessionId;
   if (parentId == null) return null;
-  final parent = ref.read(sessionDaoProvider).getById(parentId);
+  final parent = ref.read(sessionsDataProvider).getById(parentId);
   if (parent == null) return null;
   return SessionAttribution(sessionId: parent.id, title: parent.title);
 }

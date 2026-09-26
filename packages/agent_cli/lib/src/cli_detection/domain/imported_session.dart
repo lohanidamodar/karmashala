@@ -41,6 +41,38 @@ class ImportedSession {
     return '(imported session)';
   }
 
+  @override
+  bool operator ==(Object other) =>
+      other is ImportedSession &&
+      other.id == id &&
+      other.repositoryId == repositoryId &&
+      other.cli == cli &&
+      other.externalId == externalId &&
+      other.environmentId == environmentId &&
+      other.filePath == filePath &&
+      other.storeHome == storeHome &&
+      other.isSubagent == isSubagent &&
+      other.title == title &&
+      other.preview == preview &&
+      other.updatedAt == updatedAt &&
+      other.createdAt == createdAt;
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    repositoryId,
+    cli,
+    externalId,
+    environmentId,
+    filePath,
+    storeHome,
+    isSubagent,
+    title,
+    preview,
+    updatedAt,
+    createdAt,
+  );
+
   ImportedSession copyWith({String? title}) => ImportedSession(
     id: id,
     repositoryId: repositoryId,

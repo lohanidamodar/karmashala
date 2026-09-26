@@ -1,7 +1,7 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_session_engine/store.dart';
+import 'package:test/test.dart';
 
 void main() {
   late AppDatabase db;

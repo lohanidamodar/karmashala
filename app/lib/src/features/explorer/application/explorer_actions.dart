@@ -71,7 +71,7 @@ class ExplorerActions {
   /// conversation, else just select it. A session in a worktree resumes *in*
   /// that worktree — the repository root is a different branch.
   Future<ExplorerResult> openNative(String sessionId) async {
-    final dao = _ref.read(sessionDaoProvider);
+    final dao = _ref.read(sessionsDataProvider);
     final session = dao.getById(sessionId);
     if (session == null) {
       return const ExplorerResult(
@@ -125,7 +125,7 @@ class ExplorerActions {
       // Written before the launch: `SessionLauncher` reuses the row that holds
       // the conversation, so otherwise the click mints a second, phantom row.
       _ref
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .updateExternalSessionId(sessionId, resolved);
       externalId = resolved;
       continueNotice = continueLatestNotice(
@@ -364,7 +364,7 @@ class ExplorerActions {
     final externalId = session.externalSessionId;
     if (externalId == null || externalId.isEmpty) return null;
     final launcher = _ref.read(sessionLauncherProvider);
-    for (final candidate in _ref.read(sessionDaoProvider).getAll()) {
+    for (final candidate in _ref.read(sessionsDataProvider).getAll()) {
       if (candidate.id == session.id) continue;
       if (candidate.externalSessionId != externalId) continue;
       if (launcher.livePaneFor(candidate.id) != null) return candidate;

@@ -28,7 +28,7 @@ final agentContextSessionIdProvider = Provider<String?>(
 final agentContextTargetProvider = Provider<AgentContextTarget?>((ref) {
   final sessionId = ref.watch(agentContextSessionIdProvider);
   if (sessionId == null) return null;
-  final session = ref.watch(sessionDaoProvider).getById(sessionId);
+  final session = ref.watch(sessionsDataProvider).getById(sessionId);
   if (session == null) return null;
   final agentId = ref
       .watch(agentInstallationDaoProvider)

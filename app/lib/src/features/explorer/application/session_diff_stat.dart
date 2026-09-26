@@ -5,7 +5,6 @@ import 'package:agent_cli/process.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -70,10 +69,10 @@ final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
   // row is 8% of the app's CPU under load (see `dateFromIso`).
   return Map.unmodifiable({
     for (final entry
-        in ref.read(sessionDaoProvider).repositoryIdsById().entries)
+        in ref.read(sessionsDataProvider).repositoryIdsById().entries)
       entry.key: ?repositories[entry.value],
     for (final entry
-        in ref.read(importedSessionDaoProvider).repositoryIdsById().entries)
+        in ref.read(importedSessionsProvider).repositoryIdsById().entries)
       entry.key: ?repositories[entry.value],
   });
 });
@@ -134,8 +133,8 @@ final projectSummaryProvider = Provider.autoDispose
         SessionChangeKind.workspace,
       });
       final repositories = ref.watch(projectRepositoriesProvider(projectId));
-      final sessionDao = ref.read(sessionDaoProvider);
-      final importedDao = ref.read(importedSessionDaoProvider);
+      final sessionDao = ref.read(sessionsDataProvider);
+      final importedDao = ref.read(importedSessionsProvider);
       // The one attention count in the app, narrowed rather than recomputed.
       // Selecting the integer keeps one waiting session from waking them all.
       final needsAttention = ref.watch(

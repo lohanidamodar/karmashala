@@ -5,24 +5,34 @@ import '../domain/uuid.dart';
 import 'filing_lookup.dart';
 import 'notes_handler.dart';
 import 'preferences_handler.dart';
+import 'sessions_handler.dart';
 import 'todos_handler.dart';
 import 'workspace_handler.dart';
 
 /// The server's data API over its store: every client's reads and writes of
-/// notes, todos, preferences and the workspace, whatever link carries them. The only writer
-/// of those tables; each write is numbered ([revision]) and told to every
-/// other subscribed [DataSession].
+/// notes, todos, preferences, the workspace and sessions, whatever link
+/// carries them. The only writer of those tables for a client; each write is
+/// numbered ([revision]) and told to every other subscribed [DataSession] —
+/// and so is each write the server makes itself ([announce]): a status it
+/// recorded, a session a phone or an automation started.
 class DataService {
   DataService(
     AppDatabase database, {
     DateTime Function()? clock,
     String Function()? newId,
+    bool Function(String sessionId)? runsSession,
   }) : _now = clock ?? _utcNow {
     final filing = FilingLookup(database);
     _notes = NotesHandler(database, filing, _now);
     _todos = TodosHandler(database, filing, _now);
     _preferences = PreferencesHandler(database);
-    _workspace = WorkspaceHandler(database, _now, newId ?? newUuid);
+    _sessions = SessionsHandler(database, _now, runs: runsSession);
+    _workspace = WorkspaceHandler(
+      database,
+      _now,
+      newId ?? newUuid,
+      checkoutsGoing: _sessions.checkoutsGoing,
+    );
   }
 
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -32,7 +42,8 @@ class DataService {
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
   late final WorkspaceHandler _workspace;
-  final _sessions = <DataSession>{};
+  late final SessionsHandler _sessions;
+  final _links = <DataSession>{};
   var _revision = 0;
 
   /// The number of the last write, since this service started.
@@ -41,9 +52,28 @@ class DataService {
   /// One client link. [deliver] gets the changes other links make once the
   /// client has sent [DataSubscribe].
   DataSession open(void Function(DataChanges changes) deliver) {
-    final session = DataSession._(this, deliver);
-    _sessions.add(session);
-    return session;
+    final link = DataSession._(this, deliver);
+    _links.add(link);
+    return link;
+  }
+
+  /// Tells every subscribed client of [changes] the server made itself,
+  /// outside any request, under the next revision.
+  void announce(List<DataChange> changes) {
+    if (changes.isEmpty) return;
+    _tell(null, DataChanges(++_revision, List.unmodifiable(changes)));
+  }
+
+  /// [announce]s sessions [sessionIds] as they now stand — rows the server
+  /// wrote itself: a lifecycle status, a session it started, a mode a phone
+  /// chose. A row that is gone is told removed.
+  void announceSessions(Iterable<String> sessionIds) =>
+      announce(_sessions.sessionsNow(sessionIds));
+
+  void _tell(DataSession? origin, DataChanges batch) {
+    for (final link in _links) {
+      if (link != origin && link._subscribed) link._deliver(batch);
+    }
   }
 
   DataReply<R> _handle<R>(DataSession origin, DataRequest<R> request) {
@@ -83,6 +113,26 @@ class DataService {
         final SectionPut r => _workspace.putSection(r, changes),
         final SectionsReorder r => _workspace.reorderSections(r, changes),
         final SectionDelete r => _workspace.deleteSection(r, changes),
+        SessionsList() => _sessions.list(),
+        final SessionCreate r => _sessions.create(r, changes),
+        final SessionEdit r => _sessions.edit(r, changes),
+        final SessionDelete r => _sessions.delete(r, changes),
+        final SessionLinkAdd r => _sessions.link(r, changes),
+        final SessionLinkRemove r => _sessions.unlink(r, changes),
+        final SessionEvents r => _sessions.events(r),
+        final SessionEventsLatest r => _sessions.lastEventAt(r),
+        final SessionEventsAppend r => _sessions.appendEvents(r),
+        final DecisionAppend r => _sessions.recordDecision(r, changes),
+        final RecapWrite r => _sessions.writeRecap(r, changes),
+        final RecapDismiss r => _sessions.dismissRecap(r, changes),
+        final RelayRecord r => _sessions.recordRelay(r),
+        final RelaysTo r => _sessions.relaysTo(r),
+        final RelayCount r => _sessions.relayCount(r),
+        final FollowUpRaise r => _sessions.raiseFollowUp(r, changes),
+        final FollowUpResolve r => _sessions.resolveFollowUp(r, changes),
+        final ImportedAdd r => _sessions.addImported(r, changes),
+        final ImportedRename r => _sessions.renameImported(r, changes),
+        final ImportedDelete r => _sessions.deleteImported(r, changes),
       };
     } on DataRefused {
       rethrow;
@@ -94,9 +144,7 @@ class DataService {
     }
     if (changes.isEmpty) return DataReply(result as R, _revision);
     final batch = DataChanges(++_revision, List.unmodifiable(changes));
-    for (final session in _sessions) {
-      if (session != origin && session._subscribed) session._deliver(batch);
-    }
+    _tell(origin, batch);
     return DataReply(result as R, _revision, batch.changes);
   }
 }
@@ -129,7 +177,7 @@ class DataSession {
     return DataEnvelope.answer(id, request, handle(request));
   }
 
-  void close() => _service._sessions.remove(this);
+  void close() => _service._links.remove(this);
 
   DataAck _subscribe() {
     _subscribed = true;

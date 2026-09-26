@@ -20,7 +20,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -79,7 +78,7 @@ void main() {
       // scrolled past, not counted.
       if (i >= 12) continue;
       for (var s = 0; s < 2; s++) {
-        SessionDao(db).insert(
+        mirroredServer(db).sessionRows.insert(
           Session(
             id: 'p$p-s$s',
             repositoryId: 'r$p',
@@ -246,7 +245,7 @@ void main() {
     final before = cards(tester);
     expect(before.keys, contains('Project 0003'));
 
-    SessionDao(harness.db).updateStatus('p0003-s0', SessionStatus.running);
+    mirroredServer(harness.db).sessionRows.updateStatus('p0003-s0', SessionStatus.running);
     harness.container
         .read(sessionsRevisionProvider.notifier)
         .changed(const SessionChange.statusChanged('p0003-s0'));
@@ -290,7 +289,7 @@ void main() {
     harness.db.reset();
     files.reads.clear();
     // A second arrival: the working tree moved under the open cards.
-    SessionDao(harness.db).updateStatus('p0002-s0', SessionStatus.idle);
+    mirroredServer(harness.db).sessionRows.updateStatus('p0002-s0', SessionStatus.idle);
     harness.container
         .read(sessionsRevisionProvider.notifier)
         .changed(const SessionChange.statusChanged('p0002-s0'));

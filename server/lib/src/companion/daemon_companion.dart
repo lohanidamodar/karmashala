@@ -40,6 +40,7 @@ import 'companion_handler.dart';
 import 'daemon_session_control.dart';
 import 'daemon_worktrees.dart';
 import 'registry_screens.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// The phone companion, served by the daemon: the one companion server on a
 /// machine with a session host, running whether or not the desktop app is.
@@ -80,7 +81,7 @@ class DaemonCompanion implements CompanionHandler {
        _pushPost = pushPost,
        _now = clock ?? DateTime.now,
        _newId = newId ?? newUuid,
-       _data = (data ?? DataService(database, newId: newId)).open((_) {}),
+       _dataService = data ?? DataService(database, newId: newId),
        _devices = PairedDeviceDao(database),
        _sessions = SessionDao(database),
        _rows = CheckoutRows(database),
@@ -144,7 +145,8 @@ class DaemonCompanion implements CompanionHandler {
 
   /// This companion's own link to the server's data API: a project a phone
   /// adds is written there, so every client is told.
-  final DataSession _data;
+  final DataService _dataService;
+  late final DataSession _data = _dataService.open((_) {});
   final PairedDeviceDao _devices;
   final SessionDao _sessions;
   final CheckoutRows _rows;
@@ -240,9 +242,11 @@ class DaemonCompanion implements CompanionHandler {
       statusOf: prompts?.statusOf,
       press: prompts?.press,
       screenOf: prompts?.screen,
+      onRowWritten: _announceSession,
       launcher: HostedAgentLauncher(
         registry: registry,
         sessions: _sessions,
+        onRowWritten: _announceSession,
         mcp: mcp,
         now: () => _now().toUtc(),
         newId: _newId,
@@ -256,6 +260,10 @@ class DaemonCompanion implements CompanionHandler {
       ),
     );
   }
+
+  /// A row this companion wrote, told to every client on the data channel.
+  void _announceSession(String sessionId) =>
+      _dataService.announceSessions([sessionId]);
 
   ({Project project, List<Repository> checkouts}) _createProject(
     String name,

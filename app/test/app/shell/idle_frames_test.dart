@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_session/session.dart';
@@ -73,7 +72,7 @@ void main() {
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final id in ['s1', 's2']) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -157,7 +156,7 @@ void main() {
           .layout
           .panes
           .single;
-      SessionDao(db).updatePaneId(id, paneId);
+      mirroredServer(db).sessionRows.updatePaneId(id, paneId);
     }
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
 

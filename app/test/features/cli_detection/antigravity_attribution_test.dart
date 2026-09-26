@@ -7,7 +7,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/directory_conversation_attribution_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -15,6 +14,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 
@@ -35,7 +35,8 @@ void main() {
   late Directory tmp;
   late String storeHome;
   late AppDatabase db;
-  late SessionDao dao;
+  late FakeSessionRows dao;
+  late SessionsData sessions;
   late WorkspaceData workspace;
 
   const conversation = 'df3c0708-1111-4222-8333-444455556666';
@@ -59,7 +60,8 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
-    dao = SessionDao(db);
+    dao = server.sessionRows;
+    sessions = await sessionsOf(server);
   });
   tearDown(() {
     db.close();
@@ -113,7 +115,7 @@ void main() {
   DirectoryConversationAttributionService service({
     Map<String, List<String>> paneTails = const {},
   }) => DirectoryConversationAttributionService(
-    sessionDao: dao,
+    sessionDao: sessions,
     installationDao: AgentInstallationDao(db),
     workspace: workspace,
     agents: AgentRegistry.builtIn,
@@ -135,7 +137,7 @@ void main() {
       final attribution = service();
       expect(attribution.wantsStoreSweep, isTrue);
       expect(await attribution.attribute(), 1);
-      expect(dao.getById('s1')!.externalSessionId, conversation);
+      expect(sessions.getById('s1')!.externalSessionId, conversation);
       // And the row stops being a candidate, so the next slot costs nothing.
       expect(attribution.wantsStoreSweep, isFalse);
     });
@@ -157,7 +159,7 @@ void main() {
         },
       );
       expect(await attribution.attribute(), 1);
-      expect(dao.getById('s1')!.externalSessionId, conversation);
+      expect(sessions.getById('s1')!.externalSessionId, conversation);
     });
   });
 
@@ -172,7 +174,7 @@ void main() {
 
         final attribution = service();
         expect(await attribution.attribute(), 0);
-        expect(dao.getById('s1')!.externalSessionId, isNull);
+        expect(sessions.getById('s1')!.externalSessionId, isNull);
         expect(attribution.reasonFor('s1'), contains('no conversation'));
       },
     );
@@ -184,7 +186,7 @@ void main() {
 
       final attribution = service();
       expect(await attribution.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
       expect(attribution.reasonFor('s1'), contains('earlier one'));
     });
 
@@ -196,7 +198,7 @@ void main() {
 
       final attribution = service();
       expect(await attribution.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
       expect(attribution.reasonFor('s1'), contains('another session'));
     });
 
@@ -211,8 +213,8 @@ void main() {
 
       final attribution = service();
       expect(await attribution.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
-      expect(dao.getById('s2')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s2')!.externalSessionId, isNull);
       expect(attribution.reasonFor('s1'), contains('More than one session'));
     });
   });
@@ -226,7 +228,7 @@ void main() {
       final attribution = service();
       expect(attribution.wantsStoreSweep, isFalse);
       expect(await attribution.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, conversation);
+      expect(sessions.getById('s1')!.externalSessionId, conversation);
     });
 
     test('never another agent, whose store this is not', () async {
@@ -237,7 +239,7 @@ void main() {
       final attribution = service();
       expect(attribution.wantsStoreSweep, isFalse);
       expect(await attribution.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(sessions.getById('s1')!.externalSessionId, isNull);
     });
 
     test('never an archived one', () async {
@@ -260,7 +262,7 @@ void main() {
         insert(directory: null);
 
         expect(await service().attribute(), 1);
-        expect(dao.getById('s1')!.externalSessionId, conversation);
+        expect(sessions.getById('s1')!.externalSessionId, conversation);
       },
     );
   });

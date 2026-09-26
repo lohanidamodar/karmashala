@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
@@ -52,14 +51,14 @@ void main() {
     pendingToolUseId: answered ? null : id,
   );
 
-  ProviderContainer containerFor({
+  Future<ProviderContainer> containerFor({
     required List<TranscriptMessage> messages,
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
     SessionSurface surface = SessionSurface.pane,
     DateTime? observedAt,
     String? externalSessionId = 'ext-1',
-  }) {
+  }) async {
     final db = AppDatabase.memory();
     final server = FakeDataServer()..mirrorInto(db);
     addTearDown(db.close);
@@ -67,7 +66,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -84,6 +83,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => Stream.value(
             AgentStatusReport(
@@ -112,7 +112,7 @@ void main() {
     DateTime? observedAt,
     String? externalSessionId = 'ext-1',
   }) async {
-    final container = containerFor(
+    final container = await containerFor(
       messages: messages,
       status: status,
       rowStatus: rowStatus,

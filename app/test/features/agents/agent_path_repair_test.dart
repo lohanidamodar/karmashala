@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -334,7 +333,7 @@ void main() {
           path: _stored,
         ),
       );
-      SessionDao(db).insert(session(agentInstallationId: 'codex-row'));
+      mirroredServer(db).sessionRows.insert(session(agentInstallationId: 'codex-row'));
       container = workspaceWith(
         probe: FakePathProbe(
           files: const {_real},

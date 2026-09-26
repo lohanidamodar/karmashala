@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/cli_detection/data/conversation_index_da
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -256,7 +255,7 @@ void main() {
       await busy.run();
 
       expect(
-        SessionDao(busy.db).getById('new0')!.title,
+        mirroredServer(busy.db).sessionRows.getById('new0')!.title,
         'Conversation 2',
         reason: 'the whole point of the slot: the CLI names the session',
       );
@@ -384,7 +383,7 @@ class _CountingDatabase extends AppDatabase {
     required String conversation,
     bool titleByUser = false,
   }) {
-    SessionDao(this).insert(
+    mirroredServer(this).sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r1',

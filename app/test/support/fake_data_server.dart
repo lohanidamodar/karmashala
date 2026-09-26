@@ -8,6 +8,15 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/read.dart';
+import 'package:karmashala_session/events.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/transcript.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+
+part 'fake_sessions.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -73,10 +82,35 @@ class FakeDataServer {
     SectionRemoved.new,
   );
 
+  /// The sessions domain, shaped like the server's DAOs: the rows (and the
+  /// checkouts each spans), the imported history, and the records.
+  late final sessionRows = FakeSessionRows._(this);
+  late final sessionLinks = FakeSessionLinks._(this);
+  late final importedRows = FakeImportedRows._(this);
+  late final sessionRecords = FakeSessionRecords._(this);
+
+  /// [sessionRecords], shaped like each of the server's record DAOs.
+  late final eventRows = FakeEventRows._(sessionRecords);
+  late final decisionRows = FakeDecisionRows._(sessionRecords);
+  late final recapRows = FakeRecapRows._(sessionRecords);
+  late final relayRows = FakeRelayRows._(sessionRecords);
+  late final followUpRows = FakeFollowUpRows._(sessionRecords);
+
   /// Told every workspace row this server writes, however it was written —
   /// what `workspace_mirror.dart` copies into a test's database for the
   /// domains that still read those tables there.
   final rowListeners = <void Function(RowChange change)>[];
+
+  /// Told every session row this server writes or removes — the mirror's
+  /// feed, for the foreign keys of the tables not moved yet.
+  final sessionRowListeners = <void Function(SessionDomainChange change)>[];
+
+  void _mirror(DataChange change) {
+    if (change is! SessionDomainChange) return;
+    for (final listener in sessionRowListeners) {
+      listener(change);
+    }
+  }
 
   /// [preferences] as a store — for a test to seed before a client
   /// connects, or to read back what one wrote (once it has landed).
@@ -94,12 +128,21 @@ class FakeDataServer {
   final _links = <FakeDataLink>{};
   var _running = true;
 
+  static final _byClient = Expando<FakeDataServer>();
+
+  /// The server [client] was connected to by [connect] — for a test that
+  /// holds only a container, or only its client.
+  static FakeDataServer of(DataClient client) =>
+      _byClient[client] ??
+      (throw StateError('that client was not connected to a fake server'));
+
   /// A client of this server, primed, closed when the test ends. [wait] is
   /// how long its writes wait for a server that is down.
   Future<DataClient> connect({
     Duration wait = const Duration(seconds: 20),
   }) async {
     final client = await DataClient.connect(dial, waitForServer: wait);
+    _byClient[client] = this;
     addTearDown(client.close);
     return client;
   }
@@ -143,9 +186,37 @@ class FakeDataServer {
           value == null ? preferences.remove(key) : preferences[key] = value;
         case final RowChange row:
           _applyRow(row);
+        case final SessionDomainChange change:
+          _applySession(change);
       }
     }
     _tell(null, changes);
+  }
+
+  void _applySession(SessionDomainChange change) {
+    final ignored = <DataChange>[];
+    switch (change) {
+      case SessionRowChanged(:final session):
+        sessionRows._put(session, ignored);
+      case SessionRowRemoved(:final id):
+        sessionRows._remove(id, ignored);
+      case SessionLinksChanged(:final sessionId, :final links):
+        sessionLinks._links[sessionId] = [...links];
+      case ImportedChanged(:final session):
+        importedRows._rows[session.id] = session;
+      case ImportedRemoved(:final id):
+        importedRows._rows.remove(id);
+      case DecisionRecorded(:final decision):
+        sessionRecords.decisions[decision.id!] = decision;
+      case DecisionRemoved(:final id):
+        sessionRecords.decisions.remove(id);
+      case RecapChanged(:final recap):
+        sessionRecords.recaps[recap.sessionId] = recap;
+      case RecapRemoved(:final sessionId):
+        sessionRecords.recaps.remove(sessionId);
+      case FollowUpChanged(:final followUp):
+        sessionRecords.followUps[followUp.id!] = followUp;
+    }
   }
 
   void _applyRow(RowChange change) => switch (change) {
@@ -180,6 +251,7 @@ class FakeDataServer {
 
   void _tell(FakeDataLink? origin, List<DataChange> changes) {
     if (changes.isEmpty) return;
+    changes.forEach(_mirror);
     final batch = DataChanges(++revision, List.unmodifiable(changes));
     for (final link in _links) {
       if (link != origin && link._subscribed) link._changes.add(batch);
@@ -189,7 +261,7 @@ class FakeDataServer {
   DataReply<R> _handle<R>(FakeDataLink origin, DataRequest<R> request) {
     requests.add(request.kind);
     final changes = <DataChange>[];
-    final Object result = switch (request) {
+    final Object? result = switch (request) {
       DataSubscribe() => _subscribe(origin),
       NotesList(:final sessionId) => [
         for (final note in notes.values)
@@ -265,6 +337,26 @@ class FakeDataServer {
       SectionPut(:final section) => _rowChanged(changes, section),
       SectionsReorder(:final ids) => _reorderSections(ids, changes),
       SectionDelete(:final id) => _deleteSection(id, changes),
+      SessionsList() ||
+      SessionCreate() ||
+      SessionEdit() ||
+      SessionDelete() ||
+      SessionLinkAdd() ||
+      SessionLinkRemove() ||
+      SessionEvents() ||
+      SessionEventsLatest() ||
+      SessionEventsAppend() ||
+      DecisionAppend() ||
+      RecapWrite() ||
+      RecapDismiss() ||
+      RelayRecord() ||
+      RelaysTo() ||
+      RelayCount() ||
+      FollowUpRaise() ||
+      FollowUpResolve() ||
+      ImportedAdd() ||
+      ImportedRename() ||
+      ImportedDelete() => _handleSessions(request, changes),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));
@@ -275,8 +367,18 @@ class FakeDataServer {
   var _ids = 0;
   String _freshId(String prefix) => '$prefix-fake-${++_ids}';
 
-  /// The records that keep a checkout from being retired, by its id — what
-  /// the server counts in session history.
+  /// Sessions, their links and imported history recorded on checkout [id].
+  int _sessionHistoryOn(String id) => {
+    for (final s in sessionRows.getAll())
+      if (s.repositoryId == id ||
+          sessionLinks.linksFor(s.id).any((l) => l.repositoryId == id))
+        s.id,
+    for (final i in importedRows._rows.values)
+      if (i.repositoryId == id) i.id,
+  }.length;
+
+  /// Other records that keep a checkout from being retired, by its id — what
+  /// else the server counts in history (comparisons).
   final historyReferences = <String, int>{};
 
   Workspace _workspace(String id) =>
@@ -428,6 +530,22 @@ class FakeDataServer {
 
   DataAck _deleteProject(String id, List<DataChange> changes) {
     _existingProject(id);
+    final checkouts = {
+      for (final checkout in repositoryRows.getByProject(id)) checkout.id,
+    };
+    // The schema's cascade: the sessions on those checkouts and the history
+    // they hold go with them.
+    for (final session in sessionRows.getAll()) {
+      if (checkouts.contains(session.repositoryId)) {
+        _deleteSession(session.id, changes);
+      }
+    }
+    for (final imported in [...importedRows._rows.values]) {
+      if (checkouts.contains(imported.repositoryId)) {
+        importedRows._rows.remove(imported.id);
+        changes.add(ImportedRemoved(imported.id));
+      }
+    }
     changes.addAll(projectRows._removeCascading(id));
     for (final note in [...notes.values]) {
       if (note.projectId == id) {
@@ -466,7 +584,8 @@ class FakeDataServer {
     for (final id in ids) {
       final checkout = repositoryRows.getById(id);
       if (checkout == null) continue;
-      final records = answer[id] = historyReferences[id] ?? 0;
+      final records = answer[id] =
+          (historyReferences[id] ?? 0) + _sessionHistoryOn(id);
       if (records > 0) continue;
       changes.add(repositoryRows._remove(id));
       final project = projectRows.getById(checkout.projectId);

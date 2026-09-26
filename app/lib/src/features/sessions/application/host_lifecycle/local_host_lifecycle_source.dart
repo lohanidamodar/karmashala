@@ -30,9 +30,6 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       hookSnapshot: [for (final hook in watch.hookSnapshot) _hookOf(hook)],
       hooks: watch.hooks.map(_hookOf),
       replyHook: watch.replyHook,
-      sessionChanges: watch.sessionChanges.map(
-        (change) => (sessionId: change.sessionId, status: change.status),
-      ),
       mcpCalls: watch.mcpCalls.map(
         (call) => (
           callId: call.callId,

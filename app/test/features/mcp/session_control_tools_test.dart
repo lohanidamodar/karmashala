@@ -7,15 +7,11 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/mcp/session_tools.dart';
-import 'package:karmashala/src/features/sessions/data/session_relay_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_wait.dart';
 import 'package:karmashala_session/session.dart';
@@ -37,6 +33,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import '../sessions/fixture_menu_screen.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala_session/events.dart';
 
 /// The session-operating tools, called the way an agent calls them: over the
 /// MCP endpoint, as `tools/call`, and asserted on by what changed afterwards.
@@ -98,7 +95,7 @@ void main() {
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', title: 'Work'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Work'));
 
     statusLookup = (_) => null;
     waitSubscribed = Completer<void>();
@@ -217,7 +214,7 @@ void main() {
         .layout
         .panes
         .first;
-    SessionDao(db).updatePaneId(sessionId, paneId);
+    mirroredServer(db).sessionRows.updatePaneId(sessionId, paneId);
     final written = <String>[];
     controller.instanceFor(paneId)!.terminal.onOutput = written.add;
     return written;
@@ -449,7 +446,7 @@ void main() {
     });
 
     test('sessionId targets, and does not change who the caller is', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
 
       // Calling as s1 but naming s2: the message goes to s2, which is what a
@@ -482,7 +479,7 @@ void main() {
   // docs/inter-agent-communication.md §4.2 and §4.5.
   group('relays are recorded, and budgeted per pair', () {
     test('a relay survives in the record, beside the turns', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
       attachPane('s2');
 
       await callTool('session_send', {
@@ -490,7 +487,7 @@ void main() {
         'text': 'run the tests',
       }, 's1');
 
-      final relays = SessionRelayDao(db).recentTo('s2', 10);
+      final relays = mirroredServer(db).relayRows.recentTo('s2', 10);
       expect(relays.total, 1);
       expect(relays.relays.single.fromSessionId, 's1');
       // What the sender wrote, not the envelope the recipient saw.
@@ -507,13 +504,13 @@ void main() {
     test('a message to yourself is not a relay', () async {
       attachPane('s1');
       await callTool('session_send', {'text': 'note to self'}, 's1');
-      expect(SessionRelayDao(db).recentTo('s1', 10).total, 0);
+      expect(mirroredServer(db).relayRows.recentTo('s1', 10).total, 0);
     });
 
     test('past the budget nothing is sent, and it says why', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
       final written = attachPane('s2');
-      final relays = SessionRelayDao(db);
+      final relays = mirroredServer(db).relayRows;
       for (var i = 0; i < relayBudget; i++) {
         relays.record(
           SessionRelay(
@@ -543,9 +540,9 @@ void main() {
     });
 
     test('sends older than the window do not count', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
       attachPane('s2');
-      final relays = SessionRelayDao(db);
+      final relays = mirroredServer(db).relayRows;
       for (var i = 0; i < relayBudget; i++) {
         relays.record(
           SessionRelay(
@@ -570,7 +567,7 @@ void main() {
 
   group('attribution', () {
     test('a relay carries the sending session, built from its row', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
 
       final result = await callTool('session_send', {
@@ -589,8 +586,8 @@ void main() {
     });
 
     test('the sender is the authenticated caller, never the argument', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
-      SessionDao(db).insert(session(id: 's3', title: 'Impersonated'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's3', title: 'Impersonated'));
       final other = attachPane('s2');
 
       // Every string a model controls, aimed at the prefix: a forged sender id
@@ -666,9 +663,9 @@ void main() {
     });
 
     test('a renamed sender is named by its title now', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
-      SessionDao(db).updateTitle('s1', 'Audit the MCP surface');
+      mirroredServer(db).sessionRows.updateTitle('s1', 'Audit the MCP surface');
 
       await callTool('session_send', {
         'sessionId': 's2',
@@ -781,7 +778,7 @@ void main() {
     });
 
     test('the prompt belongs to the target, not the caller', () async {
-      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      mirroredServer(db).sessionRows.insert(session(id: 's2', title: 'Other'));
       final other = attachPane('s2');
       // s1 is the one holding a prompt; it is still free to talk to s2.
       statusLookup = (id) => id == 's1'
@@ -841,7 +838,7 @@ void main() {
     // captured screen, in the pane's own grid, answered through the tool.
     FixtureMenuScreen folderTrustIn(String sessionId) {
       attachPane(sessionId);
-      final paneId = SessionDao(db).getById(sessionId)!.paneId!;
+      final paneId = mirroredServer(db).sessionRows.getById(sessionId)!.paneId!;
       final terminal = container
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(paneId)!
@@ -908,7 +905,7 @@ void main() {
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(id: 'a2', agentId: 'codex'));
-      SessionDao(db).insert(session(id: 's3', agentInstallationId: 'a2'));
+      mirroredServer(db).sessionRows.insert(session(id: 's3', agentInstallationId: 'a2'));
       attachPane('s3');
 
       final result = await callTool('session_answer', {
@@ -932,7 +929,7 @@ void main() {
 
   group('session_transcript', () {
     test('returns the recorded turns, newest last', () async {
-      final events = SessionEventDao(db);
+      final events = mirroredServer(db).eventRows;
       events.append(
         event(payload: '{"role":"user","text":"first"}', type: 'message.user'),
       );
@@ -967,7 +964,7 @@ void main() {
       attachPane('s1');
       container
           .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(SessionDao(db).getById('s1')!.paneId!)!
+          .instanceFor(mirroredServer(db).sessionRows.getById('s1')!.paneId!)!
           .terminal
           .write('waiting for your approval\r\n');
 
@@ -983,7 +980,7 @@ void main() {
     });
 
     test('limit caps the turns and reports what was left out', () async {
-      final events = SessionEventDao(db);
+      final events = mirroredServer(db).eventRows;
       for (var i = 0; i < 5; i++) {
         events.append(event(payload: '{"text":"turn $i"}'));
       }
@@ -1011,7 +1008,7 @@ void main() {
       });
 
       expect(result.isError, isFalse);
-      expect(SessionDao(db).getById('s1')!.title, 'Fix the login bug');
+      expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'Fix the login bug');
     });
 
     test('a blank title is refused', () async {
@@ -1020,7 +1017,7 @@ void main() {
         'title': '  ',
       });
       expect(result.isError, isTrue);
-      expect(SessionDao(db).getById('s1')!.title, 'Work');
+      expect(mirroredServer(db).sessionRows.getById('s1')!.title, 'Work');
     });
   });
 
@@ -1030,7 +1027,7 @@ void main() {
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
       );
-      final paneId = SessionDao(db).getById('s1')!.paneId!;
+      final paneId = mirroredServer(db).sessionRows.getById('s1')!.paneId!;
       expect(controller.instanceFor(paneId), isNotNull);
 
       final result = await callTool('session_end', {'sessionId': 's1'});
@@ -1098,7 +1095,7 @@ void main() {
     // docs/spawn-approval.md: the mode is the model's string, so without a cap
     // any session could start a bypass child with one call.
     test('a bypass caller is refused a bypass child', () async {
-      SessionDao(db).updatePermissionMode('s1', 'mode=bypassPermissions');
+      mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=bypassPermissions');
       final result = await callTool('open_new_session', {
         'projectId': 'p1',
         'permissionMode': 'bypass',
@@ -1108,7 +1105,7 @@ void main() {
     });
 
     test('a plan-mode caller is refused a child that writes', () async {
-      SessionDao(db).updatePermissionMode('s1', 'mode=plan');
+      mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=plan');
       final result = await callTool('open_new_session', {
         'projectId': 'p1',
         'permissionMode': 'acceptEdits',
@@ -1118,7 +1115,7 @@ void main() {
     });
 
     test('an exact mode above the cap is refused too', () async {
-      SessionDao(db).updatePermissionMode('s1', 'mode=bypassPermissions');
+      mirroredServer(db).sessionRows.updatePermissionMode('s1', 'mode=bypassPermissions');
       final result = await callTool('open_new_session', {
         'projectId': 'p1',
         'permissionMode': 'mode=bypassPermissions',
@@ -1168,7 +1165,7 @@ void main() {
         bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
         socketDirectory: p.join(tmp.path, 'ipc'),
       );
-      ImportedSessionDao(db).insertIfAbsent(
+      mirroredServer(db).importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i-claude',
           repositoryId: 'r1',
@@ -1228,7 +1225,7 @@ void main() {
           path: r'C:\bin\silent.exe',
         ),
       );
-      ImportedSessionDao(db).insertIfAbsent(
+      mirroredServer(db).importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i-silent',
           repositoryId: 'r1',
@@ -1276,7 +1273,7 @@ void main() {
             path: '/home/me/.local/bin/silent',
           ),
         );
-        ImportedSessionDao(db).insertIfAbsent(
+        mirroredServer(db).importedRows.insertIfAbsent(
           ImportedSession(
             id: 'i-silent-wsl',
             repositoryId: 'r-wsl',

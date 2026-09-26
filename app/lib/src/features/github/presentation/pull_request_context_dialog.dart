@@ -228,7 +228,9 @@ class SentContextCardsDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final cards = ref.watch(sentContextCardsProvider(sessionId));
+    final cards =
+        ref.watch(sentContextCardsProvider(sessionId)).value ??
+        const <SentContextCard>[];
     return AlertDialog(
       title: const Text('Context sent to this session'),
       content: BoundedDialogContent(

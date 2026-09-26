@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/events.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../protocol/messages.dart';
 import 'daemon_agent_status.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// **Answering the prompts of the agents this host holds**: approve and deny,
 /// a menu's option, a question's answers — typed into the PTY here, read back
@@ -22,6 +22,7 @@ class DaemonPromptAnswers implements PromptTerminals {
     this.agents = AgentRegistry.builtIn,
     Duration menuPoll = const Duration(milliseconds: 100),
     Duration menuPatience = const Duration(seconds: 3),
+    this.onDecision,
   }) : _sessions = SessionDao(database),
        _decisions = DecisionRecordDao(database) {
     answers = SessionPromptAnswers(
@@ -34,6 +35,10 @@ class DaemonPromptAnswers implements PromptTerminals {
 
   final DaemonAgentStatus status;
   final AgentRegistry agents;
+
+  /// Told of each decision this files, so every client hears of it on the
+  /// data channel.
+  void Function(DecisionRecord decision)? onDecision;
   final SessionDao _sessions;
   final DecisionRecordDao _decisions;
   late final SessionPromptAnswers answers;
@@ -109,7 +114,8 @@ class DaemonPromptAnswers implements PromptTerminals {
   @override
   void record(DecisionRecord decision) {
     try {
-      _decisions.append(decision);
+      final stored = _decisions.append(decision);
+      onDecision?.call(stored);
     } on Object {
       // Best-effort, as the app's recorder is: an answer that landed is not
       // taken back because its record could not be written.

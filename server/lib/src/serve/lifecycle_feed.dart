@@ -103,10 +103,6 @@ class LifecycleFeed {
   void publishAgentStatus(String sessionId, Map<String, Object?>? status) =>
       _out.add(AgentStatusMessage(sessionId: sessionId, status: status));
 
-  /// Tells every watcher the daemon wrote [status] to the row [sessionId].
-  void publishSessionChanged(String sessionId, String status) =>
-      _out.add(SessionChangedMessage(sessionId: sessionId, status: status));
-
   /// Keeps [hook] for the snapshot and relays it to every watcher. Completes
   /// when the agent may be answered: at once, unless [hook] is a kind that is
   /// held and someone is watching — then on the first watcher's

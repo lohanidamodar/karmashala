@@ -2,7 +2,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -84,15 +83,17 @@ void main() {
     );
   });
 
-  /// A session row, which is what makes an installation undeletable: the
-  /// schema declares `sessions.agent_installation_id ... ON DELETE RESTRICT`.
+  /// A session row at the server, mirrored into the store beside it — what
+  /// makes an installation undeletable there: the schema declares
+  /// `sessions.agent_installation_id ... ON DELETE RESTRICT`, the backstop
+  /// behind the controller asking the sessions first.
   void giveItASession({String sessionId = 's1', String installationId = 'a1'}) {
-    FakeDataServer().mirrorInto(db)
+    (FakeDataServer()..mirrorInto(db))
       ..projectRows.insert(project())
-      ..repositoryRows.insert(repository());
-    SessionDao(
-      db,
-    ).insert(session(id: sessionId, agentInstallationId: installationId));
+      ..repositoryRows.insert(repository())
+      ..sessionRows.insert(
+        session(id: sessionId, agentInstallationId: installationId),
+      );
   }
 
   test('an installation nothing points at is deleted', () {
@@ -110,23 +111,6 @@ void main() {
     // left the whole app reporting no agents at all.
     expect(dao.deleteIfUnreferenced('a1'), isFalse);
     expect(dao.getById('a1'), isNotNull);
-  });
-
-  test('repointed sessions follow the installation they moved to', () {
-    dao.insert(agentInstallation(id: 'shim', path: '/tmp/shim/claude'));
-    dao.insert(
-      agentInstallation(id: 'real', path: '/home/me/.local/bin/claude'),
-    );
-    giveItASession(installationId: 'shim');
-
-    dao.repointSessions(from: 'shim', to: 'real');
-
-    expect(
-      db.query('SELECT agent_installation_id FROM sessions;').single.values,
-      ['real'],
-    );
-    // And with nothing pointing at it any more, the old row can now go.
-    expect(dao.deleteIfUnreferenced('shim'), isTrue);
   });
 
   group('moving an installation to a new path', () {

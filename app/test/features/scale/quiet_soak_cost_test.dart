@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -238,7 +237,7 @@ void main() {
         ..repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
       for (var i = 0; i < count; i++) {
-        SessionDao(db).insert(
+        mirroredServer(db).sessionRows.insert(
           session(
             id: 's$i',
             title: 'Session $i',

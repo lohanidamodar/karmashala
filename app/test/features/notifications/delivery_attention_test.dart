@@ -9,7 +9,6 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/transitions.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -159,7 +158,7 @@ void main() {
         ..projectRows.insert(project())
         ..repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 's1',
           repositoryId: 'r1',

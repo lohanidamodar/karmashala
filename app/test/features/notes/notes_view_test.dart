@@ -59,7 +59,7 @@ void main() {
     addTearDown(container.dispose);
     if (withSession) {
       container
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .insert(session(title: 'Toolbar rework'));
     }
 
@@ -310,7 +310,7 @@ void main() {
         .read(terminalSessionsControllerProvider)
         .activeTab!
         .focusedPaneId;
-    container.read(sessionDaoProvider).updatePaneId('s1', paneId);
+    container.read(sessionsDataProvider).updatePaneId('s1', paneId);
     final groupId = terminals.groupOfPane(paneId);
     expect(groupId, isNotNull);
     final written = <String>[];
@@ -353,7 +353,7 @@ void main() {
         .read(terminalSessionsControllerProvider)
         .activeTab!
         .focusedPaneId;
-    container.read(sessionDaoProvider).updatePaneId('s1', paneId);
+    container.read(sessionsDataProvider).updatePaneId('s1', paneId);
     final groupId = terminals.groupOfPane(paneId)!;
     terminals.showFaceIn(groupId, terminal: false);
     final written = <String>[];

@@ -25,7 +25,7 @@ void reportRefusedLaunches(Ref ref, Iterable<String> stoppedPaneIds) {
   final controller = ref.read(terminalSessionsControllerProvider.notifier);
   final registry = ref.read(agentRegistryProvider);
   for (final session
-      in ref.read(sessionDaoProvider).getByPaneIds(refusals.keys)) {
+      in ref.read(sessionsDataProvider).getByPaneIds(refusals.keys)) {
     final refusal = refusals[session.paneId];
     if (refusal == null) continue;
     final agentId = controller.instanceFor(refusal.pane)?.agentLaunch?.agentId;

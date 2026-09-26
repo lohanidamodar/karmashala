@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -12,7 +11,6 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -104,7 +102,7 @@ Future<String> _startLiveSession(
         ),
       );
   container
-      .read(sessionDaoProvider)
+      .read(sessionsDataProvider)
       .updateExternalSessionId(launched.session.id, externalId);
   return launched.session.id;
 }
@@ -123,7 +121,7 @@ Future<String> _startDeadSession(
   );
   container
       .read(terminalSessionsControllerProvider.notifier)
-      .endSession(container.read(sessionDaoProvider).getById(id)!.paneId!);
+      .endSession(container.read(sessionsDataProvider).getById(id)!.paneId!);
   return id;
 }
 
@@ -148,7 +146,7 @@ void main() {
     addTearDown(h.container.dispose);
 
     final liveId = await _startLiveSession(h.container);
-    ImportedSessionDao(h.db).insertIfAbsent(_imported());
+    h.server.importedRows.insertIfAbsent(_imported());
 
     final resumed = await h.container
         .read(sessionActionsProvider)
@@ -156,12 +154,15 @@ void main() {
 
     // The same session, not a second one on the same conversation.
     expect(resumed, liveId);
-    expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+    expect(
+      h.container.read(sessionsDataProvider).getByRepository('r1'),
+      hasLength(1),
+    );
     // And it is on screen: selected, with the terminal shown.
     expect(h.container.read(selectedSessionIdProvider), liveId);
     expect(h.container.read(terminalVisibleProvider), isTrue);
     // The imported entry was a duplicate record of a session we own.
-    expect(ImportedSessionDao(h.db).getById('i1'), isNull);
+    expect(h.container.read(importedSessionsProvider).getById('i1'), isNull);
   });
 
   test('a detached session is reattached rather than relaunched', () async {
@@ -187,7 +188,10 @@ void main() {
         .resumeImported(_imported());
 
     expect(resumed, liveId);
-    expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+    expect(
+      h.container.read(sessionsDataProvider).getByRepository('r1'),
+      hasLength(1),
+    );
     // The view came back; the session was never recreated.
     final state = h.container.read(terminalSessionsControllerProvider);
     expect(state.detached, isEmpty);
@@ -210,8 +214,11 @@ void main() {
     // but it continues the row that already records this conversation rather
     // than leaving the dead one behind and starting a second (A3).
     expect(resumed, stoppedId);
-    expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
-    final row = SessionDao(h.db).getById(resumed)!;
+    expect(
+      h.container.read(sessionsDataProvider).getByRepository('r1'),
+      hasLength(1),
+    );
+    final row = h.container.read(sessionsDataProvider).getById(resumed)!;
     expect(row.status, SessionStatus.running);
     final launch = h.container
         .read(terminalSessionsControllerProvider.notifier)
@@ -244,7 +251,10 @@ void main() {
         throwsA(isA<SessionAlreadyRunning>()),
       );
       // The refusal happens before anything is created — no orphan row, no pane.
-      expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+      expect(
+        h.container.read(sessionsDataProvider).getByRepository('r1'),
+        hasLength(1),
+      );
     },
   );
 
@@ -314,14 +324,21 @@ void main() {
         final result = await resume(h.container);
         expect(result.session.id, originalId);
         expect(
-          SessionDao(h.db).getAllByExternalSessionId('ext-1'),
+          h.container
+              .read(sessionsDataProvider)
+              .getAllByExternalSessionId('ext-1'),
           hasLength(1),
         );
         // Each round ends the pane again so the next one is a resume of a
         // stopped session rather than a second writer.
         h.container
             .read(terminalSessionsControllerProvider.notifier)
-            .endSession(SessionDao(h.db).getById(originalId)!.paneId!);
+            .endSession(
+              h.container
+                  .read(sessionsDataProvider)
+                  .getById(originalId)!
+                  .paneId!,
+            );
       }
     });
 
@@ -336,11 +353,15 @@ void main() {
           h.container,
           title: 'Refactor the parser',
         );
-        final before = SessionDao(h.db).getById(originalId)!;
+        final before = h.container
+            .read(sessionsDataProvider)
+            .getById(originalId)!;
 
         await resume(h.container, title: 'rollout-ext-1.jsonl');
 
-        final after = SessionDao(h.db).getById(originalId)!;
+        final after = h.container
+            .read(sessionsDataProvider)
+            .getById(originalId)!;
         // The imported entry's CLI-derived title must not overwrite the name the
         // user's session already has, and its identity must survive the resume.
         expect(after.title, 'Refactor the parser');
@@ -370,7 +391,12 @@ void main() {
       // Same conversation, different thing being run: reusing the row would
       // leave it claiming a repository it is not in.
       expect(result.session.id, isNot(originalId));
-      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+      expect(
+        h.container
+            .read(sessionsDataProvider)
+            .getAllByExternalSessionId('ext-1'),
+        hasLength(2),
+      );
     });
 
     test('a resume by a different installation writes its own row', () async {
@@ -386,7 +412,12 @@ void main() {
       final result = await resume(h.container, installationId: 'a2');
 
       expect(result.session.id, isNot(originalId));
-      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+      expect(
+        h.container
+            .read(sessionsDataProvider)
+            .getAllByExternalSessionId('ext-1'),
+        hasLength(2),
+      );
     });
 
     test(
@@ -399,12 +430,18 @@ void main() {
         final originalId = await _startDeadSession(h.container);
         // Its worktree is gone; pointing a live agent back at it would run in a
         // directory that no longer exists.
-        SessionDao(h.db).markArchived(originalId, testTime);
+        h.server.sessionRows.markArchived(originalId, testTime);
 
         final result = await resume(h.container);
 
         expect(result.session.id, isNot(originalId));
-        expect(SessionDao(h.db).getById(originalId)!.isArchived, isTrue);
+        expect(
+          h.container
+              .read(sessionsDataProvider)
+              .getById(originalId)!
+              .isArchived,
+          isTrue,
+        );
       },
     );
 
@@ -418,7 +455,10 @@ void main() {
       addTearDown(h.container.dispose);
 
       final liveId = await _startLiveSession(h.container, agentId: 'sharish');
-      final livePane = SessionDao(h.db).getById(liveId)!.paneId;
+      final livePane = h.container
+          .read(sessionsDataProvider)
+          .getById(liveId)!
+          .paneId;
 
       final second = await h.container
           .read(sessionLauncherProvider)
@@ -433,9 +473,17 @@ void main() {
           );
 
       expect(second.session.id, isNot(liveId));
-      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+      expect(
+        h.container
+            .read(sessionsDataProvider)
+            .getAllByExternalSessionId('ext-1'),
+        hasLength(2),
+      );
       // The first session still owns its own pane.
-      expect(SessionDao(h.db).getById(liveId)!.paneId, livePane);
+      expect(
+        h.container.read(sessionsDataProvider).getById(liveId)!.paneId,
+        livePane,
+      );
       expect(
         h.container.read(sessionLauncherProvider).livePaneFor(liveId),
         livePane,
@@ -457,7 +505,12 @@ void main() {
 
       final deadId = await _startDeadSession(h.container);
       final liveId = await _startLiveSession(h.container);
-      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+      expect(
+        h.container
+            .read(sessionsDataProvider)
+            .getAllByExternalSessionId('ext-1'),
+        hasLength(2),
+      );
 
       final launcher = h.container.read(sessionLauncherProvider);
       expect(launcher.runningSessionWithExternalId('ext-1')?.id, liveId);

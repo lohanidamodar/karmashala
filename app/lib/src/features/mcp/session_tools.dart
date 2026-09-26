@@ -11,11 +11,11 @@ import '../sessions/application/session_prompt_answers.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_status_providers.dart';
 import '../sessions/application/session_wait.dart';
-import '../sessions/data/session_relay_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
+import 'package:karmashala_session/events.dart';
 
 /// Operating a session that already exists. Every tool takes an optional
 /// `sessionId` and falls back to the caller the *transport* authenticated.
@@ -88,7 +88,7 @@ class SessionControlTools {
   }
 
   Session _session(String id) {
-    final session = _container.read(sessionDaoProvider).getById(id);
+    final session = _container.read(sessionsDataProvider).getById(id);
     if (session == null) {
       throw StateError('No session with id $id.');
     }
@@ -150,10 +150,10 @@ class SessionControlTools {
     }
     final caller = callerSessionId;
     final relayed = caller != null && caller != sessionId;
-    final relays = _container.read(sessionRelayDaoProvider);
+    final relays = _container.read(sessionRecordsProvider);
     final now = _container.read(clockProvider).nowUtc();
     if (relayed) {
-      final sent = relays.countBetween(
+      final sent = await relays.relayCount(
         caller,
         sessionId,
         since: now.subtract(relayBudgetWindow),
@@ -180,7 +180,7 @@ class SessionControlTools {
           attribution == null ? text : attribution.render(text),
         );
     if (relayed) {
-      relays.record(
+      relays.recordRelay(
         SessionRelay(
           fromSessionId: caller,
           toSessionId: sessionId,
@@ -333,13 +333,13 @@ class SessionControlTools {
 
   /// What this session has said, and which source answered. A source with
   /// nothing in it reports "not recorded", never an empty list.
-  Object? _transcript(String sessionId, int limit) {
+  Future<Object?> _transcript(String sessionId, int limit) async {
     final session = _session(sessionId);
     final capped = limit <= 0 ? 20 : (limit > 200 ? 200 : limit);
 
-    final events = _container
-        .read(sessionEventDaoProvider)
-        .listForSession(sessionId)
+    final events = (await _container
+            .read(sessionRecordsProvider)
+            .listForSession(sessionId))
         .where(
           (event) =>
               event.type == SessionEventTypes.userMessage ||
@@ -361,9 +361,9 @@ class SessionControlTools {
         ? null
         : terminalTailLines(instance.terminal, lines: capped);
 
-    final relayed = _container
-        .read(sessionRelayDaoProvider)
-        .recentTo(sessionId, capped);
+    final relayed = await _container
+        .read(sessionRecordsProvider)
+        .relaysTo(sessionId, capped);
 
     return <String, Object?>{
       'sessionId': sessionId,

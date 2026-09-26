@@ -52,7 +52,7 @@ void main() {
             sessions: () => const [],
             isLive: (_) => false,
             liveTerminalDirectories: () => const [],
-            lastEventAt: (_) => null,
+            lastEventAt: (_) async => null,
             createdAt: (_) => null,
             clock: clock,
           ),

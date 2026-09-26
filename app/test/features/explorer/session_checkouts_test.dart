@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/git/application/checkout_probe_queue.dar
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -117,7 +116,7 @@ void main() {
     String repositoryId = 'hub',
     String? worktree,
     String? workingDirectory,
-  }) => SessionDao(db).insert(
+  }) => mirroredServer(db).sessionRows.insert(
     Session(
       id: id,
       repositoryId: repositoryId,
@@ -133,7 +132,7 @@ void main() {
 
   /// A subagent of [parent] that recorded [directory] as the place it runs.
   void subagent(String id, String parent, {String? directory}) =>
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'hub',

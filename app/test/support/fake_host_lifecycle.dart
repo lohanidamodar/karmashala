@@ -9,26 +9,38 @@ import 'package:karmashala_host/lifecycle_client.dart'
         CompanionNoticeMessage,
         PairedMessage;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala_store/database.dart';
 
+import 'fake_data_server.dart';
 import 'fixtures.dart';
 
 /// A host that answers from memory: each [open] is one link, whose events the
 /// test pushes and whose end is the host going away.
 ///
-/// Given a [store], it is also the daemon writing to it, as `serve` does: the
-/// snapshot and the unheld rows on each open, then each event, every write
-/// told to the app as a session change. Without one it writes nothing.
+/// Given a [server], it is also the daemon writing to it, as `serve` does:
+/// the snapshot and the unheld rows on each open, then each event — every
+/// write told to the app on the data channel, as the server's own change.
+/// Without one it writes nothing. A row runs on this machine unless its
+/// checkout (or directory) is on an SSH environment (`ssh:…`), or
+/// [runsOnThisMachine] says otherwise.
 class FakeHostLifecycle implements HostLifecycleSource {
-  FakeHostLifecycle([AppDatabase? store])
-    : _keeper = store == null ? null : HostedSessionStatusKeeper(store) {
-    _keeper?.changes.listen((change) {
-      final link = changeLinks.lastOrNull;
-      if (link != null && !link.isClosed) {
-        link.add((sessionId: change.sessionId, status: change.to.name));
-      }
-    });
+  FakeHostLifecycle([
+    FakeDataServer? server,
+    bool Function(Session session)? runsOnThisMachine,
+  ]) : _keeper = server == null
+           ? null
+           : HostedSessionStatusKeeper(
+               server.sessionRows,
+               runsOnThisMachine:
+                   runsOnThisMachine ?? (s) => _notSsh(server, s),
+             );
+
+  static bool _notSsh(FakeDataServer server, Session session) {
+    final environment =
+        session.workingDirectory?.environmentId ??
+        server.repositoryRows.getById(session.repositoryId)?.path.environmentId;
+    return environment != null && !environment.startsWith('ssh');
   }
 
   final HostedSessionStatusKeeper? _keeper;
@@ -37,7 +49,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
   List<RelayedAgentHook> hookSnapshot = const [];
   final links = <StreamController<SessionLifecycleEvent>>[];
   final hookLinks = <StreamController<RelayedAgentHook>>[];
-  final changeLinks = <StreamController<HostSessionChange>>[];
 
   /// What the host says each agent it holds is doing, sent on each open.
   List<HostedAgentStatus> statusSnapshot = const [];
@@ -111,15 +122,16 @@ class FakeHostLifecycle implements HostLifecycleSource {
 
   StreamController<SessionLifecycleEvent> get link => links.last;
   StreamController<RelayedAgentHook> get hookLink => hookLinks.last;
-  StreamController<HostSessionChange> get changeLink => changeLinks.last;
 
   @override
   Future<HostLifecycleFeed?> open({List<String> runByClient = const []}) async {
     this.runByClient.add(runByClient);
+    // Answered later, as a socket is: the daemon's writes below then reach a
+    // client outside whatever provider build dialled.
+    await Future<void>.value();
     if (!listening) return null;
     final link = StreamController<SessionLifecycleEvent>();
     final hooks = StreamController<RelayedAgentHook>();
-    final changes = StreamController<HostSessionChange>();
     final calls = StreamController<HostMcpCall>();
     mcpCallLinks.add(calls);
     final companionCalls = StreamController<CompanionCallMessage>();
@@ -130,7 +142,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
     statusLinks.add(statuses);
     links.add(link);
     hookLinks.add(hooks);
-    changeLinks.add(changes);
     final keeper = _keeper;
     if (keeper != null) {
       keeper.applySnapshot(snapshot);
@@ -148,7 +159,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
       hookSnapshot: List.of(hookSnapshot),
       hooks: hooks.stream,
       replyHook: replies.add,
-      sessionChanges: changes.stream,
       mcpCalls: calls.stream,
       offerMcpTools: offeredTools.add,
       answerMcpCall: (callId, {result, error}) =>
@@ -193,7 +203,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
         if (!statuses.isClosed) unawaited(statuses.close());
         if (!link.isClosed) await link.close();
         if (!hooks.isClosed) await hooks.close();
-        if (!changes.isClosed) await changes.close();
       },
     );
   }

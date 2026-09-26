@@ -91,13 +91,13 @@ class ScheduledResumeObserver extends Notifier<int> {
             .read(resumeAnnouncerProvider)
             .announce(
               failed,
-              ref.read(sessionDaoProvider).getById(resume.sessionId),
+              ref.read(sessionsDataProvider).getById(resume.sessionId),
             );
       }
     }
     final launcher = ref.read(sessionLauncherProvider);
     for (final resume in _waiting()) {
-      final session = ref.read(sessionDaoProvider).getById(resume.sessionId);
+      final session = ref.read(sessionsDataProvider).getById(resume.sessionId);
       if (session == null) continue;
       if (session.isArchived) {
         _letGo(session.id, 'The session was archived, so it was left alone.');
@@ -122,7 +122,7 @@ class ScheduledResumeObserver extends Notifier<int> {
     );
     ref
         .read(resumeAnnouncerProvider)
-        .announce(ended, ref.read(sessionDaoProvider).getById(sessionId));
+        .announce(ended, ref.read(sessionsDataProvider).getById(sessionId));
   }
 
   /// A reading that came off the wire anyway. Costs no request of its own.

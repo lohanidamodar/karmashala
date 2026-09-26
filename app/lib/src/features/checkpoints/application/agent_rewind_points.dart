@@ -12,7 +12,7 @@ import '../../sessions/application/session_providers.dart';
 /// adapter, so an agent nobody has read the undo of says nothing.
 final sessionAgentRewindProvider = Provider.autoDispose
     .family<AgentRewind, String>((ref, sessionId) {
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) return const AgentRewind.unknown();
       final agentId = ref
           .read(agentInstallationDaoProvider)
@@ -27,7 +27,7 @@ final sessionAgentRewindProvider = Provider.autoDispose
 /// keeps none this app can read. Read once per open panel: it scans the store.
 final agentRewindPointsProvider = FutureProvider.autoDispose
     .family<AgentRewindPoints?, String>((ref, sessionId) async {
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       final externalId = session?.externalSessionId;
       if (session == null || externalId == null || externalId.isEmpty) {
         return null;

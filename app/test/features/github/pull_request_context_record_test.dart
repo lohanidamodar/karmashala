@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/github/application/pull_request_context_service.dart';
 import 'package:karmashala_git/pull_request_context.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -43,7 +42,7 @@ void main() {
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session());
+    server.sessionRows.insert(session());
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -87,7 +86,7 @@ void main() {
 
   test('keeps the prompt verbatim, not a summary of it', () async {
     await send();
-    final card = service().sentIn('s1').single;
+    final card = (await service().sentIn('s1')).single;
     expect(card.prompt, 'the exact text\nover two lines');
     expect(card.pullRequestNumber, 42);
     expect(card.at, testTime);
@@ -102,7 +101,10 @@ void main() {
           PullRequestContextPart.checks,
         },
       );
-      expect(service().sentIn('s1').single.parts, ['reference', 'checks']);
+      expect((await service().sentIn('s1')).single.parts, [
+        'reference',
+        'checks',
+      ]);
     },
   );
 
@@ -111,16 +113,19 @@ void main() {
     // no trace of what was attempted.
     await build(failSend: true);
     await expectLater(send(), throwsA(isA<StateError>()));
-    expect(service().sentIn('s1'), hasLength(1));
+    expect(await service().sentIn('s1'), hasLength(1));
   });
 
   test('cards come back newest first', () async {
     await send(prompt: 'first');
     await send(prompt: 'second');
-    expect(service().sentIn('s1').map((c) => c.prompt), ['second', 'first']);
+    expect((await service().sentIn('s1')).map((c) => c.prompt), [
+      'second',
+      'first',
+    ]);
   });
 
-  test('a session with nothing attached has nothing to show', () {
-    expect(service().sentIn('s1'), isEmpty);
+  test('a session with nothing attached has nothing to show', () async {
+    expect(await service().sentIn('s1'), isEmpty);
   });
 }

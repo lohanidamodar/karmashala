@@ -3095,7 +3095,59 @@ WorkbenchView
                                                                                                                                                   RichText
                                     SizedBox
                               SessionRepositoriesBar
-                                SizedBox
+                                Padding
+                                  Wrap
+                                    InputChip
+                                      RawChip
+                                        Semantics
+                                          _ChipRedirectingHitDetectionWidget
+                                            Center
+                                              Material
+                                                _MaterialInterior
+                                                  PhysicalShape
+                                                    _ShapeBorderPaint
+                                                      CustomPaint
+                                                        NotificationListener<LayoutChangedNotification>
+                                                          _InkFeatures key=[GlobalKey#… ink renderer]
+                                                            AnimatedDefaultTextStyle
+                                                              DefaultTextStyle
+                                                                InkWell
+                                                                  _InkResponseStateWidget
+                                                                    _ParentInkResponseProvider
+                                                                      Actions
+                                                                        _ActionsScope
+                                                                          Focus
+                                                                            _FocusInheritedScope
+                                                                              Semantics
+                                                                                MouseRegion
+                                                                                  Builder
+                                                                                    DefaultSelectionStyle
+                                                                                      Semantics
+                                                                                        GestureDetector
+                                                                                          RawGestureDetector
+                                                                                            Listener
+                                                                                              AnimatedBuilder
+                                                                                                Ink
+                                                                                                  Padding key=[GlobalKey#…]
+                                                                                                    Builder
+                                                                                                      _ChipRenderWidget
+                                                                                                        DefaultTextStyle
+                                                                                                          Text text="app"
+                                                                                                            RichText
+                                                                                                        AnimatedSwitcher
+                                                                                                          Stack
+                                                                                                            KeyedSubtree key=[<[<null>]>]
+                                                                                                              FadeTransition key=[<null>]
+                                                                                                                Builder
+                                                                                                                  IconTheme
+                                                                                                                    Icon
+                                                                                                                      Semantics
+                                                                                                                        ExcludeSemantics
+                                                                                                                          SizedBox
+                                                                                                                            Center
+                                                                                                                              RichText
+                                                                                                        AnimatedSwitcher
+                                                                                                          Stack
                               Divider
                                 SizedBox
                                   Center

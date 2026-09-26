@@ -2,19 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_auto_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// **Which sessions a repository takes, and which the Claude store is asked
 /// for.**
@@ -26,6 +25,8 @@ void main() {
   late AppDatabase db;
   late List<StoreScanRequest> asked;
   late FakeDataServer server;
+  late SessionsData sessions;
+  late ImportedSessionsData imported;
 
   EnvironmentPath at(String path) =>
       EnvironmentPath(environmentId: 'windows', path: path);
@@ -51,8 +52,8 @@ void main() {
         );
       },
       environmentDao: ExecutionEnvironmentDao(db),
-      importedSessionDao: ImportedSessionDao(db),
-      sessionDao: SessionDao(db),
+      importedSessionDao: imported,
+      sessionDao: sessions,
       ids: SequentialIdGenerator('i-'),
       clock: FixedClock(testTime),
     );
@@ -66,7 +67,7 @@ void main() {
     storeHome: r'C:\store\.claude',
   );
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
@@ -80,6 +81,9 @@ void main() {
         createdAt: testTime,
       ),
     );
+    final client = await server.connect();
+    sessions = SessionsData(client);
+    imported = ImportedSessionsData(client, sessions);
   });
   tearDown(() => db.close());
 
@@ -103,7 +107,7 @@ void main() {
       reason: 'only the one that ran in the repository itself',
     );
     expect(
-      ImportedSessionDao(db).getByRepository('r1').map((s) => s.externalId),
+      imported.getByRepository('r1').map((s) => s.externalId),
       ['s-root'],
     );
   });
@@ -135,8 +139,8 @@ void main() {
           return const Stream.empty();
         },
         environmentDao: ExecutionEnvironmentDao(db),
-        importedSessionDao: ImportedSessionDao(db),
-        sessionDao: SessionDao(db),
+        importedSessionDao: imported,
+        sessionDao: sessions,
         ids: SequentialIdGenerator('i-'),
         clock: FixedClock(testTime),
         narrowByDirectory: false,

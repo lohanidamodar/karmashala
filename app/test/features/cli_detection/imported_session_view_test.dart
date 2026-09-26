@@ -7,7 +7,6 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/imported_session_view.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -41,7 +40,7 @@ void main() {
     final server = FakeDataServer()..mirrorInto(db);
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'i1',
         repositoryId: 'r1',

@@ -2,6 +2,8 @@
 /// **Never** on a tick, at launch, or at the end: each one spends a turn.
 library;
 
+import 'record_json.dart';
+
 /// The request every recap is written from, **fixed** for every CLI: a
 /// per-agent prompt would make two recaps of one conversation incomparable.
 const String kSessionRecapRequest =
@@ -46,4 +48,36 @@ class SessionRecap {
 
   /// Whether the conversation has grown since this was written.
   bool isStaleAgainst(int turnsNow) => turnsNow > turnCount;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'text': text,
+    'agentId': agentId,
+    'model': ?model,
+    'turnCount': turnCount,
+    'writtenAt': jsonDate(writtenAt),
+  };
+
+  static SessionRecap fromJson(Map<String, Object?> json) => SessionRecap(
+    sessionId: jsonString(json, 'sessionId'),
+    text: jsonString(json, 'text'),
+    agentId: jsonString(json, 'agentId'),
+    model: jsonOptionalString(json, 'model'),
+    turnCount: jsonInt(json, 'turnCount'),
+    writtenAt: jsonDateOf(json, 'writtenAt'),
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionRecap &&
+      other.sessionId == sessionId &&
+      other.text == text &&
+      other.agentId == agentId &&
+      other.model == model &&
+      other.turnCount == turnCount &&
+      other.writtenAt == writtenAt;
+
+  @override
+  int get hashCode =>
+      Object.hash(sessionId, text, agentId, model, turnCount, writtenAt);
 }

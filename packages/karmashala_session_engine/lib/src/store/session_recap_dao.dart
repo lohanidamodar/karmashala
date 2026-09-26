@@ -38,6 +38,10 @@ class SessionRecapDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  /// Every recap held — a client's snapshot.
+  List<SessionRecap> all() =>
+      _db.query('SELECT * FROM session_recaps;').map(_fromRow).toList();
+
   /// Drops [sessionId]'s recap. Used when a person dismisses one; a deleted
   /// session takes its own with it through the foreign key.
   void delete(String sessionId) {

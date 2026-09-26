@@ -137,7 +137,7 @@ void main() {
     // The screen arms the pane; the store has nothing to say (no CLI store on
     // this machine), so the conversation stays unnamed …
     await runStoreSlot(h);
-    expect(h.container.read(sessionDaoProvider).getAll(), isEmpty);
+    expect(h.container.read(sessionsDataProvider).getAll(), isEmpty);
 
     // … until the agent's own hook says which conversation it is.
     h.container
@@ -148,12 +148,12 @@ void main() {
           body: '{"session_id":"cli-abc","cwd":"$_repoPath"}',
         );
 
-    final rows = h.container.read(sessionDaoProvider).getAll();
+    final rows = h.container.read(sessionsDataProvider).getAll();
     expect(rows, hasLength(1));
     expect(rows.single.paneId, paneId);
     expect(rows.single.externalSessionId, 'cli-abc');
     expect(
-      h.container.read(sessionDaoProvider).getByRepository('r1'),
+      h.container.read(sessionsDataProvider).getByRepository('r1'),
       hasLength(1),
       reason: 'it hangs under the repository the Explorer draws',
     );
@@ -204,7 +204,7 @@ void main() {
             sessionId: 'cli-abc',
             body: '{"session_id":"cli-abc"}',
           );
-      final id = h.container.read(sessionDaoProvider).getAll().single.id;
+      final id = h.container.read(sessionsDataProvider).getAll().single.id;
 
       unawaited(
         h.container
@@ -216,7 +216,7 @@ void main() {
           .openNative(id);
 
       expect(
-        h.container.read(sessionDaoProvider).getById(id)?.title,
+        h.container.read(sessionsDataProvider).getById(id)?.title,
         'The parser bug',
       );
       expect(
@@ -224,7 +224,7 @@ void main() {
         ExplorerOutcome.reattached,
         reason: 'clicking the card brings back the terminal it is running in',
       );
-      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
+      expect(h.container.read(sessionsDataProvider).getAll(), hasLength(1));
     },
   );
 
@@ -243,7 +243,7 @@ void main() {
             sessionId: 'cli-abc',
             body: '{"session_id":"cli-abc"}',
           );
-      final id = h.container.read(sessionDaoProvider).getAll().single.id;
+      final id = h.container.read(sessionsDataProvider).getAll().single.id;
 
       // The agent is ended, so there is nothing to reattach to.
       h.container.read(terminalSessionsControllerProvider.notifier)
@@ -256,8 +256,8 @@ void main() {
 
       expect(opened.outcome, ExplorerOutcome.resumed);
       // The same row, continued — not a second one for one conversation.
-      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
-      final resumed = h.container.read(sessionDaoProvider).getById(id)!;
+      expect(h.container.read(sessionsDataProvider).getAll(), hasLength(1));
+      final resumed = h.container.read(sessionsDataProvider).getById(id)!;
       expect(resumed.externalSessionId, 'cli-abc');
       expect(resumed.status, SessionStatus.running);
       expect(resumed.surface, SessionSurface.pane);
@@ -303,6 +303,6 @@ void main() {
       h.container.read(sessionAdoptionServiceProvider).armedPaneIds,
       isEmpty,
     );
-    expect(h.container.read(sessionDaoProvider).getAll(), isEmpty);
+    expect(h.container.read(sessionsDataProvider).getAll(), isEmpty);
   });
 }

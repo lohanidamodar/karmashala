@@ -44,6 +44,18 @@ class SessionEventDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// When the newest event of any of [sessionIds] was written, or null.
+  DateTime? lastAt(List<String> sessionIds) {
+    if (sessionIds.isEmpty) return null;
+    final rows = _db.query(
+      'SELECT MAX(created_at) AS at FROM session_events '
+      'WHERE session_id IN (${List.filled(sessionIds.length, '?').join(', ')});',
+      sessionIds,
+    );
+    final at = rows.firstOrNull?['at'];
+    return at == null ? null : dateFromIso(at);
+  }
+
   /// Number of events recorded for [sessionId].
   int countForSession(String sessionId) {
     final rows = _db.query(

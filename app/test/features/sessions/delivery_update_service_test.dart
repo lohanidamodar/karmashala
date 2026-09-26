@@ -7,7 +7,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_update_service.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,7 +60,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: 'r1',
@@ -265,7 +264,7 @@ void main() {
   });
 
   test('a session that is gone is refused, not crashed into', () async {
-    SessionDao(db).markArchived('s1', testTime);
+    mirroredServer(db).sessionRows.markArchived('s1', testTime);
 
     expect((await update()).refusal, UpdateRefusal.sessionGone);
     expect(mergeCall(), isNull);

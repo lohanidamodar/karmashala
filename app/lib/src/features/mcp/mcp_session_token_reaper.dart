@@ -51,7 +51,7 @@ class McpSessionTokenReaper {
           _callers?.sessions ??
           {for (final c in claims.standingClaims) c.holderSessionId};
       if (held.isEmpty) return;
-      final dao = _container.read(sessionDaoProvider);
+      final dao = _container.read(sessionsDataProvider);
       for (final sessionId in held) {
         final session = dao.getById(sessionId);
         if (session != null && !session.isOver) continue;

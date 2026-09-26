@@ -158,7 +158,7 @@ class NoteMetadata extends ConsumerWidget {
     final sessionId = note.sourceSessionId;
     final sessionTitle = sessionId == null
         ? null
-        : ref.read(sessionDaoProvider).getById(sessionId)?.title;
+        : ref.read(sessionsDataProvider).getById(sessionId)?.title;
     final items = [
       // Its row is as wide as it is allowed to be, which in a Wrap is the run.
       IntrinsicWidth(

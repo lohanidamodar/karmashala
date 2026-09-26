@@ -1,6 +1,12 @@
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_session/events.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/transcript.dart';
+
+import 'session_values.dart';
+import 'package:agent_cli/read.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -34,8 +40,152 @@ sealed class DataChange {
         'repositoryRemoved' => RepositoryRemoved(json['id']! as String),
         'sectionChanged' => SectionChanged(StoredSection.fromJson(_row(json))),
         'sectionRemoved' => SectionRemoved(json['id']! as String),
+        'sessionRowChanged' => SessionRowChanged(Session.fromJson(_row(json))),
+        'sessionRowRemoved' => SessionRowRemoved(json['id']! as String),
+        'sessionLinksChanged' => SessionLinksChanged(
+          json['id']! as String,
+          [
+            for (final link in json['links']! as List)
+              SessionRepositoryLink.fromJson(
+                (link as Map).cast<String, Object?>(),
+              ),
+          ],
+        ),
+        'importedChanged' => ImportedChanged(importedFromJson(_row(json))),
+        'importedRemoved' => ImportedRemoved(json['id']! as String),
+        'decisionRecorded' => DecisionRecorded(
+          DecisionRecord.fromJson(_row(json)),
+        ),
+        'decisionRemoved' => DecisionRemoved(json['id']! as int),
+        'recapChanged' => RecapChanged(SessionRecap.fromJson(_row(json))),
+        'recapRemoved' => RecapRemoved(json['id']! as String),
+        'followUpChanged' => FollowUpChanged(FollowUp.fromJson(_row(json))),
         _ => null,
       };
+}
+
+/// A sessions-domain row as it now stands, or its key when it went. Each
+/// travels as `{change, row}` / `{change, id}`.
+sealed class SessionDomainChange extends DataChange {
+  const SessionDomainChange();
+}
+
+/// A session row as the server now holds it — created, edited, or given a
+/// new status by the server that runs it.
+final class SessionRowChanged extends SessionDomainChange {
+  const SessionRowChanged(this.session);
+
+  final Session session;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionRowChanged',
+    'row': session.toJson(),
+  };
+}
+
+final class SessionRowRemoved extends SessionDomainChange {
+  const SessionRowRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'sessionRowRemoved', 'id': id};
+}
+
+/// Every checkout session [sessionId] now spans, the primary first; empty
+/// once it spans none.
+final class SessionLinksChanged extends SessionDomainChange {
+  const SessionLinksChanged(this.sessionId, this.links);
+
+  final String sessionId;
+  final List<SessionRepositoryLink> links;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionLinksChanged',
+    'id': sessionId,
+    'links': [for (final link in links) link.toJson()],
+  };
+}
+
+final class ImportedChanged extends SessionDomainChange {
+  const ImportedChanged(this.session);
+
+  final ImportedSession session;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'importedChanged',
+    'row': importedToJson(session),
+  };
+}
+
+final class ImportedRemoved extends SessionDomainChange {
+  const ImportedRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'importedRemoved', 'id': id};
+}
+
+final class DecisionRecorded extends SessionDomainChange {
+  const DecisionRecorded(this.decision);
+
+  final DecisionRecord decision;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'decisionRecorded',
+    'row': decision.toJson(),
+  };
+}
+
+/// A decision that went with its session.
+final class DecisionRemoved extends SessionDomainChange {
+  const DecisionRemoved(this.id);
+
+  final int id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'decisionRemoved', 'id': id};
+}
+
+final class RecapChanged extends SessionDomainChange {
+  const RecapChanged(this.recap);
+
+  final SessionRecap recap;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'recapChanged',
+    'row': recap.toJson(),
+  };
+}
+
+/// Session [sessionId]'s recap went: dismissed, or with its session.
+final class RecapRemoved extends SessionDomainChange {
+  const RecapRemoved(this.sessionId);
+
+  final String sessionId;
+
+  @override
+  Map<String, Object?> toJson() => {'change': 'recapRemoved', 'id': sessionId};
+}
+
+/// A follow-up raised or resolved. Never removed: a disappearance has an
+/// answer.
+final class FollowUpChanged extends SessionDomainChange {
+  const FollowUpChanged(this.followUp);
+
+  final FollowUp followUp;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'followUpChanged',
+    'row': followUp.toJson(),
+  };
 }
 
 final class NoteChanged extends DataChange {

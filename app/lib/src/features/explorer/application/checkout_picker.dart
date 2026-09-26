@@ -30,7 +30,7 @@ final sessionCheckoutsProvider = Provider<List<Repository>>((ref) {
   // Only the followed session's own row, plus whatever names no session — a
   // rescan can retire the checkout this is describing.
   ref.watchSession(sessionId);
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  final session = ref.read(sessionsDataProvider).getById(sessionId);
   if (session == null) return const [];
   return sessionCheckouts(ref, session);
 });

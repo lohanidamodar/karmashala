@@ -4,8 +4,10 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
 
+import '../domain/session_reads.dart';
+
 /// Data-access for [Session] rows. Hand-written SQL, no codegen.
-class SessionDao {
+class SessionDao implements SessionStatusStore {
   SessionDao(this._db);
 
   final AppDatabase _db;
@@ -58,6 +60,36 @@ class SessionDao {
     );
   });
 
+  /// Writes every column a client may change — the server's write of a
+  /// patched row it read a moment before, in the same synchronous step, so no
+  /// newer write can fall between the read and this.
+  void write(Session session) {
+    _db.execute(
+      'UPDATE sessions SET title = ?, title_by_user = ?, use_worktree = ?, '
+      'worktree_environment_id = ?, worktree_path = ?, '
+      'working_directory_environment_id = ?, working_directory_path = ?, '
+      'status = ?, external_session_id = ?, pane_id = ?, view = ?, '
+      'permission_mode = ?, model_id = ?, archived_at = ? WHERE id = ?;',
+      [
+        session.title,
+        intFromBool(session.titleByUser),
+        intFromBool(session.useWorktree),
+        session.worktree?.environmentId,
+        session.worktree?.path,
+        session.workingDirectory?.environmentId,
+        session.workingDirectory?.path,
+        session.status.name,
+        session.externalSessionId,
+        session.paneId,
+        session.view.name,
+        session.permissionMode,
+        session.modelId,
+        session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
+        session.id,
+      ],
+    );
+  }
+
   /// Updates the mutable fields of a session (title, worktree, status).
   void update(Session session) {
     _db.execute(
@@ -95,6 +127,7 @@ class SessionDao {
   }
 
   /// Updates only the [status] of session [id].
+  @override
   void updateStatus(String id, SessionStatus status) {
     _db.execute('UPDATE sessions SET status = ? WHERE id = ?;', [
       status.name,
@@ -143,6 +176,7 @@ class SessionDao {
 
   /// The parent of [id], or `null` for a root session or an unknown id. One
   /// column, one row — this is the read `SessionDepth` walks, so it stays cheap.
+  @override
   String? parentOf(String id) {
     final rows = _db.query(
       'SELECT parent_session_id FROM sessions WHERE id = ?;',
@@ -153,6 +187,7 @@ class SessionDao {
 
   /// Sessions naming [id] as their parent, oldest first — spawned, handed off
   /// and forked alike; the caller reads [Session.parentLink] to tell them apart.
+  @override
   List<Session> childrenOf(String id) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE parent_session_id = ? '
@@ -169,6 +204,7 @@ class SessionDao {
     ]);
   }
 
+  @override
   Session? getById(String id) {
     final rows = _db.query('SELECT * FROM sessions WHERE id = ?;', [id]);
     return rows.isEmpty ? null : _fromRow(rows.first);
@@ -176,6 +212,7 @@ class SessionDao {
 
   /// Sessions hosted by any of [paneIds], oldest first. The pane index keeps
   /// this proportional to that tab's panes, not to every session ever opened.
+  @override
   List<Session> getByPaneIds(Iterable<String> paneIds) {
     final ids = paneIds.toSet().toList();
     if (ids.isEmpty) return const [];
@@ -190,6 +227,7 @@ class SessionDao {
 
   /// paneId → the session standing in it, for every placed row at once: one
   /// statement over the pane index, so one pane's answer cannot wake the others.
+  @override
   Map<String, String> paneSessionIds() {
     final rows = _db.query(
       'SELECT id, pane_id FROM sessions WHERE pane_id IS NOT NULL '
@@ -204,6 +242,7 @@ class SessionDao {
 
   /// sessionId → the repository it targets, for every row at once. Taken off
   /// [getAll] it decoded twenty-one columns and an ISO date to read two.
+  @override
   Map<String, String> repositoryIdsById() {
     final rows = _db.query('SELECT id, repository_id FROM sessions;');
     return {
@@ -214,6 +253,7 @@ class SessionDao {
 
   /// Every row whose status still claims something is running, oldest first.
   /// The words come from [SessionStatus.claimsLive], so a seventh is swept too.
+  @override
   List<Session> getClaimingLive() {
     final names = [
       for (final status in SessionStatus.values)
@@ -230,6 +270,7 @@ class SessionDao {
 
   /// Every row recording the CLI conversation [externalSessionId], **newest
   /// first**: the column has no `UNIQUE` constraint, so duplicates are real.
+  @override
   List<Session> getAllByExternalSessionId(String externalSessionId) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE external_session_id = ? '
@@ -241,6 +282,7 @@ class SessionDao {
 
   /// The most recently started row for [externalSessionId], or `null`. A caller
   /// that needs the *running* one must scan them all — any of them may be it.
+  @override
   Session? getByExternalSessionId(String externalSessionId) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE external_session_id = ? '
@@ -250,6 +292,7 @@ class SessionDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  @override
   List<Session> getAll() {
     final rows = _db.query('SELECT * FROM sessions ORDER BY created_at, id;');
     return rows.map(_fromRow).toList();
@@ -257,6 +300,7 @@ class SessionDao {
 
   /// All external session IDs currently held by active sessions. Projects one
   /// column instead of deserializing full session objects.
+  @override
   Set<String> heldExternalSessionIds({String? excludingSessionId}) {
     final results = excludingSessionId == null
         ? _db.query(
@@ -278,6 +322,7 @@ class SessionDao {
 
   /// Active, non-archived sessions that have an external session ID and
   /// whose title was not typed by the user, waiting for title synchronization.
+  @override
   List<Session> getWaitingForTitleSync() {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE archived_at IS NULL AND title_by_user = 0 '
@@ -288,6 +333,7 @@ class SessionDao {
   }
 
   /// Active, non-archived sessions that are still waiting for an external session ID.
+  @override
   List<Session> getUnattributed() {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE archived_at IS NULL '
@@ -299,6 +345,7 @@ class SessionDao {
 
   /// The rows named by [ids], oldest first, in one indexed query. For callers
   /// reaching for [getAll] only to build a lookup map; a scan costs every row.
+  @override
   List<Session> getByIds(Iterable<String> ids) {
     final unique = ids.toSet().toList();
     if (unique.isEmpty) return const [];
@@ -313,6 +360,7 @@ class SessionDao {
 
   /// How many sessions sit under [repositoryIds], and how many are running, in
   /// **one statement that decodes no session at all**. A header never names one.
+  @override
   ({int sessions, int running}) countsByRepositories(
     Iterable<String> repositoryIds,
   ) {
@@ -332,6 +380,7 @@ class SessionDao {
   }
 
   /// Sessions targeting [repositoryId].
+  @override
   List<Session> getByRepository(String repositoryId) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE repository_id = ? ORDER BY created_at, id;',

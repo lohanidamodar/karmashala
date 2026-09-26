@@ -171,7 +171,7 @@ String? _sessionEnvironment(
   if (agentSessionId == null || agentSessionId.isEmpty) return null;
   try {
     final session = container
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .getByExternalSessionId(agentSessionId);
     if (session == null) return null;
     return container

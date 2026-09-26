@@ -13,7 +13,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../../agents/application/agent_hook_intake.dart';
 import '../../../automations/application/host_automations.dart';
 import '../../../agents/application/agent_hook_sweep.dart';
-import '../../../../core/database/database_providers.dart';
+import '../../../environments/application/environment_providers.dart';
+import '../../../workspaces/data/workspace_data.dart';
 import '../../../mcp/mcp_tool_dispatcher.dart';
 import '../../../remote/application/host_companion_providers.dart';
 import '../../../terminal/application/local_host_providers.dart';
@@ -22,7 +23,6 @@ import '../../../terminal/application/terminal_sessions_controller.dart';
 import '../session_liveness_reconciler.dart' show panesThatStartedRunning;
 import '../session_decision_providers.dart';
 import '../session_providers.dart';
-import '../session_signals.dart';
 import 'host_agent_statuses.dart';
 import 'host_lifecycle_source.dart';
 import 'host_lifecycle_subscriber.dart';
@@ -36,12 +36,20 @@ final hostLifecycleSourceProvider = Provider<HostLifecycleSource?>((ref) {
   return access == null ? null : LocalHostLifecycleSource(access.socketPath);
 });
 
-/// Whether a row runs on this machine, under this machine's host.
+/// Whether a row runs on this machine, under this machine's host: its
+/// checkout from the workspace copy, the environment's kind from the
+/// environments table (read here until environments move, slice 1d).
 final sessionRunsOnThisMachineProvider = Provider<bool Function(Session)>((
   ref,
 ) {
-  final database = ref.watch(databaseProvider);
-  return (session) => sessionRunsOnThisMachine(database, session);
+  final workspace = ref.watch(workspaceDataProvider);
+  final environments = ref.watch(executionEnvironmentDaoProvider);
+  return (session) => runsOnThisMachine(
+    session,
+    environmentOfRepository: (id) =>
+        workspace.repository(id)?.path.environmentId,
+    kindOf: (id) => environments.getById(id)?.kind,
+  );
 });
 
 /// The subscriber to this machine's host, or null without a source. **Watched
@@ -57,13 +65,7 @@ hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
   final agentStatuses = ref.read(hostAgentStatusesProvider);
   final subscriber = HostLifecycleSubscriber(
     source: source,
-    sessionDao: ref.watch(sessionDaoProvider),
-    // The host wrote the row; this only says to read it again.
-    onStatusChanged: (sessionId) => ref.publishSessionChange(
-      sessionId == null
-          ? const SessionChange(kinds: {SessionChangeKind.status})
-          : SessionChange.statusChanged(sessionId),
-    ),
+    sessions: ref.watch(sessionsDataProvider),
     hasLivePane: (paneId) =>
         ref.exists(terminalSessionsControllerProvider) &&
         (ref

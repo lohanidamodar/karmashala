@@ -10,14 +10,12 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -119,7 +117,7 @@ void main() {
     String? parentSessionId,
     String? worktree,
   }) {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: id,
         repositoryId: repositoryId,
@@ -202,7 +200,7 @@ void main() {
     seedProject('p', r'C:\work\p');
     seedRepository('r', 'p', r'C:\work\p\repo');
     seedSession('native', repositoryId: 'r', createdAt: DateTime.utc(2026, 3));
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imported',
         repositoryId: 'r',
@@ -358,7 +356,7 @@ void main() {
     seedEnvironment();
     seedProject('p', r'C:\work\p');
     seedRepository('r', 'p', r'C:\work\p\repo');
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'undated',
         repositoryId: 'r',

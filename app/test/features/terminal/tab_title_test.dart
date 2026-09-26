@@ -88,7 +88,7 @@ void main() {
     });
 
     test('renaming a session renames its tab, with no reopen', () {
-      container.read(sessionDaoProvider).insert(session(title: 'Work'));
+      container.read(sessionsDataProvider).insert(session(title: 'Work'));
       final opened = controller.openAgentTab(
         const AgentPaneLaunch(
           agentId: 'claude',
@@ -99,7 +99,7 @@ void main() {
       );
       expect(controller.titleForTab(opened.tabId), 'Work');
 
-      container.read(sessionDaoProvider).updateTitle('s1', 'Fix the parser');
+      container.read(sessionsDataProvider).updateTitle('s1', 'Fix the parser');
       container.read(sessionsRevisionProvider.notifier).bump();
 
       expect(controller.titleForTab(opened.tabId), 'Fix the parser');
@@ -108,7 +108,7 @@ void main() {
     });
 
     test('a rename republishes, so the tab strip actually rebuilds', () {
-      container.read(sessionDaoProvider).insert(session(title: 'Work'));
+      container.read(sessionsDataProvider).insert(session(title: 'Work'));
       controller.openAgentTab(
         const AgentPaneLaunch(
           agentId: 'claude',
@@ -118,7 +118,7 @@ void main() {
       );
       final before = container.read(terminalSessionsControllerProvider);
 
-      container.read(sessionDaoProvider).updateTitle('s1', 'Renamed');
+      container.read(sessionsDataProvider).updateTitle('s1', 'Renamed');
       container.read(sessionsRevisionProvider.notifier).bump();
 
       expect(
@@ -131,7 +131,7 @@ void main() {
     });
 
     test('a renamed session survives a detach and reattach', () {
-      container.read(sessionDaoProvider).insert(session(title: 'Work'));
+      container.read(sessionsDataProvider).insert(session(title: 'Work'));
       final opened = controller.openAgentTab(
         const AgentPaneLaunch(
           agentId: 'claude',
@@ -139,7 +139,7 @@ void main() {
           sessionId: 's1',
         ),
       );
-      container.read(sessionDaoProvider).updateTitle('s1', 'Renamed');
+      container.read(sessionsDataProvider).updateTitle('s1', 'Renamed');
       container.read(sessionsRevisionProvider.notifier).bump();
 
       controller.closeTab(opened.tabId);
@@ -321,7 +321,7 @@ void main() {
     test('an agent session outranks the title the agent set for itself', () {
       // Claude Code and Codex both name their own window; letting that win
       // would put the rename back out of reach, which is the bug.
-      container.read(sessionDaoProvider).insert(session(title: 'Work'));
+      container.read(sessionsDataProvider).insert(session(title: 'Work'));
       final opened = controller.openAgentTab(
         const AgentPaneLaunch(
           agentId: 'claude',

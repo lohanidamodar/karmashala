@@ -39,11 +39,11 @@ import 'src/features/environments/data/execution_environment_dao.dart';
 import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'src/features/sessions/application/session_liveness_reconciler.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/terminal/application/local_host_providers.dart';
 import 'src/features/system/system_integration_service.dart';
 import 'src/features/verification/application/verification_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// Application entry point. Logging and the uncaught-error handlers first, so
 /// whatever the bootstrap does next is on record if it fails.
@@ -176,7 +176,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   final followsLocalHost = container.read(hostLifecycleSourceProvider) != null;
   final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
   final lost = markSessionsLostOnLaunch(
-    SessionDao(database),
+    container.read(sessionsDataProvider),
     where: followsLocalHost ? (session) => !onThisMachine(session) : null,
   );
   if (lost > 0) {

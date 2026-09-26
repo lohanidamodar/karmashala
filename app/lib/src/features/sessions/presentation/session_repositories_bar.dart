@@ -58,22 +58,28 @@ class SessionRepositoriesBar extends ConsumerWidget {
               tooltip: checkouts[repo.id]?.note,
               onDeleted: repo.id == primary.id
                   ? null
-                  : () {
-                      service.detach(sessionId, repo.id);
-                      bump();
+                  : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await service.detach(sessionId, repo.id);
+                        bump();
+                      } on SessionRepositoryException catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text(e.message)),
+                        );
+                      }
                     },
             ),
           if (attachable.isNotEmpty)
             PopupMenuButton<String>(
               tooltip: 'Add a repository from this project',
-              onSelected: (repoId) {
+              onSelected: (repoId) async {
+                final messenger = ScaffoldMessenger.of(context);
                 try {
-                  service.attach(sessionId, repoId);
+                  await service.attach(sessionId, repoId);
                   bump();
                 } on SessionRepositoryException catch (e) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(e.message)));
+                  messenger.showSnackBar(SnackBar(content: Text(e.message)));
                 }
               },
               itemBuilder: (context) => [

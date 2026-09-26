@@ -17,7 +17,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/unresumable_sessions.dart';
 import 'package:karmashala/src/features/explorer/presentation/unresumable_sessions_dialog.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -96,7 +95,7 @@ void main() {
     required String title,
     EnvironmentPath? workingDirectory,
   }) {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       session(id: id, title: title).copyWith(
         externalSessionId: id,
         status: SessionStatus.running,
@@ -234,7 +233,7 @@ void main() {
         await tester.tap(find.text('Remove 1 session'));
         await tester.pumpAndSettle();
 
-        expect(SessionDao(db).getById('dead-1'), isNull);
+        expect(mirroredServer(db).sessionRows.getById('dead-1'), isNull);
         expect(find.text('One'), findsNothing);
         expect(
           find.textContaining('Every session here names a conversation'),

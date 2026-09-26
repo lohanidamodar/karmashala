@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/mcp/decision_tools.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -35,17 +34,18 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
   late LauncherControlServer server;
+  late FakeDataServer fake;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_decision_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    final fake = FakeDataServer()..mirrorInto(db);
+    fake = FakeDataServer()..mirrorInto(db);
     fake.projectRows.insert(project());
     fake.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', title: 'Work'));
-    SessionDao(db).insert(session(id: 's2', title: 'The verifier'));
+    fake.sessionRows.insert(session(id: 's1', title: 'Work'));
+    fake.sessionRows.insert(session(id: 's2', title: 'The verifier'));
 
     container = ProviderContainer(
       overrides: [
@@ -69,7 +69,7 @@ void main() {
   });
 
   List<DecisionRecord> recordOf(String sessionId) =>
-      DecisionRecordDao(db).forSession(sessionId);
+      fake.decisionRows.forSession(sessionId);
 
   Map<String, Object?> handshake() =>
       jsonDecode(File(p.join(tmp.path, 'mcp_bridge.json')).readAsStringSync())
@@ -136,7 +136,7 @@ void main() {
         .layout
         .panes
         .first;
-    SessionDao(db).updatePaneId(sessionId, paneId);
+    fake.sessionRows.updatePaneId(sessionId, paneId);
   }
 
   group('decision_record', () {
@@ -319,38 +319,49 @@ void main() {
       reason: reason,
     );
 
-    test('lands on the record of the session whose work it was about', () {
-      recordFinishedVerdict(container, run());
+    test(
+      'lands on the record of the session whose work it was about',
+      () async {
+        recordFinishedVerdict(container, run());
+        await pumpEventQueue();
 
-      // The subject's record, not the verifier's: whoever takes *that* work
-      // over is the one who would otherwise re-run a check that passed.
-      expect(recordOf('s2'), isEmpty);
-      final decision = recordOf('s1').single;
-      expect(decision.kind, DecisionKind.verificationVerdict);
-      expect(decision.summary, contains('Pass'));
-      expect(decision.summary, contains('Login page'));
-      expect(decision.summary, contains('The header row renders.'));
-      expect(decision.origin, DecisionOrigin.verificationRun);
-      expect(decision.originId, 'v-1');
-    });
+        // The subject's record, not the verifier's: whoever takes *that* work
+        // over is the one who would otherwise re-run a check that passed.
+        expect(recordOf('s2'), isEmpty);
+        final decision = recordOf('s1').single;
+        expect(decision.kind, DecisionKind.verificationVerdict);
+        expect(decision.summary, contains('Pass'));
+        expect(decision.summary, contains('Login page'));
+        expect(decision.summary, contains('The header row renders.'));
+        expect(decision.origin, DecisionOrigin.verificationRun);
+        expect(decision.originId, 'v-1');
+      },
+    );
 
-    test('carries whether the verifier was the author', () {
+    test('carries whether the verifier was the author', () async {
       recordFinishedVerdict(container, run(producedBy: 's2'));
+      await pumpEventQueue();
       expect(recordOf('s1').single.detail, contains('by another session'));
 
       recordFinishedVerdict(container, run(producedBy: 's1'));
+      await pumpEventQueue();
       expect(recordOf('s1').last.detail, contains('by the author'));
 
       recordFinishedVerdict(container, run(producedBy: null));
+      await pumpEventQueue();
       // Never folded into either neighbour: unattributed is its own state.
       expect(recordOf('s1').last.detail, contains('not recorded'));
     });
 
-    test('a run still recording, or attached to nobody, writes nothing', () {
-      recordFinishedVerdict(container, run(verdict: null));
-      recordFinishedVerdict(container, run(sessionId: null));
-      recordFinishedVerdict(container, null);
-      expect(recordOf('s1'), isEmpty);
-    });
+    test(
+      'a run still recording, or attached to nobody, writes nothing',
+      () async {
+        recordFinishedVerdict(container, run(verdict: null));
+        recordFinishedVerdict(container, run(sessionId: null));
+        recordFinishedVerdict(container, null);
+        await pumpEventQueue();
+        expect(recordOf('s1'), isEmpty);
+      },
+    );
   });
 }

@@ -11,7 +11,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
@@ -20,7 +19,6 @@ import 'package:karmashala/src/features/explorer/application/session_selection.d
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:path/path.dart' as p;
 
@@ -30,6 +28,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../../support/temp_directory.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// **Deleting a ticked set of sessions.**
 ///
@@ -94,7 +93,7 @@ void main() {
         title: title,
       ),
     );
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r1',
@@ -112,7 +111,7 @@ void main() {
   void addImported(String id, {required String title}) {
     final externalId = 'cli-$id';
     writeTranscript(externalId);
-    ImportedSessionDao(db).insertIfAbsent(
+    server.importedRows.insertIfAbsent(
       ImportedSession(
         id: id,
         repositoryId: 'r1',
@@ -167,9 +166,9 @@ void main() {
         bulk.run(targets, deleteFromCli: true);
 
         // The rows are already gone, in the same turn the confirmation returned.
-        expect(SessionDao(db).getById('n0'), isNull);
-        expect(SessionDao(db).getById('n1'), isNull);
-        expect(ImportedSessionDao(db).getById('i0'), isNull);
+        expect(container.read(sessionsDataProvider).getById('n0'), isNull);
+        expect(container.read(sessionsDataProvider).getById('n1'), isNull);
+        expect(container.read(importedSessionsProvider).getById('i0'), isNull);
 
         await bulk.settled;
         for (final external in ['ext-n0', 'ext-n1', 'cli-i0']) {
@@ -241,8 +240,8 @@ void main() {
       bulk.run(bulk.resolve(const ['n0', 'i0']), deleteFromCli: false);
       await bulk.settled;
 
-      expect(SessionDao(db).getById('n0'), isNull);
-      expect(ImportedSessionDao(db).getById('i0'), isNull);
+      expect(container.read(sessionsDataProvider).getById('n0'), isNull);
+      expect(container.read(importedSessionsProvider).getById('i0'), isNull);
       expect(File(transcript('ext-n0')).existsSync(), isTrue);
       expect(File(transcript('cli-i0')).existsSync(), isTrue);
       expect(bulk.pending, 0, reason: 'nothing is started to do nothing');
@@ -262,7 +261,7 @@ void main() {
         // The rows have gone and the files have not: the irreversible half is
         // still running. This is the assertion that fails if it is ever awaited
         // inline again.
-        expect(SessionDao(db).getById('n0'), isNull);
+        expect(container.read(sessionsDataProvider).getById('n0'), isNull);
         expect(bulk.pending, 1);
         expect(File(transcript('ext-n0')).existsSync(), isTrue);
 
@@ -287,7 +286,7 @@ void main() {
         bulk.run(bulk.resolve(const ['n0']), deleteFromCli: true);
         await bulk.settled;
 
-        expect(SessionDao(db).getById('n0'), isNull);
+        expect(container.read(sessionsDataProvider).getById('n0'), isNull);
         final shown = presenter.shown.single;
         expect(shown.title, '1 session file was left behind');
         expect(shown.body, contains('Native one'));
@@ -315,8 +314,8 @@ void main() {
 
       // The rows all left the workspace regardless — that half never depended
       // on the store, and it is the half that can be undone.
-      expect(SessionDao(db).getByRepository('r1'), isEmpty);
-      expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
+      expect(container.read(sessionsDataProvider).getByRepository('r1'), isEmpty);
+      expect(container.read(importedSessionsProvider).getByRepository('r1'), isEmpty);
 
       await bulk.settled;
       for (final external in ['ext-n0', 'cli-i0', 'cli-i1']) {

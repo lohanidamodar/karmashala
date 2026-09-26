@@ -8,9 +8,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/cli_detection/application/conversation_indexer.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_search.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
@@ -76,7 +74,7 @@ void main() {
     bool withSession = true,
   }) {
     if (withSession) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 's${sessionCount++}',
           repositoryId: repositoryId,
@@ -323,7 +321,7 @@ void main() {
     });
 
     test('read-only history is a result', () {
-      ImportedSessionDao(db).insertIfAbsent(
+      mirroredServer(db).importedRows.insertIfAbsent(
         ImportedSession(
           id: 'i1',
           repositoryId: 'r1',
@@ -424,7 +422,7 @@ void main() {
       () async {
         final path = '${dir.path}/live.jsonl';
         File(path).writeAsStringSync(line('the morning plan'));
-        SessionDao(db).insert(
+        mirroredServer(db).sessionRows.insert(
           Session(
             id: 'live',
             repositoryId: 'r1',
@@ -457,7 +455,7 @@ void main() {
     test('at most once an interval, and nothing polls', () async {
       final path = '${dir.path}/live.jsonl';
       File(path).writeAsStringSync(line('one'));
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'live',
           repositoryId: 'r1',

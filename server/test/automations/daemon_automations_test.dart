@@ -9,7 +9,8 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_session/session.dart'
     show SessionEnding, SessionStatus;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
-    show SessionDao, hostSessionIdOf;
+    show hostSessionIdOf;
+import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';

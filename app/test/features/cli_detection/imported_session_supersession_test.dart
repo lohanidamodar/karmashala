@@ -5,13 +5,11 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -32,6 +30,7 @@ import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// One CLI session, one row in the workspace.
 ///
@@ -39,7 +38,10 @@ import '../../support/workspace_mirror.dart';
 /// Explorer showing it twice while the CLI still reported a single session.
 /// `imported_sessions` and `sessions` can each hold a record of one
 /// conversation, and `sessions.external_session_id` is the tie — resolved once,
-/// in `ImportedSessionDao`, rather than filtered in each view.
+/// by the shared rule (`visibleImported`) the server's store and this app's
+/// copy (`ImportedSessionsData`) both follow, rather than filtered in each
+/// view. The rule against the store itself is
+/// `packages/karmashala_session_engine/test/session_reads_test.dart`.
 
 class _StaticSettings extends SettingsController {
   @override
@@ -88,8 +90,8 @@ void main() {
   late FakeDataServer server;
   late DataClient client;
   late AppDatabase db;
-  late ImportedSessionDao dao;
-  late SessionDao sessions;
+  late ImportedSessionsData dao;
+  late SessionsData sessions;
 
   setUp(() async {
     db = AppDatabase.memory();
@@ -101,8 +103,8 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(agentId: AgentIds.claudeCode));
-    dao = ImportedSessionDao(db);
-    sessions = SessionDao(db);
+    sessions = SessionsData(client);
+    dao = ImportedSessionsData(client, sessions);
   });
   tearDown(() => db.close());
 
@@ -111,7 +113,7 @@ void main() {
       dao.insertIfAbsent(imported());
       expect(dao.getAll(), hasLength(1));
 
-      sessions.insert(native());
+      server.sessionRows.insert(native());
 
       expect(dao.getAll(), isEmpty);
       expect(dao.getByRepository('r1'), isEmpty);
@@ -124,17 +126,17 @@ void main() {
     // Both end at one row.
     test('is hidden, not deleted — the record survives for its history', () {
       dao.insertIfAbsent(imported());
-      sessions.insert(native());
+      server.sessionRows.insert(native());
 
       expect(dao.getById('imp-1'), isNotNull);
       expect(dao.getByExternal(AgentIds.claudeCode, 'cli-abc'), isNotNull);
       // And it comes back if the live row that superseded it goes away.
-      sessions.delete('n1');
+      server.sessionRows.delete('n1');
       expect(dao.getAll(), hasLength(1));
     });
 
     test('is not re-imported by a later store scan', () {
-      sessions.insert(native());
+      server.sessionRows.insert(native());
 
       expect(dao.insertIfAbsent(imported()), isFalse);
       expect(dao.getAll(), isEmpty);
@@ -142,7 +144,7 @@ void main() {
 
     test('a native row with no CLI id supersedes nothing', () {
       dao.insertIfAbsent(imported());
-      sessions.insert(native(externalId: null));
+      server.sessionRows.insert(native(externalId: null));
 
       expect(dao.getAll(), hasLength(1));
     });
@@ -151,7 +153,7 @@ void main() {
       dao
         ..insertIfAbsent(imported(id: 'imp-1', externalId: 'cli-abc'))
         ..insertIfAbsent(imported(id: 'imp-2', externalId: 'cli-def'));
-      sessions.insert(native(externalId: 'cli-abc'));
+      server.sessionRows.insert(native(externalId: 'cli-abc'));
 
       final rows = dao.getAll();
       expect(rows, hasLength(1));
@@ -168,7 +170,7 @@ void main() {
         ..insertIfAbsent(imported(id: 'imp-2', externalId: 'cli-def'));
       expect(dao.countByRepositories(['r1']), 2);
 
-      sessions.insert(native(externalId: 'cli-abc'));
+      server.sessionRows.insert(native(externalId: 'cli-abc'));
 
       expect(dao.countByRepositories(['r1']), dao.getByRepository('r1').length);
       expect(dao.countByRepositories(['r1']), 1);
@@ -189,7 +191,7 @@ void main() {
         ..insertIfAbsent(imported(id: 'imp-2', externalId: 'cli-def'));
       expect(dao.repositoryIdsById(), {'imp-1': 'r1', 'imp-2': 'r1'});
 
-      sessions.insert(native(externalId: 'cli-abc'));
+      server.sessionRows.insert(native(externalId: 'cli-abc'));
 
       expect(dao.repositoryIdsById(), {'imp-2': 'r1'});
       expect(dao.repositoryIdsById(), {
@@ -197,25 +199,11 @@ void main() {
       });
     });
 
-    test('a pair already in the database resolves with no migration', () {
-      // Exactly the shape a user upgrading into this fix has: both rows
-      // already written, by a resume that predates the resolution.
-      dao.insertIfAbsent(imported());
-      db.execute(
-        'INSERT INTO sessions '
-        '(id, repository_id, agent_installation_id, title, use_worktree, '
-        'status, created_at, external_session_id, surface, view) '
-        "VALUES ('n1','r1','a1','Earlier work',0,'running','2026-01-02', "
-        "'cli-abc','pane','terminal');",
-      );
-
-      expect(dao.getAll(), isEmpty);
-    });
   });
 
   group('the whole-store import', () {
     test('does not re-add a conversation that is already live', () async {
-      sessions.insert(native());
+      server.sessionRows.insert(native());
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
@@ -259,7 +247,7 @@ void main() {
       tester,
     ) async {
       dao.insertIfAbsent(imported(title: 'Earlier work'));
-      sessions.insert(native(title: 'Earlier work'));
+      server.sessionRows.insert(native(title: 'Earlier work'));
       tester.view.physicalSize = const Size(460, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);

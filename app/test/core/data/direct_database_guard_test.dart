@@ -5,10 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// **The app is a client of the server's data** (docs/daemon-architecture.md,
 /// "Slice 1 — data through the server").
 ///
-/// Notes, todos, preferences and the workspace (contexts, projects, checkouts,
-/// saved sections) go through the server's data API (`lib/src/core/data/`,
-/// `WorkspaceData`); nothing under `lib/` opens their tables or the
-/// `app_metadata` rows itself. The domains not moved yet still use the
+/// Notes, todos, preferences, the workspace (contexts, projects, checkouts,
+/// saved sections) and sessions (their rows, checkouts, records and the
+/// imported history) go through the server's data API (`lib/src/core/data/`,
+/// `WorkspaceData`, `SessionsData`); nothing under `lib/` opens their tables
+/// or the `app_metadata` rows itself. The domains not moved yet still use the
 /// database the app opens, from the files listed in [remaining] — a list that
 /// only shrinks: a new file fails here, and a listed file that stopped
 /// touching the database fails until it is taken off.
@@ -40,22 +41,12 @@ void main() {
       'src/features/agents/data/codex_account_dao.dart',
       'src/features/agents/data/usage_sample_dao.dart',
     ],
-    'sessions and their records': [
-      'src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart',
-      'src/features/sessions/application/session_launcher_start.dart',
-      'src/features/sessions/application/session_providers.dart',
-      'src/features/sessions/data/session_event_dao.dart',
-      'src/features/sessions/data/session_recap_dao.dart',
-      'src/features/sessions/data/session_relay_dao.dart',
-      'src/features/sessions/data/session_repository_dao.dart',
-      'src/features/follow_ups/application/follow_up_providers.dart',
-      'src/features/follow_ups/data/follow_up_dao.dart',
-      'src/features/remote/application/remote_providers.dart',
-    ],
-    'imported sessions and the conversation index': [
+    'the conversation index': [
       'src/features/cli_detection/application/cli_detection_providers.dart',
       'src/features/cli_detection/data/conversation_index_dao.dart',
-      'src/features/cli_detection/data/imported_session_dao.dart',
+    ],
+    'pairings and the companion host id': [
+      'src/features/remote/application/remote_providers.dart',
     ],
     'automations, checkpoints, verification, comparisons': [
       'src/features/automations/application/automation_providers.dart',
@@ -119,6 +110,33 @@ void main() {
       reason: 'the workspace goes through WorkspaceData',
     );
     expect(
+      filesMatching(
+        RegExp(
+          r'\b(SessionDao|SessionEventDao|DecisionRecordDao|SessionRecapDao|'
+          r'SessionRelayDao|FollowUpDao|SessionRepositoryDao|'
+          r'ImportedSessionDao|HostedSessionStatusKeeper|'
+          r'SessionLifecycleRecorder)\b|karmashala_session_engine/store',
+        ),
+      ),
+      isEmpty,
+      reason:
+          'sessions and their records go through SessionsData and the '
+          'sessions providers; the daemon records lifecycle status',
+    );
+    expect(
+      filesMatching(
+        RegExp(
+          r'\b(FROM|INTO|UPDATE|JOIN)\s+(sessions|session_repositories|'
+          r'session_events|session_decisions|session_recaps|session_relays|'
+          r'session_follow_ups|imported_sessions)\b',
+        ),
+      ),
+      // The index's own queries join the rows it indexes; it moves with the
+      // conversation index (1f), reading only.
+      ['src/features/cli_detection/data/conversation_index_dao.dart'],
+      reason: 'sessions go through SessionsData',
+    );
+    expect(
       filesMatching(RegExp(r'\.(readMetadata|writeMetadata)\(')),
       // The index's own write counter, a key the data API reserves for its
       // domain; it moves with the conversation index.
@@ -132,6 +150,8 @@ void main() {
       'src/features/workspaces/',
       'src/features/projects/',
       'src/features/repositories/',
+      'src/features/sessions/',
+      'src/features/follow_ups/',
     ]) {
       expect(
         [
@@ -165,13 +185,14 @@ void main() {
   });
 
   test('no app test reaches the moved domains in a store', () {
-    // Notes, todos, preferences and the workspace are read and written
-    // through the fake server (test/support/fake_data_server.dart); their
-    // rules are tested in packages/karmashala_notes, karmashala_projects,
-    // karmashala_store and server/test/data. The one exception is the
-    // transitional `workspace_mirror.dart`, which copies the fake's workspace
-    // rows into a test's database for the sessions' foreign keys until
-    // sessions move (1c).
+    // Notes, todos, preferences, the workspace and sessions are read and
+    // written through the fake server (test/support/fake_data_server.dart);
+    // their rules are tested in packages/karmashala_notes,
+    // karmashala_projects, karmashala_session(_engine), karmashala_store and
+    // server/test/data. The one exception is the transitional
+    // `workspace_mirror.dart`, which copies the fake's workspace and session
+    // rows into a test's database for the foreign keys of the tables not
+    // moved yet.
     final reaching = <String>[];
     for (final file in Directory(
       'test',
@@ -182,7 +203,10 @@ void main() {
       }
       if (RegExp(
         r'\b(DataService|NoteDao|TodoDao|StoredPreferences|WorkspaceDao|'
-        r'ProjectDao|RepositoryDao|SectionDao)\b|'
+        r'ProjectDao|RepositoryDao|SectionDao|SessionDao|SessionEventDao|'
+        r'DecisionRecordDao|SessionRecapDao|SessionRelayDao|FollowUpDao|'
+        r'SessionRepositoryDao|ImportedSessionDao)\b|'
+        r'karmashala_session_engine/store|'
         r'karmashala_host/data\.dart|karmashala_notes/store|'
         r'karmashala_projects/store|\.(readMetadata|writeMetadata)\(|'
         r'DataClient\.inProcess',

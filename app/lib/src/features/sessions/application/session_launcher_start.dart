@@ -6,7 +6,7 @@ extension SessionStartVerbs on SessionLauncher {
   /// Ends the agent [sessionId] is running and starts a new one on the same
   /// conversation. Every refusal happens before anything is killed.
   Future<SessionLaunchResult> restartSession(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       throw StateError('This session no longer exists.');
     }
@@ -284,30 +284,46 @@ extension SessionStartVerbs on SessionLauncher {
           // Only what was chosen, for the reason above.
           modelId: request.modelOverride,
         );
-    final dao = _ref.read(sessionDaoProvider);
-    // One transaction: a row with no repository link is a session no list can
-    // place, and a link that failed must not leave one behind.
-    _ref.read(databaseProvider).transaction(() {
-      if (reused == null) {
-        dao.insert(session);
-      } else {
-        dao.updateStatus(id, SessionStatus.running);
-        // Written only when this launch carries a decision: writing the resolved
-        // mode unconditionally destroyed the chip's choice on the next resume.
-        if (request.permissionOverride != null) {
-          dao.updatePermissionMode(id, request.permissionOverride!.canonical);
-        }
-        if (request.modelOverride != null) {
-          dao.updateModel(id, request.modelOverride);
-        }
-        if (recordDirectory) dao.updateWorkingDirectory(id, workingDirectory);
-      }
-      final repositoryDao = _ref.read(sessionRepositoryDaoProvider)
-        ..link(id, request.repository.id, role: SessionRepositoryRole.primary);
+    final dao = _ref.read(sessionsDataProvider);
+    // Awaited, before any pane opens: the server writes the row and its links
+    // in one transaction, and a host that starts the process must find the
+    // row it records the lifecycle of.
+    if (reused == null) {
+      await dao.create(
+        session,
+        repositories: [
+          for (final extra in request.additionalRepositories) extra.id,
+        ],
+      );
+    } else {
+      await dao.edit(
+        id,
+        SessionPatch.status(SessionStatus.running)
+            // Written only when this launch carries a decision: writing the
+            // resolved mode unconditionally destroyed the chip's choice on the
+            // next resume.
+            .and(
+              request.permissionOverride == null
+                  ? SessionPatch.none
+                  : SessionPatch.permissionMode(
+                      request.permissionOverride!.canonical,
+                    ),
+            )
+            .and(
+              request.modelOverride == null
+                  ? SessionPatch.none
+                  : SessionPatch.model(request.modelOverride),
+            )
+            .and(
+              recordDirectory
+                  ? SessionPatch.directory(workingDirectory)
+                  : SessionPatch.none,
+            ),
+      );
       for (final extra in request.additionalRepositories) {
-        repositoryDao.link(id, extra.id);
+        await dao.link(id, extra.id);
       }
-    });
+    }
 
     // The packet's way in that is not a paste, resolved here because the file
     // is named by [id]. Every "no" falls back to the opening prompt.
@@ -396,7 +412,7 @@ extension SessionStartVerbs on SessionLauncher {
     if (request.useWorktree || request.parentSessionId != null) return null;
     for (final candidate
         in _ref
-            .read(sessionDaoProvider)
+            .read(sessionsDataProvider)
             .getAllByExternalSessionId(externalId)) {
       if (candidate.isArchived) continue;
       if (candidate.repositoryId != request.repository.id) continue;
@@ -414,7 +430,7 @@ extension SessionStartVerbs on SessionLauncher {
     final rowId = request.restartSessionId;
     if (rowId == null || rowId.isEmpty) return null;
     if (request.useWorktree || request.parentSessionId != null) return null;
-    final candidate = _ref.read(sessionDaoProvider).getById(rowId);
+    final candidate = _ref.read(sessionsDataProvider).getById(rowId);
     if (candidate == null || candidate.isArchived) return null;
     if (candidate.repositoryId != request.repository.id) return null;
     if (candidate.agentInstallationId != request.installation.id) return null;

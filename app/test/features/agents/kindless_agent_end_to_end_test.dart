@@ -8,9 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
-import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +18,7 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// An agent that exists only as data: a registry entry with **no adapter code
 /// of its own** (`DataOnlyAgentAdapter`), so nothing about it is hardcoded
@@ -70,7 +68,8 @@ void main() {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    FakeDataServer().mirrorInto(db)
+    final server = FakeDataServer()..mirrorInto(db);
+    server
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     final installationDao = AgentInstallationDao(db)..insert(discovered.single);
@@ -105,10 +104,10 @@ void main() {
 
     // 4. SESSION CREATION — the engine resolves the adapter by agent id.
     final resolved = <String>[];
+    final client = await server.connect();
     final engine = SessionEngine(
-      sessionDao: SessionDao(db),
-      eventDao: SessionEventDao(db),
-      sessionRepositoryDao: SessionRepositoryDao(db),
+      sessions: SessionsData(client),
+      records: SessionRecordsData(client),
       worktreeService: WorktreeService(
         runnerFactory: FakeCommandRunnerFactory(),
         environmentOf: worktreeEnvironmentOf(ExecutionEnvironmentDao(db)),
@@ -129,9 +128,12 @@ void main() {
     );
 
     expect(resolved, ['roverCli']);
-    expect(SessionDao(db).getById(session.id)!.status, SessionStatus.running);
     expect(
-      SessionDao(db).getByRepository(repository().id).single.id,
+      server.sessionRows.getById(session.id)!.status,
+      SessionStatus.running,
+    );
+    expect(
+      server.sessionRows.getByRepository(repository().id).single.id,
       session.id,
     );
     await engine.stop(session.id);

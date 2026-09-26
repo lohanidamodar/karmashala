@@ -432,7 +432,7 @@ class SessionStatsButton extends ConsumerWidget {
   /// Whether this session's agent keeps a store with counts in it. Read rather
   /// than awaited, so nothing draws a control that opens onto an apology.
   bool _recordsStats(WidgetRef ref) {
-    final session = ref.read(sessionDaoProvider).getById(sessionId);
+    final session = ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return false;
     final agentId = ref
         .read(agentInstallationDaoProvider)

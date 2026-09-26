@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
@@ -33,13 +32,14 @@ import '../../support/workspace_mirror.dart';
 void main() {
   late AppDatabase db;
   late Directory dir;
+  late FakeDataServer server;
 
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
-    FakeDataServer().mirrorInto(db)
+    server = FakeDataServer().mirrorInto(db)
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
     dir = Directory.systemTemp.createTempSync('image_lookup');
@@ -49,7 +49,7 @@ void main() {
     removeTempDirectory(dir);
   });
 
-  void register(String filePath) => ImportedSessionDao(db).insertIfAbsent(
+  void register(String filePath) => server.importedRows.insertIfAbsent(
     ImportedSession(
       id: 'i1',
       repositoryId: 'r1',
@@ -64,10 +64,11 @@ void main() {
     ),
   );
 
-  ProviderContainer containerFor() {
+  Future<ProviderContainer> containerFor() async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await server.override(),
         sessionMediaCacheRootProvider.overrideWith(
           (ref) async => Directory('${dir.path}/cache')..createSync(),
         ),
@@ -77,8 +78,8 @@ void main() {
     return container;
   }
 
-  Future<SessionImageLookup> look(int pasteId, {String session = 'i1'}) =>
-      containerFor().read(sessionImageLookupProvider)(session, pasteId);
+  Future<SessionImageLookup> look(int pasteId, {String session = 'i1'}) async =>
+      (await containerFor()).read(sessionImageLookupProvider)(session, pasteId);
 
   test('a reference resolves to the picture the CLI numbered', () async {
     // Two `Read` results before the paste, so the paste is the scan's third

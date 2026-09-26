@@ -281,7 +281,7 @@ class FanOutService {
         .read(workspaceDataProvider)
         .repository(comparison.repositoryId);
     if (repository == null) return const [];
-    final sessions = ref.read(sessionDaoProvider);
+    final sessions = ref.read(sessionsDataProvider);
     return [
       for (final candidate in comparison.candidates)
         if (candidate.sessionId case final sessionId?)

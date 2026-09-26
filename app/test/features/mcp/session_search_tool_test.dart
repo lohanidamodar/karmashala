@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/inventory_tools.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -46,7 +45,7 @@ void main() {
   tearDown(() => db.close());
 
   void said(String session, String conversation, List<String> turns) {
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: session,
         repositoryId: 'r1',

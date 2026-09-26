@@ -240,36 +240,6 @@ class LifecycleMessage extends HostMessage {
   );
 }
 
-/// host → client: the daemon wrote [status] to the row [sessionId]; the row
-/// is the record, this only says to read it again.
-class SessionChangedMessage extends HostMessage {
-  const SessionChangedMessage({required this.sessionId, required this.status});
-
-  final String sessionId;
-
-  /// The status's name as the store keeps it, e.g. `completed`.
-  final String status;
-
-  @override
-  Frame toFrame() => Frame(
-    MessageType.sessionChanged,
-    0,
-    (WireWriter()..str(jsonEncode({'sessionId': sessionId, 'status': status})))
-        .take(),
-  );
-
-  static SessionChangedMessage decode(Frame frame) {
-    final map = _object(
-      _decodeJson(WireReader(frame.payload).str()),
-      'session changed',
-    );
-    return SessionChangedMessage(
-      sessionId: _required<String>(map, 'sessionId'),
-      status: _required<String>(map, 'status'),
-    );
-  }
-}
-
 Object? _decodeJson(String text) {
   try {
     return jsonDecode(text);

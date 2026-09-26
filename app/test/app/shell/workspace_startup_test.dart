@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/sessions/application/delivery_providers.
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
@@ -118,7 +117,7 @@ void main() {
   void storeASplitWorkspace() {
     final first = fakeTerminalContainer(database: db);
     final controller = first.read(terminalSessionsControllerProvider.notifier);
-    final dao = SessionDao(db);
+    final dao = mirroredServer(db).sessionRows;
 
     void seed(String id, String tabId) {
       final paneId = first

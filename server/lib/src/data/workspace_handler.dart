@@ -12,17 +12,28 @@ import 'package:karmashala_store/database.dart';
 /// write did to other domains' rows (a deleted project unfiles its notes and
 /// todos).
 class WorkspaceHandler {
-  WorkspaceHandler(this._db, this._now, this._newId)
-    : _workspaces = WorkspaceDao(_db),
-      _projects = ProjectDao(_db),
-      _repositories = RepositoryDao(_db),
-      _sections = SectionDao(_db),
-      _notes = NoteDao(_db),
-      _todos = TodoDao(_db);
+  WorkspaceHandler(
+    this._db,
+    this._now,
+    this._newId, {
+    List<DataChange> Function() Function(List<String> checkoutIds)?
+    checkoutsGoing,
+  }) : _checkoutsGoing = checkoutsGoing,
+       _workspaces = WorkspaceDao(_db),
+       _projects = ProjectDao(_db),
+       _repositories = RepositoryDao(_db),
+       _sections = SectionDao(_db),
+       _notes = NoteDao(_db),
+       _todos = TodoDao(_db);
 
   final AppDatabase _db;
   final DateTime Function() _now;
   final String Function() _newId;
+
+  /// What deleting checkouts takes from the sessions domain, read before
+  /// the delete and told after it.
+  final List<DataChange> Function() Function(List<String> checkoutIds)?
+  _checkoutsGoing;
   final WorkspaceDao _workspaces;
   final ProjectDao _projects;
   final RepositoryDao _repositories;
@@ -217,10 +228,14 @@ class WorkspaceHandler {
       for (final todo in _todos.list())
         if (todo.projectId == request.id) todo.id,
     ];
+    final sessionsGoing = _checkoutsGoing?.call([
+      for (final checkout in checkouts) checkout.id,
+    ]);
     _projects.delete(request.id);
     changes
       ..add(ProjectRemoved(request.id))
-      ..addAll(checkouts.map((checkout) => RepositoryRemoved(checkout.id)));
+      ..addAll(checkouts.map((checkout) => RepositoryRemoved(checkout.id)))
+      ..addAll(sessionsGoing?.call() ?? const []);
     for (final id in notes) {
       if (_notes.getById(id) case final note?) changes.add(NoteChanged(note));
     }

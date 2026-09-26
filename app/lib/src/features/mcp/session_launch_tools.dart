@@ -10,7 +10,6 @@ import '../checkpoints/application/checkpoint_fork.dart';
 import '../checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../checkpoints/domain/checkpoint_title.dart';
-import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../projects/application/projects_controller.dart';
@@ -584,7 +583,7 @@ class SessionLaunchTools {
         for (final session in sessionsWorkingIn(
           repository,
           excluding: sessionId,
-          among: _container.read(sessionDaoProvider).getAll(),
+          among: _container.read(sessionsDataProvider).getAll(),
           pathsMatch: samePath,
         ))
           session.title,
@@ -656,10 +655,10 @@ class SessionLaunchTools {
 
     // A native session is reattached, not relaunched: if a pane is still running
     // it, "open" means bring its tab back.
-    final native = _container.read(sessionDaoProvider).getById(id);
+    final native = _container.read(sessionsDataProvider).getById(id);
     if (native != null) return _openNativeSession(native);
 
-    final session = _container.read(importedSessionDaoProvider).getById(id);
+    final session = _container.read(importedSessionsProvider).getById(id);
     if (session == null) throw StateError('Session not found: $id');
     // An imported entry can name a conversation one of our own panes is still
     // running: open that, rather than putting a second agent on it.

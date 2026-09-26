@@ -165,7 +165,7 @@ class _ResumeRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionDaoProvider).getById(resume.sessionId);
+    final session = ref.watch(sessionsDataProvider).getById(resume.sessionId);
     return _ActiveRow(
       icon: AppIcons.clockCounterClockwise,
       title: 'Resume · ${session?.title ?? 'a session that is no longer here'}',

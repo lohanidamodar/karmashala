@@ -135,7 +135,7 @@ class _ResumeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final session = ref.watch(sessionDaoProvider).getById(resume.sessionId);
+    final session = ref.watch(sessionsDataProvider).getById(resume.sessionId);
     final resumes = ref.read(scheduledResumeControllerProvider);
     final waiting =
         resume.state == ScheduledResumeState.pending ||

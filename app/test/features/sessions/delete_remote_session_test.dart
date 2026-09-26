@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../../support/fake_data_server.dart';
@@ -64,7 +63,7 @@ void main() {
   tearDown(() => db.close());
 
   void addSession(String id, {required String repositoryId}) =>
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: repositoryId,
@@ -100,7 +99,7 @@ void main() {
         .read(sessionActionsProvider)
         .deleteNative('s-remote');
 
-    expect(SessionDao(db).getById('s-remote'), isNull);
+    expect(mirroredServer(db).sessionRows.getById('s-remote'), isNull);
     expect(notice, contains('do-box'));
     expect(notice, contains('was left'));
     // Nothing on this machine was touched on that session's behalf.
@@ -118,7 +117,7 @@ void main() {
       container.read(sessionActionsProvider).deleteNative('s-local'),
       throwsA(isA<StateError>()),
     );
-    expect(SessionDao(db).getById('s-local'), isNotNull);
+    expect(mirroredServer(db).sessionRows.getById('s-local'), isNotNull);
     expect(mutator.deleted, isEmpty);
   });
 
@@ -130,7 +129,7 @@ void main() {
         .read(sessionActionsProvider)
         .deleteNative('s-local', deleteFromCli: false);
 
-    expect(SessionDao(db).getById('s-local'), isNull);
+    expect(mirroredServer(db).sessionRows.getById('s-local'), isNull);
     expect(notice, isNull);
     expect(mutator.deleted, isEmpty);
   });

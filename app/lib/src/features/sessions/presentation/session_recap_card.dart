@@ -104,7 +104,7 @@ class SessionRecapCard extends ConsumerWidget {
           icon: const Icon(AppIcons.x),
           iconSize: Chrome.iconSmall,
           onPressed: () {
-            ref.read(sessionRecapDaoProvider).delete(sessionId);
+            ref.read(sessionRecordsProvider).dismissRecap(sessionId);
             ref.invalidate(sessionRecapProvider(sessionId));
           },
         ),

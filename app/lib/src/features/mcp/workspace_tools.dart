@@ -67,7 +67,7 @@ class WorkspaceControlTools {
     final selected = _container.read(selectedRepositoryIdProvider);
     // Who else is standing here: without occupancy, fan-out candidates sharing
     // every repository but the primary one could not notice each other.
-    final rows = _container.read(sessionDaoProvider).getAll();
+    final rows = _container.read(sessionsDataProvider).getAll();
     return <String, Object?>{
       'projectId': projectId,
       'checkouts': <Object?>[
@@ -150,7 +150,7 @@ class WorkspaceControlTools {
   /// What a session's checkout still owes. Every count is nullable at the
   /// source, and an unknown reads "not recorded" rather than `0`.
   Future<Object?> _delivery(String sessionId) async {
-    final session = _container.read(sessionDaoProvider).getById(sessionId);
+    final session = _container.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       throw StateError('No session with id $sessionId.');
     }

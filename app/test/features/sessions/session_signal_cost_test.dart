@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,8 +25,16 @@ import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
+import '../../support/counting_sessions.dart';
 
 /// **What one narrow fact costs the app.**
+///
+/// Since slice 1c the sessions are no longer read from SQLite: every read goes
+/// to the app's copy of the server's rows through `SessionsData` and
+/// `ImportedSessionsData`. The unit is kept — a read of the session tables,
+/// now a call into the copy (`CountingSessions` records each), and a
+/// "table scan" is a whole-list `getAll` — so the claims below still price
+/// what they priced (test/support/counting_sessions.dart).
 ///
 /// `sessionsRevisionProvider` is one global counter with sixteen bump sites and
 /// twenty-eight watchers, and several of those watchers answer with a full
@@ -74,7 +81,7 @@ void main() {
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < count; i++) {
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         session(
           id: 's$i',
           title: 'Session $i',
@@ -93,6 +100,9 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(db),
         await serverOf[db]!.override(),
+        // The copy, counted: these cases write from this app, or bump by
+        // hand, so no server change needs announcing.
+        ...countedSessionsOverrides(db.log),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // The status pipeline is not the subject here; the row is.
         agentSessionStatusProvider.overrideWith(
@@ -148,14 +158,14 @@ void main() {
         print(
           'SESSION-RENAME-COST sessions=$count '
           'sessionReads=${db.sessionReads} rowsScanned=${db.rowsScanned} '
-          'allQueries=${db.queries}',
+          'allQueries=${db.queries} reads=${db.reads}',
         );
         expect(
           db.tableScans,
           0,
           reason:
-              'nothing may answer a one-row rename with an unfiltered '
-              '`SELECT * FROM sessions`: ${db.reads}',
+              'nothing may answer a one-row rename with the whole list of '
+              'sessions: ${db.reads}',
         );
       });
     }
@@ -218,7 +228,7 @@ void main() {
           () => container.listen(projectSummaryProvider('p1'), (_, _) {}),
         );
         expect(
-          db.reads.where((sql) => sql.contains('WHERE repository_id = ?')),
+          db.reads.where((read) => read.startsWith('getByRepository')),
           isEmpty,
           reason: 'a header counts sessions; a rename changes no count',
         );
@@ -305,7 +315,7 @@ void main() {
 
       // A session appears behind the app's back — exactly what an unmigrated
       // bump site says when it says nothing more specific.
-      SessionDao(db).insert(session(id: 'sNew', title: 'Arrived'));
+      serverOf[db]!.sessionRows.insert(session(id: 'sNew', title: 'Arrived'));
       db.reset();
       container.read(sessionsRevisionProvider.notifier).bump();
       await container.pump();
@@ -380,7 +390,7 @@ void main() {
 
     test('a stopped session changes the running count', () async {
       final before = container.read(projectSummaryProvider('p1')).running;
-      SessionDao(db).updateStatus('s4', SessionStatus.completed);
+      serverOf[db]!.sessionRows.updateStatus('s4', SessionStatus.completed);
       container.read(sessionsRevisionProvider.notifier).bump();
       await container.pump();
 
@@ -419,43 +429,37 @@ void main() {
   });
 }
 
-/// An [AppDatabase] that records every SELECT, so a change can be priced in the
-/// unit that matters: reads of the session tables.
+/// An [AppDatabase] that counts every SELECT (the tables not moved yet), and
+/// carries the log of reads of the sessions copy — the unit that matters.
 class _CountingDatabase extends AppDatabase {
   _CountingDatabase() : super(sqlite3.openInMemory());
 
-  final List<String> reads = [];
-  int rowsScanned = 0;
+  final List<String> sql = [];
+  final log = SessionReadLog();
 
   void reset() {
-    reads.clear();
-    rowsScanned = 0;
+    sql.clear();
+    log.reset();
   }
 
-  int get queries => reads.length;
+  int get queries => sql.length;
 
-  static final _sessionTable = RegExp(r'FROM\s+(imported_)?sessions\b');
+  /// Each read of the sessions copy, by method.
+  List<String> get reads => log.reads;
 
-  /// Reads with no `WHERE` against the two session tables — the full table
-  /// scans this whole exercise exists to stop paying for a one-row change.
-  static final _unfiltered = RegExp(
-    r'FROM\s+sessions\s+ORDER\s+BY'
-    r'|FROM\s+imported_sessions\s+WHERE\s+NOT\s+EXISTS',
-  );
+  int get rowsScanned => log.rows;
 
-  /// Reads against the two tables that hold sessions.
-  int get sessionReads => reads.where(_sessionTable.hasMatch).length;
+  int get sessionReads => log.reads.length;
 
-  int get tableScans => reads.where(_unfiltered.hasMatch).length;
+  /// Whole-list reads — what a one-row change must never pay for.
+  int get tableScans => log.tableScans;
 
   @override
   List<Map<String, Object?>> query(
     String sql, [
     List<Object?> params = const [],
   ]) {
-    reads.add(sql);
-    final rows = super.query(sql, params);
-    if (_sessionTable.hasMatch(sql)) rowsScanned += rows.length;
-    return rows;
+    this.sql.add(sql);
+    return super.query(sql, params);
   }
 }

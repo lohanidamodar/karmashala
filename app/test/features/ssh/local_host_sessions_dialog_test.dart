@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host/host_paths.dart';
@@ -84,7 +83,7 @@ void main() {
   testWidgets('lists what the host holds, agents by their session title', (
     tester,
   ) async {
-    SessionDao(db).insert(session(id: 's1', title: 'Fix the parser'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Fix the parser'));
     final host = _LocalHost([
       _summary('karmashala_s1', ['claude', '--resume', 'x']),
       _summary('karmashala_local_pane-1', ['/bin/zsh', '-l']),

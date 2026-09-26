@@ -24,7 +24,6 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/activity_strip.dart';
@@ -162,7 +161,7 @@ void main() {
     // plus a third nothing in this file ever touches, which is what makes a
     // fan-out visible as a per-row bill.
     for (final id in ['s1', 's2', 's3']) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -271,7 +270,7 @@ void main() {
           .layout
           .panes
           .single;
-      SessionDao(db).updatePaneId(id, paneId);
+      mirroredServer(db).sessionRows.updatePaneId(id, paneId);
     }
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
 
@@ -290,7 +289,7 @@ void main() {
     await container.read(explorerActionsProvider).openNative('s1');
     await settle(tester);
 
-    final paneId = SessionDao(db).getById('s1')!.paneId!;
+    final paneId = mirroredServer(db).sessionRows.getById('s1')!.paneId!;
     final instance = controller.instanceFor(paneId)!;
     // The guard against a false green, and the reason this file can claim a
     // zero at all: a fake pane has no PTY, so without this nothing proves the

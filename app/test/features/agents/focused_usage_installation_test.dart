@@ -6,13 +6,13 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **Which quota a session is spending**, and nothing at all for an agent whose
 /// usage endpoint we do not speak.
@@ -26,10 +26,11 @@ import 'usage_fixtures.dart';
 void main() {
   late AppDatabase db;
 
-  ProviderContainer containerFor(AppDatabase database) {
+  Future<ProviderContainer> containerFor(AppDatabase database) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(database),
+        await mirroredServer(database).override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentUsageServiceProvider.overrideWithValue(FakeAgentUsageService()),
       ],
@@ -40,25 +41,29 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('resolves a session to its Claude installation', () {
+  test('resolves a session to its Claude installation', () async {
     db = seedUsageDatabase();
-    final container = containerFor(db);
+    final container = await containerFor(db);
 
     expect(container.read(usageInstallationForSessionProvider('s1'))?.id, 'a1');
   });
 
   test('answers per session across Claude, Codex, and Antigravity — all at '
-      'once', () {
+      'once', () async {
     db = seedUsageDatabase();
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
-    SessionDao(db).insert(session(id: 's2', agentInstallationId: 'a2'));
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'a3', agentId: AgentIds.antigravity));
-    SessionDao(db).insert(session(id: 's3', agentInstallationId: 'a3'));
-    final container = containerFor(db);
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session(id: 's3', agentInstallationId: 'a3'));
+    final container = await containerFor(db);
 
     // Three panes, three agents, three quotas — read together rather than one
     // at a time, because that is the situation the old single answer could not
@@ -77,7 +82,7 @@ void main() {
     );
   });
 
-  test('two accounts of one agent are two accounts', () {
+  test('two accounts of one agent are two accounts', () async {
     // The owner has more than one. They are the same `agentId` in different
     // environments, so they are different keys and different quotas — the
     // reason an app-level figure could not be right for both.
@@ -86,8 +91,10 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'a2', environmentId: wslEnv().id));
-    SessionDao(db).insert(session(id: 's2', agentInstallationId: 'a2'));
-    final container = containerFor(db);
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
+    final container = await containerFor(db);
 
     final first = container.read(usageInstallationForSessionProvider('s1'))!;
     final second = container.read(usageInstallationForSessionProvider('s2'))!;
@@ -95,9 +102,9 @@ void main() {
     expect(usageAccountKey(first), isNot(usageAccountKey(second)));
   });
 
-  test('is null for an agent whose usage endpoint we do not speak', () {
+  test('is null for an agent whose usage endpoint we do not speak', () async {
     db = seedUsageDatabase(agentId: 'unknownAgent');
-    final container = containerFor(db);
+    final container = await containerFor(db);
 
     expect(
       container.read(usageInstallationForSessionProvider('s1')),
@@ -106,9 +113,9 @@ void main() {
     );
   });
 
-  test('is null for a row that has gone', () {
+  test('is null for a row that has gone', () async {
     db = seedUsageDatabase();
-    final container = containerFor(db);
+    final container = await containerFor(db);
 
     expect(container.read(usageInstallationForSessionProvider('nope')), isNull);
   });

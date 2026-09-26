@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -184,7 +183,7 @@ void main() {
       AgentInstallationDao(
         db,
       ).insert(agentInstallation(id: 'old', path: r'C:\old\claude.exe'));
-      SessionDao(db).insert(session(agentInstallationId: 'old'));
+      mirroredServer(db).sessionRows.insert(session(agentInstallationId: 'old'));
 
       return ProviderContainer(
         overrides: [

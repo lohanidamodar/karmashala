@@ -1,7 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
@@ -11,11 +10,12 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 void main() {
   late AppDatabase db;
   late ProjectImportService service;
-  late ImportedSessionDao importedDao;
+  late ImportedSessionsData importedDao;
   late FakeDataServer server;
 
   DetectedSession session(String id, {String? entrypoint}) => DetectedSession(
@@ -42,7 +42,8 @@ void main() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     server = FakeDataServer()..mirrorInto(db);
-    importedDao = ImportedSessionDao(db);
+    final client = await server.connect();
+    importedDao = ImportedSessionsData(client, SessionsData(client));
     service = ProjectImportService(
       workspace: await workspaceOf(server),
       importedSessionDao: importedDao,

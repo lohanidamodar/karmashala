@@ -11,8 +11,6 @@ import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/mcp/workspace_tools.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -21,6 +19,8 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../fanout/fanout_harness.dart' as fanout;
+import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// A worktree isolates one repository. A multi-repo session has more than one.
 ///
@@ -40,7 +40,7 @@ import '../fanout/fanout_harness.dart' as fanout;
 void main() {
   late AppDatabase db;
   late SessionRepositoriesService service;
-  late SessionRepositoryDao links;
+  late FakeSessionLinks links;
   late FakeDataServer server;
 
   /// A project with three checkouts, which is the shape this is about: an `app`
@@ -69,11 +69,11 @@ void main() {
         ),
       );
     AgentInstallationDao(db).insert(agentInstallation());
-    links = SessionRepositoryDao(db);
+    links = server.sessionLinks;
+    final client = await server.connect();
     service = SessionRepositoriesService(
-      sessionDao: SessionDao(db),
-      workspace: await workspaceOf(server),
-      linkDao: links,
+      sessions: SessionsData(client),
+      workspace: WorkspaceData(client),
     );
   });
   tearDown(() => db.close());
@@ -84,7 +84,7 @@ void main() {
     String worktree = r'C:\src\.karmashala-worktrees\app-1',
     List<String> alsoSpanning = const ['r-api'],
   }) {
-    SessionDao(db).insert(
+    server.sessionRows.insert(
       Session(
         id: id,
         repositoryId: 'r-app',
@@ -151,7 +151,7 @@ void main() {
       // Two sessions that genuinely record the same directory *are* named. This
       // is the case a `useWorktree: false` session hits, and it is the same
       // collision wearing the primary's hat.
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: 's3',
           repositoryId: 'r-app',
@@ -167,7 +167,7 @@ void main() {
         ),
       );
       links.link('s3', 'r-app', role: SessionRepositoryRole.primary);
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: 's4',
           repositoryId: 'r-app',
@@ -195,7 +195,7 @@ void main() {
     });
 
     test('an archived session is not counted as still standing there', () {
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: 's5',
           repositoryId: 'r-app',
@@ -219,7 +219,7 @@ void main() {
 
     test('a row in another environment is not the same directory', () {
       ExecutionEnvironmentDao(db).upsert(wslEnv());
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: 's6',
           repositoryId: 'r-app',
@@ -282,7 +282,7 @@ void main() {
           sessionsWorkingIn(
             EnvironmentPath(environmentId: 'windows', path: path),
             excluding: '',
-            among: SessionDao(db).getAll(),
+            among: server.sessionRows.getAll(),
             pathsMatch: samePath,
           ),
           isEmpty,
@@ -301,7 +301,7 @@ void main() {
 
       // Four candidates in four worktrees of `app`, and one ordinary session
       // working in `app` itself: the tool must distinguish them.
-      SessionDao(db).insert(
+      server.sessionRows.insert(
         Session(
           id: 'in-app',
           repositoryId: 'r-app',
@@ -371,7 +371,8 @@ void main() {
           );
       expect(launched.started, hasLength(3));
 
-      final linkDao = SessionRepositoryDao(h.db);
+      // Launches await their row, so the server holds each by now.
+      final linkDao = h.server.sessionLinks;
       final worktrees = <String>{};
       for (final result in launched.started) {
         final id = result.session.id;
@@ -397,7 +398,7 @@ void main() {
             path: r'C:\src\demo\api',
           ),
           excluding: '',
-          among: SessionDao(h.db).getAll(),
+          among: h.server.sessionRows.getAll(),
           pathsMatch: samePath,
         ),
         isEmpty,

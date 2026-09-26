@@ -9,8 +9,8 @@ import 'package:karmashala_notifications/evidence.dart';
 import 'package:karmashala_notifications/attention.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import 'package:agent_cli/stream.dart';
+import 'session_engine_provider.dart';
 import 'session_launcher.dart';
-import 'session_providers.dart';
 import 'session_status_providers.dart';
 
 /// **Block until a session settles**, so one agent can hand work to another and
@@ -73,7 +73,18 @@ class SessionWaitService {
   }) async {
     final completer = Completer<SessionWaitOutcome>();
     final launcher = _ref.read(sessionLauncherProvider);
-    final baselineTurns = _turns(sessionId);
+    // Turns taken while waiting: the event log only grows turns through a
+    // run the engine holds, so they are counted as it hands them on.
+    var turns = 0;
+    final taken = _ref
+        .read(sessionEngineProvider)
+        .watch(sessionId)
+        ?.listen((event) {
+          if (event.type == SessionEventTypes.userMessage ||
+              event.type == SessionEventTypes.agentMessage) {
+            turns++;
+          }
+        });
     AgentStatusReport? opening;
     var changed = false;
     var transcriptMoved = false;
@@ -99,7 +110,7 @@ class SessionWaitService {
           transcriptMoved = true;
         }
       }
-      if (_turns(sessionId) > baselineTurns) {
+      if (turns > 0) {
         changed = true;
         transcriptMoved = true;
       }
@@ -180,6 +191,7 @@ class SessionWaitService {
       return await completer.future;
     } finally {
       await statuses.cancel();
+      await taken?.cancel();
       exits.close();
     }
   }
@@ -240,16 +252,6 @@ class SessionWaitService {
     if (moved) return true;
     return report?.sourceModifiedAt == null ? null : false;
   }
-
-  int _turns(String sessionId) => _ref
-      .read(sessionEventDaoProvider)
-      .listForSession(sessionId)
-      .where(
-        (event) =>
-            event.type == SessionEventTypes.userMessage ||
-            event.type == SessionEventTypes.agentMessage,
-      )
-      .length;
 
   static bool _advanced(DateTime? before, DateTime? after) =>
       after != null && (before == null || after.isAfter(before));

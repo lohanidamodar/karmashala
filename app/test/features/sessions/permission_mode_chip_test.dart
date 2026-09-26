@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -67,7 +66,7 @@ Future<({AppDatabase db, ProviderScope app})> harness({
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
-  SessionDao(db).insert(
+  mirroredServer(db).sessionRows.insert(
     Session(
       id: 's1',
       repositoryId: repository().id,
@@ -148,7 +147,7 @@ String startAgent(WidgetTester tester, AppDatabase db) {
           title: 'Session',
         ),
       );
-  SessionDao(db).updatePaneId('s1', opened.paneId);
+  mirroredServer(db).sessionRows.updatePaneId('s1', opened.paneId);
   return opened.paneId;
 }
 
@@ -358,7 +357,7 @@ void main() {
     await tester.pump(kPermissionCycleSettle * 2);
     await tester.pumpAndSettle();
 
-    expect(SessionDao(h.db).getById('s1')!.permissionMode, _acceptEdits);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _acceptEdits);
     // Never claims the running agent changed: it was started with the old
     // flags and no CLI here can be re-governed mid-session.
     expect(find.textContaining('applies'), findsOneWidget);
@@ -447,7 +446,7 @@ void main() {
     // Clearing the row is the only way back: without it the first pick would
     // be irreversible, and "follow the default" would be a state the user
     // could leave but never re-enter.
-    expect(SessionDao(h.db).getById('s1')!.permissionMode, isNull);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, isNull);
     expect(find.text('Ask'), findsOneWidget);
     expect(find.text('· default'), findsOneWidget);
   });
@@ -479,8 +478,8 @@ void main() {
     // row first and offering to undo would be a weaker promise: the mode would
     // already be recorded, and any other surface resuming this session would
     // honour it.
-    expect(SessionDao(h.db).getById('s1')!.permissionMode, _ask);
-    expect(SessionDao(h.db).getById('s1')!.paneId, pane);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _ask);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.paneId, pane);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
     );
@@ -538,14 +537,14 @@ void main() {
     await tester.tap(find.text('Restart in $_bypassLabel'));
     await tester.pumpAndSettle();
 
-    expect(SessionDao(h.db).getById('s1')!.permissionMode, _bypass);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _bypass);
 
     // A second process, on the same conversation, carrying the flags the first
     // one could not be told about.
     final terminals = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
     ).read(terminalSessionsControllerProvider.notifier);
-    final restarted = SessionDao(h.db).getById('s1')!.paneId!;
+    final restarted = mirroredServer(h.db).sessionRows.getById('s1')!.paneId!;
     expect(restarted, isNot(pane));
     expect(terminals.instanceFor(pane), isNull);
     final arguments = terminals.instanceFor(restarted)!.agentLaunch!.arguments;
@@ -580,7 +579,7 @@ void main() {
     // Nothing was ended. Accept-edits is not dangerous, so it earns no dialog
     // — but a mode change must not silently kill an agent either, so the
     // restart is an offer.
-    expect(SessionDao(h.db).getById('s1')!.paneId, pane);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.paneId, pane);
     expect(find.text('Restart to apply'), findsOneWidget);
     // And the offer is honest before it is taken: it is one tap with no dialog
     // behind it, so both costs are in the message itself.
@@ -618,7 +617,7 @@ void main() {
     final terminals = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
     ).read(terminalSessionsControllerProvider.notifier);
-    final restarted = SessionDao(h.db).getById('s1')!.paneId!;
+    final restarted = mirroredServer(h.db).sessionRows.getById('s1')!.paneId!;
     expect(restarted, isNot(pane));
     expect(terminals.instanceFor(pane), isNull);
     expect(
@@ -680,14 +679,14 @@ void main() {
     // Asked of the instance, not of the row: the row goes on naming a pane
     // long after that pane has been disposed, so a paneId check alone would
     // pass for a refusal that killed the agent on its way out.
-    expect(SessionDao(h.db).getById('s1')!.paneId, pane);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.paneId, pane);
     expect(
       ProviderScope.containerOf(
         tester.element(find.byType(PermissionModeChip)),
       ).read(terminalSessionsControllerProvider.notifier).instanceFor(pane),
       isNotNull,
     );
-    expect(SessionDao(h.db).getById('s1')!.permissionMode, _acceptEdits);
+    expect(mirroredServer(h.db).sessionRows.getById('s1')!.permissionMode, _acceptEdits);
     expect(find.textContaining('new conversation'), findsOneWidget);
     expect(find.textContaining('is saved'), findsOneWidget);
   });

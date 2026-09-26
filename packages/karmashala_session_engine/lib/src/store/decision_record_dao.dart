@@ -52,6 +52,13 @@ class DecisionRecordDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// Every decision ever recorded, each session's oldest first — a client's
+  /// snapshot.
+  List<DecisionRecord> all() => _db
+      .query('SELECT * FROM session_decisions ORDER BY session_id, sequence;')
+      .map(_fromRow)
+      .toList();
+
   /// How many decisions [sessionId] has recorded.
   int countForSession(String sessionId) {
     final rows = _db.query(

@@ -132,7 +132,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
       return null;
     }
     final session = ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .getById(hostSessionId.substring(prefix.length));
     return session?.title;
   }

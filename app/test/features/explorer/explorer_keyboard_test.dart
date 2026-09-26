@@ -21,7 +21,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_project_r
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -94,7 +93,7 @@ void main() {
     );
     AgentInstallationDao(db).insert(agentInstallation());
     for (final (i, title) in ['Fix login', 'Add tests'].indexed) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r1',

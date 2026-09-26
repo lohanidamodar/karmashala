@@ -79,7 +79,7 @@ void main() {
       // Protocol 8: a standalone server administered from its own machine
       // (serverCall, serverResult) and `pair` carrying a label. Protocol 9: a
       // forwarded `session.start` may ask for a worktree of its own.
-      expect(kProtocolVersion, 12);
+      expect(kProtocolVersion, 13);
     });
   });
 

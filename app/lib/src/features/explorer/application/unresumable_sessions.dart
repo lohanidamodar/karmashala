@@ -175,7 +175,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
         'nothing may be started over it. Check again first.',
       );
     }
-    final row = ref.read(sessionDaoProvider).getById(sessionId);
+    final row = ref.read(sessionsDataProvider).getById(sessionId);
     if (row == null) {
       throw StateError('That session is no longer in the workspace.');
     }
@@ -242,7 +242,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
     };
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final out = <_Candidate>[];
-    for (final session in ref.read(sessionDaoProvider).getAll()) {
+    for (final session in ref.read(sessionsDataProvider).getAll()) {
       final installation = installations[session.agentInstallationId];
       if (installation == null) continue;
       final descriptor = registry.byId(installation.agentId);

@@ -69,7 +69,7 @@ final directoryResumePlannerProvider = Provider<DirectoryResumePlanner>((ref) {
       conversationId: session.externalSessionId,
       lastConversationForDirectory: latest,
       conversationIdsHeldByOtherSessions: ref
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .heldExternalSessionIds(excludingSessionId: session.id),
     );
   };

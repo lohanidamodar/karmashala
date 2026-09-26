@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/session_providers.dart';
@@ -162,8 +161,8 @@ class SessionSelectionController extends Notifier<SessionSelection> {
         (id) => ref.read(workspaceDataProvider).project(id) != null,
       _ =>
         (id) =>
-            ref.read(sessionDaoProvider).getById(id) != null ||
-            ref.read(importedSessionDaoProvider).getById(id) != null,
+            ref.read(sessionsDataProvider).getById(id) != null ||
+            ref.read(importedSessionsProvider).getById(id) != null,
     };
     final kept = {
       for (final id in state.ids)

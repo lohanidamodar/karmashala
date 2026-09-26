@@ -33,7 +33,7 @@ class SessionChangedFilesService {
 
   Future<SessionChangedFilesReport> read(String sessionId) async {
     final now = _ref.read(clockProvider).nowUtc();
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) {
       return SessionChangedFilesReport(
         outcome: SessionChangedFilesOutcome.unknownSession,

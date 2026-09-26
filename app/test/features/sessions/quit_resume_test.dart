@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/quit_resume.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
@@ -59,7 +58,7 @@ void main() {
   );
 
   void seed(String id, String title, {SessionStatus? status}) =>
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(
           id: id,
           title: title,
@@ -178,7 +177,7 @@ void main() {
 
     test('an archived one is left archived', () {
       seed('s1', 'Archived');
-      SessionDao(db).markArchived('s1', testTime);
+      mirroredServer(db).sessionRows.markArchived('s1', testTime);
       service().remember(['s1']);
 
       expect(
@@ -199,7 +198,7 @@ void main() {
     });
 
     test('one with no conversation recorded cannot be resumed', () {
-      SessionDao(db).insert(session(id: 's1', title: 'Never named one'));
+      mirroredServer(db).sessionRows.insert(session(id: 's1', title: 'Never named one'));
       service().remember(['s1']);
 
       expect(

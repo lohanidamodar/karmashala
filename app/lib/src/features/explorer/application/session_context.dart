@@ -74,7 +74,7 @@ String? sessionInTab(Ref ref, TerminalTab? tab) {
   // The indexed query returns only sessions belonging to this tab. The focused
   // pane still wins; the oldest sibling is the deterministic fallback.
   String? fallback;
-  for (final record in ref.read(sessionDaoProvider).getByPaneIds(siblings)) {
+  for (final record in ref.read(sessionsDataProvider).getByPaneIds(siblings)) {
     final paneId = record.paneId;
     if (paneId == null) continue;
     if (paneId == tab.focusedPaneId) return record.id;
@@ -95,7 +95,7 @@ final focusedSessionIdProvider = Provider<String?>(
 /// The repository whose checkout contains [sessionId]'s work, absent a pick.
 /// The rule itself is [inferredCheckoutFor], which the picker and tree share.
 Repository? repositoryForSession(Ref ref, String sessionId) {
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  final session = ref.read(sessionsDataProvider).getById(sessionId);
   if (session == null) return null;
   return inferredCheckoutFor(ref, session);
 }

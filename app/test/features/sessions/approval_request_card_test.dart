@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
@@ -43,7 +42,7 @@ Future<({AppDatabase db, Widget app, ProviderContainer container})> harness({
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
   AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
-  final dao = SessionDao(db)
+  final dao = mirroredServer(db).sessionRows
     ..insert(
       Session(
         id: 's1',

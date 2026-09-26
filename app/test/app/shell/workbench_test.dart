@@ -24,7 +24,6 @@ import 'package:karmashala/src/features/sessions/application/session_handoff_ser
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
@@ -69,7 +68,7 @@ const minimumWindowHugestText = WindowCell(
 /// family: what it answers changes with every row the agent draws.
 final paneTailProvider = Provider<List<String> Function(String)>(
   (ref) => (sessionId) {
-    final row = ref.read(sessionDaoProvider).getById(sessionId);
+    final row = ref.read(sessionsDataProvider).getById(sessionId);
     if (row == null) return const [];
     return sessionTerminalTail(ref, row, agentId: AgentIds.claudeCode);
   },
@@ -254,7 +253,7 @@ void main() {
         .layout
         .panes
         .single;
-    final dao = SessionDao(db);
+    final dao = server.sessionRows;
     dao.insert(
       session(
         id: id,
@@ -351,7 +350,7 @@ void main() {
     // conversation, which is how a tap could open the chat interface; the
     // terminal surface now says what is true instead of showing a tab that
     // belongs to some other session.
-    SessionDao(db).insert(session(title: 'Read the report'));
+    server.sessionRows.insert(session(title: 'Read the report'));
     await pump(tester);
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await tester.pumpAndSettle();
@@ -524,9 +523,9 @@ void main() {
       container
           .read(terminalSessionsControllerProvider.notifier)
           .openTab(TerminalProfile.powerShell);
-      SessionDao(
-        db,
-      ).insert(session(id: 's3', title: 'Audit and improve Karmashala app'));
+      server.sessionRows.insert(
+        session(id: 's3', title: 'Audit and improve Karmashala app'),
+      );
       container.read(selectedSessionIdProvider.notifier).select('s3');
       return paneId;
     }
@@ -1314,7 +1313,7 @@ void main() {
     // ...and back: moving to a session in the other checkout does move it.
     container
         .read(terminalSessionsControllerProvider.notifier)
-        .focusPane(container.read(sessionDaoProvider).getById('s1')!.paneId!);
+        .focusPane(container.read(sessionsDataProvider).getById('s1')!.paneId!);
     await tester.pumpAndSettle();
     expect(container.read(selectedRepositoryIdProvider), 'r1');
   });
@@ -1353,7 +1352,7 @@ void main() {
     // deliberately without the launcher's own `terminalVisible = true`: the
     // workbench must follow the session's state, not depend on another feature
     // poking its surface at the right moment.
-    SessionDao(db).insert(session(title: 'Read the report'));
+    server.sessionRows.insert(session(title: 'Read the report'));
     await pump(tester);
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await tester.pumpAndSettle();
@@ -1373,7 +1372,7 @@ void main() {
         .layout
         .panes
         .single;
-    SessionDao(db).updatePaneId('s1', paneId);
+    server.sessionRows.updatePaneId('s1', paneId);
     container.read(sessionsRevisionProvider.notifier).bump();
     // One frame, not a settle: the correction has to have happened before
     // anything was painted, or the conversation is still a surface the user saw
@@ -1541,7 +1540,7 @@ void main() {
     // fix being "always show the terminal" — a paneless session had to reach
     // its conversation. It reaches the terminal's own empty state instead, and
     // never the chat surface, on the first frame or any after it.
-    SessionDao(db).insert(session(title: 'Read the report'));
+    server.sessionRows.insert(session(title: 'Read the report'));
     container.read(selectedSessionIdProvider.notifier).select('s1');
 
     await pumpOneFrame(tester);

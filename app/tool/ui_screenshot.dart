@@ -24,13 +24,11 @@ import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/editor/application/editor_tab_actions.dart';
 import 'package:karmashala/src/features/editor/application/open_documents.dart';
@@ -50,7 +48,9 @@ import 'package:path/path.dart' as p;
 import '../test/features/terminal/fake_instance.dart';
 import '../test/support/fake_command_runner.dart';
 import '../test/support/fakes.dart';
+import '../test/support/fake_data_server.dart';
 import '../test/support/fixtures.dart';
+import '../test/support/workspace_mirror.dart';
 
 const _outDir = 'build/ui-screenshots';
 
@@ -263,22 +263,24 @@ void main() {
 
   setUpAll(() => _loadFonts(fontDir));
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db)
+    // The workspace and the sessions are the server's: seeded at a fake one.
+    final server = FakeDataServer()..mirrorInto(db);
+    server.projectRows
       ..insert(
         project(id: 'p1', name: 'karmashala', path: r'C:\src\karmashala'),
       )
       ..insert(
         project(id: 'p2', name: 'meronepali', path: r'C:\src\meronepali'),
       );
-    RepositoryDao(db)
+    server.repositoryRows
       ..insert(repository(id: 'r1', projectId: 'p1', name: 'karmashala-app'))
       ..insert(repository(id: 'r2', projectId: 'p1', name: 'mcp_bridge'))
       ..insert(repository(id: 'r3', projectId: 'p2', name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db)
+    server.sessionRows
       ..insert(
         session(
           id: 's1',
@@ -297,6 +299,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        await server.override(),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         documentStoreProvider.overrideWithValue(const _SampleStore()),
         repositoryChangesProvider.overrideWith((ref) async => _changedFiles),

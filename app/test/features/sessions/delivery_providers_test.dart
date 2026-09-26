@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -178,7 +177,7 @@ void main() {
   }
 
   void addSession(String id, {EnvironmentPath? at = worktree}) =>
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -524,7 +523,7 @@ void main() {
   test('an archived session reports archived, offers no prompts, and asks '
       'git nothing — its directory is gone', () async {
     addSession('s1');
-    SessionDao(db).markArchived('s1', testTime);
+    mirroredServer(db).sessionRows.markArchived('s1', testTime);
 
     final container = harness();
     final delivery = await container.read(sessionDeliveryProvider('s1').future);

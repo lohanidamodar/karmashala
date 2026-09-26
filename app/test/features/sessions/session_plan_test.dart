@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_plan_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:agent_cli/stream.dart';
@@ -200,7 +199,7 @@ void main() {
       server.projectRows.insert(project());
       server.repositoryRows.insert(repository());
       AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 's1',
           repositoryId: 'r1',
@@ -367,7 +366,7 @@ void main() {
         onTranscriptSubscribed: () => subscribed++,
       );
       // A full frame's worth of other work, with the panel closed.
-      container.read(sessionDaoProvider).getById('s1');
+      container.read(sessionsDataProvider).getById('s1');
       expect(subscribed, 0);
     });
 

@@ -7,20 +7,24 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
+import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 
+/// The checkouts a session spans, as the app reads and changes them. The
+/// rules — primary first, one project only, the primary never taken off, the
+/// links going with their session — are the server's
+/// (server/test/data/sessions_handler_test.dart); these are what the app
+/// shows and sends.
 void main() {
   late AppDatabase db;
-  late SessionRepositoryDao linkDao;
   late SessionRepositoriesService service;
   late FakeDataServer server;
 
@@ -36,50 +40,41 @@ void main() {
       ..insert(repository(id: 'r2', projectId: 'p1', name: 'api'))
       ..insert(repository(id: 'rX', projectId: 'p2', name: 'other'));
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(repositoryId: 'r1'));
-    linkDao = SessionRepositoryDao(db);
-    linkDao.link('s1', 'r1', role: SessionRepositoryRole.primary);
+    // The row and its primary checkout, as the server records a new session.
+    server.sessionRows.insert(session(repositoryId: 'r1'));
+    final client = await server.connect();
     service = SessionRepositoriesService(
-      sessionDao: SessionDao(db),
-      workspace: await workspaceOf(server),
-      linkDao: linkDao,
+      sessions: SessionsData(client),
+      workspace: WorkspaceData(client),
     );
   });
   tearDown(() => db.close());
 
-  test('links list the primary first', () {
-    linkDao.link('s1', 'r2');
-    final links = linkDao.linksFor('s1');
-    expect(links.first.isPrimary, isTrue);
-    expect(links.map((l) => l.repositoryId), ['r1', 'r2']);
-  });
-
-  test('attach adds a repository from the same project', () {
-    service.attach('s1', 'r2');
+  test('attach adds a repository from the same project', () async {
+    await service.attach('s1', 'r2');
     expect(service.forSession('s1').map((r) => r.name), ['app', 'api']);
   });
 
-  test('attach rejects a repository from a different project', () {
-    expect(
-      () => service.attach('s1', 'rX'),
+  test('attach rejects a repository from a different project', () async {
+    await expectLater(
+      service.attach('s1', 'rX'),
       throwsA(isA<SessionRepositoryException>()),
     );
     expect(service.forSession('s1').length, 1);
   });
 
-  test('detach removes an additional repository but not the primary', () {
-    service.attach('s1', 'r2');
-    service.detach('s1', 'r2');
+  test('detach removes an additional repository but not the primary', () async {
+    await service.attach('s1', 'r2');
+    await service.detach('s1', 'r2');
     expect(service.forSession('s1').map((r) => r.id), ['r1']);
 
-    service.detach('s1', 'r1'); // primary is protected
+    await service.detach('s1', 'r1'); // primary is protected
     expect(service.forSession('s1').map((r) => r.id), ['r1']);
   });
 
-  test('deleting the session cascades its repository links', () {
-    service.attach('s1', 'r2');
-    SessionDao(db).delete('s1');
-    expect(linkDao.linksFor('s1'), isEmpty);
+  test('a session deleted elsewhere takes its checkouts off the list', () {
+    server.sessionRows.delete('s1');
+    expect(service.forSession('s1'), isEmpty);
   });
 
   group('the Add repo menu', () {
@@ -128,6 +123,10 @@ void main() {
       await tester.tap(find.text('api'));
       await tester.pumpAndSettle();
 
+      expect(
+        [for (final l in server.sessionLinks.linksFor('s1')) l.repositoryId],
+        ['r1', 'r2'],
+      );
       expect(service.forSession('s1').map((r) => r.id), ['r1', 'r2']);
     });
   });

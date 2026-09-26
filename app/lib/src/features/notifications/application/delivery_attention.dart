@@ -42,7 +42,7 @@ class DeliveryAttentionController
   /// The session in the terms the inbox talks about. Built here, not through
   /// `WatchedSessionLoader`, which would drop a session with no CLI id.
   WatchedSession? _watchedSession(String sessionId) {
-    final session = ref.read(sessionDaoProvider).getById(sessionId);
+    final session = ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final agentId = ref
         .read(agentInstallationDaoProvider)

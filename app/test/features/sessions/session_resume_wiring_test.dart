@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -152,7 +151,7 @@ Future<String> startLive(
       );
   if (externalId != null) {
     h.container
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .updateExternalSessionId(launched.session.id, externalId);
   }
   return launched.session.id;
@@ -227,7 +226,10 @@ void main() {
         // Instant, keeps the scrollback, cannot fail — better than a second
         // process even where a second process is allowed.
         expect(resumed, liveId);
-        expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+        expect(
+          h.container.read(sessionsDataProvider).getByRepository('r1'),
+          hasLength(1),
+        );
       });
     }
   });
@@ -301,7 +303,13 @@ void main() {
       addTearDown(h.container.dispose);
 
       final liveId = await startLive(h, _exclusive, externalId: null);
-      expect(SessionDao(h.db).getById(liveId)!.externalSessionId, isNull);
+      expect(
+        h.container
+            .read(sessionsDataProvider)
+            .getById(liveId)!
+            .externalSessionId,
+        isNull,
+      );
 
       await expectLater(
         h.container
@@ -320,7 +328,9 @@ void main() {
       final liveId = await startLive(h, _exclusive);
       h.container
           .read(terminalSessionsControllerProvider.notifier)
-          .endSession(SessionDao(h.db).getById(liveId)!.paneId!);
+          .endSession(
+            h.container.read(sessionsDataProvider).getById(liveId)!.paneId!,
+          );
 
       await h.container
           .read(sessionActionsProvider)
@@ -349,7 +359,10 @@ void main() {
           );
 
       // Two of our rows on one conversation, which is what the agent allows.
-      expect(SessionDao(h.db).getByRepository('r1'), hasLength(2));
+      expect(
+        h.container.read(sessionsDataProvider).getByRepository('r1'),
+        hasLength(2),
+      );
       expect(second.session.externalSessionId, 'ext-1');
       final launch = h.container
           .read(terminalSessionsControllerProvider.notifier)
@@ -378,7 +391,10 @@ void main() {
             ),
         throwsA(isA<SessionAlreadyRunning>()),
       );
-      expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+      expect(
+        h.container.read(sessionsDataProvider).getByRepository('r1'),
+        hasLength(1),
+      );
     });
 
     test('does not stand in the way of an unrelated conversation', () async {
@@ -411,7 +427,7 @@ void main() {
 
     /// An adopted row: the CLI's id, a recorded directory, and no pane.
     void adopted(Harness h) {
-      SessionDao(h.db).insert(
+      h.server.sessionRows.insert(
         session(
           id: 'adopted-1',
           title: 'Adopted',
@@ -468,7 +484,10 @@ void main() {
         expect(h.terminals.directories.single, repository().path.path);
         // And the row still remembers where it ran: the folder may come back.
         expect(
-          SessionDao(h.db).getById('adopted-1')!.workingDirectory,
+          h.container
+              .read(sessionsDataProvider)
+              .getById('adopted-1')!
+              .workingDirectory,
           elsewhere,
         );
       },
@@ -538,7 +557,7 @@ void main() {
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       broken(h);
-      SessionDao(h.db).insert(
+      h.server.sessionRows.insert(
         session(
           id: 'n2',
           repositoryId: 'r2',

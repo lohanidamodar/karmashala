@@ -18,7 +18,7 @@ SessionChatView screenSessionChatView(Ref ref, String sessionId) {
     ChatViewEvidence.noSessionRecord,
     prior: false,
   );
-  final row = ref.read(sessionDaoProvider).getById(sessionId);
+  final row = ref.read(sessionsDataProvider).getById(sessionId);
   if (row == null) return nothingToRead;
   final agentId = ref
       .read(agentInstallationDaoProvider)
@@ -87,7 +87,7 @@ final sessionChatViewProbeProvider = FutureProvider.autoDispose
     .family<SessionChatView, String>((ref, sessionId) async {
       final screen = screenSessionChatView(ref, sessionId);
       if (screen.isMeasured || screen.prior) return screen;
-      final row = ref.read(sessionDaoProvider).getById(sessionId)!;
+      final row = ref.read(sessionsDataProvider).getById(sessionId)!;
       final agentId = ref
           .read(agentInstallationDaoProvider)
           .getById(row.agentInstallationId)!

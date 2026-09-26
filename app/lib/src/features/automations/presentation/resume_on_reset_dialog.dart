@@ -81,7 +81,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
     var message = settings.resumeMessage;
     if (_single) {
       final session = ref
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .getById(widget.sessionIds.single);
       final agentId = session == null
           ? null
@@ -124,7 +124,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
   Widget _buildSingle(BuildContext context) {
     final theme = Theme.of(context);
     final sessionId = widget.sessionIds.single;
-    final session = ref.watch(sessionDaoProvider).getById(sessionId);
+    final session = ref.watch(sessionsDataProvider).getById(sessionId);
     final existing = ref.watch(sessionResumeBadgeProvider(sessionId));
     if (session == null) {
       return AlertDialog(
@@ -371,7 +371,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
     final controller = ref.watch(scheduledResumeControllerProvider);
     final sessions = [
       for (final id in widget.sessionIds)
-        ?ref.watch(sessionDaoProvider).getById(id),
+        ?ref.watch(sessionsDataProvider).getById(id),
     ];
     final refused = <String>[
       for (final session in sessions)

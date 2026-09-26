@@ -13,7 +13,6 @@ import 'package:karmashala_automations/scheduler.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/store.dart';
@@ -33,6 +32,8 @@ import 'first_run_prompt_watch.dart';
 import 'hosted_agent_launcher.dart';
 import 'hosted_check_runner.dart';
 import 'session_mcp_access.dart';
+import 'package:karmashala_session_engine/store.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 /// Automations and checks in the daemon: the one scheduler, the runs it
 /// starts in sessions it owns, their verdicts when those sessions end, and
@@ -45,6 +46,7 @@ class DaemonAutomations implements AutomationHandler {
     required String dataDirectory,
     required SessionMcpAccessPoint mcp,
     required void Function() announce,
+    void Function(String sessionId)? sessionWritten,
     DateTime Function()? clock,
     String Function()? newId,
     AutomationTimer? timer,
@@ -114,6 +116,7 @@ class DaemonAutomations implements AutomationHandler {
         now: now,
         newId: ids,
         hostEnvironment: hostEnvironment,
+        onRowWritten: sessionWritten,
         onLaunched: (sessionId, agentId, directory) => firstRunPrompts.follow(
           sessionId: sessionId,
           agentId: agentId,

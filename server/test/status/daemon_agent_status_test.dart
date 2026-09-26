@@ -15,10 +15,10 @@ import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:test/test.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 class _Clock implements Clock {
   _Clock(this.now);

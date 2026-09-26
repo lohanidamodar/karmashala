@@ -95,7 +95,7 @@ final tokenTotalsProvider = FutureProvider.autoDispose<TokenTotals>((
 ) async {
   final now = ref.read(clockProvider).nowUtc();
   final since = now.subtract(kTokenTotalsPeriod);
-  final sessions = ref.read(sessionDaoProvider).getAll()
+  final sessions = ref.read(sessionsDataProvider).getAll()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   final stats = ref.read(sessionStatsServiceProvider);
   final workspace = ref.read(workspaceDataProvider);

@@ -69,7 +69,7 @@ class _AutomationDryRunDialogState
     // answered as it now stands.
     ref.watch(automationsRevisionProvider);
     final sessions = ref
-        .watch(sessionDaoProvider)
+        .watch(sessionsDataProvider)
         .getByRepository(widget.automation.repositoryId)
         .where((session) => !session.isArchived)
         .toList();

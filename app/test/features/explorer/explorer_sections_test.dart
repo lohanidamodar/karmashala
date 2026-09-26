@@ -17,7 +17,6 @@ import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter/material.dart';
@@ -62,12 +61,12 @@ void main() {
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < failed; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(id: 'f$i', title: 'Failed $i', status: SessionStatus.failed),
       );
     }
     for (var i = 0; i < running; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(id: 'r$i', title: 'Running $i', status: SessionStatus.running),
       );
     }

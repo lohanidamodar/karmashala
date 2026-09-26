@@ -2,11 +2,17 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:agent_cli/read.dart';
+import 'package:karmashala_session/events.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/transcript.dart';
 
 import 'refusal.dart';
+import 'session_values.dart';
 import 'workspace_values.dart';
 
 part 'requests/subscription_requests.dart';
+part 'requests/sessions_requests.dart';
 part 'requests/notes_requests.dart';
 part 'requests/todos_requests.dart';
 part 'requests/preferences_requests.dart';
@@ -101,6 +107,56 @@ sealed class DataRequest<R> {
       ),
       SectionsReorder.name => SectionsReorder(args.strings('ids')),
       SectionDelete.name => SectionDelete(args.string('id')),
+      SessionsList.name => const SessionsList(),
+      SessionCreate.name => SessionCreate(
+        args.value('session', Session.fromJson),
+        repositories: args.strings('repositories', orEmpty: true),
+      ),
+      SessionEdit.name => SessionEdit(
+        args.string('id'),
+        args.value('patch', SessionPatch.fromJson),
+      ),
+      SessionDelete.name => SessionDelete(args.string('id')),
+      SessionLinkAdd.name => SessionLinkAdd(
+        sessionId: args.string('sessionId'),
+        repositoryId: args.string('repositoryId'),
+      ),
+      SessionLinkRemove.name => SessionLinkRemove(
+        sessionId: args.string('sessionId'),
+        repositoryId: args.string('repositoryId'),
+      ),
+      SessionEvents.name => SessionEvents(args.string('sessionId')),
+      SessionEventsLatest.name => SessionEventsLatest(args.strings('sessionIds')),
+      SessionEventsAppend.name => SessionEventsAppend(
+        args.objects('events', SessionEvent.fromJson),
+      ),
+      DecisionAppend.name => DecisionAppend(
+        args.value('decision', DecisionRecord.fromJson),
+      ),
+      RecapWrite.name => RecapWrite(args.value('recap', SessionRecap.fromJson)),
+      RecapDismiss.name => RecapDismiss(args.string('sessionId')),
+      RelayRecord.name => RelayRecord(
+        args.value('relay', SessionRelay.fromJson),
+      ),
+      RelaysTo.name => RelaysTo(args.string('to'), args.integer('limit')),
+      RelayCount.name => RelayCount(
+        fromSessionId: args.string('from'),
+        toSessionId: args.string('to'),
+        since: args.date('since'),
+      ),
+      FollowUpRaise.name => FollowUpRaise(
+        args.value('followUp', FollowUp.fromJson),
+      ),
+      FollowUpResolve.name => FollowUpResolve(
+        args.integer('id'),
+        FollowUpResolution.fromName(args.string('resolution'))!,
+      ),
+      ImportedAdd.name => ImportedAdd(args.value('session', importedFromJson)),
+      ImportedRename.name => ImportedRename(
+        id: args.string('id'),
+        title: args.string('title'),
+      ),
+      ImportedDelete.name => ImportedDelete(args.string('id')),
       _ => throw DataRefused.invalid('no data request is called "$kind"'),
     };
   }
@@ -181,12 +237,45 @@ final class _Arguments {
     throw DataRefused.invalid('$kind: "$key" must map ids to an id or null');
   }
 
-  List<String> strings(String key) {
-    final value = values[key];
+  List<String> strings(String key, {bool orEmpty = false}) {
+    final value = values[key] ?? (orEmpty ? const <String>[] : null);
     if (value is List && value.every((item) => item is String)) {
       return value.cast<String>();
     }
     throw DataRefused.invalid('$kind: "$key" must be a list of strings');
+  }
+
+  int integer(String key) {
+    final value = values[key];
+    if (value is int) return value;
+    throw DataRefused.invalid('$kind: "$key" must be a whole number');
+  }
+
+  DateTime date(String key) {
+    final value = values[key];
+    final parsed = value is String ? DateTime.tryParse(value) : null;
+    if (parsed != null) return parsed.toUtc();
+    throw DataRefused.invalid('$kind: "$key" must be a time');
+  }
+
+  /// Each object under [key] as [read] makes it, refusing the list whole for
+  /// one out of shape.
+  List<T> objects<T>(String key, T Function(Map<String, Object?> json) read) {
+    final value = values[key];
+    try {
+      if (value is List) {
+        return [
+          for (final item in value)
+            if (item is Map)
+              read(item.cast<String, Object?>())
+            else
+              throw const FormatException('not an object'),
+        ];
+      }
+    } on FormatException {
+      // Refused below.
+    }
+    throw DataRefused.invalid('$kind: "$key" must be a list of objects');
   }
 }
 

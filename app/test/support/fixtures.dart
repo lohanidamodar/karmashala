@@ -12,6 +12,8 @@ import 'package:karmashala/src/features/workspaces/application/workspaces_contro
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 
 import 'fake_data_server.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 
 /// Fixed timestamp used across tests for determinism.
 final testTime = DateTime.utc(2026, 1, 2, 3, 4, 5);
@@ -20,6 +22,15 @@ final testTime = DateTime.utc(2026, 1, 2, 3, 4, 5);
 /// container: a client of [server].
 Future<WorkspaceData> workspaceOf(FakeDataServer server) async =>
     WorkspaceData(await server.connect());
+
+/// The app's copy of the sessions, for a service built outside a container:
+/// a client of [server].
+Future<SessionsData> sessionsOf(FakeDataServer server) async =>
+    SessionsData(await server.connect());
+
+/// The fake server [container]'s data client talks to.
+FakeDataServer serverOf(ProviderContainer container) =>
+    FakeDataServer.of(container.read(dataClientProvider));
 
 /// A context made through [container]'s own controller, once the server has
 /// answered it.

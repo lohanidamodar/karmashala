@@ -2,6 +2,8 @@
 /// what was said. Written only by explicit acts, never inferred from prose.
 library;
 
+import 'record_json.dart';
+
 /// What sort of decision a row records. The five the gap analysis named, and no
 /// more: a free-text label would mean whatever the last writer wanted.
 enum DecisionKind {
@@ -143,6 +145,64 @@ class DecisionRecord {
     origin: origin,
     originId: originId,
     recordedAt: recordedAt,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': ?id,
+    'sessionId': sessionId,
+    'sequence': sequence,
+    'kind': kind.name,
+    'summary': summary,
+    'detail': ?detail,
+    'decidedBy': ?decidedBy,
+    'recordedBySessionId': ?recordedBySessionId,
+    'origin': origin.name,
+    'originId': ?originId,
+    'recordedAt': jsonDate(recordedAt),
+  };
+
+  static DecisionRecord fromJson(Map<String, Object?> json) => DecisionRecord(
+    id: jsonOptionalInt(json, 'id'),
+    sessionId: jsonString(json, 'sessionId'),
+    sequence: jsonOptionalInt(json, 'sequence') ?? 0,
+    kind: DecisionKind.fromName(jsonOptionalString(json, 'kind')),
+    summary: jsonString(json, 'summary'),
+    detail: jsonOptionalString(json, 'detail'),
+    decidedBy: jsonOptionalString(json, 'decidedBy'),
+    recordedBySessionId: jsonOptionalString(json, 'recordedBySessionId'),
+    origin: DecisionOrigin.fromName(jsonOptionalString(json, 'origin')),
+    originId: jsonOptionalString(json, 'originId'),
+    recordedAt: jsonDateOf(json, 'recordedAt'),
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is DecisionRecord &&
+      other.id == id &&
+      other.sessionId == sessionId &&
+      other.sequence == sequence &&
+      other.kind == kind &&
+      other.summary == summary &&
+      other.detail == detail &&
+      other.decidedBy == decidedBy &&
+      other.recordedBySessionId == recordedBySessionId &&
+      other.origin == origin &&
+      other.originId == originId &&
+      other.recordedAt == recordedAt;
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    sequence,
+    kind,
+    summary,
+    detail,
+    decidedBy,
+    recordedBySessionId,
+    origin,
+    originId,
+    recordedAt,
   );
 
   @override

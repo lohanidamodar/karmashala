@@ -36,8 +36,8 @@ CommandCatalog readCommandCatalog(
   final environments = read(executionEnvironmentDaoProvider).getAll();
   final installations = read(agentInstallationDaoProvider).getAll();
   final workspace = read(workspaceDataProvider);
-  final sessionDao = read(sessionDaoProvider);
-  final importedDao = read(importedSessionDaoProvider);
+  final sessionDao = read(sessionsDataProvider);
+  final importedDao = read(importedSessionsProvider);
   final lastActiveOf = read(sessionLastActiveProvider);
   final statusOf = read(sessionStatusLookupProvider);
   final launcher = read(sessionLauncherProvider);
@@ -263,8 +263,8 @@ List<ConversationMatch> _searchConversations(
       .read(sessionSearchServiceProvider)
       .search(query, limit: kCommandSuggestionLimit)
       .hits;
-  final sessionDao = container.read(sessionDaoProvider);
-  final importedDao = container.read(importedSessionDaoProvider);
+  final sessionDao = container.read(sessionsDataProvider);
+  final importedDao = container.read(importedSessionsProvider);
   return [
     for (final hit in hits)
       if (sessionDao.getByExternalSessionId(hit.sessionId)?.id ??

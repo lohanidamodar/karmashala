@@ -63,7 +63,7 @@ void recordCheckpointHints(
   final spec = container.read(agentRegistryProvider).byId(agentId)?.hooks;
   if (spec == null) return;
   final session = container
-      .read(sessionDaoProvider)
+      .read(sessionsDataProvider)
       .getByExternalSessionId(agentSessionId);
   if (session == null) return;
   final Object? payload;
@@ -126,7 +126,7 @@ Future<void> holdToolForCheckpoint(
 }) async {
   if (event != 'PreToolUse' || agentSessionId.isEmpty) return;
   final session = container
-      .read(sessionDaoProvider)
+      .read(sessionsDataProvider)
       .getByExternalSessionId(agentSessionId);
   if (session == null) return;
   final recorder = container.read(sessionCheckpointRecorderProvider.notifier);
@@ -151,7 +151,7 @@ void noteToolUnheld(
 }) {
   if (event != 'PreToolUse' || agentSessionId.isEmpty) return;
   final session = container
-      .read(sessionDaoProvider)
+      .read(sessionsDataProvider)
       .getByExternalSessionId(agentSessionId);
   if (session == null) return;
   container

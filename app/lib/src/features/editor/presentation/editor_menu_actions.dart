@@ -168,7 +168,7 @@ void sendSelectionToSession(BuildContext context, WidgetRef ref, String text) {
     return;
   }
   final title =
-      ref.read(sessionDaoProvider).getById(sessionId)?.title ?? 'the session';
+      ref.read(sessionsDataProvider).getById(sessionId)?.title ?? 'the session';
   final outcome = offerToSession(ref, sessionId: sessionId, text: text);
   ref.read(selectedSessionIdProvider.notifier).select(sessionId);
   _say(context, sessionOfferMessage(outcome, title));

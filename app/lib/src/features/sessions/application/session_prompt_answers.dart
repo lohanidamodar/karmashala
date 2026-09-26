@@ -17,6 +17,7 @@ import 'session_chat_source.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';
+import 'dart:async';
 
 /// **Every prompt answer the app gives, and where it is typed.** A session
 /// this machine's session host runs is answered by the host — it holds the
@@ -102,7 +103,7 @@ final transcriptOpenQuestionProvider =
             .transcriptPathForOpenId(sessionId);
         if (path == null) {
           final external = ref
-              .read(sessionDaoProvider)
+              .read(sessionsDataProvider)
               .getById(sessionId)
               ?.externalSessionId;
           if (external == null || external.isEmpty) return null;
@@ -142,11 +143,11 @@ class AppPromptTerminals implements PromptTerminals {
 
   @override
   bool exists(String sessionId) =>
-      _ref.read(sessionDaoProvider).getById(sessionId) != null;
+      _ref.read(sessionsDataProvider).getById(sessionId) != null;
 
   @override
   AgentDescriptor? agentOf(String sessionId) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     final agentId = _ref
         .read(agentInstallationDaoProvider)
@@ -183,7 +184,7 @@ class AppPromptTerminals implements PromptTerminals {
 
   @override
   void record(DecisionRecord decision) =>
-      _ref.read(decisionRecorderProvider).file(decision);
+      unawaited(_ref.read(decisionRecorderProvider).file(decision));
 }
 
 /// Answers over this app's own panes — the path for a pane no host holds.

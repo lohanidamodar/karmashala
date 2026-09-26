@@ -8,7 +8,6 @@ import '../../../core/util/clock_provider.dart';
 import '../shell_shortcuts.dart' show shellCommandLabel;
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
-import '../../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../../features/cli_detection/data/conversation_index_dao.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
 import '../../../features/automations/application/scheduled_resume_providers.dart';
@@ -162,7 +161,7 @@ class QuickOpenSources {
     final sessionId = ref.read(selectedSessionIdProvider);
     final native =
         sessionId != null &&
-        ref.read(sessionDaoProvider).getById(sessionId) != null;
+        ref.read(sessionsDataProvider).getById(sessionId) != null;
     final waiting = native
         ? ref.read(sessionResumeBadgeProvider(sessionId))
         : null;
@@ -584,8 +583,8 @@ class QuickOpenSources {
   /// Native and imported sessions, most recently active first. Only *free*
   /// whereabouts: a transcript stat per session would be a disk sweep.
   List<QuickOpenItem> _sessions() {
-    final sessionDao = ref.read(sessionDaoProvider);
-    final importedDao = ref.read(importedSessionDaoProvider);
+    final sessionDao = ref.read(sessionsDataProvider);
+    final importedDao = ref.read(importedSessionsProvider);
     final workspace = ref.read(workspaceDataProvider);
     final installations = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
@@ -720,7 +719,7 @@ class QuickOpenSources {
   Future<ExplorerResult> _open(String openId, {required bool imported}) {
     final actions = ref.read(explorerActionsProvider);
     if (!imported) return actions.openNative(openId);
-    final record = ref.read(importedSessionDaoProvider).getById(openId);
+    final record = ref.read(importedSessionsProvider).getById(openId);
     return record == null
         ? Future.value(const ExplorerResult(ExplorerOutcome.selected))
         : actions.openImported(record);
@@ -736,8 +735,8 @@ class QuickOpenSources {
     DateTime? now,
   }) {
     if (hits.isEmpty) return const [];
-    final sessionDao = ref.read(sessionDaoProvider);
-    final importedDao = ref.read(importedSessionDaoProvider);
+    final sessionDao = ref.read(sessionsDataProvider);
+    final importedDao = ref.read(importedSessionsProvider);
     final registry = ref.read(agentRegistryProvider);
     final at = now ?? DateTime.now().toUtc();
 
@@ -834,7 +833,7 @@ class QuickOpenSources {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final shell = ref.read(shellControllerProvider.notifier);
     final sessionPanes = {
-      for (final record in ref.read(sessionDaoProvider).getAll())
+      for (final record in ref.read(sessionsDataProvider).getAll())
         ?record.paneId,
     };
     return [

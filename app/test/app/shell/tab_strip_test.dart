@@ -18,7 +18,6 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter/material.dart';
@@ -419,7 +418,7 @@ void main() {
           .read(terminalSessionsControllerProvider)
           .tabs[12]
           .focusedPaneId;
-      SessionDao(db)
+      mirroredServer(db).sessionRows
         ..insert(session(id: 's1', title: 'Fix login redirect'))
         ..updatePaneId('s1', paneId);
       await pump(tester);
@@ -514,7 +513,7 @@ void main() {
           .tabs
           .first
           .focusedPaneId;
-      SessionDao(db)
+      mirroredServer(db).sessionRows
         ..insert(session(id: 's1', title: 'Read the report'))
         ..updatePaneId('s1', paneId);
       container.read(selectedSessionIdProvider.notifier).select('s1');

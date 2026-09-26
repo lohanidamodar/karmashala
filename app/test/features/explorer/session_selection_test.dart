@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
@@ -21,7 +20,6 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -70,7 +68,7 @@ void main() {
   tearDown(() => db.close());
 
   void addNative(String id, {required String title, int minutes = 0}) =>
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -84,7 +82,7 @@ void main() {
       );
 
   void addImported(String id, {required String title, int minutes = 0}) =>
-      ImportedSessionDao(db).insertIfAbsent(
+      mirroredServer(db).importedRows.insertIfAbsent(
         ImportedSession(
           id: id,
           repositoryId: 'r1',
@@ -378,8 +376,8 @@ void main() {
 
       // Deleted somewhere else entirely — another window, a project removal, a
       // sweep. The Explorer hears about it the only way it ever does.
-      SessionDao(db).delete('n1');
-      ImportedSessionDao(db).delete('i0');
+      mirroredServer(db).sessionRows.delete('n1');
+      mirroredServer(db).importedRows.delete('i0');
       container
           .read(sessionsRevisionProvider.notifier)
           .changed(const SessionChange.removed('n1'));
@@ -468,7 +466,7 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
 
-      expect(SessionDao(db).getById('n0'), isNotNull);
+      expect(mirroredServer(db).sessionRows.getById('n0'), isNotNull);
       expect(find.byType(SessionCard), findsNWidgets(2));
       expect(container.read(sessionSelectionProvider).ids, {'n0', 'i0'});
       expect(container.read(sessionSelectionProvider).active, isTrue);

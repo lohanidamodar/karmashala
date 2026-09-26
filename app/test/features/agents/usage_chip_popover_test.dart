@@ -19,6 +19,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'usage_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// The chip's hover card: meters with countdowns and pace, a sparkline where
 /// there is history, and the plain sentence kept for screen readers.
@@ -27,8 +28,11 @@ void main() {
   late MovableClock clock;
   late FakeAgentUsageService service;
 
-  setUp(() {
+  late Override data;
+
+  setUp(() async {
     db = seedUsageDatabase();
+    data = await mirroredServer(db).override();
     clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);
   });
@@ -36,6 +40,7 @@ void main() {
 
   List<Override> overrides() => [
     databaseProvider.overrideWithValue(db),
+    data,
     clockProvider.overrideWithValue(clock),
     agentUsageServiceProvider.overrideWithValue(service),
   ];

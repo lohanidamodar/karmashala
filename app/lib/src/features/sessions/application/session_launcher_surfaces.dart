@@ -94,7 +94,7 @@ extension SessionSurfaceStarters on SessionLauncher {
     final opened = resumedTab != null
         ? (tabId: resumedTab, paneId: dormant!)
         : slotted ?? terminals.openAgentTab(launch);
-    _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
+    _ref.read(sessionsDataProvider).updatePaneId(session.id, opened.paneId);
     _ref
         .read(terminalSessionsControllerProvider.notifier)
         .showTerminalForPane(opened.paneId);
@@ -200,7 +200,7 @@ extension SessionSurfaceStarters on SessionLauncher {
     // Launched into a window this app cannot see: `running` would be a claim
     // nothing observes. The agent's own hooks move the row from here.
     _ref
-        .read(sessionDaoProvider)
+        .read(sessionsDataProvider)
         .updateStatus(session.id, SessionStatus.unknown);
     return SessionLaunchResult(
       session: session.copyWith(status: SessionStatus.unknown),
@@ -256,7 +256,7 @@ extension SessionSurfaceStarters on SessionLauncher {
         // The sweep, and the only one: this directory grows on a handoff and on
         // nothing else, so a handoff is the occasion to retire what is stale.
         liveSessionIds: {
-          for (final row in _ref.read(sessionDaoProvider).getAll())
+          for (final row in _ref.read(sessionsDataProvider).getAll())
             if (row.status == SessionStatus.running) row.id,
         },
       );

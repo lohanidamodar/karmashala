@@ -163,7 +163,7 @@ SessionActivity sessionActivityOf({
 final sessionOutstandingCallsProvider = Provider.autoDispose
     .family<SessionActivity, String>((ref, sessionId) {
       ref.watchSessionKinds(const {SessionChangeKind.status});
-      final row = ref.read(sessionDaoProvider).getById(sessionId);
+      final row = ref.read(sessionsDataProvider).getById(sessionId);
       if (row == null) return SessionActivity.none;
 
       // The one word the rule turns on: `AgentStatusReport` has no value

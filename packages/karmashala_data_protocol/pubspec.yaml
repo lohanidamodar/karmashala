@@ -27,6 +27,10 @@ dependencies:
     path: ../karmashala_git
   karmashala_projects:
     path: ../karmashala_projects
+  # The sessions domain's values its requests carry: a session and the
+  # change a client asks of it, its records, and the imported history.
+  karmashala_session:
+    path: ../karmashala_session
 
 dev_dependencies:
   lints: ^6.1.0

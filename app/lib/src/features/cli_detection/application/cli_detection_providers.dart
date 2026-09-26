@@ -23,7 +23,6 @@ import 'agent_store_server_providers.dart';
 import '../data/conversation_index_dao.dart';
 import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
-import '../data/imported_session_dao.dart';
 import 'directory_conversation_attribution_service.dart';
 import 'cli_detection_service.dart';
 import 'conversation_index_backfill.dart';
@@ -38,10 +37,6 @@ import 'session_title_sync_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
   (ref) => CliDetectionService(registry: ref.watch(agentRegistryProvider)),
-);
-
-final importedSessionDaoProvider = Provider<ImportedSessionDao>(
-  (ref) => ImportedSessionDao(ref.watch(databaseProvider)),
 );
 
 final conversationIndexDaoProvider = Provider<ConversationIndexDao>(
@@ -81,7 +76,7 @@ final conversationIndexBackfillProvider = Provider<ConversationIndexBackfill>(
 final projectImportServiceProvider = Provider<ProjectImportService>(
   (ref) => ProjectImportService(
     workspace: ref.watch(workspaceDataProvider),
-    importedSessionDao: ref.watch(importedSessionDaoProvider),
+    importedSessionDao: ref.watch(importedSessionsProvider),
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
   ),
@@ -98,8 +93,8 @@ final sessionAutoImportServiceProvider = Provider<SessionAutoImportService>(
     locator: ref.watch(cliStoreLocatorProvider),
     scan: ref.watch(storeScanRunnerProvider).scan,
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
-    importedSessionDao: ref.watch(importedSessionDaoProvider),
-    sessionDao: ref.watch(sessionDaoProvider),
+    importedSessionDao: ref.watch(importedSessionsProvider),
+    sessionDao: ref.watch(sessionsDataProvider),
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
   ),
@@ -118,12 +113,11 @@ final autoImportRunnerProvider = Provider<AutoImportRunner>(
 /// Cycled by `SessionStatusRegistry` and poked by `/agent-hook`; starts nothing.
 final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
   return SessionAdoptionService(
-    sessionDao: ref.watch(sessionDaoProvider),
-    importedSessionDao: ref.watch(importedSessionDaoProvider),
+    sessionDao: ref.watch(sessionsDataProvider),
+    importedSessionDao: ref.watch(importedSessionsProvider),
     workspace: ref.watch(workspaceDataProvider),
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
     installationDao: ref.watch(agentInstallationDaoProvider),
-    linkDao: ref.watch(sessionRepositoryDaoProvider),
     agents: ref.watch(agentRegistryProvider),
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
@@ -156,7 +150,7 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
 final directoryConversationAttributionServiceProvider =
     Provider<DirectoryConversationAttributionService>((ref) {
       return DirectoryConversationAttributionService(
-        sessionDao: ref.watch(sessionDaoProvider),
+        sessionDao: ref.watch(sessionsDataProvider),
         installationDao: ref.watch(agentInstallationDaoProvider),
         workspace: ref.watch(workspaceDataProvider),
         agents: ref.watch(agentRegistryProvider),
@@ -189,7 +183,7 @@ final directoryConversationAttributionServiceProvider =
 void followSupersededHistory(Ref ref, String sessionId, String conversationId) {
   final selected = ref.read(selectedImportedSessionIdProvider);
   if (selected == null) return;
-  final record = ref.read(importedSessionDaoProvider).getById(selected);
+  final record = ref.read(importedSessionsProvider).getById(selected);
   // Only the record this row just took over. Another conversation's history is
   // what the user asked to look at.
   if (record == null || record.externalId != conversationId) return;
@@ -202,7 +196,7 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((
   ref,
 ) {
   return SessionTitleSyncService(
-    sessionDao: ref.watch(sessionDaoProvider),
+    sessionDao: ref.watch(sessionsDataProvider),
     agents: ref.watch(agentRegistryProvider),
     scanStores: () => ref.read(cliStoreScanPassProvider).read(),
     isRunningInPane: (id) =>
@@ -219,7 +213,7 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((
       // The other moment the index is built on: a CLI writing a name is the
       // app's evidence that the transcript moved. One row read, on a rename.
       final conversation = ref
-          .read(sessionDaoProvider)
+          .read(sessionsDataProvider)
           .getById(sessionId)
           ?.externalSessionId;
       if (conversation != null) {
@@ -234,7 +228,7 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((
 final launchedSessionAttributionServiceProvider =
     Provider<LaunchedSessionAttributionService>((ref) {
       return LaunchedSessionAttributionService(
-        sessionDao: ref.watch(sessionDaoProvider),
+        sessionDao: ref.watch(sessionsDataProvider),
         installationDao: ref.watch(agentInstallationDaoProvider),
         workspace: ref.watch(workspaceDataProvider),
         environmentDao: ref.watch(executionEnvironmentDaoProvider),

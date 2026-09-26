@@ -44,7 +44,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
@@ -58,8 +57,6 @@ import 'package:karmashala/src/features/repositories/application/repository_disc
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
@@ -235,7 +232,7 @@ void main() {
       String repositoryId = 'r1',
       SessionSurface surface = SessionSurface.external,
       String? parentSessionId,
-    }) => SessionDao(db).insert(
+    }) => mirroredServer(db).sessionRows.insert(
       Session(
         id: id,
         repositoryId: repositoryId,
@@ -278,7 +275,7 @@ void main() {
       title: 'On another machine',
       repositoryId: 'r3',
     );
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imp1',
         repositoryId: 'r1',
@@ -294,7 +291,7 @@ void main() {
         updatedAt: DateTime.utc(2026, 8, 31, 8),
       ),
     );
-    ImportedSessionDao(db).insertIfAbsent(
+    mirroredServer(db).importedRows.insertIfAbsent(
       ImportedSession(
         id: 'imp2',
         repositoryId: 'r2',
@@ -312,7 +309,7 @@ void main() {
     );
 
     void append(String sessionId, String type, Map<String, Object?> data) =>
-        SessionEventDao(db).append(
+        mirroredServer(db).eventRows.append(
           SessionEvent(
             sessionId: sessionId,
             seq: 0,

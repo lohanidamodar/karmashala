@@ -86,6 +86,29 @@ class ImportedSessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// Every record, superseded or not — a client's snapshot, which hides the
+  /// superseded ones itself by the same rule (`visibleImported`).
+  List<ImportedSession> everything() => _db
+      .query('SELECT * FROM imported_sessions ORDER BY created_at, id;')
+      .map(_fromRow)
+      .toList();
+
+  /// Every record [repositoryIds] hold, superseded or not — what a deleted
+  /// project takes with it.
+  List<String> idsUnder(Iterable<String> repositoryIds) {
+    final ids = repositoryIds.toSet().toList();
+    if (ids.isEmpty) return const [];
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    return [
+      for (final row in _db.query(
+        'SELECT id FROM imported_sessions '
+        'WHERE repository_id IN ($placeholders);',
+        ids,
+      ))
+        row['id']! as String,
+    ];
+  }
+
   /// conversationId → its repository, for every record still showing as history.
   /// Two columns rather than a built [ImportedSession] per row.
   Map<String, String> repositoryIdsById() {

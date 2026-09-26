@@ -11,6 +11,7 @@ import 'package:karmashala_store/database.dart';
 import '../domain/host_session.dart';
 import '../domain/session_registry.dart';
 import '../protocol/messages.dart';
+import 'package:karmashala_session_engine/store.dart';
 
 /// How often the daemon reads the screens of the agents it holds. The app's
 /// registry cycled at the same pace: a status badge is what somebody is

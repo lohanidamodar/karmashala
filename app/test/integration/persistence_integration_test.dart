@@ -11,21 +11,27 @@ import '../support/fixtures.dart';
 import '../support/fake_data_server.dart';
 import '../support/workspace_mirror.dart';
 
-/// End-to-end persistence through the repository-layer providers: build the full
-/// Project → Repository → AgentInstallation → Session → SessionEvent graph and
-/// read it back, then verify cascade deletion.
+/// End-to-end persistence through the providers: the tables still in the
+/// app's store (environments, installations) and the domains read and written
+/// through the server (the workspace, sessions and their event log) build the
+/// full Project → Repository → AgentInstallation → Session → SessionEvent
+/// graph and read it back. The server's own cascades are tested at the server
+/// (server/test/data).
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
   late FakeDataServer server;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.memory();
-    // Sessions are still in the database; their foreign keys reach the
-    // workspace rows the server writes, so those are mirrored there.
+    // The installations' foreign keys reach the workspace rows the server
+    // writes, so those are mirrored there.
     server = FakeDataServer()..mirrorInto(db);
     container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        await server.override(),
+      ],
     );
   });
   tearDown(() {
@@ -37,44 +43,32 @@ void main() {
     final envDao = container.read(executionEnvironmentDaoProvider);
     envDao.upsert(windowsEnv());
     // A different provider sees the same write.
-    expect(container.read(sessionDaoProvider).getAll(), isEmpty);
-    expect(envDao.getById('windows'), isNotNull);
+    expect(
+      container.read(executionEnvironmentDaoProvider).getById('windows'),
+      isNotNull,
+    );
+    expect(container.read(sessionsDataProvider).getAll(), isEmpty);
   });
 
-  test('full domain graph persists and reads back', () {
+  test('full domain graph persists and reads back', () async {
     container.read(executionEnvironmentDaoProvider).upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     container.read(agentInstallationDaoProvider).insert(agentInstallation());
 
-    final sessionDao = container.read(sessionDaoProvider);
-    sessionDao.insert(session(status: SessionStatus.running));
+    final sessions = container.read(sessionsDataProvider);
+    await sessions.create(session(status: SessionStatus.running));
 
-    final eventDao = container.read(sessionEventDaoProvider);
-    eventDao.append(event(type: 'session.started'));
-    eventDao.append(event(type: 'message.agent'));
+    final records = container.read(sessionRecordsProvider);
+    await records.appendAll([
+      event(type: 'session.started'),
+      event(type: 'message.agent'),
+    ]);
 
     expect(server.projectRows.getAll().single.name, 'Demo');
     expect(server.repositoryRows.getByProject('p1').single.name, 'app');
-    expect(sessionDao.getById('s1')!.status, SessionStatus.running);
-    expect(eventDao.listForSession('s1').map((e) => e.seq), [0, 1]);
+    expect(sessions.getById('s1')!.status, SessionStatus.running);
+    expect(server.sessionRows.getById('s1')!.status, SessionStatus.running);
+    expect((await records.listForSession('s1')).map((e) => e.seq), [0, 1]);
   });
-
-  test(
-    'deleting a project cascades through repositories, sessions, events',
-    () {
-      container.read(executionEnvironmentDaoProvider).upsert(windowsEnv());
-      server.projectRows.insert(project());
-      server.repositoryRows.insert(repository());
-      container.read(agentInstallationDaoProvider).insert(agentInstallation());
-      container.read(sessionDaoProvider).insert(session());
-      container.read(sessionEventDaoProvider).append(event());
-
-      server.projectRows.delete('p1');
-
-      expect(server.repositoryRows.getAll(), isEmpty);
-      expect(container.read(sessionDaoProvider).getAll(), isEmpty);
-      expect(container.read(sessionEventDaoProvider).countForSession('s1'), 0);
-    },
-  );
 }

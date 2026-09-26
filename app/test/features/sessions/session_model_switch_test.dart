@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/sessions/application/pending_live_switch
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -27,6 +26,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// **Live where supported, next launch otherwise — and never into a busy pane.**
 ///
@@ -136,7 +136,10 @@ void main() {
       // slash command goes through `sendTo` and is typed exactly like a message.
       expect(session.written, ['/model opus', kEndOfLineKey, '\r']);
       // And it persists, so the next launch agrees with what was just typed.
-      expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
+      expect(
+        h.container.read(sessionsDataProvider).getById(session.id)!.modelId,
+        'opus',
+      );
     },
   );
 
@@ -160,7 +163,10 @@ void main() {
         isEmpty,
         reason: 'mid-turn the line lands in the user\'s own conversation',
       );
-      expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
+      expect(
+        h.container.read(sessionsDataProvider).getById(session.id)!.modelId,
+        'opus',
+      );
     },
   );
 
@@ -187,7 +193,10 @@ void main() {
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       final session = await launched(h.container);
-      final paneId = SessionDao(h.db).getById(session.id)!.paneId!;
+      final paneId = h.container
+          .read(sessionsDataProvider)
+          .getById(session.id)!
+          .paneId!;
       h.container
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(paneId)!
@@ -208,7 +217,10 @@ void main() {
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
-    final paneId = SessionDao(h.db).getById(session.id)!.paneId!;
+    final paneId = h.container
+        .read(sessionsDataProvider)
+        .getById(session.id)!
+        .paneId!;
     h.container
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(paneId)!
@@ -252,7 +264,10 @@ void main() {
       expect(outcome.deferral, ModelDeferral.openedPicker);
       expect(outcome.command, '/model');
       expect(session.written.join(), contains('/model'));
-      expect(SessionDao(h.db).getById(session.id)!.modelId, 'gpt-5.5');
+      expect(
+        h.container.read(sessionsDataProvider).getById(session.id)!.modelId,
+        'gpt-5.5',
+      );
     },
   );
 
@@ -310,7 +325,10 @@ void main() {
     addTearDown(h.container.dispose);
     final session = await launched(h.container);
     // The pane exits: the row is still there and still ours to configure.
-    final paneId = SessionDao(h.db).getById(session.id)!.paneId!;
+    final paneId = h.container
+        .read(sessionsDataProvider)
+        .getById(session.id)!
+        .paneId!;
     (h.container
                 .read(terminalSessionsControllerProvider.notifier)
                 .instanceFor(paneId)!
@@ -323,7 +341,10 @@ void main() {
 
     expect(outcome.deferral, ModelDeferral.notRunning);
     expect(session.written, isEmpty);
-    expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
+    expect(
+      h.container.read(sessionsDataProvider).getById(session.id)!.modelId,
+      'opus',
+    );
   });
 
   test('handing the session back to the default clears the row', () async {
@@ -342,7 +363,10 @@ void main() {
     expect(outcome.switchedNow, isFalse);
     expect(outcome.deferral, ModelDeferral.noModel);
     expect(session.written, isEmpty);
-    expect(SessionDao(h.db).getById(session.id)!.modelId, isNull);
+    expect(
+      h.container.read(sessionsDataProvider).getById(session.id)!.modelId,
+      isNull,
+    );
     expect(launcher.effectiveModelFor(session.id)!.modelId, isNull);
     expect(launcher.effectiveModelFor(session.id)!.inherited, isTrue);
   });
@@ -370,7 +394,12 @@ void main() {
       // carries the model.
       (h.container
                   .read(terminalSessionsControllerProvider.notifier)
-                  .instanceFor(SessionDao(h.db).getById(session.id)!.paneId!)!
+                  .instanceFor(
+                    h.container
+                        .read(sessionsDataProvider)
+                        .getById(session.id)!
+                        .paneId!,
+                  )!
               as FakeTerminalInstance)
           .exitCleanly();
 

@@ -15,7 +15,6 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -174,7 +173,7 @@ void main() {
         ),
       );
     }
-    SessionDao(db).insert(
+    mirroredServer(db).sessionRows.insert(
       Session(
         id: 'n0',
         repositoryId: 'r0',
@@ -201,7 +200,7 @@ void main() {
   void seedOnePerCheckout(int count) {
     seed(count);
     for (var i = 1; i < count; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: 'n$i',
           repositoryId: 'r$i',
@@ -608,7 +607,7 @@ void main() {
         repository(id: 'r0', name: 'hub', path: r'C:\hub'),
       );
       for (var i = 0; i < worktrees; i++) {
-        SessionDao(db).insert(
+        mirroredServer(db).sessionRows.insert(
           Session(
             id: 'w$i',
             repositoryId: 'r0',

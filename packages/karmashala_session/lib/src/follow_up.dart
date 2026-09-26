@@ -1,4 +1,5 @@
-import 'package:karmashala_session/session.dart';
+import 'record_json.dart';
+import 'session_ending.dart';
 
 /// A session ended and left something behind: a **durable note the environment
 /// is offering back**, written only from typed facts, and never an instruction.
@@ -59,6 +60,10 @@ enum FollowUpResolution {
   }
 }
 
+/// How many open follow-ups are ever handed to the inbox at once. Bounded at
+/// the source: an evicted one would be re-filed by the next sync.
+const int kOpenFollowUpCap = 200;
+
 /// One thing a session left behind, as it was noticed.
 class FollowUp {
   const FollowUp({
@@ -97,15 +102,47 @@ class FollowUp {
 
   bool get isOpen => resolvedAt == null;
 
-  FollowUp copyWith({int? id}) => FollowUp(
+  /// `'<sessionId>/<ending>'` — the mark that stops one ending being raised
+  /// twice, open or resolved.
+  String get endingMark => '$sessionId/${ending.name}';
+
+  FollowUp copyWith({
+    int? id,
+    DateTime? resolvedAt,
+    FollowUpResolution? resolution,
+  }) => FollowUp(
     id: id ?? this.id,
     sessionId: sessionId,
     reason: reason,
     ending: ending,
     summary: summary,
     raisedAt: raisedAt,
-    resolvedAt: resolvedAt,
-    resolution: resolution,
+    resolvedAt: resolvedAt ?? this.resolvedAt,
+    resolution: resolution ?? this.resolution,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': ?id,
+    'sessionId': sessionId,
+    'reason': reason.name,
+    'ending': ending.name,
+    'summary': ?summary,
+    'raisedAt': jsonDate(raisedAt),
+    if (resolvedAt case final at?) 'resolvedAt': jsonDate(at),
+    'resolution': ?resolution?.name,
+  };
+
+  static FollowUp fromJson(Map<String, Object?> json) => FollowUp(
+    id: jsonOptionalInt(json, 'id'),
+    sessionId: jsonString(json, 'sessionId'),
+    reason: FollowUpReason.fromName(jsonOptionalString(json, 'reason')),
+    ending: SessionEnding.fromName(jsonOptionalString(json, 'ending')),
+    summary: jsonOptionalString(json, 'summary'),
+    raisedAt: jsonDateOf(json, 'raisedAt'),
+    resolvedAt: jsonOptionalDateOf(json, 'resolvedAt'),
+    resolution: FollowUpResolution.fromName(
+      jsonOptionalString(json, 'resolution'),
+    ),
   );
 
   @override
@@ -135,4 +172,23 @@ class FollowUp {
   @override
   String toString() =>
       'FollowUp($id, $sessionId, ${reason.name}, open: $isOpen)';
+}
+
+/// The open follow-ups among [all], newest first, at most [limit] — a work
+/// queue, so the thing that just broke is the thing still in the user's head.
+/// The table's `ORDER BY raised_at DESC, id DESC`.
+List<FollowUp> openFollowUps(
+  Iterable<FollowUp> all, {
+  int limit = kOpenFollowUpCap,
+}) {
+  final open = [
+    for (final followUp in all)
+      if (followUp.isOpen) followUp,
+  ]..sort(compareFollowUpsNewestFirst);
+  return open.length > limit ? open.sublist(0, limit) : open;
+}
+
+int compareFollowUpsNewestFirst(FollowUp a, FollowUp b) {
+  final byTime = b.raisedAt.compareTo(a.raisedAt);
+  return byTime != 0 ? byTime : (b.id ?? 0).compareTo(a.id ?? 0);
 }

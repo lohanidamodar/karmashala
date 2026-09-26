@@ -9,7 +9,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -144,7 +143,7 @@ void main() {
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     for (final id in ['s1', 's2']) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         Session(
           id: id,
           repositoryId: 'r1',
@@ -205,7 +204,7 @@ void main() {
       controller.openTab(TerminalProfile.powerShell);
       final tab = container.read(terminalSessionsControllerProvider).activeTab!;
       tabs.add(tab.id);
-      SessionDao(db).updatePaneId(id, tab.layout.panes.single);
+      mirroredServer(db).sessionRows.updatePaneId(id, tab.layout.panes.single);
     }
     await tester.pumpWidget(
       UncontrolledProviderScope(

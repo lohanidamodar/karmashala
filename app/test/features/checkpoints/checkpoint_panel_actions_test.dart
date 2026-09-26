@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_vie
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -139,7 +138,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1'));
+    mirroredServer(db).sessionRows.insert(session(id: 's1'));
     trees = ['tree1'];
     ids = 0;
     runner = FakeCommandRunner(responder: respond);

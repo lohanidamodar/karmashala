@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/cli_detection/data/agent_store_servers.d
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
@@ -20,6 +19,8 @@ import '../../support/workspace_mirror.dart';
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'dart:async';
 
 /// **A session Karmashala launched, renamed in Karmashala, reaching Codex.**
 ///
@@ -32,13 +33,15 @@ void main() {
   late AppDatabase db;
   late FakeCodexAppServer server;
   late FakeCommandRunner runner;
+  late FakeDataServer data;
 
   setUp(() {
     db = AppDatabase(sqlite3.openInMemory());
     server = FakeCodexAppServer();
     runner = FakeCommandRunner(processFactory: (_) => server);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    FakeDataServer().mirrorInto(db)
+    data = FakeDataServer()..mirrorInto(db);
+    data
       ..projectRows.insert(project())
       ..repositoryRows.insert(repository());
   });
@@ -49,15 +52,16 @@ void main() {
     String? externalId = 'u1',
   }) {
     AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
-    SessionDao(db).insert(
+    data.sessionRows.insert(
       session(title: 'Session 0').copyWith(externalSessionId: externalId),
     );
   }
 
-  ProviderContainer mount() {
+  Future<ProviderContainer> mount() async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await data.override(),
         agentStoreServersProvider.overrideWithValue(
           AgentStoreServers(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
@@ -75,14 +79,15 @@ void main() {
     'renaming a Codex row tells Codex, and keeps the name the user own',
     () async {
       seedSession();
-      final container = mount();
+      final container = await mount();
 
       await container
           .read(sessionActionsProvider)
           .renameNative('s1', 'Renamed');
 
       expect(server.lastNameSet, {'threadId': 'u1', 'name': 'Renamed'});
-      final row = SessionDao(db).getById('s1')!;
+      await container.read(sessionsDataProvider).settled();
+      final row = data.sessionRows.getById('s1')!;
       expect(row.title, 'Renamed');
       expect(
         row.titleByUser,
@@ -92,35 +97,46 @@ void main() {
     },
   );
 
-  test('the workspace row is renamed before Codex is asked anything', () {
+  test('the workspace row is renamed before Codex is asked anything', () async {
     seedSession();
-    final container = mount();
+    final container = await mount();
 
     // Deliberately not awaited: everything the user sees must already have
     // happened by the time `renameNative` first suspends.
-    container.read(sessionActionsProvider).renameNative('s1', 'Renamed');
+    unawaited(
+      container.read(sessionActionsProvider).renameNative('s1', 'Renamed'),
+    );
 
-    expect(SessionDao(db).getById('s1')!.title, 'Renamed');
+    expect(
+      container.read(sessionsDataProvider).getById('s1')!.title,
+      'Renamed',
+    );
   });
 
   test('a row with no CLI conversation behind it asks nothing', () async {
     seedSession(externalId: null);
-    final container = mount();
+    final container = await mount();
 
     await container.read(sessionActionsProvider).renameNative('s1', 'Renamed');
 
     expect(runner.startRequests, isEmpty);
-    expect(SessionDao(db).getById('s1')!.title, 'Renamed');
+    expect(
+      container.read(sessionsDataProvider).getById('s1')!.title,
+      'Renamed',
+    );
   });
 
   test('a Codex that will not start leaves the local rename applied', () async {
     seedSession();
     runner = FakeCommandRunner(throwError: StateError('no codex here'));
-    final container = mount();
+    final container = await mount();
 
     await container.read(sessionActionsProvider).renameNative('s1', 'Renamed');
 
-    expect(SessionDao(db).getById('s1')!.title, 'Renamed');
+    expect(
+      container.read(sessionsDataProvider).getById('s1')!.title,
+      'Renamed',
+    );
   });
 
   test(
@@ -130,6 +146,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await data.override(),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
           ),
@@ -149,7 +166,8 @@ void main() {
         'Renamed in Codex',
       );
 
-      final row = SessionDao(db).getById('s1')!;
+      await container.read(sessionsDataProvider).settled();
+      final row = data.sessionRows.getById('s1')!;
       expect(row.title, 'Renamed in Codex');
       expect(row.titleByUser, isFalse);
       expect(container.read(sessionsRevisionProvider), beforeSessions + 1);

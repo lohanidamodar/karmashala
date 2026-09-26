@@ -10,7 +10,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
+import '../../support/workspace_mirror.dart';
 
 /// **When the quota is read again, and — far more importantly — when it is
 /// not.**
@@ -64,7 +64,7 @@ void main() {
     bool withOtherAgent = false,
   }) async {
     db = seedUsageDatabase();
-    final dao = SessionDao(db);
+    final dao = mirroredServer(db).sessionRows;
     for (var i = 2; i <= sessions; i++) {
       dao.insert(session(id: 's$i'));
     }
@@ -81,6 +81,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await mirroredServer(db).override(),
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -355,10 +356,13 @@ void main() {
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
-    SessionDao(db).insert(session(id: 's2', agentInstallationId: 'a2'));
+    mirroredServer(
+      db,
+    ).sessionRows.insert(session(id: 's2', agentInstallationId: 'a2'));
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await mirroredServer(db).override(),
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -508,6 +512,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        await mirroredServer(db).override(),
         clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
       ],
@@ -545,6 +550,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          await mirroredServer(db).override(),
           clockProvider.overrideWithValue(clock),
           agentUsageServiceProvider.overrideWithValue(service),
         ],

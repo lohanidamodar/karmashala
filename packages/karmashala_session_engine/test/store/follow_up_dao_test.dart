@@ -1,8 +1,8 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
-import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
+import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_session_engine/store.dart';
+import 'package:test/test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {

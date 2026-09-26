@@ -7,8 +7,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_providers.dart';
-import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
-import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -25,25 +23,27 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/workspace_mirror.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala_session/events.dart';
 
 /// A hosted session's follow-up is owed by what the recorder wrote to its row,
 /// never by its pane exiting or its live status.
 void main() {
   late AppDatabase db;
   late Override data;
-  late FollowUpDao followUps;
+  late FakeDataServer server;
+  late FakeFollowUpRows followUps;
   late StreamController<AgentStatusReport> reports;
   late FakeHostLifecycle host;
 
   setUp(() async {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    final server = FakeDataServer()..mirrorInto(db);
+    server = FakeDataServer()..mirrorInto(db);
     data = await server.override();
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    SessionDao(db).insert(session(id: 's1', status: SessionStatus.running));
+    server.sessionRows.insert(session(id: 's1', status: SessionStatus.running));
     // Outstanding verification, so a clean finish is owed a follow-up.
     VerificationDao(db).insertRun(
       VerificationRun(
@@ -55,9 +55,9 @@ void main() {
         sessionId: 's1',
       ),
     );
-    followUps = FollowUpDao(db);
+    followUps = server.followUpRows;
     reports = StreamController<AgentStatusReport>.broadcast();
-    host = FakeHostLifecycle(db)
+    host = FakeHostLifecycle(server)
       ..snapshot = [hostFacts('s1', HostSessionState.running)];
     addTearDown(() async {
       await reports.close();
@@ -168,7 +168,7 @@ void main() {
         ),
       );
       await settle();
-      expect(SessionDao(db).getById('s1')!.status, SessionStatus.cancelled);
+      expect(server.sessionRows.getById('s1')!.status, SessionStatus.cancelled);
       expect(followUps.open(), isEmpty);
     });
   });

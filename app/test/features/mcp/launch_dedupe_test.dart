@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -356,7 +355,7 @@ void main() {
 
     test('a read answers freshly every time', () async {
       expect(await call('list_sessions', const {}), isEmpty);
-      SessionDao(db).insert(session());
+      mirroredServer(db).sessionRows.insert(session());
       // The ledger must not be in the way of a read: the identical call, made
       // a moment later, has to see what changed in between.
       expect(await call('list_sessions', const {}), hasLength(1));

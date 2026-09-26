@@ -8,4 +8,6 @@ export 'src/session_attribution.dart';
 export 'src/session_checkouts.dart';
 export 'src/session_ending.dart';
 export 'src/session_naming.dart';
+export 'src/session_patch.dart';
+export 'src/session_repository_link.dart';
 export 'src/session_status.dart';

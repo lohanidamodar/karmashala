@@ -1,21 +1,5 @@
+import 'package:karmashala_session/events.dart';
 import 'package:karmashala_store/database.dart';
-
-/// One message a session sent another through `session_send`.
-class SessionRelay {
-  const SessionRelay({
-    required this.fromSessionId,
-    required this.toSessionId,
-    required this.text,
-    required this.at,
-  });
-
-  final String fromSessionId;
-  final String toSessionId;
-
-  /// As the sender wrote it, without the attribution line the recipient saw.
-  final String text;
-  final DateTime at;
-}
 
 /// The `session_relays` record: append-only, so "who told this session to do
 /// that" survives a restart (docs/inter-agent-communication.md §4.2).

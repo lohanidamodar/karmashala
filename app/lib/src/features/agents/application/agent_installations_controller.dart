@@ -11,6 +11,7 @@ import '../data/agent_installation_dao.dart';
 import '../data/agent_probe_log.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'agent_providers.dart';
+import '../../sessions/application/session_providers.dart';
 
 /// Holds the known agent installations and can (re)discover them across every
 /// known execution environment.
@@ -284,7 +285,11 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
 
       // Genuinely uninstalled. It goes only if nothing depends on it: that
       // `ON DELETE RESTRICT` raise used to abort the entire sweep.
-      if (dao.deleteIfUnreferenced(row.id)) {
+      final sessionsName = ref
+          .read(sessionsDataProvider)
+          .getAll()
+          .any((session) => session.agentInstallationId == row.id);
+      if (!sessionsName && dao.deleteIfUnreferenced(row.id)) {
         removed.add(row);
       } else {
         retained.add(row);

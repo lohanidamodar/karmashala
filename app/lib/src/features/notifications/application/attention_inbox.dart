@@ -91,7 +91,7 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     // no fifth provider re-reads every session row.
     final panes = ref.read(foregroundTerminalPaneIdsProvider);
     if (panes.isNotEmpty) {
-      for (final row in ref.read(sessionDaoProvider).getByPaneIds(panes)) {
+      for (final row in ref.read(sessionsDataProvider).getByPaneIds(panes)) {
         open.add(row.id);
       }
     }

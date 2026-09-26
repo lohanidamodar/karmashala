@@ -8,7 +8,6 @@ import 'package:riverpod/riverpod.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -112,7 +111,7 @@ Future<RemoteSessionStarted> resumeRemoteSession(
   Ref ref,
   String sessionId,
 ) async {
-  final native = ref.read(sessionDaoProvider).getById(sessionId);
+  final native = ref.read(sessionsDataProvider).getById(sessionId);
   if (native != null) {
     final launcher = ref.read(sessionLauncherProvider);
     if (await launcher.show(native.id)) {
@@ -167,7 +166,7 @@ Future<RemoteSessionStarted> resumeRemoteSession(
       throw RemoteApiRefusal(ErrorCode.badRequest, _sayLaunchFailure(error));
     }
   }
-  final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
+  final imported = ref.read(importedSessionsProvider).getById(sessionId);
   if (imported == null) {
     throw const RemoteApiRefusal(
       ErrorCode.notFound,
@@ -176,7 +175,7 @@ Future<RemoteSessionStarted> resumeRemoteSession(
   }
   try {
     final id = await ref.read(sessionActionsProvider).resumeImported(imported);
-    final resumed = ref.read(sessionDaoProvider).getById(id);
+    final resumed = ref.read(sessionsDataProvider).getById(id);
     return RemoteSessionStarted(
       sessionId: id,
       title: resumed?.title ?? imported.title ?? 'Resumed session',

@@ -5,22 +5,42 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../domain/follow_up.dart';
 import 'follow_up_providers.dart';
+import 'package:karmashala_session/events.dart';
 
 /// Everything a session has left behind, as rows for the attention inbox — one
 /// surface, not two. Watching this is also what keeps the observer running.
-final openFollowUpsProvider = Provider<List<InboxItem>>((ref) {
-  ref.watch(sessionEndingObserverProvider);
-  // It draws each session's name, so a rename does have to reach it. What no
-  // longer reaches it is a permission mode, a pane move or a project rescan.
-  ref.watchSessionKinds(const {
-    SessionChangeKind.membership,
-    SessionChangeKind.title,
-    SessionChangeKind.status,
-  });
+final openFollowUpsProvider =
+    NotifierProvider<OpenFollowUpsController, List<InboxItem>>(
+      OpenFollowUpsController.new,
+    );
 
-  final open = ref.read(followUpDaoProvider).open();
+/// [openFollowUpsProvider]'s rows. Live: a follow-up the server answers later,
+/// or another client resolves, reaches the inbox **as it arrives** — set here
+/// at once, not left dirty for a widget build to recompute, which would hand
+/// the inbox a change in the middle of that build.
+class OpenFollowUpsController extends Notifier<List<InboxItem>> {
+  @override
+  List<InboxItem> build() {
+    ref.watch(sessionEndingObserverProvider);
+    // It draws each session's name, so a rename does have to reach it. What no
+    // longer reaches it is a permission mode, a pane move or a project rescan.
+    ref.watchSessionKinds(const {
+      SessionChangeKind.membership,
+      SessionChangeKind.title,
+      SessionChangeKind.status,
+    });
+    final changed = ref
+        .read(followUpsDataProvider)
+        .changes
+        .listen((_) => state = _openFollowUpItems(ref));
+    ref.onDispose(changed.cancel);
+    return _openFollowUpItems(ref);
+  }
+}
+
+List<InboxItem> _openFollowUpItems(Ref ref) {
+  final open = ref.read(followUpsDataProvider).open();
   if (open.isEmpty) return const [];
 
   // Only the rows this list is about. It used to scan the whole table to build
@@ -29,7 +49,7 @@ final openFollowUpsProvider = Provider<List<InboxItem>>((ref) {
   final sessions = {
     for (final session
         in ref
-            .read(sessionDaoProvider)
+            .read(sessionsDataProvider)
             .getByIds(open.map((followUp) => followUp.sessionId)))
       session.id: session,
   };
@@ -67,7 +87,7 @@ final openFollowUpsProvider = Provider<List<InboxItem>>((ref) {
     );
   }
   return items;
-});
+}
 
 /// The inbox id for the follow-up stored at [rowId]. Keyed by the **row**: two
 /// sessions can share one CLI conversation id.

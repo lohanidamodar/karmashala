@@ -84,7 +84,7 @@ class DeliveryUpdateService {
   final Ref _ref;
 
   Future<UpdateOutcome> updateFromBase(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null || session.isArchived) {
       return const UpdateOutcome.refused(UpdateRefusal.sessionGone);
     }

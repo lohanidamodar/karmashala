@@ -175,7 +175,7 @@ ResumeUsageAccess resumeUsageAccess(Ref ref, Session session) {
 final resumeUsageAccessProvider = Provider.autoDispose
     .family<ResumeUsageAccess?, String>((ref, sessionId) {
       ref.watchSession(sessionId);
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
       return session == null ? null : resumeUsageAccess(ref, session);
     });
 
@@ -239,7 +239,7 @@ class ScheduledResumeController {
 
   /// Why [sessionId] may not be resumed unattended under [permissionMode].
   UnattendedRefusal? refusalFor(String sessionId, {String? permissionMode}) {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) return null;
     return _ref
         .read(unattendedPreflightProvider)
@@ -249,7 +249,7 @@ class ScheduledResumeController {
   /// Arms [request], replacing whatever its session had waiting. Throws
   /// [ScheduledResumeRefused] with the gate's sentence when it may not be.
   ScheduledResume schedule(ResumeRequest request) {
-    final session = _ref.read(sessionDaoProvider).getById(request.sessionId);
+    final session = _ref.read(sessionsDataProvider).getById(request.sessionId);
     if (session == null) {
       throw const ScheduledResumeRefused(
         'This session is no longer in the workspace.',

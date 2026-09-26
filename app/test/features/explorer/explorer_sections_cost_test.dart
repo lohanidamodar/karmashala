@@ -10,7 +10,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -42,8 +41,9 @@ import '../terminal/fake_instance.dart';
 ///
 /// 1. **Matching is O(1) in database statements and O(0) in processes.**
 ///    Filing a hundred sessions into four sections reads the database exactly
-///    as often as filing one — two unfiltered sweeps, on change only — and
-///    starts no subprocess at all. Re-reading the answer, the way a rebuilding
+///    as often as filing one — and, since slice 1c, not at all for the
+///    sessions, which are this app's copy of the server's rows — and starts
+///    no subprocess at all. Re-reading the answer, the way a rebuilding
 ///    sidebar re-reads it, costs nothing.
 /// 2. **A collapsed section builds no rows and matches nothing.** Not "less":
 ///    nothing. The candidate sweep, the fact table and the assignment are all
@@ -55,15 +55,16 @@ import '../terminal/fake_instance.dart';
 ///    sidebar nobody has opened, and claim 2 holds only with the filter off.
 ///    What the filter buys back is three rows of the user's sidebar that said
 ///    nothing; what it costs is exactly the bill an open section already paid
-///    and not a statement more: the same two sweeps, still flat in the size
-///    of the workspace, still no subprocess, still nothing per rebuild — and
+///    and not a statement more: no sweep of the sessions (the copy answers),
+///    still flat in the size of the workspace, still no subprocess, still nothing per rebuild — and
 ///    **not the delivery heartbeat**, which stays gated on a section actually
 ///    having rows on screen. That last one is not a micro-optimisation: it is
 ///    the difference between the Explorer being open and the app running a
 ///    two-minute timer.
-/// The two unfiltered sweeps `sectionCandidatesProvider` makes (its checkouts
-/// come from the copy of the workspace, not the database) — the only
-/// statements saved sections added to the app.
+/// The two unfiltered sweeps `sectionCandidatesProvider` once made. Since
+/// slice 1c its sessions and imported history come from this app's copy of
+/// the server's rows, like its checkouts, so it asks the database for neither
+/// — counted here so a regression back to a query shows up as a number.
 bool _isSectionSweep(String sql) =>
     sql.startsWith('SELECT * FROM sessions ORDER BY') ||
     sql.startsWith('SELECT * FROM imported_sessions WHERE NOT EXISTS');
@@ -86,7 +87,7 @@ void main() {
     );
     AgentInstallationDao(db).insert(agentInstallation());
     for (var i = 0; i < count; i++) {
-      SessionDao(db).insert(
+      mirroredServer(db).sessionRows.insert(
         session(
           id: 's$i',
           title: 'Session $i',
@@ -354,10 +355,10 @@ void main() {
         );
         expect(
           result.sweeps,
-          2,
+          0,
           reason:
-              'matching reads the two session tables once each, and a bigger '
-              'workspace does not make that three',
+              'matching reads the copy of the server\'s sessions: it asks the '
+              'database for neither table, at any size',
         );
       });
     }
@@ -481,7 +482,7 @@ void main() {
       });
     }
 
-    test('costs two sweeps, and the same two at a hundred as at one', () {
+    test('costs no sweep, at a hundred as at one', () {
       expect(on.keys, containsAll(scale));
       expect(off.keys, containsAll(scale));
       // ignore: avoid_print
@@ -494,10 +495,10 @@ void main() {
       for (final count in scale) {
         expect(
           on[count]! - off[count]!,
-          2,
+          0,
           reason:
-              'deciding which sections are worth a row reads the two tables '
-              'once each and no more, at $count sessions: '
+              'deciding which sections are worth a row reads the copy of the '
+              'sessions, never the database, at $count sessions: '
               '${on[count]} against ${off[count]}',
         );
       }

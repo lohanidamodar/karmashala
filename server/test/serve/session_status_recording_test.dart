@@ -22,6 +22,7 @@ void main() {
   late SessionRegistry registry;
   late HostServer server;
   late SessionStatusRecording recording;
+  late List<String> written;
 
   setUp(() {
     db = AppDatabase.memory();
@@ -49,10 +50,15 @@ void main() {
       ptyLibrary: 'libc.so.6',
       clock: () => clock,
     );
+    written = [];
     recording = SessionStatusRecording(
       server.lifecycle,
       db,
       clock: () => clock,
+      // What the data service tells every client: the row as it now stands.
+      onWritten: (id) => written.add(
+        '$id ${db.query('SELECT status FROM sessions WHERE id = ?;', [id]).single['status']}',
+      ),
     );
   });
   tearDown(() async {
@@ -99,29 +105,25 @@ void main() {
     });
   });
 
-  test('each event is written, then told to watchers as sessionChanged after '
-      'the lifecycle event itself', () async {
+  test('each event is written, and each row written is handed on to be told '
+      'on the data channel', () async {
     row('s1', 'running');
     recording.start();
     final feed = await watch();
     final said = <String>[];
     feed.events.listen((e) => said.add('lifecycle ${e.kind.name}'));
-    feed.sessionChanges.listen(
-      (c) => said.add('changed ${c.sessionId} ${c.status}'),
-    );
 
     registry.open('karmashala_s1', request);
     launcher.handles.last.finish(0);
     await pump();
 
     expect(statusOf('s1'), 'completed');
-    expect(said, [
+    expect(said, ['lifecycle started', 'lifecycle exited']);
+    expect(written, [
       // Watched before the pane opened: nobody held it yet.
-      'changed s1 unknown',
-      'lifecycle started',
-      'changed s1 running',
-      'lifecycle exited',
-      'changed s1 completed',
+      's1 unknown',
+      's1 running',
+      's1 completed',
     ]);
     await feed.close();
   });
@@ -136,14 +138,11 @@ void main() {
     registry.open('karmashala_held', request);
     recording.start();
 
+    written.clear();
     final feed = await watch(runByClient: ['in-app']);
-    final changed = <String>[];
-    feed.sessionChanges.listen(
-      (c) => changed.add('${c.sessionId} ${c.status}'),
-    );
     await pump();
 
-    expect(changed, ['lost unknown']);
+    expect(written, ['lost unknown']);
     expect(statusOf('held'), 'running');
     expect(statusOf('in-app'), 'running');
     expect(statusOf('remote'), 'running', reason: 'an SSH host speaks for it');

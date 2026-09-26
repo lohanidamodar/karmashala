@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
@@ -25,7 +24,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -82,7 +80,7 @@ void main() {
       );
       AgentInstallationDao(db).insert(agentInstallation());
       for (var i = 0; i < rows; i++) {
-        SessionDao(db).insert(
+        mirroredServer(db).sessionRows.insert(
           Session(
             id: 'n$i',
             repositoryId: 'r1',
@@ -285,7 +283,7 @@ void main() {
                 title: 'Session $i',
               ),
             );
-            SessionDao(db).insert(
+            mirroredServer(db).sessionRows.insert(
               Session(
                 id: 'n$i',
                 repositoryId: 'r1',
@@ -299,7 +297,7 @@ void main() {
             );
           } else {
             ids.add('s$i');
-            ImportedSessionDao(db).insertIfAbsent(
+            mirroredServer(db).importedRows.insertIfAbsent(
               ImportedSession(
                 id: 's$i',
                 repositoryId: 'r1',
@@ -356,8 +354,8 @@ void main() {
 
         // The work itself still happened.
         expect(mutator.transcriptsDeleted, count);
-        expect(SessionDao(db).getByRepository('r1'), isEmpty);
-        expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
+        expect(mirroredServer(db).sessionRows.getByRepository('r1'), isEmpty);
+        expect(mirroredServer(db).importedRows.getByRepository('r1'), isEmpty);
       });
     }
 

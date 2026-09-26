@@ -2,12 +2,11 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:agent_cli/read.dart';
-import '../data/imported_session_dao.dart';
 import '../data/store_scan_worker.dart';
 import 'detected_project_merger.dart';
 import 'project_import_service.dart';
+import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
 /// Scans the CLI stores and imports sessions whose folder matches a repository.
 /// Idempotent, once per app lifecycle, and walked on the store-scan worker.
@@ -31,8 +30,8 @@ class SessionAutoImportService {
   final Stream<StoreScanChunk> Function(StoreScanRequest) scan;
 
   final ExecutionEnvironmentDao environmentDao;
-  final ImportedSessionDao importedSessionDao;
-  final SessionDao sessionDao;
+  final ImportedSessionsData importedSessionDao;
+  final SessionsData sessionDao;
   final IdGenerator ids;
   final Clock clock;
   final PathTranslator translator;

@@ -43,7 +43,7 @@ void main() {
       overrides: [databaseProvider.overrideWithValue(db), data],
     );
     addTearDown(container.dispose);
-    container.read(sessionDaoProvider).insert(session(title: 'Toolbar rework'));
+    container.read(sessionsDataProvider).insert(session(title: 'Toolbar rework'));
 
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -167,7 +167,7 @@ void main() {
           ],
         );
         addTearDown(container.dispose);
-        container.read(sessionDaoProvider).insert(session(title: 'Toolbar'));
+        container.read(sessionsDataProvider).insert(session(title: 'Toolbar'));
         container
             .read(noteScopeProvider.notifier)
             .select(const ProjectScope.project('p1'));

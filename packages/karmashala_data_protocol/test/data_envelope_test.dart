@@ -5,6 +5,10 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:agent_cli/read.dart';
+import 'package:karmashala_session/events.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/transcript.dart';
 import 'package:test/test.dart';
 
 /// Every request survives the envelope as JSON text, as a transport carries
@@ -57,6 +61,31 @@ void main() {
     members: {'a', 'b'},
   );
   const found = [DiscoveredRepository(name: 'app', path: root)];
+  final session = Session(
+    id: 's1',
+    repositoryId: 'r1',
+    agentInstallationId: 'a1',
+    title: 'Work',
+    useWorktree: false,
+    status: SessionStatus.running,
+    createdAt: t0,
+    paneId: 'pane',
+    permissionMode: 'plan',
+  );
+  final imported = ImportedSession(
+    id: 'i',
+    repositoryId: 'r1',
+    cli: 'claude-code',
+    externalId: 'conv',
+    environmentId: 'windows',
+    filePath: 'f',
+    storeHome: 'h',
+    isSubagent: true,
+    preview: 'p',
+    title: 'T',
+    updatedAt: t0,
+    createdAt: t0,
+  );
 
   Map<String, Object?> overTheWire(Map<String, Object?> json) =>
       (jsonDecode(jsonEncode(json)) as Map).cast<String, Object?>();
@@ -115,7 +144,98 @@ void main() {
     const SectionPut(section),
     const SectionsReorder(['s', 't']),
     const SectionDelete('s'),
+    const SessionsList(),
+    SessionCreate(session, repositories: const ['r2']),
+    SessionEdit(
+      's1',
+      SessionPatch.pane(null).and(SessionPatch.rename('x', byUser: true)),
+    ),
+    const SessionDelete('s1'),
+    const SessionLinkAdd(sessionId: 's1', repositoryId: 'r2'),
+    const SessionLinkRemove(sessionId: 's1', repositoryId: 'r2'),
+    const SessionEvents('s1'),
+    const SessionEventsLatest(['s1', 's2']),
+    SessionEventsAppend([
+      SessionEvent(
+        sessionId: 's1',
+        seq: 0,
+        type: 'message.user',
+        payload: '{}',
+        createdAt: t0,
+      ),
+    ]),
+    DecisionAppend(
+      DecisionRecord(
+        sessionId: 's1',
+        kind: DecisionKind.constraintAccepted,
+        summary: 'x',
+        origin: DecisionOrigin.userEntry,
+        recordedAt: t0,
+      ),
+    ),
+    RecapWrite(
+      SessionRecap(
+        sessionId: 's1',
+        text: 't',
+        agentId: 'claude-code',
+        turnCount: 1,
+        writtenAt: t0,
+      ),
+    ),
+    const RecapDismiss('s1'),
+    RelayRecord(
+      SessionRelay(fromSessionId: 'a', toSessionId: 'b', text: 't', at: t0),
+    ),
+    const RelaysTo('b', 5),
+    RelayCount(fromSessionId: 'a', toSessionId: 'b', since: t0),
+    FollowUpRaise(
+      FollowUp(
+        sessionId: 's1',
+        reason: FollowUpReason.endedInFailure,
+        ending: SessionEnding.failed,
+        raisedAt: t0,
+      ),
+    ),
+    const FollowUpResolve(3, FollowUpResolution.dismissed),
+    ImportedAdd(imported),
+    const ImportedRename(id: 'i', title: 'T'),
+    const ImportedDelete('i'),
   ];
+
+  test('sessions changes and snapshots round-trip', () {
+    final batch = DataChanges.fromJson(
+      overTheWire(
+        DataChanges(3, [
+          SessionRowChanged(session),
+          const SessionRowRemoved('s2'),
+          const SessionLinksChanged('s1', [
+            SessionRepositoryLink(repositoryId: 'r1', role: 'primary'),
+          ]),
+          ImportedChanged(imported),
+          const ImportedRemoved('i'),
+          const DecisionRemoved(4),
+          const RecapRemoved('s1'),
+        ]).toJson(),
+      ),
+    );
+    expect(batch.changes, hasLength(7));
+    expect((batch.changes.first as SessionRowChanged).session, session);
+    expect((batch.changes[3] as ImportedChanged).session, imported);
+    final snapshot = SessionsSnapshot.fromJson(
+      overTheWire(
+        SessionsSnapshot(
+          sessions: [session],
+          links: const {
+            's1': [SessionRepositoryLink(repositoryId: 'r1', role: 'primary')],
+          },
+          imported: [imported],
+        ).toJson(),
+      ),
+    );
+    expect(snapshot.sessions.single, session);
+    expect(snapshot.links['s1']!.single.isPrimary, isTrue);
+    expect(snapshot.imported.single, imported);
+  });
 
   test('every request round-trips with its arguments', () {
     for (final request in requests) {

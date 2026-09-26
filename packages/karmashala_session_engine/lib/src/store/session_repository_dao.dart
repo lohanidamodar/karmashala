@@ -1,20 +1,5 @@
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
-
-/// Roles a repository can play within a session.
-class SessionRepositoryRole {
-  const SessionRepositoryRole._();
-  static const primary = 'primary';
-  static const additional = 'additional';
-}
-
-/// One repository link of a session.
-class SessionRepositoryLink {
-  const SessionRepositoryLink({required this.repositoryId, required this.role});
-  final String repositoryId;
-  final String role;
-
-  bool get isPrimary => role == SessionRepositoryRole.primary;
-}
 
 /// Data-access for the `session_repositories` link table (Loop 13).
 class SessionRepositoryDao {
@@ -51,12 +36,25 @@ class SessionRepositoryDao {
       "WHERE session_id = ? ORDER BY (role = 'primary') DESC, repository_id;",
       [sessionId],
     );
-    return [
-      for (final row in rows)
-        SessionRepositoryLink(
-          repositoryId: row['repository_id']! as String,
-          role: row['role']! as String,
-        ),
-    ];
+    return [for (final row in rows) _linkOf(row)];
   }
+
+  /// Every session's links, primary first — a client's snapshot.
+  Map<String, List<SessionRepositoryLink>> all() {
+    final rows = _db.query(
+      'SELECT session_id, repository_id, role FROM session_repositories '
+      "ORDER BY session_id, (role = 'primary') DESC, repository_id;",
+    );
+    final bySession = <String, List<SessionRepositoryLink>>{};
+    for (final row in rows) {
+      (bySession[row['session_id']! as String] ??= []).add(_linkOf(row));
+    }
+    return bySession;
+  }
+
+  static SessionRepositoryLink _linkOf(Map<String, Object?> row) =>
+      SessionRepositoryLink(
+        repositoryId: row['repository_id']! as String,
+        role: row['role']! as String,
+      );
 }

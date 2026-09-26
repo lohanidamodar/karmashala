@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/sessions/application/session_wait.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
@@ -366,7 +365,7 @@ void seedSession(
   EnvironmentPath? workingDirectory,
   String? mode = askStored,
 }) {
-  SessionDao(db).insert(
+  mirroredServer(db).sessionRows.insert(
     session(
       id: id,
       agentInstallationId: installationId,
@@ -588,7 +587,7 @@ void main() {
       String? originId,
       String? decidedBy = 'Forker CLI',
       int minute = 0,
-    }) => DecisionRecordDao(db).append(
+    }) => mirroredServer(db).decisionRows.append(
       DecisionRecord(
         sessionId: sessionId,
         kind: kind,
@@ -716,11 +715,11 @@ void main() {
       required String childId,
       required SessionLink link,
     }) async {
-      final child = SessionDao(h.db).getById(childId)!;
+      final child = mirroredServer(h.db).sessionRows.getById(childId)!;
       expect(child.parentSessionId, 'src');
       expect(child.parentLink, link);
       // The old session is untouched — not ended, not detached, not marked.
-      expect(SessionDao(h.db).getById('src')!.status, session().status);
+      expect(mirroredServer(h.db).sessionRows.getById('src')!.status, session().status);
     }
 
     test('starts the target through the launcher and links the two', () async {
@@ -780,7 +779,7 @@ void main() {
       expect(launch.arguments, isNot(contains('--careful')));
       // And it is stamped on the row, so the next resume runs under it too.
       expect(
-        SessionDao(h.db).getById(result.session.id)!.permissionMode,
+        mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
         bypassStored,
       );
     });
@@ -814,7 +813,7 @@ void main() {
             .agentLaunch!;
         expect(launch.arguments, contains('--trust-me'));
         expect(
-          SessionDao(h.db).getById(result.session.id)!.permissionMode,
+          mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
           isNull,
         );
       },
@@ -846,7 +845,7 @@ void main() {
       expect(launch.arguments, contains('--careful'));
       expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
-        SessionDao(h.db).getById(result.session.id)!.permissionMode,
+        mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
         askStored,
       );
     });
@@ -874,7 +873,7 @@ void main() {
         ),
       );
       // Nothing was created for a launch that must not happen.
-      expect(SessionDao(h.db).getAll(), hasLength(1));
+      expect(mirroredServer(h.db).sessionRows.getAll(), hasLength(1));
     });
 
     test(
@@ -918,7 +917,7 @@ void main() {
         expect(service.forkPlanFor('src').kind, SessionForkKind.native);
 
         final result = await service.forkSession(sessionId: 'src');
-        final child = SessionDao(h.db).getById(result.session.id)!;
+        final child = mirroredServer(h.db).sessionRows.getById(result.session.id)!;
         expect(child.parentLink, SessionLink.fork);
         expect(child.title, 'Work (fork)');
 
@@ -954,7 +953,7 @@ void main() {
       expect(launch.arguments, isNot(contains('--careful')));
       // The branch runs under the picked mode; the session it came from is
       // left on its own.
-      expect(SessionDao(h.db).getById('src')!.permissionMode, askStored);
+      expect(mirroredServer(h.db).sessionRows.getById('src')!.permissionMode, askStored);
     });
 
     test(
@@ -983,7 +982,7 @@ void main() {
         // parent follows the setting, so the branch does too. Stamping what the
         // default said today would freeze the branch the moment it was made.
         expect(
-          SessionDao(h.db).getById(result.session.id)!.permissionMode,
+          mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
           isNull,
         );
       },
@@ -1019,7 +1018,7 @@ void main() {
       expect(launch.arguments, contains('--careful'));
       expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
-        SessionDao(h.db).getById(result.session.id)!.permissionMode,
+        mirroredServer(h.db).sessionRows.getById(result.session.id)!.permissionMode,
         askStored,
       );
     });
@@ -1033,7 +1032,7 @@ void main() {
       await service.forkSession(sessionId: 'src');
       final second = await service.forkSession(sessionId: 'src');
       expect(
-        SessionDao(h.db).getById(second.session.id)!.title,
+        mirroredServer(h.db).sessionRows.getById(second.session.id)!.title,
         'Work (fork 2)',
       );
     });
@@ -1053,7 +1052,7 @@ void main() {
         expect(plan.explanation, contains('never learned its id for this one'));
 
         final result = await service.forkSession(sessionId: 'src');
-        final child = SessionDao(h.db).getById(result.session.id)!;
+        final child = mirroredServer(h.db).sessionRows.getById(result.session.id)!;
         // Still a fork in the lineage — that is what the user asked for and got.
         expect(child.parentLink, SessionLink.fork);
 
@@ -1091,7 +1090,7 @@ void main() {
             ),
           ),
         );
-        expect(SessionDao(h.db).getAll(), hasLength(1));
+        expect(mirroredServer(h.db).sessionRows.getAll(), hasLength(1));
       },
     );
   });
@@ -1112,7 +1111,7 @@ void main() {
       );
       final forked = await service.forkSession(sessionId: 'src');
 
-      final dao = SessionDao(h.db);
+      final dao = mirroredServer(h.db).sessionRows;
       expect(dao.parentOf('src'), isNull, reason: 'the source is a root');
       // Both children hang off the same parent and are distinguishable, which
       // is the whole reason the link kind is stored rather than inferred: the
@@ -1143,7 +1142,7 @@ void main() {
             instruction: 'Take over.',
           );
 
-      final child = SessionDao(h.db).getById(handed.session.id)!;
+      final child = mirroredServer(h.db).sessionRows.getById(handed.session.id)!;
       expect(child.parentSessionId, 'src');
       expect(child.parentLink, SessionLink.handoff);
       expect(
@@ -1180,7 +1179,7 @@ void main() {
       expect(launch.workingDirectory, subdirectory);
       // A fork of a session that has no worktree still has none: the directory
       // is where the work is, not a claim about how it is checked out.
-      final child = SessionDao(h.db).getById(forked.session.id)!;
+      final child = mirroredServer(h.db).sessionRows.getById(forked.session.id)!;
       expect(child.worktree, isNull);
       expect(child.useWorktree, isFalse);
       expect(child.workingDirectory, elsewhere);
@@ -1225,7 +1224,7 @@ void main() {
           .instanceFor(forked.paneId!)!
           .agentLaunch!;
       expect(launch.workingDirectory, isNot(subdirectory));
-      expect(SessionDao(h.db).getById(forked.session.id)!.useWorktree, isTrue);
+      expect(mirroredServer(h.db).sessionRows.getById(forked.session.id)!.useWorktree, isTrue);
     });
 
     test('the packet names the directory the work is actually in', () async {
