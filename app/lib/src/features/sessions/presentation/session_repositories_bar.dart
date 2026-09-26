@@ -1,10 +1,10 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../application/session_providers.dart';
 import '../application/session_repositories_service.dart';
 import '../application/session_ui_providers.dart';
@@ -24,8 +24,8 @@ class SessionRepositoriesBar extends ConsumerWidget {
     final primary = repos.first;
     final linkedIds = repos.map((r) => r.id).toSet();
     final attachable = ref
-        .read(repositoryDaoProvider)
-        .getByProject(primary.projectId)
+        .read(workspaceDataProvider)
+        .repositoriesOf(primary.projectId)
         .where((r) => !linkedIds.contains(r.id))
         .toList();
 

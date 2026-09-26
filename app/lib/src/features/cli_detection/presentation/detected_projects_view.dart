@@ -70,9 +70,10 @@ class DetectedProjectsView extends ConsumerWidget {
               ),
               if (detected.asData?.value.isNotEmpty ?? false) ...[
                 FilledButton.icon(
-                  onPressed: () {
-                    final summary = controller.importAll();
-                    ScaffoldMessenger.of(context).showSnackBar(
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final summary = await controller.importAll();
+                    messenger.showSnackBar(
                       SnackBar(
                         content: Text(
                           summary.isEmpty

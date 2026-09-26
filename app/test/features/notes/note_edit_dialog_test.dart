@@ -6,7 +6,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala/src/features/notes/presentation/note_edit_dialog.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fixtures.dart';

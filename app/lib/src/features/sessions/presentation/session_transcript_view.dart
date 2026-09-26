@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:convert';
 import 'dart:io' show FileSystemEntityType;
 
@@ -21,7 +22,6 @@ import 'package:agent_cli/process.dart';
 import '../../file_explorer/application/file_explorer_providers.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -188,7 +188,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     if (session == null) return null;
     return session.workingDirectory ??
-        ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+        ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
   }
 
   void _say(String message) {

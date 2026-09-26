@@ -10,9 +10,8 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -94,10 +93,10 @@ void main() {
       ),
     );
 
-    test('records the project\'s own folder when nothing else is', () {
+    test('records the project\'s own folder when nothing else is', () async {
       addProject(path: folder.path);
 
-      final checkout = container
+      final checkout = await container
           .read(projectsControllerProvider.notifier)
           .ensureRunLocation('legacy');
 
@@ -113,7 +112,7 @@ void main() {
           .createByDiscovery(name: 'Workspace', path: r'C:\ws');
 
       final before = RepositoryDao(db).getByProject(created.project.id);
-      final checkout = container
+      final checkout = await container
           .read(projectsControllerProvider.notifier)
           .ensureRunLocation(created.project.id);
 
@@ -121,11 +120,11 @@ void main() {
       expect(RepositoryDao(db).getByProject(created.project.id), hasLength(1));
     });
 
-    test('refuses when the folder itself is not there, and names it', () {
+    test('refuses when the folder itself is not there, and names it', () async {
       addProject(path: r'C:\src\gone');
 
-      expect(
-        () => container
+      await expectLater(
+        container
             .read(projectsControllerProvider.notifier)
             .ensureRunLocation('legacy'),
         throwsA(

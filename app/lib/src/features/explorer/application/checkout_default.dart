@@ -1,13 +1,11 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
-import '../../repositories/application/repository_providers.dart';
-import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
-import 'checkout.dart';
 
 /// The checkout the scoped surfaces describe when the user has not picked one:
 /// the strongest location the session has a *record* of — working directory,
@@ -21,8 +19,8 @@ Repository? inferredCheckoutFor(Ref ref, Session session) {
 /// question [inferredCheckoutFor] asks, keeping the runners-up. The launch
 /// repository is last always: a guess may not outrank a recorded location.
 List<Repository> sessionCheckouts(Ref ref, Session session) {
-  final repositories = ref.read(repositoryDaoProvider);
-  final own = repositories.getById(session.repositoryId);
+  final workspace = ref.read(workspaceDataProvider);
+  final own = workspace.repository(session.repositoryId);
 
   final ordered = <Repository>[];
   final seen = <String>{};
@@ -31,13 +29,11 @@ List<Repository> sessionCheckouts(Ref ref, Session session) {
   }
 
   final recorded = session.workingDirectory ?? session.worktree;
-  if (recorded != null) add(checkoutContaining(repositories, recorded) ?? own);
+  if (recorded != null) add(checkoutContaining(workspace, recorded) ?? own);
   _subagentCheckouts(ref, session, own).forEach(add);
   final directory = own?.path;
   add(
-    directory == null
-        ? own
-        : checkoutContaining(repositories, directory) ?? own,
+    directory == null ? own : checkoutContaining(workspace, directory) ?? own,
   );
   return ordered;
 }
@@ -48,11 +44,11 @@ List<Repository> sessionCheckouts(Ref ref, Session session) {
 /// Public because the sidebar asks the same question of a live directory: a
 /// second copy of this rule is how the tree and the follower would disagree.
 Repository? checkoutContaining(
-  RepositoryDao repositories,
+  WorkspaceData workspace,
   EnvironmentPath directory,
 ) {
   Repository? best;
-  for (final repository in repositories.getAll()) {
+  for (final repository in workspace.repositories) {
     if (!isUnder(repository.path, directory)) continue;
     if (best == null || pathDepth(repository.path) > pathDepth(best.path)) {
       best = repository;
@@ -68,14 +64,14 @@ List<Repository> _subagentCheckouts(Ref ref, Session parent, Repository? own) {
   if (own == null) return const [];
   final children = ref.read(sessionDaoProvider).childrenOf(parent.id);
   if (children.isEmpty) return const [];
-  final repositories = ref.read(repositoryDaoProvider);
+  final workspace = ref.read(workspaceDataProvider);
 
   final found = <String, Repository>{};
   final votes = <String, int>{};
   for (final child in children) {
     final directory = child.workingDirectory ?? child.worktree;
     if (directory == null) continue;
-    final repository = checkoutContaining(repositories, directory);
+    final repository = checkoutContaining(workspace, directory);
     if (repository == null || repository.projectId != own.projectId) continue;
     found[repository.id] = repository;
     votes[repository.id] = (votes[repository.id] ?? 0) + 1;

@@ -5,7 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 
 import '../../workspaces/application/workspaces_controller.dart';
-import '../../workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../workspaces/domain/workspace_scope.dart';
 import '../../workspaces/presentation/context_color_dialog.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
@@ -148,7 +148,7 @@ Future<void> _confirmDelete(
     ),
   );
   if (confirmed != true) return;
-  ref.read(workspacesControllerProvider.notifier).delete(workspace.id);
+  await ref.read(workspacesControllerProvider.notifier).delete(workspace.id);
   messenger?.showSnackBar(
     SnackBar(content: Text('Deleted the context "${workspace.name}".')),
   );

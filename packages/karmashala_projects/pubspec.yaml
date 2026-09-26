@@ -1,0 +1,30 @@
+name: karmashala_projects
+description: >-
+  The workspace domain: contexts (the `workspaces` table), projects, their
+  checkouts (`repositories`) and the Explorer's saved sections — the values,
+  their wire shape, the rules every copy follows, and (in `store.dart`, the
+  server's alone) the DAOs over their tables. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `EnvironmentPath`, where a project or a checkout is.
+  agent_cli:
+    path: ../agent_cli
+  # `Repository`, `DiscoveredRepository` and `Checkout`, a checkout's identity.
+  karmashala_git:
+    path: ../karmashala_git
+  # The tables, in the app's one schema.
+  karmashala_store:
+    path: ../karmashala_store
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

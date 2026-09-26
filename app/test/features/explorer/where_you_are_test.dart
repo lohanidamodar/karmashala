@@ -2,7 +2,7 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/application/where_you_are.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 import '../../support/fixtures.dart';
 

@@ -14,13 +14,12 @@ import 'package:karmashala/src/features/explorer/presentation/environment_rows.d
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
-import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/presentation/context_color_dialog.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
 import 'package:karmashala_store/database.dart';
@@ -441,7 +440,7 @@ void main() {
     testWidgets('is offered on the chip\'s right-click, and None takes it '
         'away again', (tester) async {
       final container = await pump(tester);
-      container
+      await container
           .read(workspacesControllerProvider.notifier)
           .setColor('w1', 'rose');
       await tester.pumpAndSettle();

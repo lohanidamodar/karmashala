@@ -6,7 +6,7 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/data/in_process_data_endpoint.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';

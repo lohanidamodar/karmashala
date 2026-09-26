@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,7 +6,6 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_git/git.dart' show joinCommandLine, splitCommandLine;
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/automation_providers.dart';
@@ -19,7 +19,7 @@ class ProjectChecksSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final repositories = ref.watch(repositoryDaoProvider).getAll();
+    final repositories = ref.watch(workspaceDataProvider).repositories;
 
     return SettingsSection(
       title: 'VERIFICATION AND PROJECT CHECKS',

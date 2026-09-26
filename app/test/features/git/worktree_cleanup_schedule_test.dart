@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/automations/application/automation_timer
 import 'package:karmashala/src/features/git/application/worktree_cleanup_policy.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_providers.dart';
 import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 

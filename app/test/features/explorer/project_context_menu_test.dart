@@ -1,3 +1,4 @@
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,9 +15,8 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala/src/features/projects/application/project_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -69,23 +69,22 @@ void main() {
   tearDown(() => db.close());
 
   ({String personal, String games}) seed({String? filedUnder}) {
-    final workspaces = container.read(workspacesControllerProvider.notifier);
-    final personal = workspaces.create('Personal').id;
-    final games = workspaces
-        .create('Game dev', description: 'Weekend things')
-        .id;
-    container
-        .read(projectDaoProvider)
-        .insert(
-          Project(
-            id: 'p1',
-            name: 'Roguelike',
-            root: root(r'C:\games\rl'),
-            createdAt: testTime,
-            workspaceId: filedUnder,
-          ),
-        );
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    final personal = createContext(container, 'Personal').id;
+    final games = createContext(
+      container,
+      'Game dev',
+      description: 'Weekend things',
+    ).id;
+    ProjectDao(container.read(databaseProvider)).insert(
+      Project(
+        id: 'p1',
+        name: 'Roguelike',
+        root: root(r'C:\games\rl'),
+        createdAt: testTime,
+        workspaceId: filedUnder,
+      ),
+    );
+    rereadWorkspace(container);
     return (personal: personal, games: games);
   }
 
@@ -141,7 +140,7 @@ void main() {
     tester,
   ) async {
     final ids = seed();
-    container
+    await container
         .read(workspacesControllerProvider.notifier)
         .assign('p1', ids.personal);
     await tester.pumpWidget(app());
@@ -162,7 +161,7 @@ void main() {
     tester,
   ) async {
     final ids = seed(filedUnder: null);
-    container
+    await container
         .read(workspacesControllerProvider.notifier)
         .assign('p1', ids.personal);
     await tester.pumpWidget(app());
@@ -203,17 +202,15 @@ void main() {
   });
 
   testWidgets('a new context can be made and filled in one go', (tester) async {
-    container
-        .read(projectDaoProvider)
-        .insert(
-          Project(
-            id: 'p1',
-            name: 'Roguelike',
-            root: root(r'C:\games\rl'),
-            createdAt: testTime,
-          ),
-        );
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    ProjectDao(container.read(databaseProvider)).insert(
+      Project(
+        id: 'p1',
+        name: 'Roguelike',
+        root: root(r'C:\games\rl'),
+        createdAt: testTime,
+      ),
+    );
+    rereadWorkspace(container);
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 

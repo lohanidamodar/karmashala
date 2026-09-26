@@ -8,8 +8,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_observer.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_run_tools.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
 

@@ -1,9 +1,8 @@
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/environments/application/environment_providers.dart';
-import 'package:karmashala/src/features/projects/application/project_providers.dart';
-import 'package:karmashala/src/features/repositories/application/repository_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,14 +32,14 @@ void main() {
     final envDao = container.read(executionEnvironmentDaoProvider);
     envDao.upsert(windowsEnv());
     // A different provider sees the same write.
-    expect(container.read(projectDaoProvider).getAll(), isEmpty);
+    expect(ProjectDao(container.read(databaseProvider)).getAll(), isEmpty);
     expect(envDao.getById('windows'), isNotNull);
   });
 
   test('full domain graph persists and reads back', () {
     container.read(executionEnvironmentDaoProvider).upsert(windowsEnv());
-    container.read(projectDaoProvider).insert(project());
-    container.read(repositoryDaoProvider).insert(repository());
+    ProjectDao(container.read(databaseProvider)).insert(project());
+    RepositoryDao(container.read(databaseProvider)).insert(repository());
     container.read(agentInstallationDaoProvider).insert(agentInstallation());
 
     final sessionDao = container.read(sessionDaoProvider);
@@ -50,9 +49,14 @@ void main() {
     eventDao.append(event(type: 'session.started'));
     eventDao.append(event(type: 'message.agent'));
 
-    expect(container.read(projectDaoProvider).getAll().single.name, 'Demo');
     expect(
-      container.read(repositoryDaoProvider).getByProject('p1').single.name,
+      ProjectDao(container.read(databaseProvider)).getAll().single.name,
+      'Demo',
+    );
+    expect(
+      RepositoryDao(
+        container.read(databaseProvider),
+      ).getByProject('p1').single.name,
       'app',
     );
     expect(sessionDao.getById('s1')!.status, SessionStatus.running);
@@ -63,15 +67,15 @@ void main() {
     'deleting a project cascades through repositories, sessions, events',
     () {
       container.read(executionEnvironmentDaoProvider).upsert(windowsEnv());
-      container.read(projectDaoProvider).insert(project());
-      container.read(repositoryDaoProvider).insert(repository());
+      ProjectDao(container.read(databaseProvider)).insert(project());
+      RepositoryDao(container.read(databaseProvider)).insert(repository());
       container.read(agentInstallationDaoProvider).insert(agentInstallation());
       container.read(sessionDaoProvider).insert(session());
       container.read(sessionEventDaoProvider).append(event());
 
-      container.read(projectDaoProvider).delete('p1');
+      ProjectDao(container.read(databaseProvider)).delete('p1');
 
-      expect(container.read(repositoryDaoProvider).getAll(), isEmpty);
+      expect(RepositoryDao(container.read(databaseProvider)).getAll(), isEmpty);
       expect(container.read(sessionDaoProvider).getAll(), isEmpty);
       expect(container.read(sessionEventDaoProvider).countForSession('s1'), 0);
     },

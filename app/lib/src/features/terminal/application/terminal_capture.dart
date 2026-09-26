@@ -1,6 +1,6 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 
 /// Where a terminal selection came from. A plain shell can say nothing, and
@@ -33,8 +33,8 @@ final terminalSelectionSourceProvider = Provider.autoDispose
         sessionId: session.id,
         repositoryId: session.repositoryId,
         projectId: ref
-            .read(repositoryDaoProvider)
-            .getById(session.repositoryId)
+            .read(workspaceDataProvider)
+            .repository(session.repositoryId)
             ?.projectId,
       );
     });

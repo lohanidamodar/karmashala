@@ -7,8 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala/src/features/git/application/review_threads.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../support/fake_command_runner.dart';

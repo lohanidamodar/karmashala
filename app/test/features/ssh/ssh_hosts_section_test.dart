@@ -4,7 +4,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';

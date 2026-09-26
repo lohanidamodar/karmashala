@@ -1,5 +1,6 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_store/database.dart';
+
 import '../domain/project.dart';
 
 /// Data-access for [Project] rows. Hand-written SQL, no codegen.
@@ -51,8 +52,7 @@ class ProjectDao {
   }
 
   /// Points [id]'s one-click "New session" at [repositoryId], or back at the
-  /// picker's first row when null. Its own statement, for [setWorkspace]'s
-  /// reason: choosing a checkout must not rewrite the name or the root.
+  /// picker's first row when null.
   void setDefaultRepository(String id, String? repositoryId) {
     _db.execute('UPDATE projects SET default_repository_id = ? WHERE id = ?;', [
       repositoryId,
@@ -69,6 +69,12 @@ class ProjectDao {
     final rows = _db.query('SELECT * FROM projects ORDER BY created_at, id;');
     return rows.map(_fromRow).toList();
   }
+
+  /// The projects filed under [workspaceId].
+  List<Project> inWorkspace(String workspaceId) => _db
+      .query('SELECT * FROM projects WHERE workspace_id = ?;', [workspaceId])
+      .map(_fromRow)
+      .toList();
 
   void delete(String id) {
     _db.execute('DELETE FROM projects WHERE id = ?;', [id]);

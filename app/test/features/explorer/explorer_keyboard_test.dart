@@ -20,15 +20,13 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
-import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';

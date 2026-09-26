@@ -16,8 +16,7 @@ import 'package:karmashala/src/features/explorer/application/explorer_actions.da
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';

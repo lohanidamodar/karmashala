@@ -19,6 +19,14 @@ dependencies:
   # `Note` and `Todo`, the values the notes and todos requests carry.
   karmashala_notes:
     path: ../karmashala_notes
+  # The workspace values its requests carry: contexts, projects, checkouts
+  # and saved sections.
+  agent_cli:
+    path: ../agent_cli
+  karmashala_git:
+    path: ../karmashala_git
+  karmashala_projects:
+    path: ../karmashala_projects
 
 dev_dependencies:
   lints: ^6.1.0

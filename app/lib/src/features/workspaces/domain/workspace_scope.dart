@@ -1,4 +1,4 @@
-import '../../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 /// What the project list is narrowed to. Three states: everything, one
 /// context, or the projects filed under none — which must stay reachable.

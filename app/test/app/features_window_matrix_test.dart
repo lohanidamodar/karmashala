@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_app_pro
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/github/presentation/github_view.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/ports.dart';

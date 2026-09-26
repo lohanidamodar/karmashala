@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import '../../editor/data/local_document_source.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -10,7 +11,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../data/file_listing_service.dart';
 
 final fileListingServiceProvider = Provider<FileListingService>(
@@ -22,7 +22,7 @@ final fileListingServiceProvider = Provider<FileListingService>(
 final selectedRepoWindowsRootProvider = Provider<String?>((ref) {
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return null;
-  final repo = ref.watch(repositoryDaoProvider).getById(id);
+  final repo = ref.watch(workspaceDataProvider).repository(id);
   if (repo == null) return null;
   return ref.read(editorActionsProvider).windowsPathFor(repo.path);
 });

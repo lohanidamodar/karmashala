@@ -18,8 +18,7 @@ import 'package:karmashala/src/features/notifications/application/notification_p
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala/src/features/projects/application/cli_store_purge.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:path/path.dart' as p;

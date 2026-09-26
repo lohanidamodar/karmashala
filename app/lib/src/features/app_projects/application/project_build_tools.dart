@@ -1,9 +1,9 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_flutter_apps/projects.dart';
 import 'project_build_loop.dart';
 
@@ -204,7 +204,7 @@ class ProjectBuildTools {
         'what says which environment the commands run in.',
       );
     }
-    final repository = _container.read(repositoryDaoProvider).getById(id);
+    final repository = _container.read(workspaceDataProvider).repository(id);
     if (repository == null) {
       throw StateError('No checkout with id $id. list_checkouts has them.');
     }

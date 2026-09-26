@@ -5,7 +5,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
-import 'checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'project_working.dart';
 import 'session_diff_stat.dart';
 

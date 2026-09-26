@@ -8,8 +8,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -288,7 +287,7 @@ void main() {
       },
     );
 
-    test('but a *new* session command is not refused', () {
+    test('but a *new* session command is not refused', () async {
       // The third copy button goes through the same decision, and the honest
       // answer for it is "nothing to refuse": it names no conversation, so it
       // cannot be mistaken for continuing one.
@@ -297,7 +296,9 @@ void main() {
       addTearDown(h.container.dispose);
 
       expect(
-        h.container.read(sessionActionsProvider).newSessionShellCommand('p1'),
+        await h.container
+            .read(sessionActionsProvider)
+            .newSessionShellCommand('p1'),
         contains(r'C:\bin\agent.exe'),
       );
     });

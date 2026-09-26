@@ -5,8 +5,7 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
@@ -42,8 +41,7 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     importedDao = ImportedSessionDao(db);
     service = ProjectImportService(
-      projectDao: ProjectDao(db),
-      repositoryDao: RepositoryDao(db),
+      workspace: workspaceOver(db),
       importedSessionDao: importedDao,
       ids: SequentialIdGenerator(),
       clock: FixedClock(testTime),
@@ -51,8 +49,8 @@ void main() {
   });
   tearDown(() => db.close());
 
-  test('imports a project, repository, and its sessions', () {
-    final summary = service.importAll([
+  test('imports a project, repository, and its sessions', () async {
+    final summary = await service.importAll([
       detected(
         sessions: [session('a'), session('b')],
         subagents: [session('sub', entrypoint: 'sdk-cli')],
@@ -68,20 +66,25 @@ void main() {
     expect(importedDao.getAll().length, 3);
   });
 
-  test('re-importing the same sessions is a no-op (duplicates ignored)', () {
-    final input = [
-      detected(sessions: [session('a')]),
-    ];
-    service.importAll(input);
-    final second = service.importAll(input);
+  test(
+    're-importing the same sessions is a no-op (duplicates ignored)',
+    () async {
+      final input = [
+        detected(sessions: [session('a')]),
+      ];
+      await service.importAll(input);
+      final second = await service.importAll(input);
 
-    expect(second.projects, 0);
-    expect(second.repositories, 0);
-    expect(second.sessions, 0);
-    expect(ProjectDao(db).getAll().length, 1);
-    expect(
-      importedDao.getByRepository(RepositoryDao(db).getAll().single.id).length,
-      1,
-    );
-  });
+      expect(second.projects, 0);
+      expect(second.repositories, 0);
+      expect(second.sessions, 0);
+      expect(ProjectDao(db).getAll().length, 1);
+      expect(
+        importedDao
+            .getByRepository(RepositoryDao(db).getAll().single.id)
+            .length,
+        1,
+      );
+    },
+  );
 }

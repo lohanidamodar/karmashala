@@ -4,7 +4,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../notes/application/notes_providers.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../todos/application/todos_providers.dart';
 
 /// The desktop's notes and todo list, for `notes.get` — the same builder the
@@ -13,7 +13,7 @@ Future<RemoteNotesSnapshot> remoteNotesSnapshot(Ref ref) async => notesSnapshot(
   notes: ref.read(notesRepositoryProvider).list(),
   todos: ref.read(todosRepositoryProvider).list(),
   projectNames: {
-    for (final project in ref.read(projectDaoProvider).getAll())
+    for (final project in ref.read(workspaceDataProvider).projects)
       project.id: project.name,
   },
   notesEnabled: ref.read(notesEnabledProvider),

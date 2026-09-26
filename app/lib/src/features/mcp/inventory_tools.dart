@@ -1,3 +1,4 @@
+import '../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/read.dart'
     show conversationQueryTokens, kConversationQueryMinimum;
 import 'package:riverpod/riverpod.dart';
@@ -8,7 +9,6 @@ import '../cli_detection/application/cli_detection_providers.dart';
 import '../cli_detection/application/session_search.dart';
 import '../cli_detection/data/conversation_index_dao.dart';
 import '../projects/application/projects_controller.dart';
-import '../repositories/application/repository_providers.dart';
 import '../sessions/application/session_providers.dart';
 import 'agent_lookup.dart';
 
@@ -156,7 +156,7 @@ class InventoryTools {
 
   List<Map<String, dynamic>> _listSessions({String? query, String? cli}) {
     final projects = _container.read(projectsControllerProvider);
-    final repositoryDao = _container.read(repositoryDaoProvider);
+    final workspace = _container.read(workspaceDataProvider);
     final importedDao = _container.read(importedSessionDaoProvider);
     final needle = query?.trim().toLowerCase();
     final wantCli = parseCli(_container, cli);
@@ -173,7 +173,7 @@ class InventoryTools {
 
     final sessions = <Map<String, dynamic>>[];
     for (final project in projects) {
-      for (final repo in repositoryDao.getByProject(project.id)) {
+      for (final repo in workspace.repositoriesOf(project.id)) {
         // Sessions started **in the app**, invisible here for as long as every
         // session tool read only `imported_sessions`.
         for (final session in sessionDao.getByRepository(repo.id)) {

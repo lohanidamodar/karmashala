@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/quick_open/repo_file_index.dart';
@@ -6,10 +7,8 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
-import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
+import '../../projects/application/projects_controller.dart';
 import 'package:karmashala_git/git.dart';
 import 'changes_service.dart';
 import 'git_providers.dart';
@@ -97,7 +96,7 @@ final selectedCheckoutPathProvider = Provider.autoDispose<EnvironmentPath?>((
 ) {
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return null;
-  return ref.read(repositoryDaoProvider).getById(id)?.path;
+  return ref.read(workspaceDataProvider).repository(id)?.path;
 });
 
 /// The repository row whose working tree is [checkout], or null when no row
@@ -105,8 +104,8 @@ final selectedCheckoutPathProvider = Provider.autoDispose<EnvironmentPath?>((
 final repositoryIdForCheckoutProvider = Provider.autoDispose
     .family<String?, EnvironmentPath>(
       (ref, checkout) => ref
-          .read(repositoryDaoProvider)
-          .getByLocation(checkout)
+          .read(workspaceDataProvider)
+          .repositoriesAt(checkout)
           .firstOrNull
           ?.id,
     );
@@ -244,7 +243,7 @@ final workingTreeStatusProvider = FutureProvider.autoDispose<WorkingTreeStatus>(
 final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return null;
-  final repo = ref.read(repositoryDaoProvider).getById(id);
+  final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return null;
   final changes = ref.read(changesServiceProvider);
   // A folder with no git in it is not a *detached* checkout, which is what this
@@ -257,7 +256,7 @@ final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
 final repoRemoteUrlProvider = FutureProvider.autoDispose<String?>((ref) async {
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return null;
-  final repo = ref.read(repositoryDaoProvider).getById(id);
+  final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return null;
   final changes = ref.read(changesServiceProvider);
   // Likewise: null here is "a clone with no `origin`", not a folder that was
@@ -285,7 +284,7 @@ final repoWorktreesProvider = FutureProvider.autoDispose<List<GitWorktree>>((
 ) async {
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return const [];
-  final repo = ref.read(repositoryDaoProvider).getById(id);
+  final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return const [];
   final worktrees = ref.read(worktreeServiceProvider);
   // Empty here is "one working tree and no others", drawn as `none`. A folder

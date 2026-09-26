@@ -6,11 +6,10 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 
-import '../../features/explorer/application/checkout.dart';
-import '../../features/explorer/application/checkout_picker.dart';
-import '../../features/projects/application/project_providers.dart';
-import '../../features/projects/application/projects_controller.dart';
 import 'package:karmashala_git/repositories.dart';
+import '../../features/explorer/application/checkout_picker.dart';
+import '../../features/workspaces/data/workspace_data.dart';
+import '../../features/projects/application/projects_controller.dart';
 
 /// Asks for a rescan of the project's folder from the picker.
 class _RescanChoice {
@@ -63,7 +62,9 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
     final repository = ref.watch(selectedCheckoutProvider);
     if (repository == null) return const SizedBox.shrink();
     final checkouts = ref.watch(projectCheckoutsProvider);
-    final project = ref.read(projectDaoProvider).getById(repository.projectId);
+    final project = ref
+        .read(workspaceDataProvider)
+        .project(repository.projectId);
     final within = project == null
         ? null
         : relativeSubPath(project.root, repository.path);

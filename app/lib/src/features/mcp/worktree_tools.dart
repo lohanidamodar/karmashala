@@ -1,16 +1,15 @@
+import '../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../explorer/application/checkout_picker.dart';
 import '../git/application/changes_providers.dart';
 import '../git/application/git_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_git/git.dart';
 import '../projects/application/projects_controller.dart';
-import '../repositories/application/repository_providers.dart';
-import 'package:karmashala_git/repositories.dart';
 import '../sessions/application/delivery_providers.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
@@ -48,8 +47,8 @@ class WorktreeControlTools {
       throw ArgumentError('$field is required. list_checkouts has the ids.');
     }
     final repository = _container
-        .read(repositoryDaoProvider)
-        .getById(repositoryId.trim());
+        .read(workspaceDataProvider)
+        .repository(repositoryId.trim());
     if (repository == null) {
       throw StateError('No checkout with id ${repositoryId.trim()}.');
     }
@@ -176,7 +175,7 @@ class WorktreeControlTools {
       // Not in `added` is not the same as not recorded: a row for this path
       // could already have existed. Ask the table rather than assume.
       for (final repository
-          in _container.read(repositoryDaoProvider).getByProject(projectId)) {
+          in _container.read(workspaceDataProvider).repositoriesOf(projectId)) {
         if (Checkout(repository.path) == Checkout(path)) {
           return repository.id;
         }
@@ -214,7 +213,7 @@ class WorktreeControlTools {
     final ownerId = label.ownerRepositoryId;
     final owner = ownerId == null
         ? null
-        : _container.read(repositoryDaoProvider).getById(ownerId);
+        : _container.read(workspaceDataProvider).repository(ownerId);
     if (owner == null) {
       throw StateError(
         'The repository ${worktree.name} is a worktree of is not recorded, so '

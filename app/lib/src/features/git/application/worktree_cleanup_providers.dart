@@ -9,9 +9,8 @@ import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../explorer/application/checkout.dart';
-import '../../projects/application/project_providers.dart';
-import '../../repositories/application/repository_providers.dart';
+import 'package:karmashala_git/repositories.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -64,8 +63,8 @@ final worktreeCleanupLastSweepProvider = Provider<WorktreeCleanupSweepSummary?>(
 final worktreeCleanupServiceProvider = Provider<WorktreeCleanupService>((ref) {
   AppDatabase db() => ref.read(databaseProvider);
   return WorktreeCleanupService(
-    projects: () => ref.read(projectDaoProvider).getAll(),
-    repositoriesOf: (id) => ref.read(repositoryDaoProvider).getByProject(id),
+    projects: () => ref.read(workspaceDataProvider).projects,
+    repositoriesOf: (id) => ref.read(workspaceDataProvider).repositoriesOf(id),
     presenceOf: (path) async {
       final env = ref
           .read(environmentResolverProvider)

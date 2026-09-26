@@ -3,14 +3,13 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'checkout_default.dart';
 import 'explorer_tree_nodes.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../settings/application/settings_controller.dart';
 import 'picked_checkouts.dart';
 
@@ -119,7 +118,7 @@ class SessionContext {
         .forSession(sessionId);
     final remembered = picked == null
         ? null
-        : _ref.read(repositoryDaoProvider).getById(picked);
+        : _ref.read(workspaceDataProvider).repository(picked);
     final repository = remembered ?? repositoryForSession(_ref, sessionId);
     if (repository == null) return null;
     // What a pick made from here on will be filed against.
@@ -138,7 +137,7 @@ class SessionContext {
   /// would empty the side panel every time you stepped outside.
   Repository? followDirectory(EnvironmentPath directory) {
     final repository = checkoutContaining(
-      _ref.read(repositoryDaoProvider),
+      _ref.read(workspaceDataProvider),
       directory,
     );
     if (repository == null) return null;
@@ -157,7 +156,7 @@ class SessionContext {
   /// highlighted off screen. The scope bar's filters need no opening: the
   /// tree keeps the selected project whatever they are.
   void reveal(String projectId) {
-    final project = _ref.read(projectDaoProvider).getById(projectId);
+    final project = _ref.read(workspaceDataProvider).project(projectId);
     if (project == null) return;
     _ref
         .read(settingsControllerProvider.notifier)

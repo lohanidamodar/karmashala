@@ -1,3 +1,5 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,9 +9,8 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../application/workspaces_controller.dart';
-import '../domain/workspace.dart';
 import 'context_color_dialog.dart';
 
 /// Create, rename, describe, delete and assign — the verbs a context has.
@@ -43,37 +44,39 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
     super.dispose();
   }
 
-  void _run(VoidCallback action) {
+  Future<void> _run(Future<void> Function() action) async {
     try {
-      action();
-      setState(() => _error = null);
-    } on DuplicateWorkspaceName catch (e) {
-      setState(() => _error = e.toString());
-    } on ArgumentError catch (e) {
-      setState(() => _error = '${e.message}');
+      await action();
+      if (mounted) setState(() => _error = null);
+    } on DataRefused catch (e) {
+      if (mounted) setState(() => _error = e.message);
     }
   }
 
   void _create() {
     final name = _newController.text.trim();
     if (name.isEmpty) return;
-    _run(() {
-      ref.read(workspacesControllerProvider.notifier).create(name);
-      _newController.clear();
-    });
+    unawaited(
+      _run(() async {
+        await ref.read(workspacesControllerProvider.notifier).create(name);
+        _newController.clear();
+      }),
+    );
   }
 
   void _commitEdit(String id) {
-    _run(() {
-      ref
-          .read(workspacesControllerProvider.notifier)
-          .edit(
-            id,
-            name: _nameController.text,
-            description: _descriptionController.text,
-          );
-      _editingId = null;
-    });
+    unawaited(
+      _run(() async {
+        await ref
+            .read(workspacesControllerProvider.notifier)
+            .edit(
+              id,
+              name: _nameController.text,
+              description: _descriptionController.text,
+            );
+        _editingId = null;
+      }),
+    );
   }
 
   @override
@@ -212,7 +215,11 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
         name: workspace.name,
         onCancel: () => setState(() => _confirmingDeleteId = null),
         onDelete: () {
-          ref.read(workspacesControllerProvider.notifier).delete(workspace.id);
+          unawaited(
+            ref
+                .read(workspacesControllerProvider.notifier)
+                .delete(workspace.id),
+          );
           setState(() => _confirmingDeleteId = null);
         },
       );
@@ -474,9 +481,11 @@ class _ProjectRow extends ConsumerWidget {
                   selected: project.workspaceId == workspace.id,
                 ),
             ],
-            onSelected: (value) => ref
-                .read(workspacesControllerProvider.notifier)
-                .assign(project.id, value.isEmpty ? null : value),
+            onSelected: (value) => unawaited(
+              ref
+                  .read(workspacesControllerProvider.notifier)
+                  .assign(project.id, value.isEmpty ? null : value),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

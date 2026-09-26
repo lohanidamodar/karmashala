@@ -3,7 +3,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

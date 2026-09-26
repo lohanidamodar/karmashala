@@ -4,7 +4,7 @@ import 'package:agent_cli/process.dart';
 import '../environments/application/environment_providers.dart';
 import '../projects/application/project_service.dart';
 import '../projects/application/projects_controller.dart';
-import '../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
 
 /// Adding a project to the workspace and editing one that is already there —

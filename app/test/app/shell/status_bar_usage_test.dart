@@ -12,7 +12,7 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

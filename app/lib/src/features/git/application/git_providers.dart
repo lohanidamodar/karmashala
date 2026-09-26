@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/quick_open/repo_file_index.dart';
@@ -6,8 +7,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../explorer/application/checkout.dart';
-import '../../repositories/application/repository_providers.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
 import 'package:karmashala_git/worktrees.dart';
@@ -46,7 +46,7 @@ final worktreeSetupServiceProvider = Provider<WorktreeSetupService>((ref) {
     lookup: (repo) {
       // Matched the way the filesystem does: the same directory reaches this
       // app spelled three ways.
-      for (final repository in ref.read(repositoryDaoProvider).getAll()) {
+      for (final repository in ref.read(workspaceDataProvider).repositories) {
         if (Checkout(repository.path) != Checkout(repo)) continue;
         return (
           repositoryId: repository.id,

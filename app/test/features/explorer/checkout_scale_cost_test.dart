@@ -12,8 +12,7 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';

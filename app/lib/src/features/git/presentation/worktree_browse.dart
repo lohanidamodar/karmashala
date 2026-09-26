@@ -6,7 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 

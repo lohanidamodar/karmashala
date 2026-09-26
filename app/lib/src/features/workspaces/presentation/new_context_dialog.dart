@@ -1,3 +1,4 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,7 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../application/workspaces_controller.dart';
-import '../domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 /// Names a new context and returns it, so the caller can put something in it
 /// straight away: "file this" and "there is no context yet" are one moment.
@@ -64,7 +65,7 @@ class _NewContextDialogState extends ConsumerState<NewContextDialog> {
     super.dispose();
   }
 
-  void _create() {
+  Future<void> _create() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'A context needs a name.');
@@ -73,23 +74,16 @@ class _NewContextDialogState extends ConsumerState<NewContextDialog> {
     try {
       final controller = ref.read(workspacesControllerProvider.notifier);
       final editing = widget.editing;
-      if (editing == null) {
-        Navigator.of(
-          context,
-        ).pop(controller.create(name, description: _description.text));
-        return;
-      }
-      controller.edit(editing.id, name: name, description: _description.text);
-      Navigator.of(context).pop(
-        ref
-            .read(workspacesControllerProvider)
-            .where((w) => w.id == editing.id)
-            .firstOrNull,
-      );
-    } on DuplicateWorkspaceName catch (e) {
-      setState(() => _error = e.toString());
-    } on ArgumentError catch (e) {
-      setState(() => _error = '${e.message}');
+      final written = editing == null
+          ? await controller.create(name, description: _description.text)
+          : await controller.edit(
+              editing.id,
+              name: name,
+              description: _description.text,
+            );
+      if (mounted) Navigator.of(context).pop(written);
+    } on DataRefused catch (e) {
+      if (mounted) setState(() => _error = e.message);
     }
   }
 

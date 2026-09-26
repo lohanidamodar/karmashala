@@ -12,7 +12,11 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
 import 'package:karmashala_automations/persistence.dart' show CheckoutRows;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/repositories.dart'
+    show DiscoveredRepository, Repository;
 import 'package:karmashala_notes/store.dart';
+import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/push.dart';
@@ -26,6 +30,7 @@ import 'package:path/path.dart' as p;
 import '../automations/daemon_checkout_facts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/session_mcp_access.dart';
+import '../data/data_service.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
 import '../protocol/messages.dart';
@@ -67,6 +72,7 @@ class DaemonCompanion implements CompanionHandler {
     bool? windows,
     AgentUsageService? usageService,
     Map<String, String>? hostEnvironment,
+    DataService? data,
   }) : _lanPort = lanPort,
        _lanAddress = lanAddress,
        _own = config,
@@ -74,6 +80,7 @@ class DaemonCompanion implements CompanionHandler {
        _pushPost = pushPost,
        _now = clock ?? DateTime.now,
        _newId = newId ?? newUuid,
+       _data = (data ?? DataService(database, newId: newId)).open((_) {}),
        _devices = PairedDeviceDao(database),
        _sessions = SessionDao(database),
        _rows = CheckoutRows(database),
@@ -134,6 +141,10 @@ class DaemonCompanion implements CompanionHandler {
   final PushPost? _pushPost;
   final DateTime Function() _now;
   final String Function() _newId;
+
+  /// This companion's own link to the server's data API: a project a phone
+  /// adds is written there, so every client is told.
+  final DataSession _data;
   final PairedDeviceDao _devices;
   final SessionDao _sessions;
   final CheckoutRows _rows;
@@ -161,8 +172,7 @@ class DaemonCompanion implements CompanionHandler {
     workspace: HostedWorkspace(
       rows: WorkspaceRows(database),
       isHere: _facts.isHere,
-      now: _now,
-      newId: _newId,
+      createProject: _createProject,
     ),
     control: _controlSlot,
     usage: _usageSnapshot,
@@ -245,6 +255,26 @@ class DaemonCompanion implements CompanionHandler {
         ),
       ),
     );
+  }
+
+  ({Project project, List<Repository> checkouts}) _createProject(
+    String name,
+    EnvironmentPath root,
+    List<DiscoveredRepository> found,
+  ) {
+    try {
+      final created = _data
+          .handle(ProjectCreate(projectName: name, root: root, found: found))
+          .value;
+      return (project: created.project, checkouts: created.repositories);
+    } on DataRefused catch (refusal) {
+      throw RemoteApiRefusal(
+        refusal.code == DataRefusalCode.notFound
+            ? ErrorCode.notFound
+            : ErrorCode.badRequest,
+        refusal.message,
+      );
+    }
   }
 
   /// Every agent account's usage on this machine, through each adapter's

@@ -4,7 +4,6 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_core/paths.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala/src/features/explorer/application/checkout.dart';
 
 /// A [Clock] that always returns a fixed instant.
 ///

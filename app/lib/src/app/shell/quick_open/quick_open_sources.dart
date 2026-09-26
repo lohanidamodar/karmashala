@@ -1,3 +1,4 @@
+import '../../../features/workspaces/data/workspace_data.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -18,7 +19,6 @@ import '../../../features/notes/application/notes_providers.dart';
 import '../../../features/notifications/application/notification_providers.dart';
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
-import '../../../features/repositories/application/repository_providers.dart';
 import '../../../features/editor/application/editor_tab_actions.dart';
 import '../../../features/git/application/diff_tab_actions.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
@@ -539,7 +539,7 @@ class QuickOpenSources {
 
   List<QuickOpenItem> _workspace() {
     final items = <QuickOpenItem>[];
-    final repositoryDao = ref.read(repositoryDaoProvider);
+    final workspace = ref.read(workspaceDataProvider);
     for (final project in ref.read(sortedProjectsProvider)) {
       items.add(
         QuickOpenItem(
@@ -556,7 +556,7 @@ class QuickOpenSources {
           ),
         ),
       );
-      for (final repository in repositoryDao.getByProject(project.id)) {
+      for (final repository in workspace.repositoriesOf(project.id)) {
         items.add(
           QuickOpenItem(
             id: 'repository/${repository.id}',
@@ -586,7 +586,7 @@ class QuickOpenSources {
   List<QuickOpenItem> _sessions() {
     final sessionDao = ref.read(sessionDaoProvider);
     final importedDao = ref.read(importedSessionDaoProvider);
-    final repositoryDao = ref.read(repositoryDaoProvider);
+    final workspace = ref.read(workspaceDataProvider);
     final installations = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
@@ -598,7 +598,7 @@ class QuickOpenSources {
         <({SessionActivityOrder order, QuickOpenItem Function(double) make})>[];
 
     for (final project in ref.read(sortedProjectsProvider)) {
-      for (final repository in repositoryDao.getByProject(project.id)) {
+      for (final repository in workspace.repositoriesOf(project.id)) {
         final where = '${project.name} · ${repository.name}';
         final here = repository.id == selectedRepository
             ? _selectedRepoBoost

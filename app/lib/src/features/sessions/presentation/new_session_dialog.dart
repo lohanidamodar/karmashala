@@ -86,9 +86,11 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// provider, which a life-cycle may not do — and is that anywhere under git.
   void _afterDestinationChanged() {
     _presence = GitPresence.unknown;
-    Future(() {
+    Future(() async {
       if (!mounted) return;
-      setState(() => _destination = _runnable(_destination));
+      final runnable = await _runnable(_destination);
+      if (!mounted) return;
+      setState(() => _destination = runnable);
       _readPresence();
     });
   }
@@ -108,12 +110,12 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// [destination] with somewhere to run: the project's own folder, recorded so
   /// every other surface sees the same row. Unchanged when there is a real
   /// reason it cannot run there, which [_error] then carries.
-  SessionDestination? _runnable(SessionDestination? destination) {
+  Future<SessionDestination?> _runnable(SessionDestination? destination) async {
     if (destination == null || destination.isRunnable) return destination;
     try {
       return SessionDestination(
         projectId: destination.projectId,
-        checkout: ref
+        checkout: await ref
             .read(projectsControllerProvider.notifier)
             .ensureRunLocation(destination.projectId),
       );

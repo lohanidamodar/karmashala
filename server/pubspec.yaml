@@ -68,6 +68,9 @@ dependencies:
   # The notes and todos a phone's `notes.get` reads.
   karmashala_notes:
     path: ../packages/karmashala_notes
+  # The workspace tables `src/data/` writes, and the rules it applies.
+  karmashala_projects:
+    path: ../packages/karmashala_projects
   # Where a unix socket can actually be bound. Pure `dart:io`, and the app uses
   # the same rule for the host's socket, so the two cannot disagree about it.
   karmashala_local_ipc:

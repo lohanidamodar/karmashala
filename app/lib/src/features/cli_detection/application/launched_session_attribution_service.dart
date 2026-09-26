@@ -1,8 +1,8 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/read.dart';
@@ -22,7 +22,7 @@ class LaunchedSessionAttributionService {
   LaunchedSessionAttributionService({
     required this.sessionDao,
     required this.installationDao,
-    required this.repositoryDao,
+    required this.workspace,
     required this.environmentDao,
     required this.agents,
     required this.scanStores,
@@ -34,7 +34,7 @@ class LaunchedSessionAttributionService {
 
   final SessionDao sessionDao;
   final AgentInstallationDao installationDao;
-  final RepositoryDao repositoryDao;
+  final WorkspaceData workspace;
   final ExecutionEnvironmentDao environmentDao;
   final AgentRegistry agents;
 
@@ -180,7 +180,7 @@ class LaunchedSessionAttributionService {
       final directory =
           row.workingDirectory ??
           row.worktree ??
-          repositoryDao.getById(row.repositoryId)?.path;
+          workspace.repository(row.repositoryId)?.path;
       if (directory == null || directory.path.isEmpty) continue;
 
       candidates.add(

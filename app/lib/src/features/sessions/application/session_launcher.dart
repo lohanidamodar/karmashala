@@ -2,6 +2,8 @@ import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
+import '../../workspaces/data/workspace_data.dart';
+
 import 'package:karmashala_core/logging.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/agent_cli_bridge.dart';
@@ -22,7 +24,6 @@ import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/git_providers.dart';
 import '../../mcp/session_mcp.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';

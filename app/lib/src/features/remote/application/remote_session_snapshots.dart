@@ -9,16 +9,15 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../explorer/application/project_tree.dart';
 import '../../explorer/application/session_forest.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../projects/domain/project.dart';
-import '../../repositories/application/repository_providers.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -73,9 +72,9 @@ final remoteSessionPresenceProvider =
 /// not already know it for (`sessionById`, orphan fallbacks).
 Project? _projectOfRepository(Ref ref, String? repositoryId) {
   if (repositoryId == null) return null;
-  final repository = ref.read(repositoryDaoProvider).getById(repositoryId);
+  final repository = ref.read(workspaceDataProvider).repository(repositoryId);
   if (repository == null) return null;
-  return ref.read(projectDaoProvider).getById(repository.projectId);
+  return ref.read(workspaceDataProvider).project(repository.projectId);
 }
 
 bool _isPinned(Ref ref, String sessionId) =>
@@ -99,8 +98,8 @@ RemoteSessionSnapshot remoteSessionSnapshot(
   Project? project,
 }) {
   final repository = ref
-      .read(repositoryDaoProvider)
-      .getById(session.repositoryId);
+      .read(workspaceDataProvider)
+      .repository(session.repositoryId);
   final installation = ref
       .read(agentInstallationDaoProvider)
       .getById(session.agentInstallationId);
@@ -186,8 +185,8 @@ RemoteSessionSnapshot remoteImportedSnapshot(
   Project? project,
 }) {
   final repository = ref
-      .read(repositoryDaoProvider)
-      .getById(session.repositoryId);
+      .read(workspaceDataProvider)
+      .repository(session.repositoryId);
   final owner = project ?? _projectOfRepository(ref, session.repositoryId);
   return RemoteSessionSnapshot(
     sessionId: session.id,
@@ -319,8 +318,8 @@ List<RemoteSessionSnapshot> listRemoteSessions(Ref ref) {
   final placed = <String>{};
   for (final project in ref.read(sortedProjectsProvider)) {
     final repositories = ref
-        .read(repositoryDaoProvider)
-        .getByProject(project.id);
+        .read(workspaceDataProvider)
+        .repositoriesOf(project.id);
     if (repositories.isEmpty) continue;
     final tree = ProjectTree(
       repositories: [

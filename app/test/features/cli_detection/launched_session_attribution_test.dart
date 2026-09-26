@@ -5,8 +5,7 @@ import 'package:karmashala/src/features/cli_detection/application/launched_sessi
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,7 +94,7 @@ void main() {
       LaunchedSessionAttributionService(
         sessionDao: dao,
         installationDao: AgentInstallationDao(db),
-        repositoryDao: RepositoryDao(db),
+        workspace: workspaceOver(db),
         environmentDao: ExecutionEnvironmentDao(db),
         agents: AgentRegistry.builtIn,
         scanStores: () async => detected,
@@ -119,7 +118,7 @@ void main() {
     final subject = LaunchedSessionAttributionService(
       sessionDao: dao,
       installationDao: AgentInstallationDao(db),
-      repositoryDao: RepositoryDao(db),
+      workspace: workspaceOver(db),
       environmentDao: ExecutionEnvironmentDao(db),
       agents: AgentRegistry.builtIn,
       scanStores: () async => [codexSession(conversation)],
@@ -258,7 +257,7 @@ void main() {
     final subject = LaunchedSessionAttributionService(
       sessionDao: dao,
       installationDao: AgentInstallationDao(db),
-      repositoryDao: RepositoryDao(db),
+      workspace: workspaceOver(db),
       environmentDao: ExecutionEnvironmentDao(db),
       agents: AgentRegistry.builtIn,
       scanStores: () async => throw const FileSystemException$('unreadable'),

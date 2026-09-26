@@ -9,8 +9,7 @@ import 'package:karmashala/src/features/automations/presentation/automation_dial
 import 'package:karmashala/src/features/automations/presentation/automation_dry_run_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/persistence.dart';

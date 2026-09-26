@@ -223,8 +223,12 @@ Future<int> runServe(
         server.lifecycle.publishAgentStatus(sessionId, body),
   );
   final prompts = DaemonPromptAnswers(status: status, database: database);
+  // Every client's notes, todos, preferences and workspace: the desktop app
+  // reads and writes them here, and a phone's new project is written here.
+  final data = DataService(database);
   final companion = DaemonCompanion(
     database: database,
+    data: data,
     registry: registry,
     hostName: settings.name,
     dataDirectory: dataDirectory,
@@ -308,9 +312,7 @@ Future<int> runServe(
   final agents = (agentsFor ?? (database) => ServerAgents(database: database))(
     database,
   );
-  // Every client's notes, todos and preferences: the desktop app reads and
-  // writes them here, not in the store it used to open itself.
-  server.data = DataService(database);
+  server.data = data;
   server.admin = ServerAdministration(
     companion: companionServing ? companion : null,
     agents: agents,

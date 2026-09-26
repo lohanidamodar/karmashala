@@ -26,8 +26,7 @@ import 'package:karmashala/src/features/github/application/github_providers.dart
 import 'package:karmashala/src/features/github/presentation/github_view.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/delivery.dart';

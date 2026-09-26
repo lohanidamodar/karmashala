@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
@@ -10,7 +11,6 @@ import '../../checkpoints/application/checkpoint_providers.dart'
     show checkpointDaoProvider;
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/lineage.dart';
@@ -81,7 +81,9 @@ class SessionHandoffService {
   List<HandoffTarget> targetsFor(String sessionId) {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return const [];
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) return const [];
     final installations = _ref.read(agentInstallationDaoProvider);
     final sourceAgentId = installations
@@ -732,8 +734,8 @@ class SessionHandoffService {
   })
   _contextFor(Session session, String installationId) {
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repository == null) {
       throw StateError('This session\'s repository is no longer available.');
     }

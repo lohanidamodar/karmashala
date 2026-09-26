@@ -3,8 +3,7 @@ import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../projects/application/project_providers.dart';
-import '../../repositories/application/repository_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_stats_providers.dart';
 import 'agent_providers.dart';
@@ -99,16 +98,15 @@ final tokenTotalsProvider = FutureProvider.autoDispose<TokenTotals>((
   final sessions = ref.read(sessionDaoProvider).getAll()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   final stats = ref.read(sessionStatsServiceProvider);
-  final repositories = ref.read(repositoryDaoProvider);
-  final projects = ref.read(projectDaoProvider);
+  final workspace = ref.read(workspaceDataProvider);
   final installations = ref.read(agentInstallationDaoProvider);
   final rows = <SessionTokens>[];
   for (final session in sessions.take(kTokenTotalsMaxSessions)) {
     final view = await stats.statsFor(session.id);
-    final repository = repositories.getById(session.repositoryId);
+    final repository = workspace.repository(session.repositoryId);
     final project = repository == null
         ? null
-        : projects.getById(repository.projectId);
+        : workspace.project(repository.projectId);
     final agentId = installations.getById(session.agentInstallationId)?.agentId;
     rows.add((
       project: project?.name ?? repository?.name ?? 'Unknown project',

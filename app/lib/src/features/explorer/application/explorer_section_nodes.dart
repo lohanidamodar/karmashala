@@ -1,9 +1,9 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../projects/application/projects_controller.dart';
-import '../../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../domain/explorer_section.dart';
-import 'checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'explorer_sections.dart';
 import 'explorer_tree_nodes.dart';
 

@@ -1,15 +1,10 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
-import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/explorer/application/checkout.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/application/checkout_retirement_service.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import 'package:karmashala_projects/store.dart';
+import 'package:karmashala/src/features/repositories/application/checkout_retirement_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -60,7 +55,7 @@ void main() {
 
   Future<CheckoutRetirementReport> retireWith(StubProbe probe) =>
       CheckoutRetirementService(
-        repositories: repositories,
+        workspace: workspaceOver(db),
         probe: probe,
       ).retireMissingCheckouts(
         projectId: 'p1',
@@ -112,52 +107,6 @@ void main() {
     expect(report.retired, isEmpty);
     expect(report.keptUnreachable.map((r) => r.id), ['r1']);
     expect(repositories.getById('r1'), isNotNull);
-  });
-
-  test('keeps a gone checkout that a session still points at', () async {
-    repositories.insert(
-      repository(id: 'r2', name: 'wt-adopt', path: r'C:\src\demo\wt-adopt'),
-    );
-    SessionDao(db).insert(session(id: 's1', repositoryId: 'r2'));
-
-    final report = await retireWith(
-      probeSaying({'c:/src/demo/wt-adopt': CheckoutPresence.absent}),
-    );
-
-    expect(report.retired, isEmpty);
-    expect(report.keptReferenced.single.repository.id, 'r2');
-    expect(report.keptReferenced.single.records, 1);
-    // The row survives, and with it the session history that would have gone
-    // down with it: `sessions.repository_id` is ON DELETE CASCADE.
-    expect(repositories.getById('r2'), isNotNull);
-    expect(SessionDao(db).getById('s1'), isNotNull);
-  });
-
-  test('keeps a gone checkout that only imported history points at', () async {
-    repositories.insert(
-      repository(id: 'r2', name: 'wt-attr', path: r'C:\src\demo\wt-attr'),
-    );
-    ImportedSessionDao(db).insertIfAbsent(
-      ImportedSession(
-        id: 'i1',
-        repositoryId: 'r2',
-        cli: 'claude-code',
-        externalId: 'ext-1',
-        environmentId: 'windows',
-        filePath: r'C:\store\ext-1.jsonl',
-        storeHome: r'C:\store',
-        isSubagent: false,
-        preview: 'hello',
-        createdAt: testTime,
-      ),
-    );
-
-    final report = await retireWith(
-      probeSaying({'c:/src/demo/wt-attr': CheckoutPresence.absent}),
-    );
-
-    expect(report.keptReferenced.single.records, 1);
-    expect(repositories.getById('r2'), isNotNull);
   });
 
   test('retires nothing when the project root itself is unreachable', () async {

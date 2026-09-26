@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
@@ -14,7 +15,6 @@ import 'hook_payload_field.dart';
 import 'agent_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/where_you_are.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_rebind_providers.dart';
 
@@ -233,8 +233,8 @@ void recordAgentDirectoryFromHook(
       .getByExternalSessionId(agentSessionId);
   if (session == null) return;
   final environmentId = container
-      .read(repositoryDaoProvider)
-      .getById(session.repositoryId)
+      .read(workspaceDataProvider)
+      .repository(session.repositoryId)
       ?.path
       .environmentId;
   if (environmentId == null) return;

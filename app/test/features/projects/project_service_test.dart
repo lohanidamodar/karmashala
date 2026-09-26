@@ -3,8 +3,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/projects/application/project_service.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -21,11 +20,8 @@ void main() {
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
   ProjectService build({CommandRunnerFactory? runnerFactory}) => ProjectService(
-    projectDao: projectDao,
-    repositoryDao: repositoryDao,
+    workspace: workspaceOver(db),
     discovery: discovery,
-    ids: SequentialIdGenerator(),
-    clock: FixedClock(testTime),
     runnerFactory: runnerFactory,
   );
 
@@ -62,24 +58,6 @@ void main() {
     // Claude Code, Codex and Antigravity all start in a plain directory. A
     // project with no checkout row could not be given a session at all — the
     // New Session dialog could only say it had no Git repositories to run in.
-    test('is still somewhere to run: the project folder is recorded', () async {
-      discovery.result = const [];
-
-      final result = await build().createProjectByDiscovery(
-        name: 'Notes',
-        root: root(r'C:\notes'),
-      );
-
-      expect(result.repositories.single.path, root(r'C:\notes'));
-      expect(result.repositories.single.name, 'Notes');
-      expect(
-        result.repositories.single.canonicalId,
-        isNull,
-        reason: 'it is a folder, not a clone with an origin',
-      );
-      expect(repositoryDao.getByProject(result.project.id), hasLength(1));
-    });
-
     test('on another machine too, bound to that machine', () async {
       discovery.result = const [];
 
@@ -93,29 +71,6 @@ void main() {
       expect(result.repositories.single.path, result.project.root);
       expect(result.repositories.single.path.environmentId, wslEnv().id);
     });
-
-    test(
-      'a rescan repairs a project recorded before a folder was enough',
-      () async {
-        discovery.result = const [];
-        final created = await build().createProjectByDiscovery(
-          name: 'Old',
-          root: root(r'C:\old'),
-        );
-        // The row as it was before this: a project with nowhere to run.
-        repositoryDao.delete(
-          repositoryDao.getByProject(created.project.id).single.id,
-        );
-
-        final added = await build().rediscover(
-          created.project,
-          projectEnvironment: windowsEnv(id: localHostEnvironmentId),
-          windows: windowsEnv(id: localHostEnvironmentId),
-        );
-
-        expect(added.single.path, root(r'C:\old'));
-      },
-    );
   });
 
   test('does not persist a project when discovery fails', () async {
@@ -126,58 +81,6 @@ void main() {
       throwsA(isA<RepositoryDiscoveryException>()),
     );
     expect(projectDao.getAll(), isEmpty);
-  });
-
-  test('rediscover only adds repositories not already recorded', () async {
-    discovery.result = [
-      DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
-    ];
-    final created = await build().createProjectByDiscovery(
-      name: 'W',
-      root: root(r'C:\ws'),
-    );
-
-    discovery.result = [
-      DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
-      DiscoveredRepository(name: 'api', path: root(r'C:\ws\api')),
-    ];
-    final added = await build().rediscover(
-      created.project,
-      projectEnvironment: windowsEnv(id: localHostEnvironmentId),
-      windows: windowsEnv(id: localHostEnvironmentId),
-    );
-
-    expect(added.map((r) => r.name), ['api']);
-    expect(repositoryDao.getByProject(created.project.id).length, 2);
-  });
-
-  test('rediscover matches a recorded repository however it is spelled', () async {
-    // B7: the match used to be string equality on the whole `EnvironmentPath`,
-    // so a scanner that reported `C:/ws/app` — or the same path with a trailing
-    // separator — inserted a second row for a checkout already in the table.
-    discovery.result = [
-      DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
-    ];
-    final created = await build().createProjectByDiscovery(
-      name: 'W',
-      root: root(r'C:\ws'),
-    );
-
-    discovery.result = [
-      DiscoveredRepository(name: 'app', path: root('C:/ws/app')),
-      DiscoveredRepository(name: 'api', path: root(r'C:\ws\api\')),
-      DiscoveredRepository(name: 'App', path: root(r'C:\WS\APP')),
-    ];
-    final added = await build().rediscover(
-      created.project,
-      projectEnvironment: windowsEnv(id: localHostEnvironmentId),
-      windows: windowsEnv(id: localHostEnvironmentId),
-    );
-
-    expect(added.map((r) => r.name), [
-      'api',
-    ], reason: 'three spellings of one Windows checkout are one checkout');
-    expect(repositoryDao.getByProject(created.project.id).length, 2);
   });
 
   test(

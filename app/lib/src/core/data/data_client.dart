@@ -3,14 +3,16 @@ import 'dart:math' as math;
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_store/database.dart';
 
 import 'in_process_data_endpoint.dart';
 import 'keyed_replica.dart';
 
 /// The domains this app reads through the server.
-enum DataDomain { notes, todos, preferences }
+enum DataDomain { notes, todos, preferences, workspace }
 
 /// How this app reaches the server's data now.
 enum DataLinkState {
@@ -123,6 +125,12 @@ class DataClient {
   final todos = KeyedReplica<Todo>();
   final preferences = KeyedReplica<String>();
 
+  /// The workspace domain, one copy per table.
+  final workspaces = KeyedReplica<Workspace>();
+  final projects = KeyedReplica<Project>();
+  final repositories = KeyedReplica<Repository>();
+  final sections = KeyedReplica<StoredSection>();
+
   DataConnection get connection => _connection;
 
   Stream<DataConnection> get connectionChanges => _connectionChanges.stream;
@@ -146,22 +154,25 @@ class DataClient {
         _replaceTodos(endpoint.sendNow(const TodosList()));
       case DataDomain.preferences:
         _replacePreferences(endpoint.sendNow(const PreferencesGet()));
+      case DataDomain.workspace:
+        _replaceWorkspace(endpoint.sendNow(const WorkspaceList()));
     }
   }
 
-  /// Sends [request] and applies its answer with [apply] — synchronously,
-  /// before this returns, on the fallback. A refusal re-reads [domain] (the
-  /// local write it undoes is gone with it) and is rethrown.
+  /// Sends [request] and applies its answer — every row it changed, and
+  /// [apply] for what the changes do not say — synchronously, before this
+  /// returns, on the fallback. A refusal re-reads [domain] (the local write
+  /// it undoes is gone with it) and is rethrown.
   Future<R> write<R>(
     DataRequest<R> request, {
     required DataDomain domain,
-    required void Function(R value, int revision) apply,
+    void Function(R value, int revision)? apply,
   }) {
     final endpoint = _endpoint;
     if (endpoint is InProcessDataEndpoint) {
       try {
         final reply = endpoint.sendNow(request);
-        apply(reply.value, reply.revision);
+        _applyReply(reply, apply);
         return Future.value(reply.value);
       } on DataRefused catch (refusal) {
         _prime(domain, endpoint);
@@ -178,6 +189,14 @@ class DataClient {
     return write;
   }
 
+  void _applyReply<R>(
+    DataReply<R> reply,
+    void Function(R value, int revision)? apply,
+  ) {
+    apply?.call(reply.value, reply.revision);
+    _onChanges(DataChanges(reply.revision, reply.changes));
+  }
+
   /// Writes sent and not yet answered, which [close] waits for: a setting
   /// changed as the app quits must still reach the server.
   final _inFlight = <Future<Object?>>{};
@@ -185,11 +204,11 @@ class DataClient {
   Future<R> _writeToServer<R>(
     DataRequest<R> request,
     DataDomain domain,
-    void Function(R value, int revision) apply,
+    void Function(R value, int revision)? apply,
   ) async {
     try {
       final reply = await send(request);
-      apply(reply.value, reply.revision);
+      _applyReply(reply, apply);
       return reply.value;
     } on DataRefused catch (refusal) {
       // A server that went away mid-write is re-read whole when it is back.
@@ -240,6 +259,8 @@ class DataClient {
         _replaceTodos(await send(const TodosList()));
       case DataDomain.preferences:
         _replacePreferences(await send(const PreferencesGet()));
+      case DataDomain.workspace:
+        _replaceWorkspace(await send(const WorkspaceList()));
     }
   }
 
@@ -247,6 +268,7 @@ class DataClient {
     DataDomain.notes => notes,
     DataDomain.todos => todos,
     DataDomain.preferences => preferences,
+    DataDomain.workspace => projects,
   };
 
   void _replaceNotes(DataReply<List<Note>> reply) => notes.replaceAll({
@@ -259,6 +281,48 @@ class DataClient {
 
   void _replacePreferences(DataReply<Map<String, String>> reply) =>
       preferences.replaceAll(reply.value, reply.revision);
+
+  void _replaceWorkspace(DataReply<WorkspaceSnapshot> reply) {
+    final WorkspaceSnapshot(
+      workspaces: w,
+      projects: p,
+      repositories: r,
+      sections: s,
+    ) = reply.value;
+    // Projects last: a reader primed by them finds the rest in place.
+    workspaces.replaceAll({for (final row in w) row.id: row}, reply.revision);
+    repositories.replaceAll({for (final row in r) row.id: row}, reply.revision);
+    sections.replaceAll({for (final row in s) row.id: row}, reply.revision);
+    projects.replaceAll({for (final row in p) row.id: row}, reply.revision);
+  }
+
+  /// Applies a workspace-domain row the server wrote at [revision].
+  void applyRow(RowChange change, int revision) => switch (change) {
+    WorkspaceChanged(:final workspace) => workspaces.applyAt(
+      workspace.id,
+      workspace,
+      revision,
+    ),
+    ProjectChanged(:final project) => projects.applyAt(
+      project.id,
+      project,
+      revision,
+    ),
+    RepositoryChanged(:final repository) => repositories.applyAt(
+      repository.id,
+      repository,
+      revision,
+    ),
+    SectionChanged(:final section) => sections.applyAt(
+      section.id,
+      section,
+      revision,
+    ),
+    WorkspaceRemoved(:final id) => workspaces.applyAt(id, null, revision),
+    ProjectRemoved(:final id) => projects.applyAt(id, null, revision),
+    RepositoryRemoved(:final id) => repositories.applyAt(id, null, revision),
+    SectionRemoved(:final id) => sections.applyAt(id, null, revision),
+  };
 
   void _listen(DataEndpoint endpoint) {
     unawaited(_changesSubscription?.cancel());
@@ -278,6 +342,8 @@ class DataClient {
           todos.applyAt(id, null, batch.revision);
         case PreferenceChanged(:final key, :final value):
           preferences.applyAt(key, value, batch.revision);
+        case final RowChange row:
+          applyRow(row, batch.revision);
       }
     }
   }
@@ -297,10 +363,12 @@ class DataClient {
       endpoint.send(const NotesList()),
       endpoint.send(const TodosList()),
       endpoint.send(const PreferencesGet()),
+      endpoint.send(const WorkspaceList()),
     ]);
     _replaceNotes(snapshot[0] as DataReply<List<Note>>);
     _replaceTodos(snapshot[1] as DataReply<List<Todo>>);
     _replacePreferences(snapshot[2] as DataReply<Map<String, String>>);
+    _replaceWorkspace(snapshot[3] as DataReply<WorkspaceSnapshot>);
   }
 
   void _lost(DataEndpoint endpoint) {
@@ -391,5 +459,8 @@ class DataClient {
     await notes.dispose();
     await todos.dispose();
     await preferences.dispose();
+    for (final replica in [workspaces, projects, repositories, sections]) {
+      await replica.dispose();
+    }
   }
 }

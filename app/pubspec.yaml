@@ -66,6 +66,11 @@ dependencies:
   # tables are the server's (`store.dart`, never imported here).
   karmashala_notes:
     path: ../packages/karmashala_notes
+  # Contexts, projects, checkouts and saved sections: the values and the rules
+  # every copy follows. The tables are the server's (`store.dart`, never
+  # imported here).
+  karmashala_projects:
+    path: ../packages/karmashala_projects
   # What a session is, as values: the record and its states, what a launch asks
   # for, the resume rules, lineage and handoff, the event and decision
   # vocabulary, the transcript readings and the delivery ladder. Pure Dart

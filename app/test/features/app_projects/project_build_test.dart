@@ -8,8 +8,7 @@ import 'package:karmashala/src/features/app_projects/application/project_build_l
 import 'package:karmashala/src/features/app_projects/application/project_build_tools.dart';
 import 'package:karmashala_flutter_apps/projects.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import '../../support/fake_command_runner.dart';

@@ -1,3 +1,4 @@
+import '../workspaces/data/workspace_data.dart';
 import 'dart:io';
 import 'dart:math';
 
@@ -8,7 +9,6 @@ import '../agents/application/agent_providers.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../repositories/application/repository_providers.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'agent_lookup.dart';
@@ -38,7 +38,7 @@ class TmuxControlTools {
   Future<Object?> _openSessionsInTmux(List<String> ids, {String? name}) async {
     if (ids.isEmpty) throw ArgumentError('No session ids given.');
     final importedDao = _container.read(importedSessionDaoProvider);
-    final repositoryDao = _container.read(repositoryDaoProvider);
+    final workspace = _container.read(workspaceDataProvider);
     final envDao = _container.read(executionEnvironmentDaoProvider);
 
     final windows = <TmuxWindow>[];
@@ -60,7 +60,7 @@ class TmuxControlTools {
           '(${distroEnv.wslDistribution}).',
         );
       }
-      final repo = repositoryDao.getById(session.repositoryId);
+      final repo = workspace.repository(session.repositoryId);
       final install = installFor(
         _container,
         session.cli,

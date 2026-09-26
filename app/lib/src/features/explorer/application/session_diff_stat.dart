@@ -1,7 +1,7 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -9,7 +9,6 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'checkout.dart';
 import 'project_working.dart';
 
 /// The branch and change count of one checkout, keyed by the *checkout*: twenty
@@ -64,7 +63,7 @@ final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
     SessionChangeKind.workspace,
   });
   final repositories = {
-    for (final repository in ref.read(repositoryDaoProvider).getAll())
+    for (final repository in ref.read(workspaceDataProvider).repositories)
       repository.id: repository.projectId,
   };
   // Two columns per row, not a decoded session: parsing an ISO timestamp per
@@ -118,7 +117,7 @@ final projectRepositoriesProvider = Provider.autoDispose
         SessionChangeKind.placement,
         SessionChangeKind.workspace,
       });
-      return ref.read(repositoryDaoProvider).getByProject(projectId);
+      return ref.read(workspaceDataProvider).repositoriesOf(projectId);
     });
 
 /// Sessions, changed files, running sessions and waiting work under one

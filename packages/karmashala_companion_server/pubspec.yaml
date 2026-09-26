@@ -43,6 +43,10 @@ dependencies:
   # The notes and todos `notes.get` reads.
   karmashala_notes:
     path: ../karmashala_notes
+  # The project and checkout rows a phone is shown, and the rule for a new
+  # project's checkouts.
+  karmashala_projects:
+    path: ../karmashala_projects
   # The shared store: paired devices, metadata, and the tables above.
   karmashala_store:
     path: ../karmashala_store

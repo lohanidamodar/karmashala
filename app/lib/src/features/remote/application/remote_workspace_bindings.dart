@@ -10,10 +10,9 @@ import 'package:path/path.dart' as p;
 import '../../agents/application/agent_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
-import '../../projects/application/project_providers.dart';
+import 'package:karmashala_git/repositories.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_binding_support.dart';
@@ -57,7 +56,7 @@ List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
   final out = <RemoteWorkspaceProject>[];
   for (final project in ref.read(sortedProjectsProvider)) {
     final repositories =
-        [...ref.read(repositoryDaoProvider).getByProject(project.id)]..sort(
+        [...ref.read(workspaceDataProvider).repositoriesOf(project.id)]..sort(
           (a, b) => canonicalPathKey(
             a.path.path,
           ).compareTo(canonicalPathKey(b.path.path)),
@@ -96,7 +95,7 @@ List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
 /// Every project the desktop holds, flat — no checkouts, because this is the
 /// list a phone picks a *place* from rather than something to start.
 List<RemoteWorkspaceProject> listRemoteProjects(Ref ref) => [
-  for (final project in ref.read(projectDaoProvider).getAll())
+  for (final project in ref.read(workspaceDataProvider).projects)
     RemoteWorkspaceProject(
       projectId: project.id,
       name: project.name,
@@ -132,7 +131,7 @@ Future<RemoteWorkspaceProject> addRemoteProject(
   }
   final canonical = canonicalPathKey(trimmedPath);
   final envDao = ref.read(executionEnvironmentDaoProvider);
-  for (final project in ref.read(projectDaoProvider).getAll()) {
+  for (final project in ref.read(workspaceDataProvider).projects) {
     if (project.root.environmentId == localHostEnvironmentId &&
         canonicalPathKey(project.root.path) == canonical) {
       final env = envDao.getById(project.environmentId);

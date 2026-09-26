@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import '../../agents/application/hook_payload_field.dart';
 
 import 'package:agent_cli/process.dart';
@@ -7,7 +8,6 @@ import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import '../../sessions/data/session_repository_dao.dart';
@@ -71,7 +71,7 @@ class SessionAdoptionService {
   SessionAdoptionService({
     required this.sessionDao,
     required this.importedSessionDao,
-    required this.repositoryDao,
+    required this.workspace,
     required this.environmentDao,
     required this.installationDao,
     required this.linkDao,
@@ -90,7 +90,7 @@ class SessionAdoptionService {
 
   final SessionDao sessionDao;
   final ImportedSessionDao importedSessionDao;
-  final RepositoryDao repositoryDao;
+  final WorkspaceData workspace;
   final ExecutionEnvironmentDao environmentDao;
   final AgentInstallationDao installationDao;
   final SessionRepositoryDao linkDao;
@@ -477,7 +477,7 @@ class SessionAdoptionService {
       status: SessionStatus.running,
     );
     if (session.workingDirectory == null) {
-      final repository = repositoryDao.getById(session.repositoryId);
+      final repository = workspace.repository(session.repositoryId);
       final directory = repository == null
           ? null
           : _directoryOf(candidate, repository);
@@ -528,7 +528,7 @@ class SessionAdoptionService {
     _loadEnvironments();
     Repository? best;
     var depth = -1;
-    for (final repository in repositoryDao.getAll()) {
+    for (final repository in workspace.repositories) {
       final environment = _environments[repository.path.environmentId];
       final (repositoryKey, _) = canonicalProjectPath(
         repository.path,

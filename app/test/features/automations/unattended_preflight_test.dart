@@ -15,8 +15,7 @@ import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';

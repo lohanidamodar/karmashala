@@ -8,15 +8,13 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/application/repository_providers.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
@@ -342,7 +340,9 @@ void main() {
     insertSession('s1', workingDirectory: appPath);
     expect(follow('s1'), 'app');
 
-    final relay = container.read(repositoryDaoProvider).getById('relay')!;
+    final relay = RepositoryDao(
+      container.read(databaseProvider),
+    ).getById('relay')!;
     container.read(checkoutPickerProvider).select(relay);
     expect(container.read(selectedRepositoryIdProvider), 'relay');
 

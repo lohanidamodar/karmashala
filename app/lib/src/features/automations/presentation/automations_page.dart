@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,7 +11,6 @@ import '../../agents/application/agent_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../terminal/presentation/session_status.dart' show describeAge;
@@ -36,7 +36,7 @@ class AutomationsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final automations = ref.watch(automationsProvider);
-    final repositories = ref.watch(repositoryDaoProvider).getAll();
+    final repositories = ref.watch(workspaceDataProvider).repositories;
     // Watched so a project added or rescanned while this is open reaches the
     // "arm one" list without the page being reopened.
     ref.watch(projectsControllerProvider);
@@ -128,8 +128,8 @@ class AutomationCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final repository = ref
-        .watch(repositoryDaoProvider)
-        .getById(automation.repositoryId);
+        .watch(workspaceDataProvider)
+        .repository(automation.repositoryId);
     final environment = repository == null
         ? null
         : ref

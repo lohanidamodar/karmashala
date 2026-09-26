@@ -12,7 +12,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../explorer/application/session_diff_stat.dart';
 import '../../projects/application/wsl_path_existence.dart';
 import '../../sessions/application/session_providers.dart';

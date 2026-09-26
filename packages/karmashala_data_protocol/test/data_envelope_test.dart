@@ -1,7 +1,10 @@
 import 'dart:convert';
 
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:test/test.dart';
 
 /// Every request survives the envelope as JSON text, as a transport carries
@@ -21,6 +24,39 @@ void main() {
     updatedAt: t0,
   );
   final todo = Todo(id: 't', body: 'b', position: 2, createdAt: t0, doneAt: t0);
+  const root = EnvironmentPath(environmentId: 'windows', path: r'C:\src');
+  final project = Project(
+    id: 'p',
+    name: 'Demo',
+    root: root,
+    createdAt: t0,
+    workspaceId: 'w',
+    defaultRepositoryId: 'r',
+  );
+  final checkout = Repository(
+    id: 'r',
+    projectId: 'p',
+    name: 'app',
+    path: root,
+    createdAt: t0,
+    canonicalId: 'github.com/a/b',
+  );
+  final workspace = Workspace(
+    id: 'w',
+    name: 'PopupBits',
+    description: 'd',
+    color: 'teal',
+    createdAt: t0,
+  );
+  const section = StoredSection(
+    id: 's',
+    name: 'Mine',
+    kind: 'manual',
+    position: 1,
+    collapsed: false,
+    members: {'a', 'b'},
+  );
+  const found = [DiscoveredRepository(name: 'app', path: root)];
 
   Map<String, Object?> overTheWire(Map<String, Object?> json) =>
       (jsonDecode(jsonEncode(json)) as Map).cast<String, Object?>();
@@ -53,6 +89,32 @@ void main() {
     const PreferencesGet(),
     const PreferenceSet('k', 'v'),
     const PreferenceRemove('k'),
+    const WorkspaceList(),
+    const WorkspacePut(id: 'w', workspaceName: 'W', description: 'd'),
+    const WorkspaceSetColor(id: 'w', color: 'teal'),
+    const WorkspaceDelete('w'),
+    const ProjectCreate(
+      projectName: 'P',
+      root: root,
+      workspaceId: 'w',
+      found: found,
+    ),
+    const ProjectUpdate(
+      id: 'p',
+      projectName: 'Q',
+      root: root,
+      clearDefaultRepository: true,
+      found: found,
+    ),
+    const ProjectsFile({'p': 'w', 'q': null}),
+    const ProjectDelete('p'),
+    const ProjectsUsingEnvironment('ssh:h'),
+    const CheckoutsAdd(projectId: 'p', found: found, orRoot: false),
+    const CheckoutsRetire(['r']),
+    const CheckoutsIdentify(path: root, canonicalId: 'x'),
+    const SectionPut(section),
+    const SectionsReorder(['s', 't']),
+    const SectionDelete('s'),
   ];
 
   test('every request round-trips with its arguments', () {
@@ -71,10 +133,12 @@ void main() {
     }
   });
 
-  test('answers carry typed results and the revision', () {
+  test('answers carry typed results, the revision and the changes', () {
     DataReply<R> roundTrip<R>(DataRequest<R> request, R result) =>
         DataEnvelope.readAnswer(
-          overTheWire(DataEnvelope.answer(4, 17, request, result)),
+          overTheWire(
+            DataEnvelope.answer(4, request, DataReply(result, 17, const [])),
+          ),
           request,
         );
 
@@ -83,6 +147,44 @@ void main() {
     expect(roundTrip(const TodosClearDone([]), 3).value, 3);
     expect(roundTrip(const PreferencesGet(), {'a': 'b'}).value, {'a': 'b'});
     expect(roundTrip(const TodoAdd(id: 't', body: 'b'), todo).revision, 17);
+    final snapshot = roundTrip(
+      const WorkspaceList(),
+      WorkspaceSnapshot(
+        workspaces: [workspace],
+        projects: [project],
+        repositories: [checkout],
+        sections: const [section],
+      ),
+    ).value;
+    expect(snapshot.workspaces, [workspace]);
+    expect(snapshot.projects, [project]);
+    expect(snapshot.repositories, [checkout]);
+    expect(snapshot.sections, [section]);
+    final updated = roundTrip(
+      const ProjectUpdate(id: 'p'),
+      ProjectUpdated(project: project, rebased: [checkout]),
+    ).value;
+    expect(updated.project, project);
+    expect(updated.rebased, [checkout]);
+    expect(roundTrip(const CheckoutsRetire(['r']), {'r': 2}).value, {'r': 2});
+    expect(roundTrip(const ProjectsUsingEnvironment('e'), ['A']).value, ['A']);
+
+    const delete = ProjectDelete('p');
+    final reply = DataEnvelope.readAnswer(
+      overTheWire(
+        DataEnvelope.answer(
+          1,
+          delete,
+          DataReply(const DataAck(), 3, [
+            const ProjectRemoved('p'),
+            NoteChanged(note),
+          ]),
+        ),
+      ),
+      delete,
+    );
+    expect(reply.changes, hasLength(2));
+    expect((reply.changes.first as ProjectRemoved).id, 'p');
   });
 
   test('a refusal is thrown typed, with its message', () {
@@ -99,6 +201,42 @@ void main() {
             .having((r) => r.message, 'message', 'no todo x'),
       ),
     );
+  });
+
+  test('a misshapen workspace argument is refused, not thrown', () {
+    for (final (kind, arguments) in [
+      ('projects.create', {'name': 'x', 'root': 'here'}),
+      (
+        'projects.create',
+        {
+          'name': 'x',
+          'root': environmentPathToJson(root),
+          'found': [1],
+        },
+      ),
+      (
+        'projects.file',
+        {
+          'placements': {'p': 3},
+        },
+      ),
+      (
+        'sections.put',
+        {
+          'section': {'id': 's'},
+        },
+      ),
+    ]) {
+      expect(
+        DataEnvelope.readRequest({
+          'id': 1,
+          'kind': kind,
+          'arguments': arguments,
+        }).refusal?.code,
+        DataRefusalCode.invalid,
+        reason: '$kind $arguments',
+      );
+    }
   });
 
   test('an unknown kind or a misshapen argument is refused, not thrown', () {
@@ -140,15 +278,31 @@ void main() {
       TodoChanged(todo),
       const TodoRemoved('t'),
       const PreferenceChanged('k', null),
+      WorkspaceChanged(workspace),
+      ProjectChanged(project),
+      RepositoryChanged(checkout),
+      const SectionChanged(section),
+      const WorkspaceRemoved('w'),
+      const ProjectRemoved('p'),
+      const RepositoryRemoved('r'),
+      const SectionRemoved('s'),
     ]);
     final json = overTheWire(DataEnvelope.changes(batch));
     (json['changes']! as List).add({'change': 'fromTheFuture'});
     final back = DataEnvelope.readChanges(json);
     expect(back.revision, 5);
-    expect(back.changes, hasLength(5));
+    expect(back.changes, hasLength(13));
     expect((back.changes[0] as NoteChanged).note, note);
     expect((back.changes[2] as TodoChanged).todo, todo);
     expect((back.changes[4] as PreferenceChanged).value, isNull);
+    expect((back.changes[5] as WorkspaceChanged).workspace, workspace);
+    expect((back.changes[6] as ProjectChanged).project, project);
+    expect((back.changes[7] as RepositoryChanged).repository, checkout);
+    expect((back.changes[8] as SectionChanged).section, section);
+    expect(
+      [for (final change in back.changes.skip(9)) (change as RowRemoved).id],
+      ['w', 'p', 'r', 's'],
+    );
   });
 
   test('reserved preference keys and shapes', () {

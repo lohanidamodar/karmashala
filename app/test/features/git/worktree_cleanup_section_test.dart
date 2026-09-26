@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/git/application/worktree_cleanup_provide
 import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
 import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';

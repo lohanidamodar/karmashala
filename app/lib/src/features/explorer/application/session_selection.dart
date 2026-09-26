@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -159,7 +159,7 @@ class SessionSelectionController extends Notifier<SessionSelection> {
     if (state.ids.isEmpty) return;
     final bool Function(String id) exists = switch (state.kind) {
       SelectionKind.projects =>
-        (id) => ref.read(projectDaoProvider).getById(id) != null,
+        (id) => ref.read(workspaceDataProvider).project(id) != null,
       _ =>
         (id) =>
             ref.read(sessionDaoProvider).getById(id) != null ||

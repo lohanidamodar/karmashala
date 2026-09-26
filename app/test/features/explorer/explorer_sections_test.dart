@@ -6,7 +6,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
@@ -14,8 +14,7 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';

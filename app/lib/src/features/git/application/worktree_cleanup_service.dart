@@ -7,8 +7,7 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/session.dart';
 
-import '../../explorer/application/checkout.dart';
-import '../../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../data/worktree_cleanup_store.dart';
 import 'worktree_cleanup_policy.dart';
 

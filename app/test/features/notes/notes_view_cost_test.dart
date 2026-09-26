@@ -5,8 +5,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter/material.dart';

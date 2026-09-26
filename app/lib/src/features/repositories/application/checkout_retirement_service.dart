@@ -1,17 +1,18 @@
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
-import '../data/repository_dao.dart';
+import '../../workspaces/data/workspace_data.dart';
 
-/// Retires the checkouts whose directories are *provably* gone. Deleting a row
-/// cascades into session history, so absence is proved and the root is witness.
+/// Retires the checkouts whose directories are *provably* gone — absence is
+/// proved here, with the root as witness; the server deletes only those no
+/// recorded history hangs off, and names the rest.
 class CheckoutRetirementService {
   const CheckoutRetirementService({
-    required this.repositories,
+    required this.workspace,
     this.probe = const LocalCheckoutPresenceProbe(),
   });
 
-  final RepositoryDao repositories;
+  final WorkspaceData workspace;
   final CheckoutPresenceProbe probe;
 
   /// Retires every checkout of [projectId] beneath [root] whose directory is
@@ -22,8 +23,8 @@ class CheckoutRetirementService {
     required ExecutionEnvironment environment,
     required ExecutionEnvironment windows,
   }) async {
-    final candidates = repositories
-        .getByProject(projectId)
+    final candidates = workspace
+        .repositoriesOf(projectId)
         .where((repository) => isUnder(root, repository.path))
         .toList();
     if (candidates.isEmpty) return CheckoutRetirementReport.nothing;
@@ -37,8 +38,7 @@ class CheckoutRetirementService {
       );
     }
 
-    final retired = <Repository>[];
-    final keptReferenced = <ReferencedCheckout>[];
+    final gone = <Repository>[];
     final keptUnreachable = <Repository>[];
     // Asked together: a WSL project's checkouts are then one `wsl.exe` call,
     // and a share that blocks costs one deadline rather than one per checkout.
@@ -53,21 +53,25 @@ class CheckoutRetirementService {
         keptUnreachable.add(candidate);
         continue;
       }
-      final records = repositories.historyReferenceCount(candidate.id);
-      if (records > 0) {
-        keptReferenced.add(
-          ReferencedCheckout(repository: candidate, records: records),
-        );
-        continue;
-      }
-      repositories.delete(candidate.id);
-      retired.add(candidate);
+      gone.add(candidate);
     }
+    final records = gone.isEmpty
+        ? const <String, int>{}
+        : await workspace.write(
+            CheckoutsRetire([for (final checkout in gone) checkout.id]),
+          );
 
     return CheckoutRetirementReport(
       examined: candidates.length,
-      retired: retired,
-      keptReferenced: keptReferenced,
+      retired: [
+        for (final checkout in gone)
+          if (records[checkout.id] == 0) checkout,
+      ],
+      keptReferenced: [
+        for (final checkout in gone)
+          if (records[checkout.id] case final kept? when kept > 0)
+            ReferencedCheckout(repository: checkout, records: kept),
+      ],
       keptUnreachable: keptUnreachable,
     );
   }

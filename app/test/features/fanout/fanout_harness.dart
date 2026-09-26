@@ -13,8 +13,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

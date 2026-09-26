@@ -1,3 +1,4 @@
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -8,9 +9,8 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/projects/application/project_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
@@ -38,7 +38,7 @@ void main() {
   tearDown(() => db.close());
 
   void seedProjects([int count = 3]) {
-    final dao = container.read(projectDaoProvider);
+    final dao = ProjectDao(container.read(databaseProvider));
     for (var i = 0; i < count; i++) {
       dao.insert(
         Project(
@@ -54,7 +54,7 @@ void main() {
         ),
       );
     }
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
   }
 
   Widget dialogApp() => UncontrolledProviderScope(
@@ -71,9 +71,7 @@ void main() {
     // where new work goes, rather than what the tree lists. What still has to
     // hold is that a scope never outlives the context it names.
     test('a deleted context does not leave the scope naming it', () {
-      final games = container
-          .read(workspacesControllerProvider.notifier)
-          .create('Game dev');
+      final games = createContext(container, 'Game dev');
       container
           .read(workspaceScopeProvider.notifier)
           .select(WorkspaceScope.of(games.id));
@@ -127,9 +125,7 @@ void main() {
     testWidgets('describes a context, and empties the description again', (
       tester,
     ) async {
-      final personal = container
-          .read(workspacesControllerProvider.notifier)
-          .create('Personal');
+      final personal = createContext(container, 'Personal');
       await tester.pumpWidget(dialogApp());
       await tester.pumpAndSettle();
       // With nothing said, the row says the one thing it knows for free.
@@ -167,10 +163,8 @@ void main() {
       tester,
     ) async {
       seedProjects();
-      final games = container
-          .read(workspacesControllerProvider.notifier)
-          .create('Game dev');
-      container
+      final games = createContext(container, 'Game dev');
+      await container
           .read(workspacesControllerProvider.notifier)
           .assign('p1', games.id);
       await tester.pumpWidget(dialogApp());
@@ -200,9 +194,7 @@ void main() {
 
     testWidgets('assigns a project, and unassigns it again', (tester) async {
       seedProjects();
-      final games = container
-          .read(workspacesControllerProvider.notifier)
-          .create('Game dev');
+      final games = createContext(container, 'Game dev');
       await tester.pumpWidget(dialogApp());
       await tester.pumpAndSettle();
 
@@ -237,9 +229,8 @@ void main() {
       tester,
     ) async {
       seedProjects(31);
-      container.read(workspacesControllerProvider.notifier)
-        ..create('Personal')
-        ..create('PopupBits');
+      createContext(container, 'Personal');
+      createContext(container, 'PopupBits');
       await expectSurvivesWindowMatrix(
         tester,
         // A 720x560 box on a 1440x900 screen.
@@ -265,10 +256,10 @@ void main() {
 
     testWidgets('the contexts dialog survives 720x560', (tester) async {
       seedProjects(1);
-      final controller = container.read(workspacesControllerProvider.notifier)
-        ..create('Personal')
-        ..create('PopupBits');
-      controller.assign(
+      createContext(container, 'Personal');
+      createContext(container, 'PopupBits');
+      final controller = container.read(workspacesControllerProvider.notifier);
+      await controller.assign(
         'p0',
         container.read(workspacesControllerProvider).first.id,
       );
@@ -284,11 +275,10 @@ void main() {
     ) async {
       // The owner's own scale, which is the case that scrolls.
       seedProjects(31);
-      container.read(workspacesControllerProvider.notifier)
-        ..create('Personal')
-        ..create('PopupBits')
-        ..create('Appwrite')
-        ..create('Game dev');
+      createContext(container, 'Personal');
+      createContext(container, 'PopupBits');
+      createContext(container, 'Appwrite');
+      createContext(container, 'Game dev');
       await expectSurvivesWindowMatrix(
         tester,
         build: dialogApp,

@@ -832,7 +832,7 @@
             {
               "type": "result",
               "payload": {
-                "projectId": "new-3",
+                "projectId": "<serverId>",
                 "name": "Workspace",
                 "path": "<projectFolder>",
                 "environmentName": "Windows",
@@ -840,7 +840,7 @@
                 "environmentKind": "windowsNative",
                 "checkouts": [
                   {
-                    "repositoryId": "new-4",
+                    "repositoryId": "<serverId>",
                     "name": "Workspace",
                     "path": "<projectFolder>",
                     "agents": []
@@ -869,7 +869,7 @@
             {
               "type": "result",
               "payload": {
-                "sessionId": "new-5",
+                "sessionId": "new-3",
                 "title": "From the phone",
                 "permissionMode": "mode=manual"
               }

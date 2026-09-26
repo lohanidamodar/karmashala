@@ -1,5 +1,7 @@
 import 'package:agent_cli/process.dart';
 
+import 'row_json.dart';
+
 /// A unit of work rooted at a folder. A project may contain many
 /// repositories (modeled separately). Its [root] folder is bound to the
 /// execution environment that owns it.
@@ -65,6 +67,34 @@ class Project {
     createdAt: createdAt,
     workspaceId: workspaceId,
   );
+
+  /// The wire shape: dates as ISO-8601 UTC, absent fields omitted.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'root': environmentPathToJson(root),
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'workspaceId': ?workspaceId,
+    'defaultRepositoryId': ?defaultRepositoryId,
+  };
+
+  /// Throws [FormatException] on a map that is not a project.
+  static Project fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    final name = json['name'];
+    final createdAt = json['createdAt'];
+    if (id is! String || name is! String || createdAt is! String) {
+      throw const FormatException('not a project');
+    }
+    return Project(
+      id: id,
+      name: name,
+      root: environmentPathFromJson(json['root']),
+      createdAt: DateTime.parse(createdAt).toUtc(),
+      workspaceId: json['workspaceId'] as String?,
+      defaultRepositoryId: json['defaultRepositoryId'] as String?,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

@@ -7,7 +7,9 @@ import 'refusal.dart';
 /// frame to a remote server later.
 ///
 /// - request: `{id, kind, arguments}`
-/// - answer: `{id, revision, result}` or `{id, refusal: {code, message}}`
+/// - answer: `{id, revision, result, changes?}` or `{id, refusal: {code,
+///   message}}` — `changes` is everything the request wrote, its side
+///   effects on other rows and domains included
 /// - changes: `{revision, changes: [...]}`
 abstract final class DataEnvelope {
   static Map<String, Object?> request(int id, DataRequest<Object?> request) => {
@@ -45,10 +47,15 @@ abstract final class DataEnvelope {
 
   static Map<String, Object?> answer<R>(
     int id,
-    int revision,
     DataRequest<R> request,
-    R result,
-  ) => {'id': id, 'revision': revision, 'result': request.resultToJson(result)};
+    DataReply<R> reply,
+  ) => {
+    'id': id,
+    'revision': reply.revision,
+    'result': request.resultToJson(reply.value),
+    if (reply.changes.isNotEmpty)
+      'changes': [for (final change in reply.changes) change.toJson()],
+  };
 
   static Map<String, Object?> refusal(int id, DataRefused refusal) => {
     'id': id,
@@ -75,7 +82,12 @@ abstract final class DataEnvelope {
         'the server answered ${request.kind} without a revision',
       );
     }
-    return DataReply(request.resultFromJson(json['result']), revision);
+    final changes = json['changes'];
+    return DataReply(request.resultFromJson(json['result']), revision, [
+      if (changes is List)
+        for (final change in changes)
+          ?DataChange.fromJson((change as Map).cast<String, Object?>()),
+    ]);
   }
 
   static Map<String, Object?> changes(DataChanges changes) => changes.toJson();
@@ -84,10 +96,12 @@ abstract final class DataEnvelope {
       DataChanges.fromJson(json);
 }
 
-/// A request's result, and the server's revision when it was answered.
+/// A request's result, the server's revision when it was answered, and
+/// every row the request changed — the same changes other clients are told.
 final class DataReply<R> {
-  const DataReply(this.value, this.revision);
+  const DataReply(this.value, this.revision, [this.changes = const []]);
 
   final R value;
   final int revision;
+  final List<DataChange> changes;
 }

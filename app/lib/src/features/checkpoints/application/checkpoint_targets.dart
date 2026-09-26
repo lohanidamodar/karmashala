@@ -1,10 +1,10 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 
 import '../../environments/application/environment_providers.dart';
 import '../../explorer/application/where_you_are.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_working_directory.dart';
 import 'checkpoint_providers.dart';
@@ -27,8 +27,8 @@ Future<List<EnvironmentPath>> checkpointTargetsFor(
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) return const [];
   final primary = checkpointTargetFor(ref, sessionId);
-  final repositories = ref.read(repositoryDaoProvider);
-  final home = repositories.getById(session.repositoryId)?.path;
+  final workspace = ref.read(workspaceDataProvider);
+  final home = workspace.repository(session.repositoryId)?.path;
   final environmentId = primary?.environmentId ?? home?.environmentId;
 
   final targets = <EnvironmentPath>[];
@@ -63,7 +63,7 @@ Future<List<EnvironmentPath>> checkpointTargetsFor(
       : session.workingDirectory?.path ?? primary?.path ?? home?.path;
   final scopes = {?session.workingDirectory?.path, ?primary?.path, ?home?.path};
   final registered = {
-    for (final repo in repositories.getAll())
+    for (final repo in workspace.repositories)
       if (repo.path.environmentId == environmentId) repo.path.path,
   };
   bool inScope(String root) =>

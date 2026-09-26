@@ -1,15 +1,14 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/git.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import 'package:karmashala_session/session.dart';
-import 'checkout.dart';
 
 /// One linked worktree of a repository, as the Explorer draws it.
 class WorktreeNode {
@@ -248,12 +247,12 @@ final projectSessionLocationsProvider = Provider.autoDispose
         SessionChangeKind.placement,
         SessionChangeKind.workspace,
       });
-      final repositoryDao = ref.read(repositoryDaoProvider);
+      final workspace = ref.read(workspaceDataProvider);
       final sessionDao = ref.read(sessionDaoProvider);
       final importedDao = ref.read(importedSessionDaoProvider);
 
       final locations = <SessionLocation>[];
-      for (final repo in repositoryDao.getByProject(projectId)) {
+      for (final repo in workspace.repositoriesOf(projectId)) {
         for (final session in sessionDao.getByRepository(repo.id)) {
           locations.add(
             SessionLocation(

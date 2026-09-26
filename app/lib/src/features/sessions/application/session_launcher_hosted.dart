@@ -49,8 +49,8 @@ extension SessionHostedVerbs on SessionLauncher {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return null;
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     final installation = _ref
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);

@@ -18,8 +18,7 @@ import 'package:karmashala/src/features/explorer/application/explorer_tree_provi
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';

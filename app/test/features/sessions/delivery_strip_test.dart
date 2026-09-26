@@ -9,8 +9,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:karmashala_git/github.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_update_service.dart';

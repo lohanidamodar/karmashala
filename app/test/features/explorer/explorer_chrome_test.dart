@@ -19,7 +19,7 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -155,7 +155,7 @@ void main() {
 
     testWidgets('the context chips are one more row, and 27px', (tester) async {
       final c = container();
-      c.read(workspacesControllerProvider.notifier).create('Game dev');
+      createContext(c, 'Game dev');
       await pumpPanel(
         tester,
         window: const Size(1440, 900),
@@ -376,10 +376,10 @@ void main() {
       tester,
     ) async {
       final c = container();
-      final games = c
+      final games = createContext(c, 'Game dev');
+      await c
           .read(workspacesControllerProvider.notifier)
-          .create('Game dev');
-      c.read(workspacesControllerProvider.notifier).assign('p1', games.id);
+          .assign('p1', games.id);
       await pumpPanel(
         tester,
         window: const Size(1440, 900),

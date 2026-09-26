@@ -5,8 +5,7 @@ import 'package:karmashala/src/features/cli_detection/application/subagent_provi
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/subagent_turns_tile.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';

@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -9,7 +10,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import 'automation_providers.dart';
 
@@ -24,7 +24,7 @@ class AppCheckoutFacts implements CheckoutFacts {
 
   @override
   Repository? repository(String id) =>
-      _ref.read(repositoryDaoProvider).getById(id);
+      _ref.read(workspaceDataProvider).repository(id);
 
   @override
   AgentInstallation? installation(String id) =>

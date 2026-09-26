@@ -7,8 +7,7 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

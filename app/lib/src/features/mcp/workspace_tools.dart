@@ -1,11 +1,10 @@
+import '../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../explorer/application/checkout_picker.dart';
 import '../git/application/changes_providers.dart';
 import '../projects/application/projects_controller.dart';
-import '../repositories/application/repository_providers.dart';
-import 'package:karmashala_git/repositories.dart';
 import '../sessions/application/delivery_providers.dart';
 import '../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -52,8 +51,8 @@ class WorkspaceControlTools {
       throw ArgumentError('projectId is required. list_projects has the ids.');
     }
     final repositories = _container
-        .read(repositoryDaoProvider)
-        .getByProject(projectId);
+        .read(workspaceDataProvider)
+        .repositoriesOf(projectId);
     if (repositories.isEmpty) {
       throw StateError(
         'No project with id $projectId, or it has no checkouts. Try '
@@ -133,8 +132,8 @@ class WorkspaceControlTools {
       );
     }
     final Repository? repository = _container
-        .read(repositoryDaoProvider)
-        .getById(repositoryId);
+        .read(workspaceDataProvider)
+        .repository(repositoryId);
     if (repository == null) {
       throw StateError('No checkout with id $repositoryId.');
     }

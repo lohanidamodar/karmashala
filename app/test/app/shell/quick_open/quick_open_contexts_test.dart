@@ -7,9 +7,8 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 
@@ -80,13 +79,12 @@ void main() {
     final container = await open(
       tester,
       before: (container) {
-        final workspaces = container.read(
-          workspacesControllerProvider.notifier,
-        );
-        workspaces.create('Personal');
-        gamesId = workspaces
-            .create('Game dev', description: 'Weekend things')
-            .id;
+        createContext(container, 'Personal');
+        gamesId = createContext(
+          container,
+          'Game dev',
+          description: 'Weekend things',
+        ).id;
       },
     );
 
@@ -109,9 +107,7 @@ void main() {
     final container = await open(
       tester,
       before: (container) {
-        final games = container
-            .read(workspacesControllerProvider.notifier)
-            .create('Game dev');
+        final games = createContext(container, 'Game dev');
         container
             .read(workspaceScopeProvider.notifier)
             .select(WorkspaceScope.of(games.id));

@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart';
@@ -10,7 +11,6 @@ import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_status_registry.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_last_active_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -146,7 +146,7 @@ final workspaceSessionsProvider =
           project.id: project.name,
       };
       final repositories = {
-        for (final repository in ref.read(repositoryDaoProvider).getAll())
+        for (final repository in ref.read(workspaceDataProvider).repositories)
           repository.id: repository,
       };
       final lastActiveOf = ref.read(sessionLastActiveProvider);

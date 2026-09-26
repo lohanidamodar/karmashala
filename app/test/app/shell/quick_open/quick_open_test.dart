@@ -9,8 +9,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';

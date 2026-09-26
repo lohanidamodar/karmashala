@@ -12,8 +12,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/session_mcp.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';

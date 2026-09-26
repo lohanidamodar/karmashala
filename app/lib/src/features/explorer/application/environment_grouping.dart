@@ -1,6 +1,6 @@
 import 'package:agent_cli/process.dart';
 
-import '../../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 /// One environment's worth of the Explorer, with the projects that run there.
 class EnvironmentGroup {

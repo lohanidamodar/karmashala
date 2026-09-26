@@ -3,8 +3,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../projects/application/project_providers.dart';
-import '../../projects/domain/project.dart';
+import '../../workspaces/data/workspace_data.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../settings/application/settings_controller.dart';
 import '../data/code_editor_service.dart';
 
@@ -83,7 +83,7 @@ class EditorActions {
   /// Opens the project's root folder, or [windowsSubPath] when a sub-folder was
   /// chosen. Throws a [StateError] with a readable message on failure.
   Future<void> openProject(String projectId, {String? windowsSubPath}) async {
-    final project = _ref.read(projectDaoProvider).getById(projectId);
+    final project = _ref.read(workspaceDataProvider).project(projectId);
     if (project == null) {
       throw StateError('This project is no longer available.');
     }

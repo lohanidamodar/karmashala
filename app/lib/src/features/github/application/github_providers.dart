@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
@@ -6,7 +7,6 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../git/application/changes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/github.dart';
 
 /// Resolves the right [GitHubService] (and runner) for a repository's
@@ -92,7 +92,7 @@ final githubRepositoryProvider = FutureProvider.autoDispose<GitHubRepo?>((
 ) async {
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return null;
-  final repo = ref.read(repositoryDaoProvider).getById(id);
+  final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return null;
   return ref.read(gitHubReviewServiceProvider).repository(repo.path);
 });
@@ -102,7 +102,7 @@ final githubPullRequestsProvider =
     FutureProvider.autoDispose<List<PullRequest>>((ref) async {
       final id = ref.watch(selectedRepositoryIdProvider);
       if (id == null) return const [];
-      final repo = ref.read(repositoryDaoProvider).getById(id);
+      final repo = ref.read(workspaceDataProvider).repository(id);
       if (repo == null) return const [];
       return ref.read(gitHubReviewServiceProvider).pullRequests(repo.path);
     });
@@ -113,7 +113,7 @@ final githubIssuesProvider = FutureProvider.autoDispose<List<Issue>>((
 ) async {
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return const [];
-  final repo = ref.read(repositoryDaoProvider).getById(id);
+  final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return const [];
   return ref.read(gitHubReviewServiceProvider).issues(repo.path);
 });

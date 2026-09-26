@@ -48,15 +48,14 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala_projects/store.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_providers.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -565,9 +564,15 @@ void main() {
     };
 
     // Everything the machine decides rather than the bindings: the desktop's
-    // own name, the folder the temp directory happened to get, and the
-    // upload id the store's secure RNG chose.
-    var encoded = '${const JsonEncoder.withIndent('  ').convert(catalogue)}\n';
+    // own name, the folder the temp directory happened to get, the upload id
+    // the store's secure RNG chose, and the ids the server gives new rows.
+    var encoded = '${const JsonEncoder.withIndent('  ').convert(catalogue)}\n'
+        .replaceAll(
+          RegExp(
+            r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}',
+          ),
+          '<serverId>',
+        );
     for (final (from, to) in <(String, String)>[
       (projectFolder.resolveSymbolicLinksSync(), '<projectFolder>'),
       (projectFolder.path, '<projectFolder>'),

@@ -11,8 +11,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_agent_statuses.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';

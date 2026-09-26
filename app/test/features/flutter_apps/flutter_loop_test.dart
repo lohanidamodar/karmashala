@@ -13,8 +13,7 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_app_pro
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';

@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,7 +8,6 @@ import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../git/application/changes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../application/fanout_service.dart';
 import 'comparison_list.dart';
@@ -54,7 +54,7 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
 
   Repository? get _repository {
     final id = ref.read(selectedRepositoryIdProvider);
-    return id == null ? null : ref.read(repositoryDaoProvider).getById(id);
+    return id == null ? null : ref.read(workspaceDataProvider).repository(id);
   }
 
   Future<void> _launch(List<AgentInstallation> installs) async {

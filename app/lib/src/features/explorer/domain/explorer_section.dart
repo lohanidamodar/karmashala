@@ -1,4 +1,6 @@
 import 'package:karmashala_git/github.dart';
+import 'package:karmashala_projects/karmashala_projects.dart'
+    show StoredSection;
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 
@@ -270,6 +272,31 @@ class ExplorerSection {
   /// The rows the user put here by hand. Empty for every rule section, and for
   /// [PinnedRule], whose membership is the settings pin set.
   final Set<String> members;
+
+  /// [stored] as a section this build can draw, or null for a rule it does not
+  /// know — a downgrade, and guessing would strip the rule on the next write.
+  static ExplorerSection? fromStored(StoredSection stored) {
+    final rule = SectionRule.fromStorage(stored.kind, stored.pattern);
+    if (rule == null) return null;
+    return ExplorerSection(
+      id: stored.id,
+      name: stored.name,
+      rule: rule,
+      position: stored.position,
+      collapsed: stored.collapsed,
+      members: stored.members,
+    );
+  }
+
+  StoredSection toStored() => StoredSection(
+    id: id,
+    name: name,
+    kind: rule.kind.name,
+    pattern: rule.pattern,
+    position: position,
+    collapsed: collapsed,
+    members: members,
+  );
 
   /// Whether this section is the built-in Pinned group.
   bool get isPinned => rule.kind == SectionRuleKind.pinned;

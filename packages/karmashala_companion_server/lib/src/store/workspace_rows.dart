@@ -1,48 +1,32 @@
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_store/database.dart';
 
-/// One `projects` row, as much of it as a phone is told.
-typedef ProjectRow = ({
-  String id,
-  String name,
-  EnvironmentPath root,
-  DateTime createdAt,
-});
-
 /// The workspace as the session host reads it while no desktop app is
-/// connected: the `projects`, `repositories`, `agent_installations` and
-/// `execution_environments` rows, straight from the shared store, and the one
-/// write a phone may ask for — a project and the checkouts found under it,
-/// shaped exactly as the app's own `ProjectDao`/`RepositoryDao` write them.
+/// connected: the `projects` and `repositories` rows through the same DAOs
+/// the server's data API writes them with, and the `agent_installations` and
+/// `execution_environments` rows, straight from the shared store. Read-only:
+/// a project a phone adds goes through the data API, so every client is told.
 class WorkspaceRows {
-  WorkspaceRows(this._db);
+  WorkspaceRows(this._db)
+    : _projects = ProjectDao(_db),
+      _repositories = RepositoryDao(_db);
 
   final AppDatabase _db;
+  final ProjectDao _projects;
+  final RepositoryDao _repositories;
 
   /// Every project, oldest first — the app's own order before pins.
-  List<ProjectRow> projects() => [
-    for (final row in _db.query(
-      'SELECT * FROM projects ORDER BY created_at, id;',
-    ))
-      _project(row),
-  ];
+  List<Project> projects() => _projects.getAll();
 
-  ProjectRow? project(String id) {
-    final rows = _db.query('SELECT * FROM projects WHERE id = ?;', [id]);
-    return rows.isEmpty ? null : _project(rows.first);
-  }
+  Project? project(String id) => _projects.getById(id);
 
   /// [projectId]'s checkouts, oldest first.
-  List<Repository> repositoriesOf(String projectId) => [
-    for (final row in _db.query(
-      'SELECT * FROM repositories WHERE project_id = ? '
-      'ORDER BY created_at, id;',
-      [projectId],
-    ))
-      _repository(row),
-  ];
+  List<Repository> repositoriesOf(String projectId) =>
+      _repositories.getByProject(projectId);
 
   /// Every agent installed in [environmentId], oldest first.
   List<AgentInstallation> installationsIn(String environmentId) => [
@@ -75,62 +59,6 @@ class WorkspaceRows {
         createdAt: dateFromIso(row['created_at']),
       ),
   ];
-
-  /// Writes a project and its checkouts in one transaction: a project with
-  /// only some of its checkouts is one a phone could start in the wrong place.
-  void insertProject(ProjectRow project, List<Repository> repositories) {
-    _db.transaction(() {
-      _db.execute(
-        'INSERT INTO projects '
-        '(id, name, root_environment_id, root_path, created_at) '
-        'VALUES (?, ?, ?, ?, ?);',
-        [
-          project.id,
-          project.name,
-          project.root.environmentId,
-          project.root.path,
-          isoFromDate(project.createdAt),
-        ],
-      );
-      for (final repository in repositories) {
-        _db.execute(
-          'INSERT INTO repositories '
-          '(id, project_id, name, environment_id, path, created_at) '
-          'VALUES (?, ?, ?, ?, ?, ?);',
-          [
-            repository.id,
-            repository.projectId,
-            repository.name,
-            repository.path.environmentId,
-            repository.path.path,
-            isoFromDate(repository.createdAt),
-          ],
-        );
-      }
-    });
-  }
-
-  static ProjectRow _project(Map<String, Object?> row) => (
-    id: row['id']! as String,
-    name: row['name']! as String,
-    root: EnvironmentPath(
-      environmentId: row['root_environment_id']! as String,
-      path: row['root_path']! as String,
-    ),
-    createdAt: dateFromIso(row['created_at']),
-  );
-
-  static Repository _repository(Map<String, Object?> row) => Repository(
-    id: row['id']! as String,
-    projectId: row['project_id']! as String,
-    name: row['name']! as String,
-    path: EnvironmentPath(
-      environmentId: row['environment_id']! as String,
-      path: row['path']! as String,
-    ),
-    createdAt: dateFromIso(row['created_at']),
-    canonicalId: row['canonical_id'] as String?,
-  );
 
   static AgentInstallation _installation(Map<String, Object?> row) =>
       AgentInstallation(

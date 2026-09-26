@@ -8,7 +8,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 
 import '../../automations/presentation/resume_on_reset_dialog.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
@@ -261,14 +261,14 @@ class ExplorerSelectionVerbs {
     ScaffoldMessengerState? messenger,
   })
   _capture() {
-    final projects = ref.read(projectDaoProvider);
+    final workspace = ref.read(workspaceDataProvider);
     final ids = [
       for (final id in _selection.ids)
-        if (projects.getById(id) != null) id,
+        if (workspace.project(id) != null) id,
     ];
     return (
       ids: ids,
-      previous: {for (final id in ids) id: projects.getById(id)!.workspaceId},
+      previous: {for (final id in ids) id: workspace.project(id)!.workspaceId},
       contexts: ref.read(workspacesControllerProvider.notifier),
       selection: ref.read(sessionSelectionProvider.notifier),
       messenger: ScaffoldMessenger.maybeOf(context),

@@ -5,6 +5,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:path/path.dart' as p;
@@ -20,12 +21,21 @@ import '../store/workspace_rows.dart';
 /// environment alone, so a checkout on WSL or over SSH is left out of
 /// `workspace.list` rather than offered with nothing to start it; the flat
 /// `projects.list` still names every project, since it is a place, not a start.
+/// Records a project called `name` at `root` with what discovery `found`
+/// under it — the server's data API, so every client hears of it — and
+/// answers it with the checkouts it was given.
+typedef CreateProject =
+    ({Project project, List<Repository> checkouts}) Function(
+      String name,
+      EnvironmentPath root,
+      List<DiscoveredRepository> found,
+    );
+
 class HostedWorkspace {
   HostedWorkspace({
     required this.rows,
     required this.isHere,
-    required this.now,
-    required this.newId,
+    required this.createProject,
     this.registry = AgentRegistry.builtIn,
     this.discovery = const LocalRepositoryDiscoveryService(),
   });
@@ -35,8 +45,7 @@ class HostedWorkspace {
   /// Whether an environment is this machine's own — where this host can
   /// start a process directly.
   final bool Function(ExecutionEnvironment environment) isHere;
-  final DateTime Function() now;
-  final String Function() newId;
+  final CreateProject createProject;
   final AgentRegistry registry;
   final RepositoryDiscoveryService discovery;
 
@@ -115,32 +124,7 @@ class HostedWorkspace {
     } on RepositoryDiscoveryException catch (error) {
       throw RemoteApiRefusal(ErrorCode.badRequest, error.message);
     }
-    final at = now().toUtc();
-    final project = (id: newId(), name: name, root: root, createdAt: at);
-    final repositories = [
-      for (final repository in found)
-        Repository(
-          id: newId(),
-          projectId: project.id,
-          name: repository.name,
-          path: repository.path,
-          createdAt: at,
-        ),
-    ];
-    // Git is not what makes a directory runnable: every agent starts in a
-    // plain one, so a folder with no repository is its own checkout.
-    if (repositories.isEmpty) {
-      repositories.add(
-        Repository(
-          id: newId(),
-          projectId: project.id,
-          name: name,
-          path: root,
-          createdAt: at,
-        ),
-      );
-    }
-    rows.insertProject(project, repositories);
+    final (:project, :checkouts) = createProject(name, root, found);
     final agents = [
       for (final installation in rows.installationsIn(here.id))
         _agentOption(installation),
@@ -149,7 +133,7 @@ class HostedWorkspace {
       project,
       here,
       checkouts: [
-        for (final repository in repositories)
+        for (final repository in checkouts)
           _checkout(project, repository, here, agents),
       ],
     );
@@ -207,7 +191,7 @@ class HostedWorkspace {
   }
 
   RemoteWorkspaceProject? _project(
-    ProjectRow project,
+    Project project,
     Map<String, ExecutionEnvironment> environments,
     List<RemoteAgentOption> Function(String environmentId) agentsIn,
   ) {
@@ -226,7 +210,7 @@ class HostedWorkspace {
   }
 
   RemoteCheckoutOption _checkout(
-    ProjectRow project,
+    Project project,
     Repository repository,
     ExecutionEnvironment environment,
     List<RemoteAgentOption> agents,
@@ -246,7 +230,7 @@ class HostedWorkspace {
   }
 
   RemoteWorkspaceProject _described(
-    ProjectRow project,
+    Project project,
     ExecutionEnvironment? environment, {
     List<RemoteCheckoutOption> checkouts = const [],
   }) => RemoteWorkspaceProject(

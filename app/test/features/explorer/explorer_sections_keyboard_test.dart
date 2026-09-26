@@ -13,8 +13,7 @@ import 'package:karmashala/src/features/explorer/application/session_selection.d
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_keyboard.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';

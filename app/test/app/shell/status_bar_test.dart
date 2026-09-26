@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_tab.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';

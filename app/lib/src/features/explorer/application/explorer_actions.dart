@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'where_you_are.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -9,7 +10,6 @@ import 'package:agent_cli/read.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
@@ -140,8 +140,8 @@ class ExplorerActions {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (installation == null || repository == null) {
       return const ExplorerResult(
         ExplorerOutcome.failed,

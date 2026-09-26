@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
@@ -17,7 +18,6 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -117,8 +117,8 @@ class SessionActions {
     String? notice;
     if (deleteFromCli) {
       final repo = _ref
-          .read(repositoryDaoProvider)
-          .getById(session.repositoryId);
+          .read(workspaceDataProvider)
+          .repository(session.repositoryId);
       final installation = _ref
           .read(agentInstallationDaoProvider)
           .getById(session.agentInstallationId);
@@ -331,7 +331,9 @@ class SessionActions {
       return running.id;
     }
 
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) {
       throw StateError(
         'Repository for this session is no longer in the workspace.',
@@ -416,8 +418,8 @@ class SessionActions {
         throw StateError('This session no longer exists.');
       }
       final repo = _ref
-          .read(repositoryDaoProvider)
-          .getById(session.repositoryId);
+          .read(workspaceDataProvider)
+          .repository(session.repositoryId);
       if (repo == null) {
         throw StateError('The session\'s repository is no longer available.');
       }
@@ -523,7 +525,9 @@ class SessionActions {
   /// A shell command (cd + resume, with permission flags) for [session], to
   /// copy to the clipboard. Throws if the repository is gone.
   String resumeShellCommand(ImportedSession session) {
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) {
       throw StateError('This session\'s repository is no longer available.');
     }
@@ -564,7 +568,9 @@ class SessionActions {
   String nativeResumeShellCommand(String sessionId) {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) {
       throw StateError('This session\'s repository is no longer available.');
     }
@@ -601,13 +607,13 @@ class SessionActions {
 
   /// A shell command (cd + fresh session, with permission flags) for
   /// [projectId]'s first repository with the default agent.
-  String newSessionShellCommand(String projectId) {
-    final repos = _ref.read(repositoryDaoProvider).getByProject(projectId);
+  Future<String> newSessionShellCommand(String projectId) async {
+    final repos = _ref.read(workspaceDataProvider).repositoriesOf(projectId);
     // Nothing recorded is not nowhere to run: the project's own folder is, and
     // recording it here is what the Explorer's own start does.
     final repo =
         repos.firstOrNull ??
-        _ref
+        await _ref
             .read(projectsControllerProvider.notifier)
             .ensureRunLocation(projectId);
     final installs = _ref
@@ -651,7 +657,9 @@ class SessionActions {
           externalSessionId: session.externalId,
         );
     _refuseWhatCannotResume(session.cli, session.externalId);
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) {
       throw StateError(
         'Repository for this session is no longer in the workspace.',
@@ -710,7 +718,9 @@ class SessionActions {
           sessionId: sessionId,
           externalSessionId: session.externalSessionId,
         );
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) {
       throw StateError('The session\'s repository is no longer available.');
     }

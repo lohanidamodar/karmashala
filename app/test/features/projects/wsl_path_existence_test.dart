@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:riverpod/riverpod.dart';
 

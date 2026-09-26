@@ -1,10 +1,11 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_providers.dart';
@@ -60,16 +61,16 @@ class SshHostsController extends Notifier<List<SshHost>> {
 
   /// The projects that have to go before [hostId] can: its environment row is
   /// what they point at, and the store refuses to orphan them.
-  List<String> projectsHolding(String hostId) => ref
-      .read(projectDaoProvider)
-      .namesUsingEnvironment(sshEnvironmentId(hostId));
+  Future<List<String>> projectsHolding(String hostId) => ref
+      .read(workspaceDataProvider)
+      .write(ProjectsUsingEnvironment(sshEnvironmentId(hostId)));
 
   /// Removes a host, its environment and any open connection. The trusted host
   /// key is kept: dropping it would make a later re-add a silent re-trust.
   ///
   /// Throws [SshHostInUse], and changes nothing, while projects still use it.
   Future<void> remove(String hostId) async {
-    final holding = projectsHolding(hostId);
+    final holding = await projectsHolding(hostId);
     if (holding.isNotEmpty) throw SshHostInUse(holding);
     await ref.read(sshConnectionPoolProvider).evict(hostId);
     ref.read(executionEnvironmentDaoProvider).delete(sshEnvironmentId(hostId));

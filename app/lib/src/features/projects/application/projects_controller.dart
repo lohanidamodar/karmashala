@@ -1,11 +1,10 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'dart:async';
 import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/data/data_client.dart';
-import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
@@ -20,15 +19,15 @@ import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'cli_store_purge.dart';
-import 'project_providers.dart';
-import 'project_service.dart';
+import '../../workspaces/data/workspace_data.dart';
 import 'project_service_provider.dart';
 import 'wsl_path_existence.dart';
 
-/// Holds the list of persisted projects and drives project creation. Reads are
-/// synchronous, so the state is the plain list, refreshed after mutations.
+/// The projects as the server keeps them, and the verbs over them. The list
+/// follows the server's copy — its projects and their checkouts, whoever
+/// changed them — so nothing here refreshes it after a write.
 class ProjectsController extends Notifier<List<Project>> {
   final Map<String, Future<ImportSummary>> _syncs = {};
 
@@ -36,13 +35,24 @@ class ProjectsController extends Notifier<List<Project>> {
   /// than starting a second walk of every store.
   Future<ImportSummary>? _lifecycleImport;
 
+  WorkspaceData get _workspace => ref.read(workspaceDataProvider);
+
   @override
-  List<Project> build() => ref.watch(projectDaoProvider).getAll();
+  List<Project> build() {
+    final workspace = ref.watch(workspaceDataProvider);
+    // Read first: priming the copy is a change, and not one to set state on.
+    final projects = workspace.projects;
+    final listening = workspace.projectChanges.listen(
+      (_) => state = workspace.projects,
+    );
+    ref.onDispose(listening.cancel);
+    return projects;
+  }
 
   /// Creates a project at a local Windows folder [path] named [name], discovers
-  /// repositories under it, and refreshes the list. Returns the result so the UI
-  /// can report how many repositories were found.
-  Future<ProjectCreationResult> createByDiscovery({
+  /// repositories under it. Returns the result so the UI can report how many
+  /// repositories were found.
+  Future<ProjectCheckouts> createByDiscovery({
     required String name,
     required String path,
   }) async {
@@ -54,7 +64,6 @@ class ProjectsController extends Notifier<List<Project>> {
         .read(projectServiceProvider)
         .createProjectByDiscovery(name: name, root: root);
     await _autoImportSessions(result.repositories);
-    _refresh();
     return result;
   }
 
@@ -75,7 +84,7 @@ class ProjectsController extends Notifier<List<Project>> {
   /// One pass over every store, because the walk is per store, not per project.
   Future<ImportSummary> importCliSessionsOnce() {
     return _lifecycleImport ??= _import(
-      () => ref.read(repositoryDaoProvider).getAll(),
+      () => ref.read(workspaceDataProvider).repositories,
       onDone: () => ref.read(cliSessionsCheckedProvider.notifier).stampAll(),
     );
   }
@@ -86,7 +95,7 @@ class ProjectsController extends Notifier<List<Project>> {
     return _syncs.putIfAbsent(projectId, () async {
       try {
         return await _import(
-          () => ref.read(repositoryDaoProvider).getByProject(projectId),
+          () => ref.read(workspaceDataProvider).repositoriesOf(projectId),
           onDone: () => ref
               .read(cliSessionsCheckedProvider.notifier)
               .stampProject(projectId),
@@ -130,27 +139,27 @@ class ProjectsController extends Notifier<List<Project>> {
     }
     final detected = detectedState.asData?.value ?? const [];
 
-    for (final project in ref.read(projectDaoProvider).getAll()) {
-      ref.read(projectDaoProvider).delete(project.id);
+    for (final project in _workspace.projects) {
+      await _workspace.write(ProjectDelete(project.id));
     }
-    _refileNotesAndTodos();
     ref.read(selectedProjectIdProvider.notifier).select(null);
     ref.read(selectedRepositoryIdProvider.notifier).select(null);
     ref.read(selectedSessionIdProvider.notifier).select(null);
     ref.read(selectedImportedSessionIdProvider.notifier).select(null);
 
-    final summary = ref.read(projectImportServiceProvider).importAll(detected);
+    final summary = await ref
+        .read(projectImportServiceProvider)
+        .importAll(detected);
     // Every store was read and everything in them imported, so this reading
     // does speak for the whole workspace.
     ref.read(cliSessionsCheckedProvider.notifier).stampAll();
     ref.read(sessionsRevisionProvider.notifier).bump();
-    _refresh();
     return summary;
   }
 
   /// Creates a project for [targetEnvironmentId] from a Windows-host folder,
   /// binding it and its repositories to that environment.
-  Future<ProjectCreationResult> createInEnvironment({
+  Future<ProjectCheckouts> createInEnvironment({
     required String name,
     required String windowsPath,
     required String targetEnvironmentId,
@@ -172,14 +181,13 @@ class ProjectsController extends Notifier<List<Project>> {
           workspaceId: workspaceId,
         );
     await _autoImportSessions(result.repositories);
-    _refresh();
     return result;
   }
 
   /// Creates a project on [targetEnvironmentId], optionally cloning [gitRepoUrl].
   ///
   /// Works across local Windows, WSL, and remote SSH environments.
-  Future<ProjectCreationResult> createProject({
+  Future<ProjectCheckouts> createProject({
     required String name,
     required String targetEnvironmentId,
     required String folderPath,
@@ -200,14 +208,13 @@ class ProjectsController extends Notifier<List<Project>> {
           workspaceId: workspaceId,
         );
     await _autoImportSessions(result.repositories);
-    _refresh();
     return result;
   }
 
   /// Edits [projectId]: its name, where its root folder is, and which checkout
   /// its one-click session runs in. A moved root fails before anything is
   /// written when the new folder cannot be read.
-  Future<ProjectUpdateResult> updateProject(
+  Future<ProjectUpdated> updateProject(
     String projectId, {
     String? name,
     String? folderPath,
@@ -215,7 +222,7 @@ class ProjectsController extends Notifier<List<Project>> {
     String? defaultRepositoryId,
     bool clearDefaultRepository = false,
   }) async {
-    final project = ref.read(projectDaoProvider).getById(projectId);
+    final project = ref.read(workspaceDataProvider).project(projectId);
     if (project == null) {
       throw StateError('This project is no longer in the workspace.');
     }
@@ -257,7 +264,6 @@ class ProjectsController extends Notifier<List<Project>> {
     if (result.rebased.isNotEmpty || result.discovered.isNotEmpty) {
       ref.read(sessionsRevisionProvider.notifier).bump();
     }
-    _refresh();
     return result;
   }
 
@@ -272,12 +278,12 @@ class ProjectsController extends Notifier<List<Project>> {
   ///
   /// Throws, in words, for the two things that really do stop a start: the
   /// project is gone, or its folder is.
-  Repository ensureRunLocation(String projectId) {
-    final project = ref.read(projectDaoProvider).getById(projectId);
+  Future<Repository> ensureRunLocation(String projectId) async {
+    final project = _workspace.project(projectId);
     if (project == null) {
       throw StateError('This project is no longer in the workspace.');
     }
-    final recorded = ref.read(repositoryDaoProvider).getByProject(projectId);
+    final recorded = _workspace.repositoriesOf(projectId);
     if (recorded.isNotEmpty) return recorded.first;
     if (_rootProvablyMissing(project)) {
       throw StateError(
@@ -285,11 +291,10 @@ class ProjectsController extends Notifier<List<Project>> {
         'project at where it lives — Edit project — or add it again.',
       );
     }
-    final checkout = ref
+    final checkout = await ref
         .read(projectServiceProvider)
         .recordRootAsCheckout(project);
     ref.read(sessionsRevisionProvider.notifier).bump();
-    _refresh();
     return checkout;
   }
 
@@ -319,15 +324,19 @@ class ProjectsController extends Notifier<List<Project>> {
 
   /// Points [projectId]'s one-click "New session" at [repositoryId], or back at
   /// the picker's first row when null.
-  void setDefaultRepository(String projectId, String? repositoryId) {
-    ref.read(projectDaoProvider).setDefaultRepository(projectId, repositoryId);
-    _refresh();
-  }
+  Future<void> setDefaultRepository(String projectId, String? repositoryId) =>
+      _workspace.write(
+        ProjectUpdate(
+          id: projectId,
+          defaultRepositoryId: repositoryId,
+          clearDefaultRepository: repositoryId == null,
+        ),
+      );
 
   /// Re-runs repository discovery over [projectId]'s root and records anything
   /// new. Without it a repository cloned in after the first scan stays invisible.
   Future<List<Repository>> rediscover(String projectId) async {
-    final project = ref.read(projectDaoProvider).getById(projectId);
+    final project = ref.read(workspaceDataProvider).project(projectId);
     if (project == null) {
       throw StateError('This project is no longer in the workspace.');
     }
@@ -362,7 +371,6 @@ class ProjectsController extends Notifier<List<Project>> {
       await _autoImportSessions(added);
       ref.read(sessionsRevisionProvider.notifier).bump();
     }
-    _refresh();
     return added;
   }
 
@@ -385,7 +393,6 @@ class ProjectsController extends Notifier<List<Project>> {
           );
       if (report.retired.isEmpty) return;
       ref.read(sessionsRevisionProvider.notifier).bump();
-      _refresh();
     } catch (error) {
       // A tidy-up that fails is not a failed rescan. The rows it would have
       // dropped are still there, which is the safe direction.
@@ -401,8 +408,8 @@ class ProjectsController extends Notifier<List<Project>> {
     String projectId, {
     bool deleteCliSessions = false,
   }) async {
-    final project = ref.read(projectDaoProvider).getById(projectId);
-    final repos = ref.read(repositoryDaoProvider).getByProject(projectId);
+    final project = ref.read(workspaceDataProvider).project(projectId);
+    final repos = ref.read(workspaceDataProvider).repositoriesOf(projectId);
     final repoIds = repos.map((r) => r.id).toSet();
     // Read before the rows go: the cascade takes the records with the project,
     // and the store still has to be told which files they named.
@@ -418,27 +425,17 @@ class ProjectsController extends Notifier<List<Project>> {
     // selected session belonged to.
     final selection = _selectionInto(repoIds);
 
-    ref.read(projectDaoProvider).delete(projectId);
-    _refileNotesAndTodos();
+    // One server operation: the checkouts and what is recorded against them
+    // go, its notes and todos are unfiled, and every client is told.
+    await _workspace.write(ProjectDelete(projectId));
     _clearSelections(projectId, repoIds, selection);
     // One publish for the whole delete. It used to be one per session plus this
     // one, and each of those woke every watcher of the session list.
     ref.read(sessionsRevisionProvider.notifier).bump();
-    _refresh();
 
     ref
         .read(cliStorePurgeRunnerProvider)
         .start(projectName: project?.name ?? 'The project', sessions: imported);
-  }
-
-  /// A project deleted here, not through the server, unfiles its notes and
-  /// todos in the store (`ON DELETE SET NULL`): the server's copies are read
-  /// again. Goes when projects move to the data API.
-  void _refileNotesAndTodos() {
-    final data = ref.read(dataClientProvider);
-    for (final domain in [DataDomain.notes, DataDomain.todos]) {
-      unawaited(data.resync(domain).catchError((Object _) {}));
-    }
   }
 
   /// Whether the selected session sits in [repoIds]. Asked *before* the project
@@ -484,13 +481,6 @@ class ProjectsController extends Notifier<List<Project>> {
       ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
   }
-
-  /// Re-reads the project rows. Public because the one mutation that does not
-  /// go through this controller — filing a project under a workspace — still
-  /// has to reach everything watching the list.
-  void refreshFromStore() => _refresh();
-
-  void _refresh() => state = ref.read(projectDaoProvider).getAll();
 }
 
 final projectsControllerProvider =
@@ -638,5 +628,5 @@ final selectedProjectRepositoriesProvider = Provider<List<Repository>>((ref) {
   final id = ref.watch(selectedProjectIdProvider);
   ref.watch(projectsControllerProvider);
   if (id == null) return const [];
-  return ref.read(repositoryDaoProvider).getByProject(id);
+  return ref.read(workspaceDataProvider).repositoriesOf(id);
 });

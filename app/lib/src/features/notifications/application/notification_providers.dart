@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
@@ -10,7 +11,6 @@ import '../../agents/application/agent_status_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/host_lifecycle/host_agent_statuses.dart';
 import '../../sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
@@ -291,7 +291,7 @@ void focusWatchedSession(
       ? read(importedSessionDaoProvider).getById(openId)?.repositoryId
       : read(sessionDaoProvider).getById(openId)?.repositoryId;
   if (repositoryId == null) return;
-  final repository = read(repositoryDaoProvider).getById(repositoryId);
+  final repository = read(workspaceDataProvider).repository(repositoryId);
   if (repository == null) return;
 
   read(selectedProjectIdProvider.notifier).select(repository.projectId);

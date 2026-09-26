@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
@@ -6,7 +7,6 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -87,7 +87,9 @@ class ReviewSessionService {
             'This session no longer exists, so there is nothing to review.',
       );
     }
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) {
       return const ReviewOffer(
         targets: [],
@@ -242,8 +244,8 @@ class ReviewSessionService {
       );
     }
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repository == null) {
       throw StateError('This session\'s repository is no longer available.');
     }
@@ -303,7 +305,10 @@ class ReviewSessionService {
   EnvironmentPath? _directoryOf(Session session) {
     final recorded = session.workingDirectory ?? session.worktree;
     if (recorded != null) return recorded;
-    return _ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+    return _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId)
+        ?.path;
   }
 
   Future<String?> _branchOf(EnvironmentPath directory) async {
@@ -315,7 +320,9 @@ class ReviewSessionService {
   }
 
   Future<String?> _baseBranch(Session session) async {
-    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repo == null) return null;
     try {
       return await _ref.read(changesServiceProvider).currentBranch(repo.path);

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -20,16 +23,14 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../projects/presentation/edit_project_dialog.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_defaults.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../workspaces/application/workspaces_controller.dart';
-import '../../workspaces/domain/workspace.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
 import '../application/checkout_default.dart';
 import '../application/checkout_picker.dart';
@@ -339,7 +340,7 @@ class ProjectRowActions {
     ref.read(selectedProjectIdProvider.notifier).select(project.id);
     // Single-repository projects select that repository so "New session" and
     // the detail view have a working context immediately.
-    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
+    final repos = ref.read(workspaceDataProvider).repositoriesOf(project.id);
     if (repos.length == 1) {
       ref.read(selectedRepositoryIdProvider.notifier).select(repos.first.id);
     }
@@ -365,17 +366,17 @@ class ProjectRowActions {
   Repository? _defaultCheckout() => projectDefaultCheckout(
     defaultRepositoryId: project.defaultRepositoryId,
     offered: ref.read(checkoutsInProjectProvider(project.id)),
-    all: ref.read(repositoryDaoProvider).getByProject(project.id),
+    all: ref.read(workspaceDataProvider).repositoriesOf(project.id),
   );
 
   /// [_defaultCheckout], falling back to the project's own folder for a project
   /// that has no checkout recorded at all — a folder is enough to run in. Null
   /// only once the real reason has been said.
-  Repository? _runLocation() {
+  Future<Repository?> _runLocation() async {
     final chosen = _defaultCheckout();
     if (chosen != null) return chosen;
     try {
-      return ref
+      return await ref
           .read(projectsControllerProvider.notifier)
           .ensureRunLocation(project.id);
     } on StateError catch (error) {
@@ -398,13 +399,13 @@ class ProjectRowActions {
   /// The `+`: starts a session with [SessionDefaults] and no dialog — unless a
   /// piece is missing, when the dialog opens to name it.
   Future<void> startWithDefaults() async {
-    final repository = _runLocation();
+    final repository = await _runLocation();
     // Null only once `_runLocation` has said why; opening the dialog would ask
     // the same question again and answer it with the same sentence.
     if (repository == null) return;
     final defaults = ref.read(sessionDefaultsProvider).forCheckout(repository);
     if (!defaults.isComplete) {
-      newSessionDialog(repository: repository);
+      await newSessionDialog(repository: repository);
       return;
     }
     // The card the session appears on has to be on screen: a start nobody can
@@ -419,16 +420,16 @@ class ProjectRowActions {
     );
   }
 
-  void newSessionDialog({Repository? repository}) {
+  Future<void> newSessionDialog({Repository? repository}) async {
     ref.read(selectedProjectIdProvider.notifier).select(project.id);
     ref.read(explorerExpandedProjectsProvider.notifier).open(project.id);
-    final repo = repository ?? _runLocation();
+    final repo = repository ?? await _runLocation();
     // The dialog opens on the current selection, so opening it with nowhere to
     // run would point it at whichever other project was last selected.
     // `_runLocation` has already said why there is nowhere.
-    if (repo == null) return;
+    if (repo == null || !context.mounted) return;
     ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
-    NewSessionDialog.show(context);
+    unawaited(NewSessionDialog.show(context));
   }
 
   void openTerminal() {
@@ -540,7 +541,7 @@ class ProjectRowActions {
     final target = action.substring(_contextAction.length);
     final controller = ref.read(workspacesControllerProvider.notifier);
     if (target == _noContext) {
-      controller.assign(project.id, null);
+      await controller.assign(project.id, null);
       // Named in full, because the menu's other leaving verb deletes the
       // project and this one must not be mistaken for it.
       _say('"${project.name}" is no longer in a context. It is still here.');
@@ -552,12 +553,12 @@ class ProjectRowActions {
         forProjectNamed: project.name,
       );
       if (created == null) return;
-      controller.assign(project.id, created.id);
+      await controller.assign(project.id, created.id);
       _say('Moved "${project.name}" to ${created.name}.');
       return;
     }
     if (project.workspaceId == target) return;
-    controller.assign(project.id, target);
+    await controller.assign(project.id, target);
     final name = ref
         .read(workspacesControllerProvider)
         .where((w) => w.id == target)
@@ -575,10 +576,13 @@ class ProjectRowActions {
           .where((installation) => installation.id == id)
           .firstOrNull;
       if (installation == null) return;
-      final repo = _runLocation();
-      if (repo != null) {
-        _startSession(repository: repo, installation: installation);
-      }
+      unawaited(
+        _runLocation().then((repo) {
+          if (repo != null) {
+            _startSession(repository: repo, installation: installation);
+          }
+        }),
+      );
       return;
     }
     if (action.startsWith(_contextAction)) {

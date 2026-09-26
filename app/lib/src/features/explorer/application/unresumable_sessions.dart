@@ -1,9 +1,9 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/conversation_presence_sweep.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -180,8 +180,8 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
       throw StateError('That session is no longer in the workspace.');
     }
     final repository = ref
-        .read(repositoryDaoProvider)
-        .getById(row.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(row.repositoryId);
     if (repository == null) {
       throw StateError(
         'This session\'s repository is no longer in the workspace.',
@@ -237,7 +237,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
         installation.id: installation,
     };
     final repositories = {
-      for (final repository in ref.read(repositoryDaoProvider).getAll())
+      for (final repository in ref.read(workspaceDataProvider).repositories)
         repository.id: repository,
     };
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);

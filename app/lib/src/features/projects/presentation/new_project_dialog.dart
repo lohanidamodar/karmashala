@@ -1,3 +1,4 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,7 @@ import '../../settings/presentation/path_field_row.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspace_suggestion.dart';
 import '../../workspaces/application/workspaces_controller.dart';
-import '../../workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../application/project_service.dart';
 import '../application/projects_controller.dart';
 
@@ -242,8 +243,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     });
 
     try {
-      final workspaceId = _resolveWorkspace();
-      final ProjectCreationResult result;
+      final workspaceId = await _resolveWorkspace();
+      final ProjectCheckouts result;
       // `createInEnvironment` scans a **Windows** folder and translates; a path
       // already spelled for its own machine must not go through it.
       final nativeToTarget = isSsh || _isPosixAbsolute(folder);
@@ -277,8 +278,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         ),
       );
       Navigator.of(context).pop(true);
-    } on DuplicateWorkspaceName catch (e) {
-      setState(() => _error = e.toString());
+    } on DataRefused catch (e) {
+      setState(() => _error = e.message);
     } on RepositoryDiscoveryException catch (e) {
       setState(() => _error = e.message);
     } on PathTranslationException catch (e) {
@@ -292,11 +293,12 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
 
   /// The context to file the new project under, creating it first when the
   /// user typed a new name. Nothing is written until the project is.
-  String? _resolveWorkspace() {
+  Future<String?> _resolveWorkspace() async {
     if (!_namingWorkspace) return _workspaceId;
     final name = _newWorkspaceController.text.trim();
     if (name.isEmpty) return null;
-    return ref.read(workspacesControllerProvider.notifier).create(name).id;
+    return (await ref.read(workspacesControllerProvider.notifier).create(name))
+        .id;
   }
 
   @override

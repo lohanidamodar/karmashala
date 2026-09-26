@@ -2,6 +2,7 @@
 /// `terminal_panel.dart` re-exports it, so its callers did not have to move.
 library;
 
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +12,6 @@ import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../git/application/changes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/terminal_scroll.dart';
 import '../application/terminal_search_controller.dart';
@@ -49,7 +49,7 @@ class TerminalActions {
   String? workingDirFor(TerminalProfile profile) {
     final repoId = ref.read(selectedRepositoryIdProvider);
     if (repoId == null) return null;
-    final repo = ref.read(repositoryDaoProvider).getById(repoId);
+    final repo = ref.read(workspaceDataProvider).repository(repoId);
     if (repo == null) return null;
     final env = ref
         .read(executionEnvironmentDaoProvider)

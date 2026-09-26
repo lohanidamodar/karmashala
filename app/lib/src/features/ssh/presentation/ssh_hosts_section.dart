@@ -246,7 +246,8 @@ class _HostCard extends ConsumerWidget {
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
     final controller = ref.read(sshHostsControllerProvider.notifier);
-    final holding = controller.projectsHolding(host.id);
+    final holding = await controller.projectsHolding(host.id);
+    if (!context.mounted) return;
     if (holding.isNotEmpty) return _explainInUse(context, holding);
 
     final confirmed = await showDialog<bool>(

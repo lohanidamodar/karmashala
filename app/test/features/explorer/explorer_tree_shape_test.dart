@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 
 import '../../support/fixtures.dart';

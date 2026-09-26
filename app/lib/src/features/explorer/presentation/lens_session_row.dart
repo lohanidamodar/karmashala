@@ -1,3 +1,4 @@
+import 'package:karmashala_git/repositories.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +14,6 @@ import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/agent_state_providers.dart';
 import '../application/agent_states.dart';
-import '../application/checkout.dart';
 import '../application/explorer_actions.dart';
 import '../application/workspace_session_entry.dart';
 

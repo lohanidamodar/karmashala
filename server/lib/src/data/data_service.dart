@@ -1,22 +1,28 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../domain/uuid.dart';
 import 'filing_lookup.dart';
 import 'notes_handler.dart';
 import 'preferences_handler.dart';
 import 'todos_handler.dart';
+import 'workspace_handler.dart';
 
 /// The server's data API over its store: every client's reads and writes of
-/// notes, todos and preferences, whatever link carries them. The only writer
+/// notes, todos, preferences and the workspace, whatever link carries them. The only writer
 /// of those tables; each write is numbered ([revision]) and told to every
 /// other subscribed [DataSession].
 class DataService {
-  DataService(AppDatabase database, {DateTime Function()? clock})
-    : _now = clock ?? _utcNow {
+  DataService(
+    AppDatabase database, {
+    DateTime Function()? clock,
+    String Function()? newId,
+  }) : _now = clock ?? _utcNow {
     final filing = FilingLookup(database);
     _notes = NotesHandler(database, filing, _now);
     _todos = TodosHandler(database, filing, _now);
     _preferences = PreferencesHandler(database);
+    _workspace = WorkspaceHandler(database, _now, newId ?? newUuid);
   }
 
   static DateTime _utcNow() => DateTime.now().toUtc();
@@ -25,6 +31,7 @@ class DataService {
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
+  late final WorkspaceHandler _workspace;
   final _sessions = <DataSession>{};
   var _revision = 0;
 
@@ -61,6 +68,21 @@ class DataService {
         PreferencesGet() => _preferences.all(),
         final PreferenceSet r => _preferences.set(r, changes),
         final PreferenceRemove r => _preferences.remove(r, changes),
+        WorkspaceList() => _workspace.list(),
+        final WorkspacePut r => _workspace.putWorkspace(r, changes),
+        final WorkspaceSetColor r => _workspace.setColor(r, changes),
+        final WorkspaceDelete r => _workspace.deleteWorkspace(r, changes),
+        final ProjectCreate r => _workspace.createProject(r, changes),
+        final ProjectUpdate r => _workspace.updateProject(r, changes),
+        final ProjectsFile r => _workspace.fileProjects(r, changes),
+        final ProjectDelete r => _workspace.deleteProject(r, changes),
+        final ProjectsUsingEnvironment r => _workspace.projectsUsing(r),
+        final CheckoutsAdd r => _workspace.addCheckouts(r, changes),
+        final CheckoutsRetire r => _workspace.retireCheckouts(r, changes),
+        final CheckoutsIdentify r => _workspace.identifyCheckouts(r, changes),
+        final SectionPut r => _workspace.putSection(r, changes),
+        final SectionsReorder r => _workspace.reorderSections(r, changes),
+        final SectionDelete r => _workspace.deleteSection(r, changes),
       };
     } on DataRefused {
       rethrow;
@@ -70,13 +92,12 @@ class DataService {
         '${request.kind} failed: $error',
       );
     }
-    if (changes.isNotEmpty) {
-      final batch = DataChanges(++_revision, List.unmodifiable(changes));
-      for (final session in _sessions) {
-        if (session != origin && session._subscribed) session._deliver(batch);
-      }
+    if (changes.isEmpty) return DataReply(result as R, _revision);
+    final batch = DataChanges(++_revision, List.unmodifiable(changes));
+    for (final session in _sessions) {
+      if (session != origin && session._subscribed) session._deliver(batch);
     }
-    return DataReply(result as R, _revision);
+    return DataReply(result as R, _revision, batch.changes);
   }
 }
 
@@ -105,8 +126,7 @@ class DataSession {
   }
 
   Map<String, Object?> _answer<R>(int id, DataRequest<R> request) {
-    final reply = handle(request);
-    return DataEnvelope.answer(id, reply.revision, request, reply.value);
+    return DataEnvelope.answer(id, request, handle(request));
   }
 
   void close() => _service._sessions.remove(this);

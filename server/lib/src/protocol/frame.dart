@@ -92,9 +92,10 @@ enum MessageType {
   serverCall(0x30),
   serverResult(0x31),
   // Protocol 11: the data API — every client read and write of notes, todos
-  // and preferences goes through the server. client → host: a request;
-  // host → client: its answer; host → client: another client's changes.
-  // Each carries a `karmashala_data_protocol` envelope as JSON.
+  // and preferences goes through the server (protocol 12: and the
+  // workspace — contexts, projects, checkouts, sections). client → host: a
+  // request; host → client: its answer; host → client: another client's
+  // changes. Each carries a `karmashala_data_protocol` envelope as JSON.
   dataRequest(0x32),
   dataAnswer(0x33),
   dataChanges(0x34);

@@ -4,14 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
 import '../domain/project_scope.dart';
 
 /// The name of one project, **read rather than watched** — a row must not be
 /// repainted by every project rescan. Null when the id no longer resolves.
 String? projectNameById(WidgetRef ref, String id) =>
-    ref.read(projectDaoProvider).getById(id)?.name;
+    ref.read(workspaceDataProvider).project(id)?.name;
 
 /// The name a scope shows in a header, short enough for a 240px panel.
 String projectScopeLabel(ProjectScope scope, WidgetRef ref) {

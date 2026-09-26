@@ -1,7 +1,8 @@
 import 'package:karmashala_store/database.dart';
+
 import '../domain/workspace.dart';
 
-/// Data-access for [Workspace] rows. Hand-written SQL, no codegen.
+/// Data-access for [Workspace] rows — contexts. Hand-written SQL, no codegen.
 class WorkspaceDao {
   WorkspaceDao(this._db);
 
@@ -30,8 +31,7 @@ class WorkspaceDao {
     );
   }
 
-  /// The colour's name, or null to clear it. Its own statement: a colour is
-  /// picked from a grid, never edited beside the name.
+  /// The colour's name, or null to clear it.
   void updateColor(String id, String? color) {
     _db.execute('UPDATE workspaces SET color = ? WHERE id = ?;', [color, id]);
   }
@@ -47,8 +47,7 @@ class WorkspaceDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
-  /// Every workspace, in the order the picker draws them: by name, the way a
-  /// user scans a list of four things they named themselves.
+  /// Every workspace, in the order the picker draws them: by name.
   List<Workspace> getAll() => _db
       .query('SELECT * FROM workspaces ORDER BY name COLLATE NOCASE, id;')
       .map(_fromRow)

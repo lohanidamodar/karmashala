@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -9,13 +10,12 @@ import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/session_model_providers.dart';
 import '../../automations/application/automation_check_runner.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../git/application/remote_links.dart';
 import '../../github/application/github_providers.dart';
 import '../../github/presentation/pull_request_context_dialog.dart';
 import '../../git/presentation/remote_link.dart';
 import 'package:karmashala_git/github.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../verification/application/review_session_service.dart';
 import '../../verification/application/verification_providers.dart';
 import '../../verification/presentation/review_action.dart';
@@ -129,7 +129,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     if (session == null) return null;
     return session.worktree ??
-        ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+        ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
   }
 
   /// Re-reads the delivery state after one of the app's own writes: neither

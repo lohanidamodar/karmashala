@@ -642,12 +642,12 @@ Future<void> _openImportedInTerminal(
 /// the result. Used by the "Copy … command" menu actions.
 Future<void> copyCommandToClipboard(
   BuildContext context,
-  String Function() build,
+  FutureOr<String> Function() build,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
   String message;
   try {
-    await Clipboard.setData(ClipboardData(text: build()));
+    await Clipboard.setData(ClipboardData(text: await build()));
     message = 'Command copied to clipboard';
   } catch (e) {
     message = e is StateError ? e.message : '$e';

@@ -8,8 +8,7 @@ import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_store/database.dart';
 

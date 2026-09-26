@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/tokens.dart';
-import '../../explorer/application/checkout.dart';
-import '../../explorer/application/checkout_picker.dart';
-import '../../projects/application/project_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
+import '../../explorer/application/checkout_picker.dart';
+import '../../workspaces/data/workspace_data.dart';
+import '../../repositories/application/repository_providers.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 
 /// Where a session is about to run. **A project is not the unit a session runs
@@ -70,8 +69,8 @@ class SessionDestinationPicker extends ConsumerWidget {
       checkoutRowsInProjectProvider(destination.projectId),
     );
     final root = ref
-        .read(projectDaoProvider)
-        .getById(destination.projectId)
+        .read(workspaceDataProvider)
+        .project(destination.projectId)
         ?.root;
 
     // The family a checkout belongs to — itself when it is a parent, its owner

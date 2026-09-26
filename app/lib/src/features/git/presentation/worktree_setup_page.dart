@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,7 +9,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/presentation/settings_section.dart';
@@ -27,7 +27,7 @@ class WorktreeSetupPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final settings = ref.watch(worktreeSetupsProvider);
-    final repositories = ref.watch(repositoryDaoProvider).getAll();
+    final repositories = ref.watch(workspaceDataProvider).repositories;
     // Watched so a project added while this is open reaches the "add a
     // checkout" list without a reopen.
     ref.watch(projectsControllerProvider);

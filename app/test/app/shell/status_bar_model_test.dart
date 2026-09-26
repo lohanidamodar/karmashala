@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';

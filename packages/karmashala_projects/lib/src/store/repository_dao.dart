@@ -1,9 +1,9 @@
-import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_store/database.dart';
 
-/// Data-access for [Repository] rows. Hand-written SQL, no codegen.
+/// Data-access for [Repository] rows — a project's checkouts. Hand-written
+/// SQL, no codegen.
 class RepositoryDao {
   RepositoryDao(this._db);
 

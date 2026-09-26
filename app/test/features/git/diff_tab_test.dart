@@ -13,8 +13,7 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/git/presentation/diff_tab_view.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 

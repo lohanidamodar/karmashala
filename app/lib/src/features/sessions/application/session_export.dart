@@ -9,6 +9,7 @@
 /// handoff packet follows, for the same reason.
 library;
 
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:convert';
 
 import 'package:agent_cli/read.dart';
@@ -23,7 +24,6 @@ import '../../agents/application/agent_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../../checkpoints/application/checkpoint_providers.dart'
     show checkpointDaoProvider;
-import '../../repositories/application/repository_providers.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
 import 'session_working_directory.dart';
@@ -84,8 +84,8 @@ class SessionExporter {
         ? null
         : _ref.read(agentRegistryProvider).displayNameFor(agentId);
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     final directory = sessionWorkingDirectory(_ref, sessionId);
 
     final transcript = await _transcript(session, agentId);

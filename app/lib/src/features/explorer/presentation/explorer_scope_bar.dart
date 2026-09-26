@@ -11,7 +11,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/presentation/pair_phone_entry.dart';
 import '../../workspaces/application/workspaces_controller.dart';
-import '../../workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../workspaces/domain/workspace_scope.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_provider.dart';

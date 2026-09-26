@@ -8,7 +8,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_actions.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/remote.dart';

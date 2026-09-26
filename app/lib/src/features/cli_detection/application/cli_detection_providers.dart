@@ -9,9 +9,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../projects/application/project_providers.dart';
-import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_launcher.dart';
@@ -82,8 +80,7 @@ final conversationIndexBackfillProvider = Provider<ConversationIndexBackfill>(
 
 final projectImportServiceProvider = Provider<ProjectImportService>(
   (ref) => ProjectImportService(
-    projectDao: ref.watch(projectDaoProvider),
-    repositoryDao: ref.watch(repositoryDaoProvider),
+    workspace: ref.watch(workspaceDataProvider),
     importedSessionDao: ref.watch(importedSessionDaoProvider),
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
@@ -123,7 +120,7 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
   return SessionAdoptionService(
     sessionDao: ref.watch(sessionDaoProvider),
     importedSessionDao: ref.watch(importedSessionDaoProvider),
-    repositoryDao: ref.watch(repositoryDaoProvider),
+    workspace: ref.watch(workspaceDataProvider),
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
     installationDao: ref.watch(agentInstallationDaoProvider),
     linkDao: ref.watch(sessionRepositoryDaoProvider),
@@ -161,7 +158,7 @@ final directoryConversationAttributionServiceProvider =
       return DirectoryConversationAttributionService(
         sessionDao: ref.watch(sessionDaoProvider),
         installationDao: ref.watch(agentInstallationDaoProvider),
-        repositoryDao: ref.watch(repositoryDaoProvider),
+        workspace: ref.watch(workspaceDataProvider),
         agents: ref.watch(agentRegistryProvider),
         locateStores: () async => ref
             .read(cliStoreLocatorProvider)
@@ -239,7 +236,7 @@ final launchedSessionAttributionServiceProvider =
       return LaunchedSessionAttributionService(
         sessionDao: ref.watch(sessionDaoProvider),
         installationDao: ref.watch(agentInstallationDaoProvider),
-        repositoryDao: ref.watch(repositoryDaoProvider),
+        workspace: ref.watch(workspaceDataProvider),
         environmentDao: ref.watch(executionEnvironmentDaoProvider),
         agents: ref.watch(agentRegistryProvider),
         scanStores: () => ref.read(cliStoreScanPassProvider).read(),
@@ -436,13 +433,9 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
 
   /// Imports every detected project/session into the workspace, ignoring
   /// duplicates. Returns what was added.
-  ImportSummary importAll() {
-    final projects = state.asData?.value ?? const [];
-    final summary = ref.read(projectImportServiceProvider).importAll(projects);
-    // Refresh the workspace project list so imports appear immediately.
-    ref.invalidate(projectsControllerProvider);
-    return summary;
-  }
+  Future<ImportSummary> importAll() => ref
+      .read(projectImportServiceProvider)
+      .importAll(state.asData?.value ?? const []);
 
   Future<void> renameSession(DetectedSession session, String newTitle) async {
     await ref

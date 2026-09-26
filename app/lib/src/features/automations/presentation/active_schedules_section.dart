@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -5,7 +6,6 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/presentation/usage_chip.dart'
     show formatResetClock, formatUsageDuration;
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/automation_providers.dart';
@@ -117,8 +117,8 @@ class _AutomationRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final repository = ref
-        .watch(repositoryDaoProvider)
-        .getById(automation.repositoryId);
+        .watch(workspaceDataProvider)
+        .repository(automation.repositoryId);
     final refusal = ref.watch(automationRefusalProvider(automation.id));
     final when = at;
     return _ActiveRow(

@@ -1,9 +1,9 @@
+import '../../workspaces/data/workspace_data.dart';
 import '../../../core/database/sqlite_row_reader.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -36,7 +36,7 @@ final directoryResumePlannerProvider = Provider<DirectoryResumePlanner>((ref) {
     final directory =
         session.workingDirectory ??
         session.worktree ??
-        ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+        ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
     if (directory == null) return null;
 
     String? latest;

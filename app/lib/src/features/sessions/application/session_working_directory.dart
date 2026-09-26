@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
@@ -5,7 +6,6 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'session_providers.dart';
 
@@ -21,7 +21,7 @@ EnvironmentPath? sessionWorkingDirectory(Ref ref, String sessionId) {
 EnvironmentPath? sessionWorkingDirectoryOf(Ref ref, Session session) {
   final recorded = session.workingDirectory ?? session.worktree;
   if (recorded != null) return recorded;
-  return ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+  return ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
 }
 
 /// Whether a directory a session recorded is still there — a seam tests stub.

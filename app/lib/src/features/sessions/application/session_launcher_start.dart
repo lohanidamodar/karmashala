@@ -20,8 +20,8 @@ extension SessionStartVerbs on SessionLauncher {
       );
     }
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repository == null) {
       throw StateError('The session\'s repository is no longer available.');
     }

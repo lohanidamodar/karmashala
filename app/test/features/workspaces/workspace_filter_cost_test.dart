@@ -6,10 +6,9 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/projects/application/project_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
@@ -75,9 +74,9 @@ void main() {
         'Appwrite',
         'Game dev',
       ])
-        container.read(workspacesControllerProvider.notifier).create(name).id,
+        createContext(container, name).id,
     ];
-    final projects = container.read(projectDaoProvider);
+    final projects = ProjectDao(container.read(databaseProvider));
     final repositories = RepositoryDao(db);
     for (var i = 0; i < count; i++) {
       projects.insert(
@@ -112,7 +111,7 @@ void main() {
         ),
       );
     }
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
     container.read(selectedProjectIdProvider.notifier).select('p0');
     // Mount the hot path before measuring, so its first read is not counted as
     // filter cost — and so a later recompute *would* be.
@@ -212,8 +211,11 @@ void main() {
       );
       expect(
         db.reads,
-        1,
-        reason: 'one re-read of the project list, which every watcher shares',
+        3,
+        reason:
+            'the server checks the project and the context and reads back '
+            'the one row it wrote; the app re-reads nothing — whatever the '
+            'scale',
       );
       expect(
         container

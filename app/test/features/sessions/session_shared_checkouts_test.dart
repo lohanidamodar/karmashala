@@ -6,11 +6,10 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/mcp/workspace_tools.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -70,7 +69,7 @@ void main() {
     links = SessionRepositoryDao(db);
     service = SessionRepositoriesService(
       sessionDao: SessionDao(db),
-      repositoryDao: RepositoryDao(db),
+      workspace: workspaceOver(db),
       linkDao: links,
     );
   });

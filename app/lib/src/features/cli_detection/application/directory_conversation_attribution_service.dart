@@ -1,9 +1,9 @@
+import '../../workspaces/data/workspace_data.dart';
 import '../../../core/database/sqlite_row_reader.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
-import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 
@@ -15,7 +15,7 @@ class DirectoryConversationAttributionService {
   DirectoryConversationAttributionService({
     required this.sessionDao,
     required this.installationDao,
-    required this.repositoryDao,
+    required this.workspace,
     required this.agents,
     required this.locateStores,
     this.readPaneTail,
@@ -25,7 +25,7 @@ class DirectoryConversationAttributionService {
 
   final SessionDao sessionDao;
   final AgentInstallationDao installationDao;
-  final RepositoryDao repositoryDao;
+  final WorkspaceData workspace;
   final AgentRegistry agents;
 
   /// Where each environment's CLI stores are, in a form this app can read.
@@ -162,7 +162,7 @@ class DirectoryConversationAttributionService {
       final directory =
           row.workingDirectory ??
           row.worktree ??
-          repositoryDao.getById(row.repositoryId)?.path;
+          workspace.repository(row.repositoryId)?.path;
       if (directory == null || directory.path.isEmpty) continue;
       final key = '${directory.environmentId}\u0000${directory.path}';
       perDirectory[key] = (perDirectory[key] ?? 0) + 1;

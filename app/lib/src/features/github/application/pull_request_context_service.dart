@@ -7,6 +7,7 @@
 /// against the session, and can be read back exactly as it left.
 library;
 
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:convert';
 
 import 'package:karmashala_core/logging.dart';
@@ -17,7 +18,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../git/application/review_threads.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_providers.dart';
@@ -86,8 +86,8 @@ class PullRequestContextService {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return const [];
     final repositoryId = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId)
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId)
         ?.id;
     if (repositoryId == null) return const [];
     try {

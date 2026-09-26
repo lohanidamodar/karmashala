@@ -1,11 +1,16 @@
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 import 'refusal.dart';
+import 'workspace_values.dart';
 
 part 'requests/subscription_requests.dart';
 part 'requests/notes_requests.dart';
 part 'requests/todos_requests.dart';
 part 'requests/preferences_requests.dart';
+part 'requests/workspace_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -63,6 +68,39 @@ sealed class DataRequest<R> {
         args.string('value'),
       ),
       PreferenceRemove.name => PreferenceRemove(args.string('key')),
+      WorkspaceList.name => const WorkspaceList(),
+      WorkspacePut.name => WorkspacePut(
+        id: args.string('id'),
+        workspaceName: args.string('name'),
+        description: args.optionalString('description'),
+      ),
+      WorkspaceSetColor.name => WorkspaceSetColor(
+        id: args.string('id'),
+        color: args.optionalString('color'),
+      ),
+      WorkspaceDelete.name => WorkspaceDelete(args.string('id')),
+      ProjectCreate.name => ProjectCreate._from(args),
+      ProjectUpdate.name => ProjectUpdate._from(args),
+      ProjectsFile.name => ProjectsFile(args.placements('placements')),
+      ProjectDelete.name => ProjectDelete(args.string('id')),
+      ProjectsUsingEnvironment.name => ProjectsUsingEnvironment(
+        args.string('environmentId'),
+      ),
+      CheckoutsAdd.name => CheckoutsAdd(
+        projectId: args.string('projectId'),
+        found: args.found(),
+        orRoot: args.boolean('orRoot', orElse: true),
+      ),
+      CheckoutsRetire.name => CheckoutsRetire(args.strings('ids')),
+      CheckoutsIdentify.name => CheckoutsIdentify(
+        path: args.value('path', environmentPathFromJson),
+        canonicalId: args.optionalString('canonicalId'),
+      ),
+      SectionPut.name => SectionPut(
+        args.value('section', StoredSection.fromJson),
+      ),
+      SectionsReorder.name => SectionsReorder(args.strings('ids')),
+      SectionDelete.name => SectionDelete(args.string('id')),
       _ => throw DataRefused.invalid('no data request is called "$kind"'),
     };
   }
@@ -106,6 +144,41 @@ final class _Arguments {
     if (value is bool) return value;
     if (value == null && orElse != null) return orElse;
     throw DataRefused.invalid('$kind: "$key" must be true or false');
+  }
+
+  /// The value under [key] as [read] makes it, refusing one out of shape.
+  T value<T>(String key, T Function(Map<String, Object?> json) read) {
+    final value = values[key];
+    try {
+      if (value is Map) return read(value.cast<String, Object?>());
+    } on FormatException {
+      // Refused below, in the same words.
+    }
+    throw DataRefused.invalid('$kind: "$key" is not what it should be');
+  }
+
+  /// Checkouts discovery found, under `found` — none when absent.
+  List<DiscoveredRepository> found() {
+    final value = values['found'] ?? const <Object?>[];
+    try {
+      if (value is List) {
+        return [for (final item in value) discoveredFromJson(item)];
+      }
+    } on FormatException {
+      // Refused below.
+    }
+    throw DataRefused.invalid('$kind: "found" must be a list of checkouts');
+  }
+
+  /// Ids mapped to an id or null.
+  Map<String, String?> placements(String key) {
+    final value = values[key];
+    if (value is Map &&
+        value.keys.every((k) => k is String) &&
+        value.values.every((v) => v == null || v is String)) {
+      return value.cast<String, String?>();
+    }
+    throw DataRefused.invalid('$kind: "$key" must map ids to an id or null');
   }
 
   List<String> strings(String key) {

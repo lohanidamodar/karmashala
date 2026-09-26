@@ -13,8 +13,7 @@ import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_vie
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../../support/fake_command_runner.dart';

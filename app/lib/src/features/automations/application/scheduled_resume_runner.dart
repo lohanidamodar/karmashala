@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart';
@@ -13,7 +14,6 @@ import '../../agents/presentation/usage_chip.dart' show formatResetClock;
 import '../../environments/application/environment_providers.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/decision_recorder.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_notice.dart';
@@ -278,8 +278,8 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
     List<String> notes,
   ) async {
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     var installation = _ref
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);

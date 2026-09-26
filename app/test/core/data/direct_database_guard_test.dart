@@ -5,8 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// **The app is a client of the server's data** (docs/daemon-architecture.md,
 /// "Slice 1 — data through the server").
 ///
-/// Notes, todos and preferences go through the server's data API
-/// (`lib/src/core/data/`); nothing under `lib/` opens their tables or the
+/// Notes, todos, preferences and the workspace (contexts, projects, checkouts,
+/// saved sections) go through the server's data API (`lib/src/core/data/`,
+/// `WorkspaceData`); nothing under `lib/` opens their tables or the
 /// `app_metadata` rows itself. The domains not moved yet still use the
 /// database the app opens, from the files listed in [remaining] — a list that
 /// only shrinks: a new file fails here, and a listed file that stopped
@@ -25,16 +26,6 @@ void main() {
       'src/core/data/server_data_connection.dart',
       'src/core/database/database_providers.dart',
       'src/core/lifecycle/app_lifecycle.dart',
-    ],
-    'workspaces, projects, repositories': [
-      'src/features/projects/application/project_providers.dart',
-      'src/features/projects/data/project_dao.dart',
-      'src/features/repositories/application/repository_providers.dart',
-      'src/features/repositories/data/repository_dao.dart',
-      'src/features/workspaces/application/workspace_providers.dart',
-      'src/features/workspaces/application/workspaces_controller.dart',
-      'src/features/workspaces/data/workspace_dao.dart',
-      'src/features/explorer/data/explorer_section_dao.dart',
     ],
     'environments and SSH hosts': [
       'src/features/environments/application/environment_providers.dart',
@@ -118,6 +109,20 @@ void main() {
       reason: 'notes and todos go through NotesRepository / TodosRepository',
     );
     expect(
+      filesMatching(
+        RegExp(
+          r'\b(WorkspaceDao|ProjectDao|RepositoryDao|SectionDao)\b|'
+          r'karmashala_projects/store|'
+          r'\b(FROM|INTO|UPDATE|JOIN)\s+(workspaces|projects|repositories|'
+          r'explorer_sections?|explorer_section_members)\b',
+        ),
+      ),
+      // The index's search narrows to a project's checkouts inside its own
+      // query; it moves with the conversation index (1f).
+      ['src/features/cli_detection/data/conversation_index_dao.dart'],
+      reason: 'the workspace goes through WorkspaceData',
+    );
+    expect(
       filesMatching(RegExp(r'\.(readMetadata|writeMetadata)\(')),
       // The index's own write counter, a key the data API reserves for its
       // domain; it moves with the conversation index.
@@ -128,6 +133,9 @@ void main() {
       'src/features/notes/',
       'src/features/todos/',
       'src/features/settings/',
+      'src/features/workspaces/',
+      'src/features/projects/',
+      'src/features/repositories/',
     ]) {
       expect(
         [

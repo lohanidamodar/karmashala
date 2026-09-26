@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
@@ -5,11 +6,9 @@ import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import 'checkout.dart';
 import 'checkout_default.dart';
 import 'picked_checkouts.dart';
 
@@ -19,7 +18,7 @@ final selectedCheckoutProvider = Provider<Repository?>((ref) {
   ref.watchSessionKinds(const {SessionChangeKind.workspace});
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return null;
-  return ref.read(repositoryDaoProvider).getById(id);
+  return ref.read(workspaceDataProvider).repository(id);
 });
 
 /// The checkouts the followed session is working in, best first; empty when no
@@ -62,7 +61,7 @@ final checkoutsInProjectProvider = Provider.family<List<Repository>, String>((
 
   final byId = {
     for (final repository
-        in ref.read(repositoryDaoProvider).getByProject(projectId))
+        in ref.read(workspaceDataProvider).repositoriesOf(projectId))
       repository.id: repository,
   };
 
@@ -103,7 +102,7 @@ final projectCheckoutRowsProvider = Provider<List<Repository>>((ref) {
 final checkoutRowsInProjectProvider = Provider.family<List<Repository>, String>(
   (ref, projectId) {
     ref.watchSessionKinds(const {SessionChangeKind.workspace});
-    return ref.read(repositoryDaoProvider).getByProject(projectId);
+    return ref.read(workspaceDataProvider).repositoriesOf(projectId);
   },
 );
 
@@ -168,8 +167,8 @@ class CheckoutLabel {
 final checkoutLabelsProvider = FutureProvider.autoDispose
     .family<Map<String, CheckoutLabel>, String>((ref, projectId) async {
       final repositories = ref
-          .read(repositoryDaoProvider)
-          .getByProject(projectId);
+          .read(workspaceDataProvider)
+          .repositoriesOf(projectId);
       final worktrees = ref.read(worktreeServiceProvider);
       final changes = ref.read(changesServiceProvider);
 

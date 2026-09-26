@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,13 +11,11 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../repositories/application/repository_providers.dart';
-import 'package:karmashala_git/repositories.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../git/presentation/worktree_browse.dart';
 import '../../git/presentation/worktree_create_dialog.dart';
@@ -495,7 +494,7 @@ class _WorktreeRow extends ConsumerWidget {
     // workspace's rows, and subscribing to them would repaint it on a rescan.
     final rows = projectId == null
         ? const <Repository>[]
-        : ref.read(repositoryDaoProvider).getByProject(projectId);
+        : ref.read(workspaceDataProvider).repositoriesOf(projectId);
     final match = rows
         .where((r) => Checkout(r.path) == Checkout(worktree.path))
         .firstOrNull;

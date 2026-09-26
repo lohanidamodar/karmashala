@@ -10,14 +10,13 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
-import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_ssh/connection.dart';
 
 import '../../support/fake_command_runner.dart';

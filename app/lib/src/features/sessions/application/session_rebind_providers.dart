@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -9,7 +10,6 @@ import '../../agents/application/hook_payload_field.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/detected_project_merger.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../domain/session_rebind.dart';
 import 'session_providers.dart';
 
@@ -140,8 +140,8 @@ String? rebindSessionFromHook(
         session.workingDirectory ??
         session.worktree ??
         container
-            .read(repositoryDaoProvider)
-            .getById(session.repositoryId)
+            .read(workspaceDataProvider)
+            .repository(session.repositoryId)
             ?.path;
     final latest = reports.latest(agentId, bound);
     panes.add(

@@ -1,9 +1,9 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../ssh/application/host_sessions.dart';
 import '../../ssh/application/ssh_providers.dart';
@@ -75,7 +75,7 @@ final panesByEnvironmentProvider =
         // A checkout is spelled for the machine it lives on, so the repository
         // row is where a session's environment actually comes from.
         final repositories = {
-          for (final repository in ref.read(repositoryDaoProvider).getAll())
+          for (final repository in ref.read(workspaceDataProvider).repositories)
             repository.id: repository.path.environmentId,
         };
         for (final session

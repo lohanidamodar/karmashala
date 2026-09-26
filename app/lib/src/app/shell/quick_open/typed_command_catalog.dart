@@ -1,3 +1,4 @@
+import '../../../features/workspaces/data/workspace_data.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
@@ -14,7 +15,6 @@ import '../../../features/cli_detection/application/cli_detection_providers.dart
 import '../../../features/environments/application/environment_providers.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
-import '../../../features/repositories/application/repository_providers.dart';
 import '../../../features/sessions/application/session_defaults.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
 import '../../../features/sessions/application/session_launcher.dart';
@@ -35,7 +35,7 @@ CommandCatalog readCommandCatalog(
   final registry = read(agentRegistryProvider);
   final environments = read(executionEnvironmentDaoProvider).getAll();
   final installations = read(agentInstallationDaoProvider).getAll();
-  final repositoryDao = read(repositoryDaoProvider);
+  final workspace = read(workspaceDataProvider);
   final sessionDao = read(sessionDaoProvider);
   final importedDao = read(importedSessionDaoProvider);
   final lastActiveOf = read(sessionLastActiveProvider);
@@ -68,7 +68,7 @@ CommandCatalog readCommandCatalog(
         })
       >[];
   for (final project in projects) {
-    for (final repository in repositoryDao.getByProject(project.id)) {
+    for (final repository in workspace.repositoriesOf(project.id)) {
       for (final session in sessionDao.getByRepository(repository.id)) {
         rows.add((
           order: (
@@ -204,7 +204,7 @@ CommandCatalog readCommandCatalog(
     final defaultId = installed.any((i) => i.id == lastUsed)
         ? lastUsed
         : defaults.forEnvironment(environmentId).installation?.id;
-    final firstRepository = repositoryDao.getByProject(project.id).firstOrNull;
+    final firstRepository = workspace.repositoriesOf(project.id).firstOrNull;
     final branches = firstRepository == null
         ? const <String>[]
         : cache.factsFor(firstRepository.id).branches;

@@ -10,8 +10,7 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_dialog.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 

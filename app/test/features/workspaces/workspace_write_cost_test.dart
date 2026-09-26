@@ -1,3 +1,4 @@
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,9 +13,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/projects/application/project_providers.dart';
-import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
@@ -63,7 +62,7 @@ void main() {
 
   /// The owner's own scale: 31 projects and four contexts.
   void seed() {
-    final dao = container.read(projectDaoProvider);
+    final dao = ProjectDao(container.read(databaseProvider));
     final workspaces = [
       for (final name in const [
         'Personal',
@@ -71,7 +70,7 @@ void main() {
         'Appwrite',
         'Game dev',
       ])
-        container.read(workspacesControllerProvider.notifier).create(name).id,
+        createContext(container, name).id,
     ];
     for (var i = 0; i < projectCount; i++) {
       dao.insert(
@@ -84,7 +83,7 @@ void main() {
         ),
       );
     }
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
   }
 
   Widget dialogApp() => UncontrolledProviderScope(
@@ -155,8 +154,10 @@ void main() {
     );
     expect(
       db.reads,
-      1,
-      reason: 'one re-read of the context list — never the project list',
+      3,
+      reason:
+          'the server reads the context list (names must differ), looks for '
+          'the id and reads back its row — never the project list',
     );
     expect(
       rebuilt,
@@ -206,7 +207,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    final dao = container.read(projectDaoProvider);
+    final dao = ProjectDao(container.read(databaseProvider));
     for (var i = 0; i < projectCount; i++) {
       dao.insert(
         Project(
@@ -220,7 +221,7 @@ void main() {
         ),
       );
     }
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -236,7 +237,7 @@ void main() {
     /// One whole rebuild of the panel, counted.
     Future<int> rebuildCost() async {
       db.reset();
-      container.read(projectsControllerProvider.notifier).refreshFromStore();
+      rereadWorkspace(container);
       await tester.pumpAndSettle();
       return db.statements;
     }
@@ -250,9 +251,8 @@ void main() {
       reason: 'a rebuild must not resolve menus nobody opened',
     );
 
-    final workspaces = container.read(workspacesControllerProvider.notifier);
     for (final name in const ['Personal', 'PopupBits', 'Appwrite', 'Games']) {
-      workspaces.create(name);
+      createContext(container, name);
     }
     await tester.pumpAndSettle();
     final withContexts = await rebuildCost();

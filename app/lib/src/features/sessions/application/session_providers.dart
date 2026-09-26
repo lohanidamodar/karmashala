@@ -1,7 +1,7 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'session_repositories_service.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import '../data/session_event_dao.dart';
@@ -43,7 +43,7 @@ final sessionRepositoryDaoProvider = Provider<SessionRepositoryDao>(
 final sessionRepositoriesServiceProvider = Provider<SessionRepositoriesService>(
   (ref) => SessionRepositoriesService(
     sessionDao: ref.watch(sessionDaoProvider),
-    repositoryDao: ref.watch(repositoryDaoProvider),
+    workspace: ref.watch(workspaceDataProvider),
     linkDao: ref.watch(sessionRepositoryDaoProvider),
   ),
 );

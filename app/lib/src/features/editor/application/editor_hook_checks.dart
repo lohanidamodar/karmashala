@@ -1,10 +1,10 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../data/local_document_source.dart';
 import '../domain/document_id.dart';
@@ -175,8 +175,8 @@ String? _sessionEnvironment(
         .getByExternalSessionId(agentSessionId);
     if (session == null) return null;
     return container
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId)
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId)
         ?.path
         .environmentId;
   } on Object {

@@ -1,16 +1,10 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
 import 'package:karmashala_git/repositories.dart';
-import '../data/repository_dao.dart';
 import '../../projects/application/wsl_path_existence.dart';
+import '../../workspaces/data/workspace_data.dart';
 import 'checkout_retirement_service.dart';
 import 'host_checkout_presence_probe.dart';
-
-/// Repository-layer provider for Git-repository persistence.
-final repositoryDaoProvider = Provider<RepositoryDao>(
-  (ref) => RepositoryDao(ref.watch(databaseProvider)),
-);
 
 /// What a project with no checkout row is told. Only a project recorded before
 /// a plain folder was enough can be in this state: a rescan writes its own
@@ -27,10 +21,10 @@ final checkoutPresenceProbeProvider = Provider<CheckoutPresenceProbe>(
 );
 
 /// Retires checkouts whose directories are provably gone — the rescan's other
-/// half, since [ProjectService.rediscover] only ever added.
+/// half, since a rediscovery only ever adds.
 final checkoutRetirementServiceProvider = Provider<CheckoutRetirementService>(
   (ref) => CheckoutRetirementService(
-    repositories: ref.watch(repositoryDaoProvider),
+    workspace: ref.watch(workspaceDataProvider),
     probe: ref.watch(checkoutPresenceProbeProvider),
   ),
 );

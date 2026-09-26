@@ -8,8 +8,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/decision_tools.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';

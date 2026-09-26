@@ -14,10 +14,9 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala/src/features/projects/application/project_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_git/repositories.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -68,16 +67,14 @@ void main() {
 
   void seed({int projects = 3}) {
     for (var i = 0; i < projects; i++) {
-      container
-          .read(projectDaoProvider)
-          .insert(
-            Project(
-              id: 'p$i',
-              name: 'Project $i',
-              root: root('C:\\work\\p$i'),
-              createdAt: testTime,
-            ),
-          );
+      ProjectDao(container.read(databaseProvider)).insert(
+        Project(
+          id: 'p$i',
+          name: 'Project $i',
+          root: root('C:\\work\\p$i'),
+          createdAt: testTime,
+        ),
+      );
       RepositoryDao(db).insert(
         Repository(
           id: 'r$i',
@@ -88,7 +85,7 @@ void main() {
         ),
       );
     }
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
   }
 
   Widget app() => UncontrolledProviderScope(

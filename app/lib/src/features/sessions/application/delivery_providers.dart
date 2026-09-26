@@ -1,9 +1,10 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/checkout_probe_queue.dart';
 import 'package:karmashala_git/git.dart';
@@ -13,7 +14,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../repositories/application/repository_identity_recorder.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
@@ -79,14 +79,14 @@ final repositoryOriginProvider = FutureProvider.autoDispose
     .family<RepositoryOrigin, Checkout>((ref, repository) async {
       // Read before the first await, like every other seam in this file.
       final changes = ref.read(changesServiceProvider);
-      final repositories = ref.read(repositoryDaoProvider);
+      final workspace = ref.read(workspaceDataProvider);
       final probe = _probeOn(ref);
       final facts =
           await probe(() => changes.originFacts(repository.path)) ??
           RepositoryOrigin.none;
       // The one place a repository's `origin` is learned, so the one place its
       // canonical identity can be refreshed without a sweep of its own.
-      recordRepositoryIdentity(repositories, repository.path, facts);
+      recordRepositoryIdentity(workspace, repository.path, facts);
       return facts;
     });
 
@@ -265,8 +265,8 @@ final sessionLocalDeliveryProvider = FutureProvider.autoDispose
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) return SessionDelivery.unknown;
       final repository = ref
-          .read(repositoryDaoProvider)
-          .getById(session.repositoryId);
+          .read(workspaceDataProvider)
+          .repository(session.repositoryId);
       if (repository == null) return SessionDelivery.unknown;
 
       final worktree = session.worktree;
@@ -298,7 +298,7 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       final repository = session == null
           ? null
-          : ref.read(repositoryDaoProvider).getById(session.repositoryId);
+          : ref.read(workspaceDataProvider).repository(session.repositoryId);
       // Nothing to ask `gh` about and nothing to file; the local provider has
       // already made the same three decisions.
       if (session == null || repository == null || session.isArchived) {
@@ -349,7 +349,9 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
 /// an imported conversation has no checkout of its own.
 final repositoryDeliveryProvider = FutureProvider.autoDispose
     .family<SessionDelivery, String>((ref, repositoryId) async {
-      final repository = ref.read(repositoryDaoProvider).getById(repositoryId);
+      final repository = ref
+          .read(workspaceDataProvider)
+          .repository(repositoryId);
       if (repository == null) return SessionDelivery.unknown;
       return ref.watch(
         checkoutDeliveryProvider(Checkout(repository.path)).future,
@@ -360,7 +362,9 @@ final repositoryDeliveryProvider = FutureProvider.autoDispose
 /// a list into a link.
 final repositoryRemoteProvider = Provider.autoDispose
     .family<RemoteRepo?, String>((ref, repositoryId) {
-      final repository = ref.read(repositoryDaoProvider).getById(repositoryId);
+      final repository = ref
+          .read(workspaceDataProvider)
+          .repository(repositoryId);
       if (repository == null) return null;
       // `.value` rather than `.asData?.value`: a link should not disappear
       // because the delivery state behind it is being refreshed.

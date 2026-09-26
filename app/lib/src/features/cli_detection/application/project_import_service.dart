@@ -1,9 +1,9 @@
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/process.dart';
-import '../../projects/data/project_dao.dart';
-import '../../projects/domain/project.dart';
-import '../../repositories/data/repository_dao.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 
@@ -28,65 +28,65 @@ class ImportSummary {
 }
 
 /// Imports detected CLI projects/sessions into the workspace, finding or
-/// creating a `Project` and `Repository` per folder. Idempotent.
+/// creating a project and a checkout per folder. Idempotent.
 class ProjectImportService {
   ProjectImportService({
-    required this.projectDao,
-    required this.repositoryDao,
+    required this.workspace,
     required this.importedSessionDao,
     required this.ids,
     required this.clock,
   });
 
-  final ProjectDao projectDao;
-  final RepositoryDao repositoryDao;
+  final WorkspaceData workspace;
   final ImportedSessionDao importedSessionDao;
   final IdGenerator ids;
   final Clock clock;
 
-  ImportSummary importAll(List<DetectedProject> detected) {
+  Future<ImportSummary> importAll(List<DetectedProject> detected) async {
     var summary = const ImportSummary();
     for (final project in detected) {
-      summary = summary + _importOne(project);
+      summary = summary + await _importOne(project);
     }
     return summary;
   }
 
-  ImportSummary _importOne(DetectedProject detected) {
+  Future<ImportSummary> _importOne(DetectedProject detected) async {
     final all = [...detected.sessions, ...detected.subagentSessions];
     if (all.isEmpty) return const ImportSummary();
     final root = all.first.cwd;
-    final now = clock.nowUtc();
+    final itself = [
+      DiscoveredRepository(name: _basename(root.path), path: root),
+    ];
 
     var addedProjects = 0;
     var addedRepos = 0;
-    var addedSessions = 0;
-
-    var project = _findProjectByRoot(root);
+    Repository? repository;
+    final project = _findProjectByRoot(root);
     if (project == null) {
-      project = Project(
-        id: ids.newId(),
-        name: _basename(root.path),
-        root: root,
-        createdAt: now,
+      final created = await workspace.write(
+        ProjectCreate(
+          projectName: _basename(root.path),
+          root: root,
+          found: itself,
+        ),
       );
-      projectDao.insert(project);
       addedProjects = 1;
+      addedRepos = created.repositories.length;
+      repository = created.repositories.first;
+    } else {
+      repository = _findRepository(project.id, root);
+      if (repository == null) {
+        final added = await workspace.write(
+          CheckoutsAdd(projectId: project.id, found: itself, orRoot: false),
+        );
+        addedRepos = added.length;
+        repository = added.firstOrNull ?? _findRepository(project.id, root);
+      }
     }
+    if (repository == null) return const ImportSummary();
 
-    var repository = _findRepository(project.id, root);
-    if (repository == null) {
-      repository = Repository(
-        id: ids.newId(),
-        projectId: project.id,
-        name: _basename(root.path),
-        path: root,
-        createdAt: now,
-      );
-      repositoryDao.insert(repository);
-      addedRepos = 1;
-    }
-
+    final now = clock.nowUtc();
+    var addedSessions = 0;
     for (final session in all) {
       if (_importSession(session, repository.id, now)) addedSessions++;
     }
@@ -126,14 +126,14 @@ class ProjectImportService {
   }
 
   Project? _findProjectByRoot(EnvironmentPath root) {
-    for (final project in projectDao.getAll()) {
+    for (final project in workspace.projects) {
       if (project.root == root) return project;
     }
     return null;
   }
 
   Repository? _findRepository(String projectId, EnvironmentPath path) {
-    for (final repo in repositoryDao.getByProject(projectId)) {
+    for (final repo in workspace.repositoriesOf(projectId)) {
       if (repo.path == path) return repo;
     }
     return null;

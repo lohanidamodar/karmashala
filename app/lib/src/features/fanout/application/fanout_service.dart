@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
@@ -7,7 +8,6 @@ import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
 import 'package:karmashala_git/git.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -278,8 +278,8 @@ class FanOutService {
   /// a place you come back to. A candidate with no session row is skipped.
   List<FanOutResult> resultsFor(Comparison comparison) {
     final repository = ref
-        .read(repositoryDaoProvider)
-        .getById(comparison.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(comparison.repositoryId);
     if (repository == null) return const [];
     final sessions = ref.read(sessionDaoProvider);
     return [

@@ -1,3 +1,4 @@
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,15 +8,13 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/projects/application/project_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -48,24 +47,20 @@ void main() {
 
   /// A context holding one project, so the folder has something to be near.
   Workspace seedGames() {
-    final games = container
-        .read(workspacesControllerProvider.notifier)
-        .create('Game dev');
-    container
-        .read(projectDaoProvider)
-        .insert(
-          Project(
-            id: 'p-existing',
-            name: 'Roguelike',
-            root: const EnvironmentPath(
-              environmentId: 'windows',
-              path: r'C:\Users\dlohani\projects\games\roguelike',
-            ),
-            createdAt: testTime,
-            workspaceId: games.id,
-          ),
-        );
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    final games = createContext(container, 'Game dev');
+    ProjectDao(container.read(databaseProvider)).insert(
+      Project(
+        id: 'p-existing',
+        name: 'Roguelike',
+        root: const EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\Users\dlohani\projects\games\roguelike',
+        ),
+        createdAt: testTime,
+        workspaceId: games.id,
+      ),
+    );
+    rereadWorkspace(container);
     return games;
   }
 
@@ -113,7 +108,7 @@ void main() {
 
   testWidgets('the guess is overridable, and stays overridden', (tester) async {
     seedGames();
-    container.read(workspacesControllerProvider.notifier).create('Personal');
+    createContext(container, 'Personal');
     await pumpDialog(tester);
     await typeFolder(tester, r'C:\Users\dlohani\projects\games\shmup');
     expect(shownContext(tester), 'Game dev');
@@ -161,20 +156,18 @@ void main() {
     final games = seedGames();
     // A second, unassigned project sitting right beside the filed one — the
     // exact case an eager classifier would "helpfully" file.
-    container
-        .read(projectDaoProvider)
-        .insert(
-          Project(
-            id: 'p-unfiled',
-            name: 'Platformer',
-            root: const EnvironmentPath(
-              environmentId: 'windows',
-              path: r'C:\Users\dlohani\projects\games\platformer',
-            ),
-            createdAt: testTime,
-          ),
-        );
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    ProjectDao(container.read(databaseProvider)).insert(
+      Project(
+        id: 'p-unfiled',
+        name: 'Platformer',
+        root: const EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\Users\dlohani\projects\games\platformer',
+        ),
+        createdAt: testTime,
+      ),
+    );
+    rereadWorkspace(container);
 
     await pumpDialog(tester);
     await typeFolder(tester, r'C:\Users\dlohani\projects\games\shmup');

@@ -9,7 +9,7 @@
 library;
 
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/explorer/application/checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_ui/rows.dart';

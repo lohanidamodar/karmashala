@@ -8,8 +8,7 @@ import 'package:karmashala/src/features/follow_ups/application/follow_up_service
 import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/decision_recorder.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';

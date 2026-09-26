@@ -50,6 +50,7 @@ workspace:
   - packages/karmashala_media
   - packages/karmashala_notes
   - packages/karmashala_notifications
+  - packages/karmashala_projects
   - packages/karmashala_remote
   - packages/karmashala_session
   - packages/karmashala_session_engine

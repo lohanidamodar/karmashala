@@ -1,10 +1,10 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../application/comparison_providers.dart';
 import '../domain/comparison.dart';
 import 'comparison_chrome.dart';
@@ -86,8 +86,8 @@ class _ComparisonRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final repository = ref
-        .read(repositoryDaoProvider)
-        .getById(comparison.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(comparison.repositoryId);
     return InkWell(
       onTap: onOpen,
       child: Padding(

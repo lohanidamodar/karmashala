@@ -8,7 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 import 'package:karmashala/src/features/todos/domain/project_scope.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';

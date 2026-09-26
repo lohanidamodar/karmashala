@@ -1,3 +1,4 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,9 +14,8 @@ import '../../settings/presentation/path_field_row.dart';
 import '../../explorer/application/checkout_picker.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspaces_controller.dart';
-import '../application/project_service.dart';
 import '../application/projects_controller.dart';
-import '../domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../settings/presentation/settings_notice.dart';
 
 /// Edits a project already in the workspace: its name, where its root folder
@@ -106,7 +106,7 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
       // a failed edit cannot half-file a project.
       final workspaceId = _workspaceId == _noContext ? null : _workspaceId;
       if (workspaceId != widget.project.workspaceId) {
-        ref
+        await ref
             .read(workspacesControllerProvider.notifier)
             .assign(widget.project.id, workspaceId);
       }
@@ -127,7 +127,7 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
 
   /// What the save did, counted rather than claimed. A checkout left behind is
   /// named, because nothing here knows where it went.
-  String _summaryOf(ProjectUpdateResult result) {
+  String _summaryOf(ProjectUpdated result) {
     if (result.rebased.isEmpty &&
         result.leftBehind.isEmpty &&
         result.discovered.isEmpty) {

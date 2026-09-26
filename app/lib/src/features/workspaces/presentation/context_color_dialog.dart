@@ -5,7 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../application/workspaces_controller.dart';
-import '../domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 /// A grid of the context hues, and *None*. One tap picks and closes: a colour
 /// is a glance, not a form.

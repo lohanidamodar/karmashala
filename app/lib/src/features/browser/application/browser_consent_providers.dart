@@ -2,8 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_providers.dart';
 import '../../git/application/changes_providers.dart';
-import '../../projects/application/project_providers.dart';
-import '../../repositories/application/repository_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../sessions/application/session_providers.dart';
 import '../data/preferences_consent_journal.dart';
 import 'package:karmashala_browser/browser.dart';
@@ -43,11 +42,11 @@ class BrowserConsentRevision extends Notifier<int> {
   repositoryId ??= container.read(selectedRepositoryIdProvider);
   if (repositoryId == null || repositoryId.isEmpty) return null;
   final projectId = container
-      .read(repositoryDaoProvider)
-      .getById(repositoryId)
+      .read(workspaceDataProvider)
+      .repository(repositoryId)
       ?.projectId;
   if (projectId == null || projectId.isEmpty) return null;
-  final project = container.read(projectDaoProvider).getById(projectId);
+  final project = container.read(workspaceDataProvider).project(projectId);
   return (id: projectId, name: project?.name ?? projectId);
 }
 

@@ -1,3 +1,4 @@
+import '../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../agents/application/agent_providers.dart';
@@ -11,10 +12,8 @@ import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../checkpoints/domain/checkpoint_title.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
-import '../explorer/application/checkout.dart';
-import '../projects/application/projects_controller.dart';
-import '../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
+import '../projects/application/projects_controller.dart';
 import '../sessions/application/session_handoff_service.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
@@ -196,8 +195,8 @@ class SessionLaunchTools {
   }) async {
     if (projectId == null) throw ArgumentError('Missing projectId.');
     final repos = _container
-        .read(repositoryDaoProvider)
-        .getByProject(projectId);
+        .read(workspaceDataProvider)
+        .repositoriesOf(projectId);
     Repository repo;
     if (repositoryId != null) {
       repo = repos.firstWhere(
@@ -209,7 +208,7 @@ class SessionLaunchTools {
       // folder when no checkout was ever discovered under it, git or not.
       repo =
           repos.firstOrNull ??
-          _container
+          await _container
               .read(projectsControllerProvider.notifier)
               .ensureRunLocation(projectId);
     }
@@ -674,8 +673,8 @@ class SessionLaunchTools {
       };
     }
     final repo = _container
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     final env = _container
         .read(executionEnvironmentDaoProvider)
         .getById(session.environmentId);
@@ -736,8 +735,8 @@ class SessionLaunchTools {
     }
 
     final repo = _container
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     final install = _container
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);

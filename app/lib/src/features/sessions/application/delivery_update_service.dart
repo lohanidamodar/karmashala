@@ -1,8 +1,8 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'delivery_providers.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
@@ -89,8 +89,8 @@ class DeliveryUpdateService {
       return const UpdateOutcome.refused(UpdateRefusal.sessionGone);
     }
     final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
     if (repository == null) {
       return const UpdateOutcome.refused(UpdateRefusal.sessionGone);
     }

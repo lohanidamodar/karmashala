@@ -5,7 +5,7 @@ import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../projects/application/project_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
@@ -89,7 +89,7 @@ class _WorktreeCleanupSectionState
     final log = ref.watch(worktreeCleanupLogProvider);
     final last = ref.watch(worktreeCleanupLastSweepProvider);
     ref.watch(projectsControllerProvider);
-    final projects = ref.watch(projectDaoProvider).getAll();
+    final projects = ref.watch(workspaceDataProvider).projects;
     final now = ref.watch(clockProvider).nowUtc();
     final small = theme.textTheme.bodySmall;
 

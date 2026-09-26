@@ -13,15 +13,13 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
-import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';

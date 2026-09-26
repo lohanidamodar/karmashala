@@ -1,4 +1,6 @@
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -22,6 +24,16 @@ sealed class DataChange {
           json['key']! as String,
           json['value'] as String?,
         ),
+        'workspaceChanged' => WorkspaceChanged(Workspace.fromJson(_row(json))),
+        'workspaceRemoved' => WorkspaceRemoved(json['id']! as String),
+        'projectChanged' => ProjectChanged(Project.fromJson(_row(json))),
+        'projectRemoved' => ProjectRemoved(json['id']! as String),
+        'repositoryChanged' => RepositoryChanged(
+          repositoryFromJson(json['row']),
+        ),
+        'repositoryRemoved' => RepositoryRemoved(json['id']! as String),
+        'sectionChanged' => SectionChanged(StoredSection.fromJson(_row(json))),
+        'sectionRemoved' => SectionRemoved(json['id']! as String),
         _ => null,
       };
 }
@@ -82,6 +94,106 @@ final class PreferenceChanged extends DataChange {
     'value': value,
   };
 }
+
+/// A workspace-domain row as it now stands, or its id when it went. Each
+/// travels as `{change, row}` / `{change, id}`.
+sealed class RowChange extends DataChange {
+  const RowChange();
+
+  String get name;
+}
+
+final class WorkspaceChanged extends RowChange {
+  const WorkspaceChanged(this.workspace);
+
+  final Workspace workspace;
+
+  @override
+  String get name => 'workspaceChanged';
+
+  @override
+  Map<String, Object?> toJson() => {'change': name, 'row': workspace.toJson()};
+}
+
+final class ProjectChanged extends RowChange {
+  const ProjectChanged(this.project);
+
+  final Project project;
+
+  @override
+  String get name => 'projectChanged';
+
+  @override
+  Map<String, Object?> toJson() => {'change': name, 'row': project.toJson()};
+}
+
+final class RepositoryChanged extends RowChange {
+  const RepositoryChanged(this.repository);
+
+  final Repository repository;
+
+  @override
+  String get name => 'repositoryChanged';
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': name,
+    'row': repositoryToJson(repository),
+  };
+}
+
+final class SectionChanged extends RowChange {
+  const SectionChanged(this.section);
+
+  final StoredSection section;
+
+  @override
+  String get name => 'sectionChanged';
+
+  @override
+  Map<String, Object?> toJson() => {'change': name, 'row': section.toJson()};
+}
+
+/// A workspace-domain row that went, by id.
+sealed class RowRemoved extends RowChange {
+  const RowRemoved(this.id);
+
+  final String id;
+
+  @override
+  Map<String, Object?> toJson() => {'change': name, 'id': id};
+}
+
+final class WorkspaceRemoved extends RowRemoved {
+  const WorkspaceRemoved(super.id);
+
+  @override
+  String get name => 'workspaceRemoved';
+}
+
+final class ProjectRemoved extends RowRemoved {
+  const ProjectRemoved(super.id);
+
+  @override
+  String get name => 'projectRemoved';
+}
+
+final class RepositoryRemoved extends RowRemoved {
+  const RepositoryRemoved(super.id);
+
+  @override
+  String get name => 'repositoryRemoved';
+}
+
+final class SectionRemoved extends RowRemoved {
+  const SectionRemoved(super.id);
+
+  @override
+  String get name => 'sectionRemoved';
+}
+
+Map<String, Object?> _row(Map<String, Object?> json) =>
+    (json['row']! as Map).cast<String, Object?>();
 
 /// Everything one write changed, under the server's [revision] for it.
 /// Revisions only grow for the life of one server process, so a copy can

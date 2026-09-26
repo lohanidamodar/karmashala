@@ -11,8 +11,7 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 
 import '../../support/fixtures.dart';
 import 'session_media_fixture.dart';

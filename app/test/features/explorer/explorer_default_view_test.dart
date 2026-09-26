@@ -12,10 +12,8 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -103,7 +101,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.read(workspacesControllerProvider.notifier).create('Game dev');
+    createContext(container, 'Game dev');
     // One project open, so session rows are part of what is frozen.
     container.read(explorerExpandedProjectsProvider.notifier).open('p1');
     await tester.pumpWidget(

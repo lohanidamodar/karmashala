@@ -9,8 +9,7 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -208,7 +207,7 @@ void main() {
   });
 
   group('the whole-store import', () {
-    test('does not re-add a conversation that is already live', () {
+    test('does not re-add a conversation that is already live', () async {
       sessions.insert(native());
       final container = ProviderContainer(
         overrides: [
@@ -219,26 +218,28 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final summary = container.read(projectImportServiceProvider).importAll([
-        DetectedProject(
-          canonicalKey: r'c:\src\demo\app',
-          displayPath: r'C:\src\demo\app',
-          sessions: [
-            DetectedSession(
-              cli: AgentIds.claudeCode,
-              sessionId: 'cli-abc',
-              cwd: const EnvironmentPath(
-                environmentId: 'windows',
-                path: r'C:\src\demo\app',
-              ),
-              filePath: r'C:\store\cli-abc.jsonl',
-              storeHome: r'C:\store',
-              modifiedAt: testTime,
+      final summary = await container
+          .read(projectImportServiceProvider)
+          .importAll([
+            DetectedProject(
+              canonicalKey: r'c:\src\demo\app',
+              displayPath: r'C:\src\demo\app',
+              sessions: [
+                DetectedSession(
+                  cli: AgentIds.claudeCode,
+                  sessionId: 'cli-abc',
+                  cwd: const EnvironmentPath(
+                    environmentId: 'windows',
+                    path: r'C:\src\demo\app',
+                  ),
+                  filePath: r'C:\store\cli-abc.jsonl',
+                  storeHome: r'C:\store',
+                  modifiedAt: testTime,
+                ),
+              ],
+              subagentSessions: const [],
             ),
-          ],
-          subagentSessions: const [],
-        ),
-      ]);
+          ]);
 
       expect(summary.sessions, 0);
       expect(dao.getAll(), isEmpty);

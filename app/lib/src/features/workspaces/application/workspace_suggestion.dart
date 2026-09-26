@@ -1,7 +1,7 @@
 import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
-import '../../projects/domain/project.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 
 /// Suggests which context a project at [root] probably belongs to: whichever
 /// already holds a project sharing the longest path prefix. Ties suggest nothing.

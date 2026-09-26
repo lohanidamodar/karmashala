@@ -1,3 +1,4 @@
+import '../../../features/workspaces/data/workspace_data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -11,7 +12,6 @@ import '../../../features/git/application/changes_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
-import '../../../features/repositories/application/repository_providers.dart';
 import '../../../features/sessions/application/session_defaults.dart';
 import '../../../features/sessions/application/session_handoff_service.dart';
 import '../../../features/sessions/application/session_launcher.dart';
@@ -35,7 +35,7 @@ Repository? commandDefaultCheckout(
   return projectDefaultCheckout(
     defaultRepositoryId: project?.defaultRepositoryId,
     offered: container.read(checkoutsInProjectProvider(projectId)),
-    all: container.read(repositoryDaoProvider).getByProject(projectId),
+    all: container.read(workspaceDataProvider).repositoriesOf(projectId),
   );
 }
 
@@ -66,7 +66,7 @@ class TypedCommandRunner {
     try {
       repository =
           commandDefaultCheckout(_container, command.projectId) ??
-          _container
+          await _container
               .read(projectsControllerProvider.notifier)
               .ensureRunLocation(command.projectId);
     } on StateError catch (error) {

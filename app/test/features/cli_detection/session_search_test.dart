@@ -10,8 +10,7 @@ import 'package:karmashala/src/features/cli_detection/application/session_search
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';

@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
@@ -7,7 +8,6 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../git/application/parsed_diff.dart';
 import 'package:agent_cli/process.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 
@@ -32,7 +32,7 @@ EnvironmentPath? checkpointTargetFor(Ref ref, String sessionId) {
   if (session == null) return null;
   final worktree = session.worktree;
   if (worktree != null) return worktree;
-  return ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+  return ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
 }
 
 /// Bumped whenever a checkpoint is written, so views refresh without polling.

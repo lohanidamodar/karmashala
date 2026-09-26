@@ -2,13 +2,13 @@
 /// through `SessionLauncher`, where everything that makes a launch safe lives.
 library;
 
+import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -39,8 +39,8 @@ Future<RemoteSessionStarted> startRemoteSession(
   RemoteSessionStartRequest request,
 ) async {
   final repository = ref
-      .read(repositoryDaoProvider)
-      .getById(request.repositoryId);
+      .read(workspaceDataProvider)
+      .repository(request.repositoryId);
   if (repository == null) {
     throw const RemoteApiRefusal(
       ErrorCode.notFound,
@@ -130,8 +130,8 @@ Future<RemoteSessionStarted> resumeRemoteSession(
       );
     }
     final repository = ref
-        .read(repositoryDaoProvider)
-        .getById(native.repositoryId);
+        .read(workspaceDataProvider)
+        .repository(native.repositoryId);
     final installation = ref
         .read(agentInstallationDaoProvider)
         .getById(native.agentInstallationId);

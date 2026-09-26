@@ -10,9 +10,8 @@ import 'package:karmashala/src/features/explorer/application/checkout_picker.dar
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';

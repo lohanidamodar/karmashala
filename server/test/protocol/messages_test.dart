@@ -17,7 +17,7 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 8, 14, 0, 30);
 
   test('the protocol version is pinned; changing it is a deliberate act', () {
-    expect(kProtocolVersion, 11);
+    expect(kProtocolVersion, 12);
   });
 
   group('client to host', () {

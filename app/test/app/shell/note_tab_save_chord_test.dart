@@ -11,8 +11,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_ui/code.dart';
 
 import '../../features/scale/scale_harness.dart';

@@ -8,8 +8,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,7 +95,7 @@ void main() {
     var notified = 0;
     container.listen(selectedRepositoryProvider, (_, _) => notified++);
 
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
     await settle();
 
     expect(
@@ -112,7 +111,7 @@ void main() {
     container.listen(selectedRepositoryProvider, (_, _) => notified++);
 
     RepositoryDao(db).update(repository(id: 'r1', name: 'renamed'));
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
     await settle();
 
     expect(notified, 1, reason: 'the row it points at now holds a new name');
@@ -131,7 +130,7 @@ void main() {
     // What `ProjectService.rediscover` does: a repository joins an existing
     // project, and not one project row is touched.
     RepositoryDao(db).insert(repository(id: 'r2', name: 'second'));
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
     await settle();
 
     expect(
@@ -179,7 +178,7 @@ void main() {
     );
     expect((top, bottom), (1, 1), reason: 'each built once to begin with');
 
-    container.read(projectsControllerProvider.notifier).refreshFromStore();
+    rereadWorkspace(container);
     await tester.pump();
 
     expect(

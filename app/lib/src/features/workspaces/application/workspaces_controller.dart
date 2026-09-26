@@ -1,59 +1,51 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/database_providers.dart';
-import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
-import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../projects/domain/project.dart';
 import '../../settings/application/settings_controller.dart';
-import '../domain/workspace.dart';
+import '../data/workspace_data.dart';
 import '../domain/workspace_scope.dart';
-import 'workspace_providers.dart';
-
-/// Raised when a name would produce two contexts a picker cannot tell apart.
-class DuplicateWorkspaceName implements Exception {
-  const DuplicateWorkspaceName(this.name);
-  final String name;
-  @override
-  String toString() => 'A context called "$name" already exists.';
-}
 
 /// The user's contexts, and the four verbs over them: create, rename, delete,
-/// assign. Reads are synchronous (SQLite), so the state is the plain list.
+/// assign. The list follows the server's copy, whoever changed it; every
+/// write is the server's to validate, and a refusal ([DataRefused]) says why
+/// in words fit to show.
 class WorkspacesController extends Notifier<List<Workspace>> {
-  @override
-  List<Workspace> build() => ref.watch(workspaceDaoProvider).getAll();
+  WorkspaceData get _data => ref.read(workspaceDataProvider);
 
-  Workspace create(String name, {String? description}) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) throw ArgumentError('A context needs a name.');
-    _rejectDuplicate(trimmed, exceptId: null);
-    final workspace = Workspace(
-      id: ref.read(idGeneratorProvider).newId(),
-      name: trimmed,
-      description: _clean(description),
-      createdAt: ref.read(clockProvider).nowUtc(),
+  @override
+  List<Workspace> build() {
+    final data = ref.watch(workspaceDataProvider);
+    final workspaces = data.workspaces;
+    final listening = data.workspaceChanges.listen(
+      (_) => state = data.workspaces,
     );
-    ref.read(workspaceDaoProvider).insert(workspace);
-    _refresh();
-    return workspace;
+    ref.onDispose(listening.cancel);
+    return workspaces;
   }
+
+  Future<Workspace> create(String name, {String? description}) => _data.write(
+    WorkspacePut(
+      id: ref.read(idGeneratorProvider).newId(),
+      workspaceName: name,
+      description: description,
+    ),
+  );
 
   /// The name and the description together, because they are edited together.
   /// A blank description **clears** it — a form that can only add cannot correct.
-  void edit(String id, {required String name, String? description}) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) throw ArgumentError('A context needs a name.');
-    _rejectDuplicate(trimmed, exceptId: id);
-    ref
-        .read(workspaceDaoProvider)
-        .updateDetails(id, name: trimmed, description: _clean(description));
-    _refresh();
-  }
+  Future<Workspace> edit(
+    String id, {
+    required String name,
+    String? description,
+  }) => _data.write(
+    WorkspacePut(id: id, workspaceName: name, description: description),
+  );
 
   /// The name alone, leaving whatever description the context already had.
-  void rename(String id, String name) => edit(
+  Future<Workspace> rename(String id, String name) => edit(
     id,
     name: name,
     description: state.where((w) => w.id == id).firstOrNull?.description,
@@ -61,60 +53,31 @@ class WorkspacesController extends Notifier<List<Workspace>> {
 
   /// The colour's name, or null for none. Stored as the word, so a colour a
   /// newer build named is kept through an older one rather than erased.
-  void setColor(String id, String? color) {
-    ref.read(workspaceDaoProvider).updateColor(id, color);
-    _refresh();
-  }
+  Future<Workspace> setColor(String id, String? color) =>
+      _data.write(WorkspaceSetColor(id: id, color: color));
 
-  /// Deletes the context. **Its projects are kept** and become unassigned, by
-  /// the schema's `ON DELETE SET NULL`; this only refreshes the project list.
-  void delete(String id) {
-    ref.read(workspaceDaoProvider).delete(id);
+  /// Deletes the context. **Its projects are kept**, unassigned.
+  Future<void> delete(String id) async {
     // Whatever was being shown, showing a context that no longer exists is not
     // an option; fall back to everything.
     final scope = ref.read(workspaceScopeProvider);
     if (scope.workspaceId == id) {
       ref.read(workspaceScopeProvider.notifier).select(WorkspaceScope.all);
     }
-    _refresh();
-    ref.read(projectsControllerProvider.notifier).refreshFromStore();
+    await _data.write(WorkspaceDelete(id));
   }
 
-  /// Files [projectId] under [workspaceId], or unassigns it when null. One
-  /// `UPDATE`, not remove-then-add, so a project is never briefly homeless.
-  void assign(String projectId, String? workspaceId) {
-    ref.read(projectDaoProvider).setWorkspace(projectId, workspaceId);
-    ref.read(projectsControllerProvider.notifier).refreshFromStore();
-  }
+  /// Files [projectId] under [workspaceId], or unassigns it when null — one
+  /// write, so a project is never briefly homeless.
+  Future<void> assign(String projectId, String? workspaceId) =>
+      assignAll({projectId: workspaceId});
 
   /// Files many projects at once — [placements] maps a project id to its
-  /// context, or null to unassign — in one transaction and one refresh.
-  void assignAll(Map<String, String?> placements) {
+  /// context, or null to unassign — in one transaction.
+  Future<void> assignAll(Map<String, String?> placements) async {
     if (placements.isEmpty) return;
-    final dao = ref.read(projectDaoProvider);
-    ref.read(databaseProvider).transaction(() {
-      placements.forEach(dao.setWorkspace);
-    });
-    ref.read(projectsControllerProvider.notifier).refreshFromStore();
+    await _data.write(ProjectsFile(placements));
   }
-
-  /// A trimmed description, or null — an empty string is the absence of one,
-  /// never a description that happens to be blank.
-  static String? _clean(String? value) {
-    final trimmed = value?.trim();
-    return trimmed == null || trimmed.isEmpty ? null : trimmed;
-  }
-
-  void _rejectDuplicate(String name, {required String? exceptId}) {
-    final lower = name.toLowerCase();
-    for (final existing in state) {
-      if (existing.id != exceptId && existing.name.toLowerCase() == lower) {
-        throw DuplicateWorkspaceName(name);
-      }
-    }
-  }
-
-  void _refresh() => state = ref.read(workspaceDaoProvider).getAll();
 }
 
 final workspacesControllerProvider =
@@ -122,8 +85,7 @@ final workspacesControllerProvider =
       WorkspacesController.new,
     );
 
-/// How many projects sit in each context, from the list already in memory —
-/// one pass over `ProjectDao.getAll`, so no picker issues a `COUNT(*)`.
+/// How many projects sit in each context, from the list already in memory.
 final workspaceProjectCountsProvider = Provider<Map<String, int>>((ref) {
   final counts = <String, int>{};
   for (final project in ref.watch(projectsControllerProvider)) {

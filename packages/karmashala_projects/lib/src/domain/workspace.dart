@@ -1,4 +1,4 @@
-/// One of the user's contexts, the level above [Project]. It is a navigation
+/// One of the user's contexts, the level above a project. It is a navigation
 /// level in the Explorer — a node inside the machine its projects run on — and
 /// a scope for where new work goes. Called a **context** wherever a human reads.
 class Workspace {
@@ -41,6 +41,31 @@ class Workspace {
     color: clearColor ? null : (color ?? this.color),
     createdAt: createdAt ?? this.createdAt,
   );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'description': ?description,
+    'color': ?color,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+  };
+
+  /// Throws [FormatException] on a map that is not a context.
+  static Workspace fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    final name = json['name'];
+    final createdAt = json['createdAt'];
+    if (id is! String || name is! String || createdAt is! String) {
+      throw const FormatException('not a context');
+    }
+    return Workspace(
+      id: id,
+      name: name,
+      description: json['description'] as String?,
+      color: json['color'] as String?,
+      createdAt: DateTime.parse(createdAt).toUtc(),
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

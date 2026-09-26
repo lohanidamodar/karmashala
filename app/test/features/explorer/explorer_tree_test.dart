@@ -12,9 +12,8 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';

@@ -1,3 +1,4 @@
+import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter/foundation.dart' show immutable, listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,13 +8,12 @@ import 'package:karmashala_session/session.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../projects/domain/project.dart';
-import '../../repositories/application/repository_providers.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../sessions/application/session_last_active_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../workspaces/application/workspaces_controller.dart';
-import 'checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'environment_terminals_providers.dart';
 import 'explorer_agent_filter.dart';
 import 'explorer_tree_nodes.dart';
@@ -245,7 +245,7 @@ List<ExplorerNode> _sessionNodes(
   // Read once for the project, never per row — `session_switch_cost_test`.
   final repositoryPaths = <String, EnvironmentPath>{
     for (final repository
-        in ref.read(repositoryDaoProvider).getByProject(project.id))
+        in ref.read(workspaceDataProvider).repositoriesOf(project.id))
       repository.id: repository.path,
   };
   final pinnedIds = ref

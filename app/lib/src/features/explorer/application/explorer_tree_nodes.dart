@@ -5,8 +5,7 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/rows.dart' show abbreviatePath;
 
-import '../../projects/domain/project.dart';
-import '../../workspaces/domain/workspace.dart';
+import 'package:karmashala_projects/karmashala_projects.dart';
 import '../../workspaces/domain/workspace_scope.dart';
 import '../domain/explorer_section.dart';
 import 'environment_grouping.dart';

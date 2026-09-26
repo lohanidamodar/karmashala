@@ -9,8 +9,7 @@ import 'package:karmashala/src/features/explorer/application/explorer_view_mode.
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -41,7 +40,7 @@ import '../terminal/fake_instance.dart';
 ///
 /// 1. **Matching is O(1) in database statements and O(0) in processes.**
 ///    Filing a hundred sessions into four sections reads the database exactly
-///    as often as filing one — three unfiltered sweeps, on change only — and
+///    as often as filing one — two unfiltered sweeps, on change only — and
 ///    starts no subprocess at all. Re-reading the answer, the way a rebuilding
 ///    sidebar re-reads it, costs nothing.
 /// 2. **A collapsed section builds no rows and matches nothing.** Not "less":
@@ -54,17 +53,17 @@ import '../terminal/fake_instance.dart';
 ///    sidebar nobody has opened, and claim 2 holds only with the filter off.
 ///    What the filter buys back is three rows of the user's sidebar that said
 ///    nothing; what it costs is exactly the bill an open section already paid
-///    and not a statement more: the same three sweeps, still flat in the size
+///    and not a statement more: the same two sweeps, still flat in the size
 ///    of the workspace, still no subprocess, still nothing per rebuild — and
 ///    **not the delivery heartbeat**, which stays gated on a section actually
 ///    having rows on screen. That last one is not a micro-optimisation: it is
 ///    the difference between the Explorer being open and the app running a
 ///    two-minute timer.
-/// The three unfiltered sweeps `sectionCandidatesProvider` makes — the only
+/// The two unfiltered sweeps `sectionCandidatesProvider` makes (its checkouts
+/// come from the copy of the workspace, not the database) — the only
 /// statements saved sections added to the app.
 bool _isSectionSweep(String sql) =>
     sql.startsWith('SELECT * FROM sessions ORDER BY') ||
-    sql.startsWith('SELECT * FROM repositories ORDER BY') ||
     sql.startsWith('SELECT * FROM imported_sessions WHERE NOT EXISTS');
 
 void main() {
@@ -176,7 +175,7 @@ void main() {
 
     test('costs the same database at a hundred sessions as at one', () {
       expect(mountStatements.keys, containsAll(scale));
-      // Three sweeps — sessions, imported sessions, repositories — plus what
+      // Two sweeps — sessions, imported sessions — plus what
       // the settings row and the sections themselves cost. A constant, because
       // nothing here is read per session.
       expect(
@@ -293,7 +292,7 @@ void main() {
 
       return (
         statements: db.count,
-        // The matching's own reads: the three unfiltered sweeps
+        // The matching's own reads: the two unfiltered sweeps
         // [sectionCandidatesProvider] makes. Counted apart from everything
         // else because they are the only statements this feature added.
         sweeps: db.statements.where(_isSectionSweep).length,
@@ -307,7 +306,7 @@ void main() {
     /// **The shape, not the number.**
     ///
     /// Opening a section costs two separable things, and separating them is the
-    /// point of this test. The **matching** costs one sweep of each of the three
+    /// point of this test. The **matching** costs one sweep of each of the two
     /// tables, whatever the workspace holds — that is the number this feature is
     /// answerable for, and it is flat. The **rows** cost what a session card has
     /// always cost, charged when a card is *inflated*, which is the rule the
@@ -344,10 +343,10 @@ void main() {
         );
         expect(
           result.sweeps,
-          3,
+          2,
           reason:
-              'matching reads the three tables once each, and a bigger '
-              'workspace does not make that four',
+              'matching reads the two session tables once each, and a bigger '
+              'workspace does not make that three',
         );
       });
     }
@@ -470,7 +469,7 @@ void main() {
       });
     }
 
-    test('costs three sweeps, and the same three at a hundred as at one', () {
+    test('costs two sweeps, and the same two at a hundred as at one', () {
       expect(on.keys, containsAll(scale));
       expect(off.keys, containsAll(scale));
       // ignore: avoid_print
@@ -483,9 +482,9 @@ void main() {
       for (final count in scale) {
         expect(
           on[count]! - off[count]!,
-          3,
+          2,
           reason:
-              'deciding which sections are worth a row reads the three tables '
+              'deciding which sections are worth a row reads the two tables '
               'once each and no more, at $count sessions: '
               '${on[count]} against ${off[count]}',
         );

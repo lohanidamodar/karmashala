@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/id_generator_provider.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
@@ -8,26 +12,40 @@ import 'package:karmashala_git/github.dart';
 import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
 import '../../settings/application/settings_controller.dart';
-import '../data/explorer_section_dao.dart';
 import '../domain/explorer_section.dart';
-import 'checkout.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'explorer_agent_filter.dart';
 
-/// The saved sections, in sidebar order, and every write to them. Every
-/// mutator writes to the DAO first and publishes second.
+/// The saved sections, in sidebar order, and every write to them. A write
+/// shows at once and goes to the server, whose copy the list then follows.
 class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
   @override
-  List<ExplorerSection> build() =>
-      List.unmodifiable(ref.read(explorerSectionDaoProvider).getAll());
+  List<ExplorerSection> build() {
+    final workspace = ref.watch(workspaceDataProvider);
+    List<ExplorerSection> read() => List.unmodifiable([
+      for (final stored in workspace.sections)
+        ?ExplorerSection.fromStored(stored),
+    ]);
+    final sections = read();
+    final listening = workspace.sectionChanges.listen((_) => state = read());
+    ref.onDispose(listening.cancel);
+    return sections;
+  }
 
-  ExplorerSectionDao get _dao => ref.read(explorerSectionDaoProvider);
+  void _put(ExplorerSection section) => _send(SectionPut(section.toStored()));
+
+  void _send(DataRequest<Object?> request) => unawaited(
+    ref
+        .read(workspaceDataProvider)
+        .write(request)
+        .then<void>((_) {}, onError: (Object _) {}),
+  );
 
   /// Adds a section at the *bottom*: position is priority (see
   /// [assignSections]), so arriving last it takes rows from nothing.
@@ -38,8 +56,8 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
       rule: rule,
       position: state.isEmpty ? 0 : state.last.position + 1,
     );
-    _dao.insert(section);
     state = List.unmodifiable([...state, section]);
+    _put(section);
     return section;
   }
 
@@ -47,25 +65,22 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
   void edit(String id, {String? name, SectionRule? rule}) {
     final section = _byId(id);
     if (section == null || !section.isEditable) return;
-    final next = section.copyWith(name: name, rule: rule);
-    _dao.update(next);
-    _replace(next);
+    _replace(section.copyWith(name: name, rule: rule));
   }
 
   void remove(String id) {
     final section = _byId(id);
     if (section == null || !section.isEditable) return;
-    _dao.delete(id);
     state = List.unmodifiable([
       for (final s in state)
         if (s.id != id) s,
     ]);
+    _send(SectionDelete(id));
   }
 
   void setCollapsed(String id, bool collapsed) {
     final section = _byId(id);
     if (section == null || section.collapsed == collapsed) return;
-    _dao.setCollapsed(id, collapsed);
     _replace(section.copyWith(collapsed: collapsed));
   }
 
@@ -84,10 +99,10 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
     final floor = ordered.indexWhere((s) => s.isEditable);
     final target = to.clamp(floor < 0 ? 0 : floor, ordered.length);
     ordered.insert(target, moving);
-    _dao.reorder([for (final s in ordered) s.id]);
     state = List.unmodifiable([
       for (var i = 0; i < ordered.length; i++) ordered[i].copyWith(position: i),
     ]);
+    _send(SectionsReorder([for (final s in ordered) s.id]));
   }
 
   /// Puts [sessionId] in a hand-filled group. Pinning is not routed here: the
@@ -96,14 +111,12 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
     final section = _byId(sectionId);
     if (section == null || section.rule.kind != SectionRuleKind.manual) return;
     if (section.members.contains(sessionId)) return;
-    _dao.addMember(sectionId, sessionId);
     _replace(section.copyWith(members: {...section.members, sessionId}));
   }
 
   void removeMember(String sectionId, String sessionId) {
     final section = _byId(sectionId);
     if (section == null || !section.members.contains(sessionId)) return;
-    _dao.removeMember(sectionId, sessionId);
     _replace(
       section.copyWith(
         members: {
@@ -121,10 +134,14 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
     return null;
   }
 
-  void _replace(ExplorerSection next) => state = List.unmodifiable([
-    for (final section in state)
-      if (section.id == next.id) next else section,
-  ]);
+  /// Shows [next] at once, and keeps it at the server.
+  void _replace(ExplorerSection next) {
+    state = List.unmodifiable([
+      for (final section in state)
+        if (section.id == next.id) next else section,
+    ]);
+    _put(next);
+  }
 }
 
 final explorerSectionsProvider =
@@ -202,7 +219,7 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
     SessionChangeKind.workspace,
   });
   final repositories = {
-    for (final repository in ref.read(repositoryDaoProvider).getAll())
+    for (final repository in ref.read(workspaceDataProvider).repositories)
       repository.id: repository,
   };
   return List.unmodifiable(<SectionCandidate>[
