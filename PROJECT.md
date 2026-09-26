@@ -337,6 +337,14 @@ If localization is not enabled:
 
 ## 11. Testing Strategy
 
+**Where things are.** The repository root is a pub workspace with no code of
+its own: `app/` is the Flutter client, `server/` the Karmashala server (package
+`karmashala_host`), `relay/` the relay with its contract in `relay/protocol/`,
+and `packages/` everything shared. Run `flutter pub get` at the root; run the
+app's `flutter` commands (`run`, `test`, `build`) from `app/`. A path in this
+guide or in `docs/` that starts `lib/`, `test/`, `integration_test/`, `assets/`
+or a platform folder is the app's, under `app/`.
+
 Add tests in proportion to risk and user impact.
 
 **One `flutter test` at a time in a checkout.** Concurrent runs fight over
@@ -375,7 +383,7 @@ Recommended responsive test sizes:
 | `phone` | `390 x 844` | compact mobile layout |
 | `desktop` | `1440 x 900` | expanded desktop/tablet layout |
 
-Before considering a task complete, try to run:
+Before considering a task complete, try to run, from `app/`:
 
 ```bash
 flutter analyze
@@ -383,21 +391,26 @@ flutter test --exclude-tags=live-ssh,live-wsl
 ```
 
 **Name every directory when you analyze by path**, or one of them rots
-unwatched:
+unwatched. From the repository root:
 
 ```bash
-dart.exe analyze --no-fatal-warnings lib test tool integration_test packages
+dart.exe analyze --no-fatal-warnings app server packages
 ```
+
+`app` covers its `lib`, `test`, `integration_test` and `tool`. `relay/` and
+`relay/protocol/` resolve on their own lock files: `dart pub get && dart
+analyze && dart test` inside each.
 
 `integration_test/` is in no gate — `flutter test` does not run it — so nothing
 but the analyzer ever compiles it. Three of its files carried 72 errors for a
 day in September 2026 because every analyze command in flight listed
 `lib test packages host` and left it out.
 
-`packages/` covers the standalone binaries too — `mcp_bridge` and `relay` are
-not workspace members (they resolve on their own lock files so
-`dart compile exe` can reach them), but they live under `packages/` like
-everything else, so naming the one directory analyzes them all. **`host` joined
+`packages/` covers the standalone `mcp_bridge` too — it is not a workspace
+member (it resolves on its own lock file so `dart compile exe` can reach it),
+but it lives under `packages/` like everything else, so naming the one
+directory analyzes it. `relay` sits beside `server` at the root and is named on
+its own. **`host` (now `server/`) joined
 the workspace on 2026-09-15**: it carries the app's store, `sqlite3` has a build
 hook, and `dart compile exe` refuses any target with one — so the exemption
 bought it nothing and it is built with `dart build cli` instead (§22). `mcp_bridge`
@@ -427,7 +440,7 @@ If verification cannot be run, explain why.
 
 ## 12. Commands Cheatsheet
 
-Common commands:
+Common commands, `pub get` at the repository root and the rest from `app/`:
 
 ```bash
 flutter pub get
@@ -1244,7 +1257,7 @@ moves there in one sentence** rather than being deleted. Everything else goes.
 
 ## 22. The session host is a bundle, and it is built where it runs
 
-`packages/host` carries the app's store (`packages/karmashala_store`), so it
+`server/` (package `karmashala_host`) carries the app's store (`packages/karmashala_store`), so it
 depends on `sqlite3`, which has a build hook. Two rules follow, and both bite
 silently if forgotten.
 
@@ -1257,7 +1270,9 @@ with build hooks: sqlite3."* The output is a directory, not a file:
 <out>/bundle/lib/libsqlite3.so   (sqlite3.dll on Windows)
 ```
 
-Pass `-o <out>` so nothing has to know the `<os>_<arch>` directory name. The
+From the repository root: `dart build cli -t server/bin/karmashala_host.dart
+-o <out>`. Pass `-o <out>` so nothing has to know the `<os>_<arch>` directory
+name. The
 executable finds its SQLite at `../lib`, so **the bundle cannot be flattened** —
 not beside `karmashala.exe`, not into a remote `bin/`.
 
@@ -1274,10 +1289,11 @@ deployer uploads one tarball per target and unpacks it; `probe-store` says which
 of four things is wrong when a machine cannot hold a store.
 
 **The bundle is also the relay.** `karmashala_host relay` runs
-`packages/relay`'s server, so an SSH host used as the desktop's relay needs no
+`relay/`'s server, so an SSH host used as the desktop's relay needs no
 second artifact and CI builds none (`docs/SETTLED.md`, *An SSH host can be the
-desktop's relay*). `packages/relay` stays out of the workspace and is reached by
-path, as the app already reaches it.
+desktop's relay*). `relay/` stays out of the workspace and is reached by
+path, as the app already reaches it; so does its contract, `relay/protocol/`,
+which the server and every client of the relay read instead of repeating.
 
 **In tests, never `dart run` the host.** Every spawn stages the bundled library
 into `.dart_tool/`, and parallel workers collide on the locked library. The live
@@ -1309,7 +1325,7 @@ A release build (built by the usual route; do not install it):
 ```powershell
 $env:KARMASHALA_PROBE = "1"
 $env:KARMASHALA_DATA_DIR = "$env:TEMP\karmashala-probe"
-& .\build\windows\x64\runner\Release\karmashala.exe
+& .\app\build\windows\x64\runner\Release\karmashala.exe
 ```
 
 A debug build, from PowerShell with the Windows toolchain (§17):
@@ -1317,12 +1333,13 @@ A debug build, from PowerShell with the Windows toolchain (§17):
 ```powershell
 $env:KARMASHALA_PROBE = "1"
 $env:KARMASHALA_DATA_DIR = "$env:TEMP\karmashala-probe"
+cd app
 C:\Users\<you>\flutter\bin\flutter.bat run -d windows --debug
 ```
 
-or `tool\debug_run.bat -Fresh`, which sets both (data in `build\debug-data`).
+or `tool\debug_run.bat -Fresh`, which sets both (data in `app\build\debug-data`).
 A profile build for CPU or heap work is `tool\profile_run.bat`, which is always
-a probe (data in `build\profile-data` unless `KARMASHALA_DATA_DIR` is set).
+a probe (data in `app\build\profile-data` unless `KARMASHALA_DATA_DIR` is set).
 `flutter run` does not build `karmashala_mcp.exe`; drive a profile probe with
 the Release one and `KARMASHALA_DATA_DIR` pointed at the probe.
 The variables are inherited by `flutter run`'s child and by every process the
@@ -1334,7 +1351,7 @@ it started one (host-backed panes): a detached `karmashala_host serve` holding
 
 ```powershell
 $env:KARMASHALA_HOST_DIR = "$env:KARMASHALA_DATA_DIR\host"
-& .\build\windows\x64\runner\Release\host\bin\karmashala_host.exe stop --force
+& .\app\build\windows\x64\runner\Release\host\bin\karmashala_host.exe stop --force
 ```
 
 ### The rules it is built to

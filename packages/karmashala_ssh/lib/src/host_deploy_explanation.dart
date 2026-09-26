@@ -119,18 +119,19 @@ HostDeployExplanation explainHostDeployment(
 }
 
 /// What builds the bundle a debug run is missing, into the second place
-/// `DirectoryHostBinaries.standard` looks. From macOS or Linux — a bundle
-/// cross-built on Windows cannot open a store (PROJECT.md §22).
+/// `DirectoryHostBinaries.standard` looks (`server/build`), run from the
+/// repository root. From macOS or Linux — a bundle cross-built on Windows
+/// cannot open a store (PROJECT.md §22).
 String hostBundleBuildCommand(
   HostPlatform platform, {
   // The filename's version has to start with a digit to be recognised.
   String version = '0.0.0',
 }) {
   final arch = platform.architecture;
-  return 'dart build cli -t packages/host/bin/karmashala_host.dart '
+  return 'dart build cli -t server/bin/karmashala_host.dart '
       '--target-os=linux --target-arch=$arch -o build/host-linux-$arch && '
-      'mkdir -p packages/host/build && '
-      'tar -czf packages/host/build/karmashala_host-$version-linux-$arch.tar.gz '
+      'mkdir -p server/build && '
+      'tar -czf server/build/karmashala_host-$version-linux-$arch.tar.gz '
       '-C build/host-linux-$arch/bundle .';
 }
 

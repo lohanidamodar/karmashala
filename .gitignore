@@ -31,9 +31,11 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/app/build/
 # `flutter test` inside a workspace member writes its tester assets here.
 packages/*/build/
 /coverage/
+/app/coverage/
 
 # Symbolication related
 app.*.symbols
@@ -42,36 +44,39 @@ app.*.symbols
 app.*.map.json
 
 # Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+/app/android/app/debug
+/app/android/app/profile
+/app/android/app/release
 
 # Inno Setup installer output
-windows/installer/output/
+app/windows/installer/output/
 .env.android
 .env.android.codemagic
 .env.ios
 .env.ios.codemagic
-android/key.properties
-android/app/**/*.jks
-android/app/**/*.keystore
-android/vendor/bundle
-android/.bundle/
-ios/vendor/bundle
-ios/.bundle/
-android/fastlane/report.xml
-android/fastlane/README.md
-ios/fastlane/report.xml
-ios/fastlane/README.md
+app/android/key.properties
+app/android/app/**/*.jks
+app/android/app/**/*.keystore
+app/android/vendor/bundle
+app/android/.bundle/
+app/ios/vendor/bundle
+app/ios/.bundle/
+app/android/fastlane/report.xml
+app/android/fastlane/README.md
+app/ios/fastlane/report.xml
+app/ios/fastlane/README.md
 
 # Loop 27 device-pane decode spike (throwaway, never shipped)
 .spike/
 packages/local_ipc/pubspec.lock
+# The relay's contract resolves on its own for its tests; the relay's lock,
+# beside it, is the one that pins what ships.
+relay/protocol/pubspec.lock
 # Only the fetched WebDriverAgent blob is ignored, not the whole directory:
 # `copy_wda.sh` is run unconditionally by the Runner's build phase, so
 # ignoring `macos/Vendor/` wholesale made every fresh clone fail the macOS
 # build with `No such file or directory`.
-macos/Vendor/wda/
+app/macos/Vendor/wda/
 .claude/worktrees/
 # Android NDK build output for the vendored flutter_pty; the package is
 # in-tree but its native build products are not.

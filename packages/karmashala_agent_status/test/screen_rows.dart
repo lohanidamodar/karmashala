@@ -32,7 +32,7 @@ Terminal fixtureScreen(
   int rows = 30,
 }) {
   final bytes = File(
-    '../../test/features/agents/fixtures/$fixture.raw',
+    '../../app/test/features/agents/fixtures/$fixture.raw',
   ).readAsStringSync();
   return Terminal(maxLines: 10000)
     ..resize(columns, rows)

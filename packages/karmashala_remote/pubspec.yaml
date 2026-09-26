@@ -18,6 +18,10 @@ dependencies:
   # XChaCha20-Poly1305 and HKDF: the key schedule, the sealed channel and the
   # push envelope. The only third-party code on the wire path.
   cryptography: ^2.9.0
+  # The relay's contract — routes, rendezvous rules, push bodies, status and
+  # close codes — shared with the relay server rather than repeated here.
+  karmashala_relay_protocol:
+    path: ../../relay/protocol
 
 dev_dependencies:
   lints: ^6.1.0
@@ -26,4 +30,4 @@ dev_dependencies:
   # pairing suites dial a real one. One-way and test-only: nothing under `lib/`
   # imports it, and the relay never imports this package.
   karmashala_relay:
-    path: ../relay
+    path: ../../relay

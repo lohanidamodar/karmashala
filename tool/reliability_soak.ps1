@@ -39,7 +39,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
+# The Flutter client, app\ beside this folder: the suites below are its.
+$root = Join-Path (Split-Path -Parent $PSScriptRoot) 'app'
 Set-Location $root
 
 $failureSuites = @(

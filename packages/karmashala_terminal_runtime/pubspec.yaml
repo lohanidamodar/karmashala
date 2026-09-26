@@ -42,7 +42,7 @@ dependencies:
   # A pane on a deployed session host: the wire protocol and where the host
   # keeps its files.
   karmashala_host:
-    path: ../host
+    path: ../../server
   # The SSH connection an ssh pane runs in, and the host access a host pane
   # links through.
   karmashala_ssh:

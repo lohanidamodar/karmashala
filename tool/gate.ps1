@@ -69,6 +69,12 @@ $dart    = Join-Path $env:USERPROFILE 'flutter\bin\cache\dart-sdk\bin\dart.exe'
 $gateDir = Join-Path $root '.gate'
 if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | Out-Null }
 
+# The Flutter client lives in app\: every `app` and `owns` path in the map
+# below is relative to it, and its suites run from there. `pkg` paths are the
+# repository root's.
+$appDir = Join-Path $root 'app'
+Set-Location $appDir
+
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
 # All fifteen are extracted and cut over, so every mapping here is a real seam:
@@ -460,7 +466,7 @@ function Invoke-PackageGate {
   # `test/terminal/perf/**` is frozen: -Full only, never a package run.
   $appPaths = @($entry.app |
     Where-Object { -not $_.StartsWith('test/terminal/perf') } |
-    Where-Object { Test-Path (Join-Path $root ($_ -replace '/', '\')) })
+    Where-Object { Test-Path (Join-Path $appDir ($_ -replace '/', '\')) })
   if ($appPaths.Count -eq 0) {
     Write-Host "    no app suites mapped for '$Key'." -ForegroundColor DarkYellow
     return
@@ -477,7 +483,9 @@ function Get-ChangedPackages {
   if ($LASTEXITCODE -eq 0 -and $base) { $files += & git diff --name-only $base }
   $files += & git diff --name-only
   $files += & git diff --name-only --cached
-  $files = $files | Where-Object { $_ } | ForEach-Object { $_ -replace '\\', '/' } | Sort-Object -Unique
+  # git names paths from the repository root; the app's are read as the map
+  # spells them, relative to app\.
+  $files = $files | Where-Object { $_ } | ForEach-Object { ($_ -replace '\\', '/') -replace '^app/', '' } | Sort-Object -Unique
 
   if ($files.Count -eq 0) { return @{ packages = @(); full = $false; files = @() } }
   foreach ($f in $files) {
@@ -525,7 +533,7 @@ if ($Full) {
     foreach ($f in $selection.files) {
       if ($f -match '^(?:lib/src|test)/features/([^/]+)/') {
         $m = "test/features/$($Matches[1])"
-        if ((Test-Path (Join-Path $root ($m -replace '/', '\'))) -and ($mirrors -notcontains $m)) { $mirrors += $m }
+        if ((Test-Path (Join-Path $appDir ($m -replace '/', '\'))) -and ($mirrors -notcontains $m)) { $mirrors += $m }
       }
     }
     if ($mirrors.Count -eq 0) {

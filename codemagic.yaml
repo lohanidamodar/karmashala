@@ -6,6 +6,9 @@
 # Android workflows use Fastlane for signing + deployment via Google Play.
 # Triggers are intentionally omitted so builds are MANUAL ONLY.
 #
+# The repository is a pub workspace: `flutter pub get` runs at its root, and
+# the Flutter client — tests, builds and both Fastlane folders — is in app/.
+#
 # All project-specific values come from environment variables.
 # Required variable groups (configure in Codemagic UI):
 #   ios_credentials       — iOS signing and upload credentials
@@ -55,27 +58,29 @@ workflows:
       # 2. Run Flutter tests
       - name: Run tests
         script: |
+          cd app
           flutter test
 
       # 3. Build Flutter iOS project (generates the Xcode workspace)
       - name: Build Flutter iOS
         script: |
+          cd app
           flutter build ios --release --no-codesign
 
       # 4. Install Ruby dependencies (Fastlane)
       - name: Install Fastlane
         script: |
-          cd ios
+          cd app/ios
           bundle install
 
       # 5. Run Fastlane beta lane (match signing + TestFlight upload)
       - name: Run Fastlane beta
         script: |
-          cd ios
+          cd app/ios
           bundle exec fastlane beta
 
     artifacts:
-      - build/ios/*.ipa
+      - app/build/ios/*.ipa
 
     publishing:
       email:
@@ -110,24 +115,26 @@ workflows:
 
       - name: Run tests
         script: |
+          cd app
           flutter test
 
       - name: Build Flutter iOS
         script: |
+          cd app
           flutter build ios --release --no-codesign
 
       - name: Install Fastlane
         script: |
-          cd ios
+          cd app/ios
           bundle install
 
       - name: Run Fastlane release
         script: |
-          cd ios
+          cd app/ios
           bundle exec fastlane release
 
     artifacts:
-      - build/ios/*.ipa
+      - app/build/ios/*.ipa
 
     publishing:
       email:
@@ -168,11 +175,11 @@ workflows:
       # 1. Decode the keystore from base64
       - name: Set up keystore
         script: |
-          mkdir -p $CM_BUILD_DIR/android/app/keystore
-          echo $ANDROID_KEYSTORE_BASE64 | base64 --decode > $CM_BUILD_DIR/android/app/keystore/upload-keystore.jks
+          mkdir -p $CM_BUILD_DIR/app/android/app/keystore
+          echo $ANDROID_KEYSTORE_BASE64 | base64 --decode > $CM_BUILD_DIR/app/android/app/keystore/upload-keystore.jks
           printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n" \
             "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_PASSWORD" "$ANDROID_KEY_ALIAS" \
-            "keystore/upload-keystore.jks" > $CM_BUILD_DIR/android/key.properties
+            "keystore/upload-keystore.jks" > $CM_BUILD_DIR/app/android/key.properties
 
       # 2. Install Flutter dependencies
       - name: Install Flutter dependencies
@@ -182,12 +189,13 @@ workflows:
       # 3. Run Flutter tests
       - name: Run tests
         script: |
+          cd app
           flutter test
 
       # 4. Install Ruby dependencies (Fastlane)
       - name: Install Fastlane
         script: |
-          cd android
+          cd app/android
           bundle install
 
       # 5. Decode Play Store JSON key
@@ -200,11 +208,11 @@ workflows:
       - name: Run Fastlane internal
         script: |
           export PLAY_STORE_JSON_KEY_PATH=/tmp/play_store_key.json
-          cd android
+          cd app/android
           bundle exec fastlane internal
 
     artifacts:
-      - build/app/outputs/bundle/release/app-release.aab
+      - app/build/app/outputs/bundle/release/app-release.aab
 
     publishing:
       email:
@@ -234,11 +242,11 @@ workflows:
     scripts:
       - name: Set up keystore
         script: |
-          mkdir -p $CM_BUILD_DIR/android/app/keystore
-          echo $ANDROID_KEYSTORE_BASE64 | base64 --decode > $CM_BUILD_DIR/android/app/keystore/upload-keystore.jks
+          mkdir -p $CM_BUILD_DIR/app/android/app/keystore
+          echo $ANDROID_KEYSTORE_BASE64 | base64 --decode > $CM_BUILD_DIR/app/android/app/keystore/upload-keystore.jks
           printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n" \
             "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_PASSWORD" "$ANDROID_KEY_ALIAS" \
-            "keystore/upload-keystore.jks" > $CM_BUILD_DIR/android/key.properties
+            "keystore/upload-keystore.jks" > $CM_BUILD_DIR/app/android/key.properties
 
       - name: Install Flutter dependencies
         script: |
@@ -246,11 +254,12 @@ workflows:
 
       - name: Run tests
         script: |
+          cd app
           flutter test
 
       - name: Install Fastlane
         script: |
-          cd android
+          cd app/android
           bundle install
 
       - name: Set up Play Store credentials
@@ -261,11 +270,11 @@ workflows:
       - name: Run Fastlane release
         script: |
           export PLAY_STORE_JSON_KEY_PATH=/tmp/play_store_key.json
-          cd android
+          cd app/android
           bundle exec fastlane release
 
     artifacts:
-      - build/app/outputs/bundle/release/app-release.aab
+      - app/build/app/outputs/bundle/release/app-release.aab
 
     publishing:
       email:

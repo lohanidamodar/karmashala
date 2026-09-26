@@ -37,10 +37,10 @@ class DirectoryHostBinaries implements HostBinarySource {
         executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
     return DirectoryHostBinaries([
       Directory(beside),
-      // `packages/` since f94086f7 moved the host there; this said `host/build`
-      // and had been naming a directory that cannot exist.
+      // The server's own build output. A debug run starts in `app/`, the
+      // repository's Flutter client, so the repository is its parent.
       Directory(
-        '${repositoryRoot ?? Directory.current.path}/packages/host/build',
+        '${repositoryRoot ?? Directory.current.parent.path}/server/build',
       ),
     ]);
   }

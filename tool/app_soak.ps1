@@ -170,7 +170,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path (Split-Path -Parent $PSScriptRoot)).Path
+# The Flutter client, app\ beside this folder: every path below is its.
+$root = (Resolve-Path (Join-Path (Split-Path -Parent $PSScriptRoot) 'app')).Path
 Set-Location $root
 
 function Get-FullPath([string]$path) { [IO.Path]::GetFullPath($path).TrimEnd('\') }

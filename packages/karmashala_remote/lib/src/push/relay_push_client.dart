@@ -6,6 +6,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart';
+
 /// Posts one JSON body and answers status + body — the seam tests inject so
 /// nothing here ever touches a real network.
 typedef PushPost =
@@ -32,8 +34,8 @@ enum PushOutcome {
 
 class RelayPushClient {
   RelayPushClient({required Uri relay, PushPost? post, this.onLog})
-    : registerEndpoint = endpointFor(relay, 'v1/push/register'),
-      pushEndpoint = endpointFor(relay, 'v1/push'),
+    : registerEndpoint = endpointFor(relay, kRelayPushRegisterPath),
+      pushEndpoint = endpointFor(relay, kRelayPushPath),
       _post = post ?? _httpPost;
 
   final Uri registerEndpoint;
@@ -51,10 +53,7 @@ class RelayPushClient {
       'http' || 'ws' => 'http',
       final other => throw ArgumentError('unusable relay scheme: $other'),
     };
-    final base = relay.path.endsWith('/')
-        ? relay.path.substring(0, relay.path.length - 1)
-        : relay.path;
-    return relay.replace(scheme: scheme, path: '$base/$path');
+    return relay.replace(scheme: scheme, path: joinRelayPath(relay.path, path));
   }
 
   /// Registers [token] under [tag]. True when the relay stored it.
@@ -65,9 +64,11 @@ class RelayPushClient {
   }) async {
     final (:status, body: _) = await _post(
       registerEndpoint,
-      jsonEncode({'tag': tag, 'token': token, 'platform': platform}),
+      jsonEncode(
+        PushRegistration(tag: tag, token: token, platform: platform).toJson(),
+      ),
     );
-    if (status == 204) return true;
+    if (status == RelayStatus.pushRegistered) return true;
     onLog?.call('push registration refused: $status');
     return false;
   }
@@ -79,13 +80,13 @@ class RelayPushClient {
   }) async {
     final (:status, body: _) = await _post(
       pushEndpoint,
-      jsonEncode({'tag': tag, 'payload': payloadB64}),
+      jsonEncode(PushRequest(tag: tag, payload: payloadB64).toJson()),
     );
     return switch (status) {
-      202 => PushOutcome.accepted,
-      404 => PushOutcome.unknownTag,
-      410 => PushOutcome.tokenGone,
-      503 => PushOutcome.notConfigured,
+      RelayStatus.pushAccepted => PushOutcome.accepted,
+      RelayStatus.notFound => PushOutcome.unknownTag,
+      RelayStatus.tokenGone => PushOutcome.tokenGone,
+      RelayStatus.unavailable => PushOutcome.notConfigured,
       _ => PushOutcome.failed,
     };
   }

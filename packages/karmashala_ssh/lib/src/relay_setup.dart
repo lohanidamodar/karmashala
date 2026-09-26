@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart';
 
 import 'companion_port.dart';
 import 'host_deploy_target.dart';
@@ -11,9 +12,10 @@ import 'remote_detach.dart';
 import 'remote_home.dart';
 import 'ssh_host.dart';
 
-/// `kDefaultRelayPort` in `packages/relay`, repeated rather than imported: this
-/// package drives a relay over SSH and never runs one.
-const int kDefaultSshRelayPort = 8787;
+/// The port a relay on a box listens on unless told otherwise: the relay's own
+/// default, read from its contract (this package drives a relay over SSH and
+/// never runs one, so it takes the contract and not the server).
+const int kDefaultSshRelayPort = kDefaultRelayPort;
 
 /// How the relay on one box ended up, separated by who can fix it.
 enum SshRelayStatus {
@@ -395,7 +397,7 @@ class SshRelaySetup {
     if (token == null) return false;
     try {
       return await _probe(
-        _base(token, scheme: 'http', suffix: '/healthz'),
+        _base(token, scheme: 'http', suffix: '/$kRelayHealthPath'),
         within,
       );
     } on Object {
@@ -410,7 +412,7 @@ class SshRelaySetup {
     scheme: scheme,
     host: host.host,
     port: port,
-    path: '/k/$token$suffix',
+    path: '/${relayAccessTokenPrefix(token)}$suffix',
   );
 
   SshRelayReading _reading(

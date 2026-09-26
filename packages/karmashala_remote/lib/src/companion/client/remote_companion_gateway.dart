@@ -10,6 +10,9 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:io';
 
+import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart'
+    show kCloseNoPeer;
+
 import '../../domain/companion_presence.dart';
 import '../../client/companion_client.dart';
 import '../../client/companion_pairing_client.dart';

@@ -24,7 +24,7 @@ class FixtureMenuScreen {
     Terminal? into,
   }) {
     final bytes = File(
-      '../../test/features/agents/fixtures/$fixture.raw',
+      '../../app/test/features/agents/fixtures/$fixture.raw',
     ).readAsStringSync();
     final teardown = bytes.indexOf('Session terminated');
     final end = fraction != null

@@ -30,8 +30,12 @@ dependencies:
   # it installs cannot drift from what that binary answers. Not a workspace
   # member on purpose (see the root pubspec), so it is a plain path dependency.
   karmashala_host:
-    path: ../host
+    path: ../../server
   meta: ^1.16.0
+  # The relay's contract: its default port, the `/k/<token>` prefix and the
+  # health route this package builds its URLs from.
+  karmashala_relay_protocol:
+    path: ../../relay/protocol
 
 dev_dependencies:
   lints: ^6.1.0

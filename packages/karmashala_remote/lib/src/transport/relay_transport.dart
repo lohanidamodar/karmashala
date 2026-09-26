@@ -6,6 +6,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart';
+
 import '../protocol.dart';
 import 'remote_transport.dart';
 
@@ -16,11 +18,6 @@ const Duration kDefaultHeartbeat = Duration(seconds: 25);
 /// How long one connection attempt may take before it counts as failed.
 const Duration kDefaultConnectTimeout = Duration(seconds: 15);
 
-/// The relay's "nobody was at the other end" close code — `kCloseNoPeer` in
-/// `packages/relay`, repeated here rather than imported so the phone's
-/// transport does not depend on the relay server.
-const int kRelayCloseNoPeer = 4408;
-
 /// A log line with what a relay URL must not leave behind taken out: a box
 /// relay's access token (`/k/<token>`) and the rendezvous id (`/v1/<id>`).
 /// `dart:io` quotes the whole URL when an upgrade is refused.
@@ -28,8 +25,12 @@ String scrubRelayLog(String message) => message
     .replaceAll(_tokenInPath, '/k/…')
     .replaceAll(_rendezvousInPath, '/v1/…');
 
-final RegExp _tokenInPath = RegExp(r'/k/[A-Za-z0-9_-]{16,}');
-final RegExp _rendezvousInPath = RegExp(r'/v1/[0-9a-f]{32}');
+final RegExp _tokenInPath = RegExp(
+  '/$kRelayAccessTokenSegment/[A-Za-z0-9_-]{16,}',
+);
+final RegExp _rendezvousInPath = RegExp(
+  '/$kRelayApiVersion/[0-9a-f]{${kRendezvousIdBytes * 2}}',
+);
 
 /// An outbound WebSocket to a relay rendezvous, with reconnect and heartbeat.
 class RelayTransport extends ReconnectingTransport {
@@ -82,14 +83,14 @@ class RelayTransport extends ReconnectingTransport {
       'http' || 'ws' => 'ws',
       final other => throw TransportException('unusable relay scheme: $other'),
     };
-    final base = relay.path.endsWith('/')
-        ? relay.path.substring(0, relay.path.length - 1)
-        : relay.path;
-    return relay.replace(scheme: scheme, path: '$base/v1/${rendezvous.value}');
+    return relay.replace(
+      scheme: scheme,
+      path: joinRelayPath(relay.path, rendezvousPath(rendezvous.value)),
+    );
   }
 
   /// The code the relay last hung up with, or null while none has been seen.
-  /// [kRelayCloseNoPeer] means "nobody else was ever there" — a different thing
+  /// [kCloseNoPeer] means "nobody else was ever there" — a different thing
   /// to tell a user than "the network failed".
   int? get lastCloseCode => _lastCloseCode;
   int? _lastCloseCode;

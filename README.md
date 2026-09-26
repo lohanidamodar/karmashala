@@ -26,7 +26,7 @@ into the shell and reachable; caveats are stated inline rather than implied.
 - **Embedded terminals** on a vendored, leak-fixed `flutter_pty`
   ([`packages/flutter_pty/VENDORED.md`](packages/flutter_pty/VENDORED.md)) —
   ConPTY on Windows, `forkpty` on POSIX — rendered by our `xterm2` fork, pinned
-  to a commit in `pubspec.yaml`. Splits, tabs, search, OSC 7/8, panes restored
+  to a commit in `app/pubspec.yaml`. Splits, tabs, search, OSC 7/8, panes restored
   across a restart.
 - **Environments:** this host, a WSL distribution, or an SSH host. An SSH host
   is a real workspace — clone into it, run sessions on it, browse it over SFTP.
@@ -45,7 +45,7 @@ into the shell and reachable; caveats are stated inline rather than implied.
 - **Browser automation** over CDP against Chrome or Edge. No Firefox or WebKit.
 - **A mobile companion** — the same codebase built with
   `--dart-define=KARMASHALA_MODE=companion`. Pairs over LAN or through the
-  relay in [`packages/relay/`](packages/relay/README.md); every frame is sealed
+  relay in [`relay/`](relay/README.md); every frame is sealed
   end to end (XChaCha20-Poly1305, HKDF-SHA256), so the relay sees a rendezvous
   id and a frame size. The phone can read a transcript, send a prompt, answer an
   approval and start a session — nothing else.
@@ -91,7 +91,7 @@ comments explain *why* a line is the way it is at the line itself. What is left:
 
 ## Requirements
 
-- **Flutter**, stable channel, with the desktop toolchain. `pubspec.yaml`
+- **Flutter**, stable channel, with the desktop toolchain. `app/pubspec.yaml`
   requires Dart `^3.12.2` and CI pins nothing tighter than `stable`, so no
   exact version is recorded here to go stale.
 - **Windows 10/11** — Visual Studio with "Desktop development with C++".
@@ -100,7 +100,7 @@ comments explain *why* a line is the way it is at the line itself. What is left:
   libsecret-1-dev libmpv-dev libnotify-dev` (the list
   [`release-build.yml`](.github/workflows/release-build.yml) installs).
 - **macOS** — Xcode. For the iOS Simulator live view, run
-  [`tool/vendor/fetch_wda.sh`](tool/vendor/fetch_wda.sh); without it the build
+  [`app/tool/vendor/fetch_wda.sh`](app/tool/vendor/fetch_wda.sh); without it the build
   still succeeds and only the live view is missing.
 
 **No code generation.** Raw SQL through the `sqlite3` package and plain Riverpod
@@ -124,18 +124,20 @@ exists only on a Windows host, by construction.
 > [`CLAUDE.md`](CLAUDE.md) §17 gives the safe invocation.
 
 ```powershell
-flutter pub get
+flutter pub get          # at the repository root: one pub workspace
+cd app
 flutter run -d windows
 ```
 
 ## Quality checks
 
 ```powershell
-flutter analyze
+dart analyze app server packages   # at the repository root
+cd app
 flutter test --exclude-tags=live-ssh,live-wsl
 ```
 
-[`dart_test.yaml`](dart_test.yaml) sets `concurrency: 8` — a measured value, and
+[`app/dart_test.yaml`](app/dart_test.yaml) sets `concurrency: 8` — a measured value, and
 the reason no command in this repository passes `--concurrency`. Leave it off so
 a local run and automation cannot drift apart.
 
@@ -155,7 +157,7 @@ powershell -ExecutionPolicy Bypass -File tool\live_tests.ps1
 through the `KarmashalaBuild` scheduled task (never from WSL — interop cannot
 traverse the plugin symlinks a Flutter Windows build needs). It builds the
 desktop app, compiles `karmashala_mcp.exe` beside it, runs Inno Setup
-([`windows/installer/karmashala.iss`](windows/installer/karmashala.iss)) and
+([`app/windows/installer/karmashala.iss`](app/windows/installer/karmashala.iss)) and
 builds the Android companion APK.
 [`tool/build_release.sh`](tool/build_release.sh) is the macOS counterpart.
 
@@ -172,7 +174,7 @@ work and does nothing: `path_provider` resolves the Windows folder through
 `SHGetKnownFolderPath`, which ignores the environment variable, so an instance
 launched that way silently opens the **real** database and imports into it.
 `appSupportDirectory()`
-([`lib/src/core/paths/app_support_directory.dart`](lib/src/core/paths/app_support_directory.dart))
+([`app/lib/src/core/paths/app_support_directory.dart`](app/lib/src/core/paths/app_support_directory.dart))
 is the one resolver, and all seven consumers go through it — the database, the
 log directory, the env vault, the IPC socket, the session media store and the
 verification artifacts. It moves as a set on purpose: a demo instance writing
@@ -198,25 +200,37 @@ refuses the name so it cannot collide with the plumbing above.
 ## Project layout
 
 ```
-lib/
-  main.dart                 # Logging, database, discovery, control server, then runApp
-  src/
-    app/                    # Shell, workbench, side panel, theme, shortcuts, companion boot
-    core/                   # Database, logging, lifecycle, process
-    features/               # 32 feature folders: sessions, terminal, agents, devices, …
+pubspec.yaml                # The pub workspace: app, server, packages/*. No code.
+app/                        # The Flutter client, with its own pubspec.yaml
+  lib/
+    main.dart               # Logging, database, discovery, control server, then runApp
+    src/
+      app/                  # Shell, workbench, side panel, theme, shortcuts, companion boot
+      core/                 # Database, logging, lifecycle, process
+      features/             # 32 feature folders: sessions, terminal, agents, devices, …
+  test/                     # Mirrors lib/; 727 files
+  integration_test/         # Driver tests that need a real device or PTY
+  tool/                     # Profiling, benchmark and manual-verification programs
+  android/ ios/ macos/ windows/ linux/ web/
+server/                     # The Karmashala server (package karmashala_host); deploy/ installs it
+relay/                      # The self-hostable relay, outside the workspace
+  protocol/                 # Its contract (karmashala_relay_protocol), shared with every client
 packages/mcp_bridge/        # The standalone stdio MCP bridge
-packages/                   # Vendored flutter_pty and launch_at_startup, the relay, local IPC
-test/                       # Mirrors lib/; 727 files
-integration_test/           # Driver tests that need a real device or PTY
-tool/                       # Build, profiling, benchmark and manual-verification programs
+packages/                   # The shared packages: vendored flutter_pty and launch_at_startup, local IPC, …
+tool/                       # Release recipes, the gate, live tests, soaks, run scripts
 docs/                       # Backlog, design notes, comparisons, profiling reports
 ```
 
-## tool/
+Paths in the docs that start `lib/`, `test/` or a platform folder are the
+app's, under `app/`.
+
+## tool/ and app/tool/
 
 None of these run in the default test gate; several are *invoked* through
 `flutter test` but live under `tool/` so discovery cannot pick them up and
-their presence never reads as coverage. Run them from the repository root.
+their presence never reads as coverage. The scripts in `tool/` find their own
+way (each moves into `app/` where it needs to); the Dart programs in
+`app/tool/` import the app, so run them from `app/`.
 
 | Path | What it is |
 | --- | --- |
@@ -224,19 +238,19 @@ their presence never reads as coverage. Run them from the repository root.
 | [`live_tests.ps1`](tool/live_tests.ps1) | Runs the excluded `live-wsl` / `live-ssh` suites, after printing what it found. |
 | [`reliability_soak.ps1`](tool/reliability_soak.ps1) | Repeats the flake-prone suites N times (default 20) to catch what one run cannot. |
 | [`profile_run.bat`](tool/profile_run.bat) | Builds and launches a `--profile` build for a profiling session, via the `KarmashalaProfile` scheduled task. |
-| [`vm_probe.dart`](tool/vm_probe.dart) | Samples a running app's VM service — frames, stalls, timeline — for when the Dart MCP server will not connect. `dart tool/vm_probe.dart <ws-uri> <seconds>`. |
-| [`analysis/test_purity.dart`](tool/analysis/test_purity.dart) | Classifies each test as widget / Flutter-free / blocked, and prices the imports that block it. Produces the numbers in `docs/BACKLOG.md`. |
-| [`analysis/migrate_unit_tests.dart`](tool/analysis/migrate_unit_tests.dart) | The one-shot mover for a purity-driven batch: relocates files, swaps `flutter_test` for `package:test`, repairs the imports. Dormant between migrations. |
-| [`ui_screenshot.dart`](tool/ui_screenshot.dart) | Renders the real shell against a fixture and writes PNGs of several states. `flutter test tool/ui_screenshot.dart`. |
-| [`benchmark/`](tool/benchmark) | Nine on-demand benchmarks — paint, input latency, ingest, scale, autosave, SSH. They print; they do not assert. |
-| [`verification/`](tool/verification/README.md) | Manual programs that drive real browsers, devices and CLIs. Kept out of `test/` so their presence never reads as coverage. |
-| [`icon/`](tool/icon) | Renders the app icon, the Android adaptive layers and the Windows `.ico` from one drawn description. |
-| [`vendor/fetch_wda.sh`](tool/vendor/fetch_wda.sh) | Fetches the pinned WebDriverAgent for the macOS build. |
+| [`app/tool/vm_probe.dart`](app/tool/vm_probe.dart) | Samples a running app's VM service — frames, stalls, timeline — for when the Dart MCP server will not connect. `dart tool/vm_probe.dart <ws-uri> <seconds>`. |
+| [`app/tool/analysis/test_purity.dart`](app/tool/analysis/test_purity.dart) | Classifies each test as widget / Flutter-free / blocked, and prices the imports that block it. Produces the numbers in `docs/BACKLOG.md`. |
+| [`app/tool/analysis/migrate_unit_tests.dart`](app/tool/analysis/migrate_unit_tests.dart) | The one-shot mover for a purity-driven batch: relocates files, swaps `flutter_test` for `package:test`, repairs the imports. Dormant between migrations. |
+| [`app/tool/ui_screenshot.dart`](app/tool/ui_screenshot.dart) | Renders the real shell against a fixture and writes PNGs of several states. `flutter test tool/ui_screenshot.dart`. |
+| [`app/tool/benchmark/`](app/tool/benchmark) | Nine on-demand benchmarks — paint, input latency, ingest, scale, autosave, SSH. They print; they do not assert. |
+| [`app/tool/verification/`](app/tool/verification/README.md) | Manual programs that drive real browsers, devices and CLIs. Kept out of `test/` so their presence never reads as coverage. |
+| [`app/tool/icon/`](app/tool/icon) | Renders the app icon, the Android adaptive layers and the Windows `.ico` from one drawn description. |
+| [`app/tool/vendor/fetch_wda.sh`](app/tool/vendor/fetch_wda.sh) | Fetches the pinned WebDriverAgent for the macOS build. |
 
 ## Keyboard shortcuts
 
 The full list, with what each one costs a focused shell, is
-[`shell_shortcuts.dart`](lib/src/app/shell/shell_shortcuts.dart); Settings →
+[`shell_shortcuts.dart`](app/lib/src/app/shell/shell_shortcuts.dart); Settings →
 Terminal offers the contested ones back. `Ctrl` below is `Cmd` on macOS.
 
 | Shortcut | Action |

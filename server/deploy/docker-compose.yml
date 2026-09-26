@@ -1,0 +1,40 @@
+# An example: the Karmashala server in a container, its data in a volume.
+# From the repository root:
+#
+#   docker compose -f server/deploy/docker-compose.yml up -d --build
+#   docker compose -f server/deploy/docker-compose.yml exec server karmashala_host pair --address=<this machine's address>
+#
+# The agent CLIs must be installed in the image and signed in inside the
+# container (docs/server.md, "Docker"); the `home` volume keeps their sign-in
+# across restarts.
+services:
+  server:
+    build:
+      context: ../..
+      dockerfile: server/deploy/Dockerfile
+    image: karmashala-server
+    container_name: karmashala-server
+    restart: unless-stopped
+    # Room for `docker stop` to let the server end its sessions.
+    stop_grace_period: 30s
+    command:
+      - serve
+      - --standalone
+      - --data-dir=/data
+      - --bind=0.0.0.0
+      - --name=karmashala-docker
+    ports:
+      # Direct pairing: the phone dials this machine's port 47820. Publish on
+      # one interface only if you can (a tailnet address: "100.x.y.z:47820:47820"),
+      # or drop this and pair through a relay (`--relay=… --relay-token=…`),
+      # which needs no inbound port at all.
+      - "47820:47820"
+    volumes:
+      # The store, server.json and every pairing.
+      - data:/data
+      # The agents' sign-in, config and the projects you clone.
+      - home:/home/karmashala
+
+volumes:
+  data:
+  home:

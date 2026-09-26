@@ -76,9 +76,7 @@ void main() {
         // pattern accepts.
         expect(
           said.command,
-          contains(
-            'packages/host/build/karmashala_host-0.0.0-linux-arm64.tar.gz',
-          ),
+          contains('server/build/karmashala_host-0.0.0-linux-arm64.tar.gz'),
         );
       },
     );

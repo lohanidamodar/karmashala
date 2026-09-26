@@ -7,6 +7,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart';
+
 /// The envelope version this build speaks.
 const int kProtocolVersion = 1;
 
@@ -462,10 +464,10 @@ class RendezvousId {
   factory RendezvousId.parse(String value) =>
       RendezvousId(_parseHex(value, lengthInBytes, 'rendezvous id'));
 
-  static const int lengthInBytes = 16;
+  static const int lengthInBytes = kRendezvousIdBytes;
 
   /// What the relay accepts as a path segment.
-  static final RegExp pattern = RegExp('^[0-9a-f]{${lengthInBytes * 2}}\$');
+  static final RegExp pattern = rendezvousIdPattern;
 
   final Uint8List bytes;
 

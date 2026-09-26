@@ -1,5 +1,5 @@
-# Regenerate android/Gemfile.lock on a runner and commit it back.
-# Needed after any android/Gemfile change: Bundler 4 runs frozen by
+# Regenerate app/android/Gemfile.lock on a runner and commit it back.
+# Needed after any app/android/Gemfile change: Bundler 4 runs frozen by
 # default in CI, so a stale lock is a hard error.
 #
 # Inline rather than calling popupbits/.github's reusable workflow —
@@ -24,12 +24,12 @@ jobs:
           ruby-version: "3.2"
           bundler-cache: false
       - name: Resolve dependencies
-        working-directory: android
+        working-directory: app/android
         run: |
           bundle config set --local frozen false
           bundle install --jobs 4 --retry 3
       - name: Commit the updated lockfile
-        working-directory: android
+        working-directory: app/android
         run: |
           if git diff --quiet -- Gemfile.lock; then
             echo "Gemfile.lock already up to date — nothing to commit."

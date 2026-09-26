@@ -726,7 +726,9 @@ class LocalHostExecutable {
   Iterable<String> _candidates() sync* {
     final beside =
         executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
-    final root = repositoryRoot ?? Directory.current.path;
+    // A debug run starts in `app/`, the repository's Flutter client, so the
+    // repository is its parent.
+    final root = repositoryRoot ?? Directory.current.parent.path;
     // The bundle `dart build cli` writes: the executable finds its SQLite at
     // `../lib`, so it cannot be flattened into the app's own directory.
     yield '$beside/host/bin/$fileName';
@@ -741,10 +743,10 @@ class LocalHostExecutable {
     yield '$beside/$fileName';
   }
 
-  /// `packages/host/build/cli/<os>_<arch>/bundle/bin`, listed rather than spelled:
+  /// `server/build/cli/<os>_<arch>/bundle/bin`, listed rather than spelled:
   /// the target directory's name is the building machine's, not ours to predict.
   static Iterable<String> _builtBundles(String root) sync* {
-    final built = Directory('$root/packages/host/build/cli');
+    final built = Directory('$root/server/build/cli');
     if (!built.existsSync()) return;
     for (final target in built.listSync().whereType<Directory>()) {
       yield '${target.path}/bundle/bin';

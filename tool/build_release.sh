@@ -14,17 +14,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Read the version out of pubspec.yaml so it cannot drift from what was built.
+# Read the version out of the app's pubspec.yaml so it cannot drift from what was built.
 # The app logs "version not recorded" without the dart-define, which is the
 # honest outcome rather than a stale number.
-APPVER="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+APPVER="$(grep '^version:' app/pubspec.yaml | awk '{print $2}')"
 APPSHORT="${APPVER%%+*}"
-APP="build/macos/Build/Products/Release/karmashala.app"
-OUT="build/macos/karmashala-$APPSHORT.dmg"
+APP="app/build/macos/Build/Products/Release/karmashala.app"
+OUT="app/build/macos/karmashala-$APPSHORT.dmg"
 
 if [ "${1:-}" != "--skip-build" ]; then
   echo "=== BUILDING $APPVER ==="
-  flutter build macos --release --dart-define=KARMASHALA_VERSION="$APPVER"
+  (cd app && flutter build macos --release --dart-define=KARMASHALA_VERSION="$APPVER")
 fi
 [ -d "$APP" ] || { echo "no app at $APP" >&2; exit 1; }
 
@@ -44,8 +44,8 @@ dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart \
 #
 # `dart build cli`, not `compile exe`: the host carries the app's store, so it
 # depends on `sqlite3`, and `compile exe` refuses any target with a build hook.
-# No `pub get` — `packages/host` is a workspace member and the root resolution
-# covers it.
+# No `pub get` — `server` is a workspace member and the root resolution covers
+# it.
 #
 # The output is a bundle and keeps its shape: the executable finds its SQLite at
 # `../lib` and cannot be flattened beside the app binary. `Contents/MacOS/host`
@@ -57,7 +57,7 @@ dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart \
 # with the building machine's separator and cannot open a store on the far end.
 echo "=== SESSION HOST (this machine) ==="
 rm -rf build/host-macos "$APP/Contents/MacOS/host"
-dart build cli -t packages/host/bin/karmashala_host.dart -o build/host-macos
+dart build cli -t server/bin/karmashala_host.dart -o build/host-macos
 cp -R build/host-macos/bundle "$APP/Contents/MacOS/host"
 # Ask the thing itself rather than trusting that a file appeared: a bundle whose
 # dylib it cannot reach still has a binary in the right place.
@@ -81,7 +81,7 @@ echo "=== SESSION HOSTS (linux, to deploy) ==="
 rm -f "$APP"/Contents/MacOS/karmashala_host-*-linux-*.tar.gz
 for arch in x64 arm64; do
   rm -rf "build/host-linux-$arch"
-  dart build cli -t packages/host/bin/karmashala_host.dart \
+  dart build cli -t server/bin/karmashala_host.dart \
     --target-os=linux --target-arch="$arch" -o "build/host-linux-$arch"
   # No AppleDouble files or xattr headers: a Linux tar warns on every one.
   COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf \

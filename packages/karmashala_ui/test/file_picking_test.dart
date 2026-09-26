@@ -477,12 +477,13 @@ void main() {
     List<Directory> everyLib() {
       final repository = Directory('../..');
       expect(
-        Directory('${repository.path}/lib').existsSync(),
+        Directory('${repository.path}/app/lib').existsSync(),
         isTrue,
         reason: 'run from packages/karmashala_ui',
       );
       return [
-        Directory('${repository.path}/lib'),
+        Directory('${repository.path}/app/lib'),
+        Directory('${repository.path}/server/lib'),
         for (final member in Directory(
           '${repository.path}/packages',
         ).listSync().whereType<Directory>())

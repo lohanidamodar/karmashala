@@ -1,0 +1,101 @@
+name: karmashala_host
+description: >-
+  Karmashala's session host: a standalone binary that owns PTYs on a machine and
+  outlives the clients that view them. Deployed to SSH hosts today to replace the
+  tmux wrapper, which renders an agent's output instead of relaying it. The same
+  binary is meant to run on localhost later, so the desktop becomes a client and
+  sessions survive an app crash — see lib/src/transport/transport.dart.
+publish_to: none
+
+# The app's pub workspace resolves this member. It is built with `dart build
+# cli`, not `dart compile exe`, which cannot reach a target with a build hook —
+# and `sqlite3`, under `karmashala_store`, has one. The output is a bundle
+# (`bin/karmashala_host` beside `lib/libsqlite3.so`), not a single file.
+resolution: workspace
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  # Launch specs for the agents an automation starts, read in one file
+  # (lib/src/automations/daemon_agents.dart) and never by agent id.
+  agent_cli:
+    path: ../packages/agent_cli
+  # The scheduler, runner, settler and check runner the daemon hosts, and
+  # the automation, resume and project-check tables. Pure Dart.
+  karmashala_automations:
+    path: ../packages/karmashala_automations
+  # What the agent in each hosted session is doing, kept from the hooks this
+  # host takes and the screens it holds, and the prompt answers typed into
+  # them. Pure Dart; the app runs the same code only for its own panes.
+  karmashala_agent_status:
+    path: ../packages/karmashala_agent_status
+  # The base checkpoint an automation run is undone to.
+  karmashala_checkpoints:
+    path: ../packages/karmashala_checkpoints
+  karmashala_core:
+    path: ../packages/karmashala_core
+  karmashala_git:
+    path: ../packages/karmashala_git
+  # The session row a daemon-started run writes, and how a session ended.
+  karmashala_session:
+    path: ../packages/karmashala_session
+  # A check's verdict, recorded as Karmashala's own verification run.
+  karmashala_verification:
+    path: ../packages/karmashala_verification
+  # The sealed channel's key material. Already transitive through
+  # `karmashala_remote`; declared because this package names the type.
+  cryptography: ^2.9.0
+  ffi: ^2.1.0
+  # The app's schema, unchanged: the host owns sessions on a machine with no
+  # GUI, so it carries the same ladder rather than a second one that could
+  # drift. SQLite itself is bundled by the build hook, so the machine needs no
+  # libsqlite3 of its own.
+  # The companion's own frame protocol and the api that answers it. Pure Dart
+  # and Flutter-free, which is what lets a host on a headless machine speak the
+  # same wire the desktop does instead of inventing a second one.
+  karmashala_remote:
+    path: ../packages/karmashala_remote
+  # The companion server itself — the same one the app runs where there is no
+  # host — the forwarded-call codec, and the answers given from the store while
+  # no app is connected. Pure Dart.
+  karmashala_companion_server:
+    path: ../packages/karmashala_companion_server
+  # The notes and todos a phone's `notes.get` reads.
+  karmashala_notes:
+    path: ../packages/karmashala_notes
+  # Where a unix socket can actually be bound. Pure `dart:io`, and the app uses
+  # the same rule for the host's socket, so the two cannot disagree about it.
+  karmashala_local_ipc:
+    path: ../packages/local_ipc
+  # The MCP wire and its HTTP binding: the daemon serves agents' tools with the
+  # same code the app did, so the two cannot answer differently. Pure Dart.
+  karmashala_mcp:
+    path: ../packages/karmashala_mcp
+  # `karmashala_host relay`: the same bundle a box already has can be the
+  # relay for a desktop, so CI ships no second artifact. Pure Dart, no build
+  # hook, and it imports nothing of ours — the dependency runs one way.
+  karmashala_relay:
+    path: ../relay
+  # The relay's contract: the access-token rules `relay` and `server.json`
+  # check, and the `/k/<token>` prefix a served relay URL carries.
+  karmashala_relay_protocol:
+    path: ../relay/protocol
+  # The recorder that writes a hosted row's lifecycle status: the daemon is
+  # its only caller, against the store the app passes with `--data-dir`.
+  karmashala_session_engine:
+    path: ../packages/karmashala_session_engine
+  karmashala_store:
+    path: ../packages/karmashala_store
+  path: ^1.9.1
+  # `karmashala_host pair` draws the pairing QR in the terminal. Pure Dart,
+  # BSD-3-Clause, and already the app's encoder (karmashala_ui's QrPainter).
+  qr: ^4.0.0
+  xterm2:
+    git:
+      url: https://github.com/lohanidamodar/xterm2.git
+      ref: 4f7450a543500a8d50d0e97fa8dc19c131b5c778
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

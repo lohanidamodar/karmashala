@@ -17,22 +17,26 @@ set LOG=%USERPROFILE%\karmashala-build.log
 set DONE=%USERPROFILE%\karmashala-build.done
 set FLUTTER=%USERPROFILE%\flutter\bin\flutter.bat
 set DARTEXE=%USERPROFILE%\flutter\bin\cache\dart-sdk\bin\dart.exe
-set RELEASE=build\windows\x64\runner\Release
+set RELEASE=app\build\windows\x64\runner\Release
 del /q "%DONE%" 2>nul
 
-rem Read the version straight out of pubspec.yaml so it cannot drift from what
+rem Read the version straight out of app\pubspec.yaml so it cannot drift from what
 rem was built. "version: 1.2.0+12" -> APPVER=1.2.0+12, APPVERSHORT=1.2.0.
 rem If this fails APPVER stays empty and the app logs "version not recorded",
 rem which is the honest outcome rather than a stale number.
 set APPVER=
-for /f "tokens=2" %%v in ('findstr /b "version:" pubspec.yaml') do set APPVER=%%v
+for /f "tokens=2" %%v in ('findstr /b "version:" app\pubspec.yaml') do set APPVER=%%v
 for /f "delims=+" %%a in ("!APPVER!") do set APPVERSHORT=%%a
 if "!APPVERSHORT!"=="" set APPVERSHORT=1.2.0
 echo === BUILDING !APPVER! === > "%LOG%"
 
 echo === WINDOWS RELEASE === >> "%LOG%"
+rem The Flutter client is app\; everything else here runs from the root.
+pushd app
 call "%FLUTTER%" build windows --release --dart-define=KARMASHALA_VERSION=!APPVER! >> "%LOG%" 2>&1
-if errorlevel 1 goto :fail
+set RC=!errorlevel!
+popd
+if not "!RC!"=="0" goto :fail
 
 rem The MCP stdio bridge. A WSL session's MCP entry names this exe rather than a
 rem URL on the WSL switch address, because an agent inside a distribution cannot
@@ -52,7 +56,7 @@ rem
 rem `dart build cli`, not `compile exe`, since 2026-09-15: the host carries the
 rem app's store, so it depends on sqlite3, and `compile exe` refuses any target
 rem with a build hook ("does not support build hooks"). No `pub get` here either
-rem — packages\host is a workspace member now and the root resolution covers it.
+rem — server is a workspace member and the root resolution covers it.
 rem
 rem The output is a bundle, so it keeps its shape: the executable finds its
 rem SQLite at ..\lib and cannot be flattened beside karmashala.exe. It lands in
@@ -61,7 +65,7 @@ rem (karmashala.iss recurses subdirectories), and LocalHostExecutable looks
 rem there first.
 echo === SESSION HOST (this machine) === >> "%LOG%"
 if exist "%RELEASE%\host" rmdir /s /q "%RELEASE%\host"
-"%DARTEXE%" build cli -t packages\host\bin\karmashala_host.dart -o build\host-windows >> "%LOG%" 2>&1
+"%DARTEXE%" build cli -t server\bin\karmashala_host.dart -o build\host-windows >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 xcopy /e /i /y "build\host-windows\bundle" "%RELEASE%\host" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
@@ -98,12 +102,15 @@ if errorlevel 1 (
 )
 
 echo === INSTALLER === >> "%LOG%"
-"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" /DMyAppVersion=!APPVERSHORT! windows\installer\karmashala.iss >> "%LOG%" 2>&1
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" /DMyAppVersion=!APPVERSHORT! app\windows\installer\karmashala.iss >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
 echo === ANDROID COMPANION APK === >> "%LOG%"
+pushd app
 call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_MODE=companion --dart-define=KARMASHALA_VERSION=!APPVER! >> "%LOG%" 2>&1
-if errorlevel 1 goto :fail
+set RC=!errorlevel!
+popd
+if not "!RC!"=="0" goto :fail
 
 echo OK > "%DONE%"
 exit /b 0

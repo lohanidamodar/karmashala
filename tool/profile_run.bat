@@ -6,7 +6,8 @@ rem WSL: interop cannot traverse the plugin symlinks a Flutter Windows build
 rem needs. `flutter run` stays alive, so the task stays running until the app
 rem is closed; the VM service URI it prints is in %LOG%.
 setlocal enabledelayedexpansion
-cd /d "%~dp0.."
+rem The Flutter client is app\, beside this folder.
+cd /d "%~dp0..\app"
 
 set LOG=%USERPROFILE%\karmashala-profile.log
 set DONE=%USERPROFILE%\karmashala-profile.done

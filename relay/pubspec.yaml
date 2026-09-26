@@ -1,0 +1,27 @@
+name: karmashala_relay
+description: >-
+  The Karmashala relay: a small, self-hostable Dart server that pairs two
+  outbound WebSockets by rendezvous id and forwards opaque frames between a
+  desktop host and its paired phone. It holds no keys and can read nothing.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  # The contract this server serves, shared with every client of it. Nested
+  # here so the Dockerfile's build context, this folder, carries it.
+  karmashala_relay_protocol:
+    path: protocol
+  # Service-account auth for the FCM HTTP v1 sender; used only when the
+  # operator configures RELAY_FCM_SERVICE_ACCOUNT.
+  googleapis_auth: ^2.0.0
+  http: ^1.2.0
+  shelf: ^1.4.2
+  shelf_web_socket: ^3.0.0
+  web_socket_channel: ^3.0.3
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

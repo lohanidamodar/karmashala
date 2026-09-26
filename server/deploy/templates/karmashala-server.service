@@ -1,0 +1,32 @@
+# Karmashala server — a systemd *user* unit, installed by server/deploy/install.sh
+# into ~/.config/systemd/user/. A user unit, not a system one, on purpose: the
+# agents it runs (Claude Code, Codex) are signed in as this user, and their
+# credentials, projects and git identity are this user's.
+#
+# `loginctl enable-linger <user>` keeps it running with nobody logged in —
+# install.sh asks for it; a droplet reached over SSH needs it.
+#
+# @BIN@, @DATA_DIR@ and @PATH@ are filled in by install.sh.
+[Unit]
+Description=Karmashala server
+Documentation=https://github.com/lohanidamodar/karmashala-app/blob/main/docs/server.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@BIN@ serve --standalone --data-dir=@DATA_DIR@
+# The agents' own tools and anything they run are found on this PATH, the
+# installer's own: a user unit otherwise gets systemd's bare one.
+Environment=PATH=@PATH@
+# The store, server.json and every file the server writes stay this user's.
+UMask=0077
+# Restarted after a crash; never after a stop somebody asked for. Stopping it
+# (`systemctl --user stop karmashala-server`) ends every session it holds.
+Restart=on-failure
+RestartSec=5
+# `serve` ends its sessions itself on SIGTERM and exits; give it the time to.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

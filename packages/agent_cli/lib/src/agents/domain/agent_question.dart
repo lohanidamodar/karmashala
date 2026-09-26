@@ -5,7 +5,7 @@
 /// assistant record that calls the tool carries every question, option and
 /// flag, and the question is open until a `tool_result` answering that call is
 /// written. And answered by keys **measured** against the real CLI
-/// (`packages/host/test/agents/claude_question_keys_live_test.dart`), because a
+/// (`server/test/agents/claude_question_keys_live_test.dart`), because a
 /// guessed key sequence answers a different option than the one tapped.
 library;
 

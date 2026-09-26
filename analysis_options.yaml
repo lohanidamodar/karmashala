@@ -7,6 +7,14 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # The same for the Flutter client, which lives in app/.
+    - app/build/**
+    - app/android/**
+    - app/ios/**
+    - app/web/**
+    - app/windows/**
+    - app/macos/**
+    - app/linux/**
 include: package:flutter_lints/flutter.yaml
 
 linter:

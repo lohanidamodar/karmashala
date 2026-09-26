@@ -1,32 +1,39 @@
-name: karmashala
-description: "Desktop agent development environment for local coding-agent CLIs — Claude Code, Codex and Antigravity."
+name: karmashala_workspace
+description: "The Karmashala repository's pub workspace: the app, the server and the shared packages. No code of its own."
 publish_to: 'none'
-version: 1.26.3+48
 
 environment:
   sdk: ^3.12.2
 
-# Pub workspace. The app is the root; every member declares `resolution:
+# Pub workspace. This root holds no code; every member declares `resolution:
 # workspace` and shares this one resolution, lock file and `.dart_tool`, so a
 # member's `dart test` needs no `pub get` of its own (docs/PACKAGE_SPLIT.md §2).
-# Not every directory under `packages/` is a member. `packages/mcp_bridge`,
-# `packages/relay` and the plugin packages stay out on purpose: each is a
-# standalone binary that resolves on its own lock file, and
-# their resolutions must not follow the app's — `dart compile exe` cannot reach
-# a target that pulls in the app's build-hook plugins, and relay's Dockerfile
-# (fly.io, see packages/relay/fly.toml) copies that directory alone and runs
-# `dart pub get` in it, which a member cannot do ("found no workspace root
-# including it"). A member is marked by `resolution: workspace` in its own
-# pubspec and by appearing below; nothing else is.
-# `packages/host` joined on 2026-09-15. It carries the app's own store now, and
-# `karmashala_store` pulls in `sqlite3`, whose build hook `dart compile exe`
-# refuses outright ("does not support build hooks") — so the host is built with
-# `dart build cli` and the exemption above bought it nothing. Sharing this
-# resolution is the point: one lock file is what stops the host's schema and the
-# app's from drifting, the same reason they already share the wire protocol.
+# Run `flutter pub get` here, at the root.
+#
+# `app` is the Flutter client and `server` the Karmashala server (package
+# `karmashala_host`). The server joined on 2026-09-15, as `packages/host`: it
+# carries the app's own store, and `karmashala_store` pulls in `sqlite3`, whose
+# build hook `dart compile exe` refuses outright ("does not support build
+# hooks") — so it is built with `dart build cli` and a standalone resolution
+# would buy it nothing. Sharing this resolution is the point: one lock file is
+# what stops the server's schema and the app's from drifting, the same reason
+# they already share the wire protocol.
+#
+# Not every package in the tree is a member. `packages/mcp_bridge`, `relay`,
+# `relay/protocol` and the plugin packages (`packages/flutter_pty`,
+# `packages/launch_at_startup_fork`) stay out on purpose: each resolves on its
+# own, and must not follow the app's resolution — `dart compile exe` cannot
+# reach a target that pulls in the app's build-hook plugins, and relay's
+# Dockerfile (fly.io, see relay/fly.toml) copies `relay/` alone, its
+# `protocol/` with it, and runs `dart pub get` there, which a member cannot do
+# ("found no workspace root including it"). Members depend on
+# `relay/protocol` by path, like any path package. A member is marked by
+# `resolution: workspace` in its own pubspec and by appearing below; nothing
+# else is.
 workspace:
+  - app
+  - server
   - packages/agent_cli
-  - packages/host
   - packages/karmashala_agent_reporting
   - packages/karmashala_agent_status
   - packages/karmashala_automations
@@ -52,295 +59,3 @@ workspace:
   - packages/karmashala_ui
   - packages/karmashala_verification
   - packages/local_ipc
-
-dependencies:
-  # The session host's protocol and domain, shared with the binary deployed to
-  # remote machines so the two ends of the wire cannot drift. The app imports
-  # `package:karmashala_host/protocol.dart` only — the pty layer binds libc
-  # through dart:ffi and a web build would refuse the whole package for it.
-  karmashala_host:
-    path: packages/host
-  # The Chrome DevTools Protocol layer and the `browser_*` agent tools over
-  # it. No dependencies of its own; the app hands it the process.
-  karmashala_browser:
-    path: packages/karmashala_browser
-  # The phone: the companion's own application layer and every screen it
-  # draws. The desktop build reaches it only through `lib/src/app/companion`,
-  # which `KARMASHALA_MODE=companion` is the only entry to.
-  karmashala_companion:
-    path: packages/karmashala_companion
-  # The Flutter-free core: logging, small utilities and path probing. A
-  # workspace member, so this path resolves to the copy in the tree
-  # (docs/PACKAGE_SPLIT.md §5).
-  karmashala_core:
-    path: packages/karmashala_core
-  # Frame capture and video encoding — the GIF/PNG sinks and the Media
-  # Foundation H.264 writer — split out of core so a package that only needs to
-  # write a recording (karmashala_devices) does not pull logging and paths in
-  # with `image` and `ffi`.
-  karmashala_media:
-    path: packages/karmashala_media
-  # Android devices and iOS simulators: adb, simctl, scrcpy, WebDriverAgent,
-  # the UI tree and screen recording. Built beside the app in phase A —
-  # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
-  karmashala_devices:
-    path: packages/karmashala_devices
-  # Finding, running and driving a Flutter app from outside it: project and
-  # SDK discovery, the four routes to a VM service address, the Dart Tooling
-  # Daemon and the VM service link. Built beside the app in phase A — nothing
-  # under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
-  karmashala_flutter_apps:
-    path: packages/karmashala_flutter_apps
-  karmashala_remote:
-    path: packages/karmashala_remote
-  # The desk end of a phone's link: the companion server (pairing, sealed
-  # channels, LAN and relay listeners, push), the forwarded-call codec both the
-  # session host and this app speak, and the answers the host gives from the
-  # store while this app is closed. Pure Dart.
-  karmashala_companion_server:
-    path: packages/karmashala_companion_server
-  # Notes and the todo list: the values and their DAOs, read by the panels
-  # here and by the session host for a phone. Pure Dart.
-  karmashala_notes:
-    path: packages/karmashala_notes
-  # What a session is, as values: the record and its states, what a launch asks
-  # for, the resume rules, lineage and handoff, the event and decision
-  # vocabulary, the transcript readings and the delivery ladder. Pure Dart
-  # (docs/PACKAGE_SPLIT_2.md, Revision 2).
-  # The tool surface served to agents: the MCP wire format and its Streamable
-  # HTTP binding, the catalogue, the instruction texts and skills, and how an
-  # agent reaches the tools. Not the handlers — those serve the app's own types
-  # (docs/PACKAGE_SPLIT_2.md, the mcp/ssh correction). Pure Dart.
-  karmashala_mcp:
-    path: packages/karmashala_mcp
-  # Work that starts itself: cron and interval schedules, the fires a sleeping
-  # machine missed, the unattended gate, scheduled resumes and project checks,
-  # and the three DAOs over them. The DAOs take an `AppDatabase`; their
-  # providers stay in the app (docs/PACKAGE_SPLIT_3.md, Tier 2). Pure Dart.
-  karmashala_automations:
-    path: packages/karmashala_automations
-  # Verification runs as values and tables, and the recorder for gates
-  # Karmashala ran itself; the session host writes a check it ran. Pure Dart.
-  karmashala_verification:
-    path: packages/karmashala_verification
-  # Checkpoints: the snapshot, its table and the service that captures and
-  # restores one; the session host takes an automation's base. Pure Dart.
-  karmashala_checkpoints:
-    path: packages/karmashala_checkpoints
-  # What is asking for the user's attention, as values: the key a session is
-  # followed by, the attention kinds and the inbox that queues them, the status
-  # and delivery transitions, the policy that decides whether a change is worth
-  # interrupting someone for, and the toast with its presenter port. Not the
-  # watcher, the dispatcher, the providers or the desktop presenter —
-  # `local_notifier` is a desktop plugin and the phone reads these same values.
-  # Pure Dart.
-  karmashala_notifications:
-    path: packages/karmashala_notifications
-  karmashala_session:
-    path: packages/karmashala_session
-  # Session lifecycle recorded from host facts: the status derived from them,
-  # the `SessionDao` and the recorder that writes hosted rows. Pure Dart.
-  karmashala_session_engine:
-    path: packages/karmashala_session_engine
-  # Reaching a machine over SSH and running the session host on it: the
-  # connection and its pool, the host key policy, the SSH command runner, the
-  # deployer and the remote file browser. Not the DAOs — the package takes a
-  # store, never a database (docs/PACKAGE_SPLIT_2.md, the mcp/ssh correction).
-  # Pure Dart.
-  karmashala_ssh:
-    path: packages/karmashala_ssh
-  # The SQLite store: the connection, the migration ladder and the column
-  # conversions. Pure Dart with no Riverpod, so the session host binary carries
-  # the same schema as the app and two machines that talk cannot diverge.
-  karmashala_store:
-    path: packages/karmashala_store
-  # What a terminal is, as values: profiles and launch contexts, the pane and
-  # workspace geometry, the grid vocabulary, OSC shell integration and the cast
-  # format. A Flutter package — `xterm2`'s buffer types are its vocabulary
-  # (docs/PACKAGE_SPLIT_2.md, Revision 2).
-  karmashala_terminal_core:
-    path: packages/karmashala_terminal_core
-  # What a terminal does: the three running instances, the PTY launch and
-  # shutdown, the ingest budget and coalescer, the scrollback codec, spool and
-  # park, the grid readings and command blocks, the cast recorder and renderer,
-  # the theme readers and the host's own terminal emulators. Not the DAOs'
-  # providers — those stay here (docs/PACKAGE_SPLIT_3.md, Tier 1).
-  karmashala_terminal_runtime:
-    path: packages/karmashala_terminal_runtime
-  # The design system: tokens, the Phosphor glyph table, the assembled theme
-  # and the desktop chrome every surface wears.
-  karmashala_ui:
-    path: packages/karmashala_ui
-  # Git and GitHub as values plus the readers and parsers that produce them.
-  # Built beside the app in phase A — nothing under `lib/` imports it yet
-  # (docs/PACKAGE_SPLIT.md §2).
-  karmashala_git:
-    path: packages/karmashala_git
-  # The coding-agent interface: discovery, launch, stream, ask, store reading
-  # and usage, over one descriptor table. Built beside the app in phase A —
-  # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §3).
-  agent_cli:
-    path: packages/agent_cli
-  # How an agent reports back: the hook callbacks written into its own config,
-  # the WSL spool, the receiver that classifies one, the skill installer and
-  # the status sources. Not the application services or the DAOs
-  # (docs/PACKAGE_SPLIT_2.md, the agents correction). Pure Dart.
-  karmashala_agent_reporting:
-    path: packages/karmashala_agent_reporting
-  # What an agent in a terminal is doing and answering its prompts: the
-  # status the session host keeps for the sessions it holds, and the same
-  # code for panes no host holds. Pure Dart.
-  karmashala_agent_status:
-    path: packages/karmashala_agent_status
-  karmashala_local_ipc:
-    path: packages/local_ipc
-  # The relay server itself, embedded in the desktop app so "This computer
-  # (local network)" needs nothing hosted; also started in-process by tests.
-  karmashala_relay:
-    path: packages/relay
-  # End-to-end sealing for the mobile companion (XChaCha20-Poly1305, HKDF).
-  cryptography: ^2.9.0
-  dartssh2: ^4.1.0
-  file_selector: ^1.1.0
-  flutter:
-    sdk: flutter
-  # Companion mode only: attention notifications on the phone.
-  flutter_local_notifications: ^22.3.1
-  flutter_markdown_plus: ^1.0.7
-  # Vendored fork — see packages/flutter_pty/VENDORED.md.
-  flutter_pty:
-    path: packages/flutter_pty
-  flutter_riverpod: ^3.3.2
-  # The Flutter-free half of the same package, at the version
-  # `flutter_riverpod` already resolves. Providers, notifiers and containers
-  # that never touch a widget import this instead, so they stay out of
-  # Flutter's import closure and can run under plain `dart test`.
-  riverpod: ^3.3.2
-  # Companion mode only: the pairing record (device key) at rest in the
-  # platform keystore — design §2 forbids plain preferences.
-  flutter_secure_storage: ^11.0.0
-  hotkey_manager: ^0.2.3
-  # Overridden by packages/launch_at_startup_fork: upstream 0.5.1 is the
-  # newest release there is and still pins win32_registry ^2.
-  launch_at_startup: ^0.5.1
-  local_notifier: ^0.1.6
-  logging: ^1.3.0
-  # Already in the tree under flutter_markdown_plus; named here because the
-  # transcript adds an inline syntax of its own (`md.InlineSyntax`) rather than
-  # preprocessing the message text, which would corrupt code fences.
-  markdown: ^7.3.1
-  # The highlighter behind the editor and the transcript's fenced code;
-  # named here because a test asserts our language ids against its registry.
-  re_highlight: ^0.0.3
-  media_kit: ^1.2.6
-  # libmpv, one package per host platform, and all three are needed.
-  # `MediaKit.ensureInitialized()` in main.dart is unguarded, so a host with no
-  # backend throws before the first frame and the app is simply dead: macOS said
-  # "Cannot find Mpv.framework/Mpv", Linux says "Cannot find libmpv at the usual
-  # places". The macOS port was blocked on this line; the Linux one would have
-  # been next, and CI would not have caught it because the release job
-  # apt-installs libmpv-dev.
-  media_kit_libs_windows_video: ^1.0.11
-  media_kit_libs_macos_video: ^1.1.4
-  media_kit_libs_linux: ^1.2.1
-  # Companion mode only: the pairing screen's QR scanner.
-  mobile_scanner: ^7.0.0
-  media_kit_video: ^2.0.1
-  pasteboard: ^0.5.0
-  path: ^1.9.1
-  path_provider: ^2.1.6
-  picons: ^3.0.1
-  # Pure-Dart QR encoder, behind core/widgets/qr_painter.dart — the
-  # remote-access pairing dialog and the wireless-adb one both draw with it.
-  qr: ^4.0.0
-  sqlite3: ^3.3.3
-  sqlite3_flutter_libs: ^0.6.0+eol
-  tray_manager: ^0.7.0
-  url_launcher: ^6.3.2
-  # The Dart VM service client, for the running Flutter app under development:
-  # hot reload, the debug console and the widget inspector all speak this
-  # protocol. Already in the lock file as a transitive of `flutter_test`, and
-  # the same version `flutter_tools` itself uses — named here because
-  # `features/flutter_apps` depends on it directly. Hand-rolling the JSON-RPC
-  # was the alternative and would have re-derived its typed event model.
-  vm_service: ^15.2.0
-  wakelock_plus: ^1.8.0
-  # The relay client transport for the mobile companion.
-  web_socket_channel: ^3.0.3
-  window_manager: ^0.5.1
-  # Our fork of xterm2 — see https://github.com/lohanidamodar/xterm2 (branch
-  # `karmashala`), whose KARMASHALA.md documents every divergence from upstream
-  # and how to rebase them. Pinned to a commit, not the branch: the branch moves.
-  xterm2:
-    git:
-      url: https://github.com/lohanidamodar/xterm2.git
-      ref: 4f7450a543500a8d50d0e97fa8dc19c131b5c778
-  yaml: ^3.1.4
-  # Encodes a terminal recording's frames — animated GIF and PNG — and packs
-  # the tray .ico files in tool/icon/write_ico.dart. Pure Dart, so the encode
-  # runs on a worker isolate rather than the one drawing the app.
-  image: ^4.8.0
-  ffi: ^2.2.0
-  # What a phone calls itself when it pairs, so two paired devices are not
-  # both "Companion" in the desktop's list.
-  device_info_plus: ^13.2.0
-  marionette_flutter: ^0.6.0
-  # Files dragged in from the OS: a drop target needs the platform's own
-  # (IDropTarget on Windows), which Flutter's DragTarget does not reach.
-  desktop_drop: ^0.8.4
-
-dependency_overrides:
-  # launch_at_startup 0.5.1 is upstream's latest and pins
-  # win32_registry ^2, which pinned win32 5.x for the whole app and
-  # held back device_info_plus and wakelock_plus. The fork changes that
-  # one constraint; see its pubspec.
-  launch_at_startup:
-    path: packages/launch_at_startup_fork
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  integration_test:
-    sdk: flutter
-  flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.14.4
-  # Read back what the launch-at-login writes, in
-  # test/features/system/launch_at_startup_windows_test.dart.
-  win32_registry: ^3.0.3
-
-# App icons: `flutter test tool/icon/render_icons.dart` draws the mark and its
-# Android layers, then `dart run flutter_launcher_icons` fans them out to every
-# platform.
-flutter_launcher_icons:
-  image_path: "assets/icon/app_icon.png"
-  android: "ic_launcher"
-  # Layers from tool/icon/render_icons.dart; regenerate them before this.
-  adaptive_icon_background: "assets/icon/app_icon_background.png"
-  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
-  adaptive_icon_monochrome: "assets/icon/app_icon_monochrome.png"
-  windows:
-    generate: true
-    image_path: "assets/icon/app_icon.png"
-    icon_size: 256
-  macos:
-    generate: true
-    image_path: "assets/icon/app_icon.png"
-
-flutter:
-  uses-material-design: true
-  assets:
-    - assets/tray_icon.ico
-    # Same icon with a red badge, shown while sessions are waiting on the user.
-    - assets/tray_icon_attention.ico
-    # The same two for macOS and Linux, whose trays cannot decode an .ico.
-    - assets/tray_icon.png
-    - assets/tray_icon_attention.png
-    # NOTE: the vendored WebDriverAgent runner is deliberately NOT listed here.
-    # A Flutter asset is copied into every platform's bundle, so declaring it
-    # would ship an 18 MB macOS-only app bundle inside the Windows and Linux
-    # builds. It lives under macos/Vendor (git-ignored, fetched by
-    # tool/vendor/fetch_wda.sh) and is resolved at runtime by WdaLocator.
-    #
-    # scrcpy-server (Apache-2.0) is deployed to the device to produce H.264 for
-    # the device pane's live view. Its version must match kScrcpyVersion.
-    - assets/scrcpy/

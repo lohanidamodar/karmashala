@@ -1,0 +1,21 @@
+name: karmashala_relay_protocol
+description: >-
+  The Karmashala relay's contract and nothing else: the URL shape
+  (`/v1/<rendezvous>`, the `/k/<token>` prefix), the rendezvous id and access
+  token rules, the push request bodies and the status and close codes. The
+  relay server and every client of it build on this instead of repeating it.
+version: 0.1.0
+publish_to: none
+
+# Not a workspace member, on purpose (see the root pubspec): the relay's
+# Dockerfile copies `relay/` alone, this folder with it, and resolves it there
+# with no workspace root in sight. Workspace members depend on it by path.
+environment:
+  sdk: ^3.9.0
+
+# No dependencies, and none of ours ever: the relay server and the phone both
+# take this package, and neither may pull the other in through it.
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

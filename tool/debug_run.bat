@@ -20,7 +20,8 @@ rem leaves the agents' hooks, skills, autostart and relay alone (PROJECT.md 23).
 rem The default is unchanged, because a debug run is usually meant to see the
 rem real workspace — and is therefore never to be run beside the installed app.
 setlocal enabledelayedexpansion
-cd /d "%~dp0.."
+rem The Flutter client is app\, beside this folder.
+cd /d "%~dp0..\app"
 
 set FRESH=
 if /i "%~1"=="-Fresh" set FRESH=1

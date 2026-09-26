@@ -4,7 +4,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:test/test.dart';
 
 /// A question an agent asks — read out of its transcript, and answered by keys
-/// measured against the real CLI (`packages/host/test/agents/
+/// measured against the real CLI (`server/test/agents/
 /// claude_question_keys_live_test.dart`, 2026-09-19, Claude Code 2.1.274).
 void main() {
   const down = '\x1b[B';

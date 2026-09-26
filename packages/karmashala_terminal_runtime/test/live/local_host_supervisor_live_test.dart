@@ -31,7 +31,7 @@ void main() {
       });
       // Where `LocalHostExecutable` finds a debug build.
       final repository = '${home.path}/repo';
-      await _buildHost('$repository/packages/host/build/cli/live');
+      await _buildHost('$repository/server/build/cli/live');
 
       final hostDirectory = Directory('${home.path}/h')..createSync();
       final data = Directory('${home.path}/data')..createSync();
@@ -110,12 +110,12 @@ Future<void> _buildHost(String output) async {
   expect(built.existsSync(), isTrue, reason: 'no ${built.path}');
 }
 
-/// `packages/host`, from wherever the runner started this package's tests.
+/// `server/`, from wherever the runner started this package's tests.
 String _hostPackage() {
-  for (final candidate in ['../host', 'packages/host']) {
+  for (final candidate in ['../../server', 'server']) {
     if (File('$candidate/bin/karmashala_host.dart').existsSync()) {
       return Directory(candidate).absolute.path;
     }
   }
-  throw StateError('packages/host not found from ${Directory.current.path}');
+  throw StateError('server/ not found from ${Directory.current.path}');
 }

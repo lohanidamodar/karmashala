@@ -61,6 +61,7 @@ jobs:
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
       - name: Build Windows release
+        working-directory: app
         run: flutter build windows --release --dart-define=KARMASHALA_VERSION=${{ env.VERSION }}
       # Mirrors tool/build_release.bat, the local recipe: keep the two in step.
       - name: Build and bundle the MCP bridge
@@ -71,7 +72,7 @@ jobs:
           # The MCP bridge ships next to karmashala.exe, where the app looks for
           # it. Without it, agents get no Karmashala tools.
           flutter pub get --directory packages/mcp_bridge
-          dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart -o build/windows/x64/runner/Release/karmashala_mcp.exe
+          dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart -o app/build/windows/x64/runner/Release/karmashala_mcp.exe
       - name: Build and bundle the session host
         shell: pwsh
         run: |
@@ -81,25 +82,25 @@ jobs:
           # whose build hook `compile exe` refuses. The app looks for it at
           # host\bin\karmashala_host.exe beside karmashala.exe, and the bundle
           # keeps its SQLite at ..\lib, so it is copied whole.
-          dart build cli -t packages/host/bin/karmashala_host.dart -o build/host-windows
-          Copy-Item -Recurse -Force build/host-windows/bundle build/windows/x64/runner/Release/host
+          dart build cli -t server/bin/karmashala_host.dart -o build/host-windows
+          Copy-Item -Recurse -Force build/host-windows/bundle app/build/windows/x64/runner/Release/host
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          & $iscc "/DMyAppVersion=$env:VERSION" "windows\installer\karmashala.iss"
+          & $iscc "/DMyAppVersion=$env:VERSION" "app\windows\installer\karmashala.iss"
       - name: Archive portable Windows build
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path build\artifacts -Force | Out-Null
-          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "build/artifacts/Karmashala-windows-portable.zip"
+          Compress-Archive -Path "app/build/windows/x64/runner/Release/*" -DestinationPath "build/artifacts/Karmashala-windows-portable.zip"
       - name: Upload Windows artifacts to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            windows/installer/output/Karmashala-Setup-${{ env.VERSION }}.exe
+            app/windows/installer/output/Karmashala-Setup-${{ env.VERSION }}.exe
             build/artifacts/Karmashala-windows-portable.zip
 
   # The hosts deployed to other machines, built on the platform they run on.
@@ -130,7 +131,7 @@ jobs:
           mkdir -p build/artifacts
           for arch in x64 arm64; do
             dart build cli \
-              -t packages/host/bin/karmashala_host.dart \
+              -t server/bin/karmashala_host.dart \
               --target-os=linux --target-arch="$arch" \
               -o "build/host-linux-$arch"
             tar -czf "build/artifacts/karmashala_host-$VERSION-linux-$arch.tar.gz" \
@@ -165,7 +166,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/artifacts
-          dmg=$(ls build/macos/karmashala-*.dmg)
+          dmg=$(ls app/build/macos/karmashala-*.dmg)
           cp "$dmg" "build/artifacts/Karmashala-macOS-$VERSION.dmg"
       - name: Upload macOS artifact to release
         uses: softprops/action-gh-release@v2
@@ -192,19 +193,20 @@ jobs:
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
       - name: Build Linux release
+        working-directory: app
         run: flutter build linux --release --dart-define=KARMASHALA_VERSION=${{ needs.prepare.outputs.version }}
       - name: Build and bundle the MCP bridge and session host
         run: |
           set -euo pipefail
-          bundle=build/linux/x64/release/bundle
+          bundle=app/build/linux/x64/release/bundle
           flutter pub get --directory packages/mcp_bridge
           dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart -o "$bundle/karmashala_mcp"
-          dart build cli -t packages/host/bin/karmashala_host.dart -o build/host-linux-app
+          dart build cli -t server/bin/karmashala_host.dart -o build/host-linux-app
           cp -R build/host-linux-app/bundle "$bundle/host"
       - name: Archive Linux build
         run: |
           mkdir -p build/artifacts
-          tar -czf build/artifacts/Karmashala-linux.tar.gz -C build/linux/x64/release/bundle .
+          tar -czf build/artifacts/Karmashala-linux.tar.gz -C app/build/linux/x64/release/bundle .
       - name: Upload Linux artifact to release
         uses: softprops/action-gh-release@v2
         with:

@@ -107,7 +107,7 @@ extension _GatewayLiveness on RemoteCompanionGateway {
     }
     final transport = _dialled;
     if (transport is RelayTransport &&
-        transport.lastCloseCode == kRelayCloseNoPeer) {
+        transport.lastCloseCode == kCloseNoPeer) {
       return _kHostAbsentTrouble;
     }
     return null;
