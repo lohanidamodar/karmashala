@@ -23,7 +23,6 @@ class HostLifecycleSubscriber {
     this.onAgentStatus,
     this.onAttached,
     this.onLost,
-    this.mcpTools,
     this.companion,
     this.retryDelays = kHostRedialDelays,
     this.idleRetry = const Duration(seconds: 30),
@@ -59,10 +58,6 @@ class HostLifecycleSubscriber {
   /// [dispose]. Whoever keeps the host up decides; this only dials again.
   final void Function()? onLost;
 
-  /// Runs agents' tool calls the host forwards; offered on every link. Null
-  /// runs none, and the host tells agents the app is not running.
-  final HostMcpTools? mcpTools;
-
   /// This app's half of the phone companion the host serves — its embedded
   /// relay and the pairing windows it opens; told of every link and every
   /// loss. Null leaves the host serving phones on its own.
@@ -78,7 +73,6 @@ class HostLifecycleSubscriber {
   HostLifecycleFeed? _feed;
   StreamSubscription<SessionLifecycleEvent>? _events;
   StreamSubscription<RelayedAgentHook>? _hooks;
-  StreamSubscription<HostMcpCall>? _mcpCalls;
   StreamSubscription<HostAgentStatusChange>? _agentStatuses;
 
   /// When the latest hook applied per [RelayedAgentHook.sessionKey] arrived.
@@ -179,40 +173,7 @@ class HostLifecycleSubscriber {
       }
     }
     _hooks = feed.hooks.listen((hook) => unawaited(_applyHook(hook)));
-    final tools = mcpTools;
-    if (tools != null) {
-      _mcpCalls = feed.mcpCalls.listen(
-        (call) => unawaited(_runMcpCall(tools, call, feed)),
-      );
-      feed.offerMcpTools(tools.catalogue());
-    }
     companion?.attached(feed);
-  }
-
-  /// Runs one forwarded call and answers it; a failure is the text the agent
-  /// reads, exactly as this app's own server would have put it.
-  Future<void> _runMcpCall(
-    HostMcpTools tools,
-    HostMcpCall call,
-    HostLifecycleFeed feed,
-  ) async {
-    Object? result;
-    try {
-      result = await tools.call(
-        call.tool,
-        call.arguments,
-        call.callerSessionId,
-      );
-    } on Object catch (error) {
-      feed.answerMcpCall(call.callId, error: '$error');
-      return;
-    }
-    try {
-      feed.answerMcpCall(call.callId, result: result);
-    } on Object catch (error) {
-      // A result the wire cannot carry, reported rather than left hanging.
-      feed.answerMcpCall(call.callId, error: '$error');
-    }
   }
 
   /// Applies [hook]. Nothing waits on this app: the server held the agent,
@@ -236,8 +197,6 @@ class HostLifecycleSubscriber {
     _events = null;
     unawaited(_hooks?.cancel());
     _hooks = null;
-    unawaited(_mcpCalls?.cancel());
-    _mcpCalls = null;
     unawaited(_agentStatuses?.cancel());
     _agentStatuses = null;
     onAgentStatuses?.call(const []);
@@ -273,8 +232,6 @@ class HostLifecycleSubscriber {
     _events = null;
     await _hooks?.cancel();
     _hooks = null;
-    await _mcpCalls?.cancel();
-    _mcpCalls = null;
     await _agentStatuses?.cancel();
     _agentStatuses = null;
     if (_feed != null) {
@@ -294,17 +251,4 @@ abstract interface class HostCompanionPeer {
 
   /// The link is gone; the host serves phones on its own until the next one.
   void detached();
-}
-
-/// This app's agent tools, as the session host forwards calls to them.
-abstract interface class HostMcpTools {
-  /// What agents list, sent to the host on each link.
-  List<Map<String, Object?>> catalogue();
-
-  /// Runs [tool] as [callerSessionId]; throws to fail it.
-  Future<Object?> call(
-    String tool,
-    Map<String, dynamic> arguments,
-    String? callerSessionId,
-  );
 }

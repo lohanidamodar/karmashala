@@ -76,13 +76,9 @@ extension TerminalSessionLifetime on TerminalSessionsController {
   void startPane(String paneId) {
     final existing = _instances[paneId];
     if (existing == null || existing.liveness.value.isLive) return;
-    // An agent pane is restarted from its recorded command, not a shell
-    // profile — but never with the recorded run's MCP flags, see
-    // [_liveMcpArgumentsFor].
-    final recorded = existing.agentLaunch;
-    final agentLaunch = recorded?.withMcpArguments(
-      _liveMcpArgumentsFor(recorded),
-    );
+    // An agent pane is its session's: the server resumes it (slice 5b) and the
+    // pane attaches — never the recorded run's command line.
+    final agentLaunch = existing.agentLaunch;
     final profile = agentLaunch != null
         ? TerminalProfile.powerShell
         : terminalProfileFromId(existing.profileId);
@@ -118,16 +114,6 @@ extension TerminalSessionLifetime on TerminalSessionsController {
     _publish();
     persistStructure();
     _focusActivePane();
-  }
-
-  /// The MCP flags a pane started **now** carries, never the recorded run's:
-  /// replaying those made the agent refuse with "MCP config file not found".
-  List<String> _liveMcpArgumentsFor(AgentPaneLaunch launch) {
-    try {
-      return ref.read(agentPaneMcpArgumentsProvider)(launch);
-    } catch (_) {
-      return const [];
-    }
   }
 
   /// Runs [launch] in the pane [paneId] already has, keeping its buffer; null

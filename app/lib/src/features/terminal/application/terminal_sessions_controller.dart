@@ -15,7 +15,6 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../editor/domain/document_id.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../notes/application/notes_providers.dart';
-import '../../sessions/application/session_mcp_arguments.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
@@ -31,6 +30,7 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'local_host_providers.dart';
 import '../data/terminals_client.dart';
+import '../../sessions/data/sessions_client.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show TerminalOpen, TerminalRecord, hostedRunSessionId, terminalSessionId;
 import 'terminal_layout_providers.dart';

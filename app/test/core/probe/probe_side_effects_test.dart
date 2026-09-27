@@ -12,7 +12,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/agents/application/agent_skill_installation_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/application/host_companion_link.dart';
 import 'package:karmashala/src/features/remote/application/host_companion_providers.dart';
@@ -261,18 +260,12 @@ void main() {
       final made = <_RecordingHookService>[];
       final container = withRecorder(true, made);
       final lifecycle = AppLifecycle(container);
-      final server = LauncherControlServer(container);
 
-      lifecycle.installAgentHooks(server);
+      lifecycle.installAgentHooks();
       lifecycle.installAgentSkills();
       await pumpEventQueue();
 
       expect(made.expand((s) => s.calls), isEmpty);
-      expect(
-        server.onWslInterfaceBound,
-        isNull,
-        reason: 'no re-sweep is armed for when WSL appears either',
-      );
     });
   });
 
@@ -337,31 +330,6 @@ void main() {
         );
       },
     );
-  });
-
-  group('the control server', () {
-    Future<int> freePort() async {
-      final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-      final port = socket.port;
-      await socket.close();
-      return port;
-    }
-
-    test('a probe does not take the preferred port', () async {
-      final wanted = await freePort();
-      final container = containerWith(probe: true);
-      final server = LauncherControlServer(container);
-      await server.start(
-        bridgeFilePath: p.join(home.path, 'mcp_bridge.json'),
-        socketDirectory: p.join(home.path, 'ipc'),
-        preferredPort: wanted,
-        hostCanHaveWsl: false,
-      );
-      addTearDown(server.stop);
-
-      expect(server.hookEndpoint!.port, isNot(wanted));
-      expect(server.hookEndpoint!.port, greaterThan(0));
-    });
   });
 
   group('OS integration', () {

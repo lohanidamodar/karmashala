@@ -88,9 +88,6 @@ class HostPaths {
   /// token is derived from — kept so tokens outlive a restart of either side.
   String get mcpCredentialsPath => '${directory.path}/mcp.credentials';
 
-  /// The last tool catalogue an app sent, served while no app is connected.
-  String get mcpToolsPath => '${directory.path}/mcp_tools.json';
-
   /// The bridge's owner-only `/rpc` socket, before [locateSocket] moves it.
   String get preferredMcpSocketPath => '${directory.path}/mcp.sock';
 

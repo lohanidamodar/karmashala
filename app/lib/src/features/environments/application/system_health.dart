@@ -71,9 +71,9 @@ enum SystemCheckId {
   /// The stdio bridge an agent spawns, probed by handshake.
   mcpBridge,
 
-  /// Whether the app is willing to answer that bridge — [ControlServerStatus],
-  /// which is already observed and needs no probe.
-  controlServer,
+  /// Whether the Karmashala server serves agents' tools — read off its
+  /// handshake, which needs no probe.
+  agentTools,
 
   /// Whether a WSL distribution can start Windows programs at all.
   wslInterop,

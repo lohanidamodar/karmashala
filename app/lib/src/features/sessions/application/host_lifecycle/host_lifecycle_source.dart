@@ -14,9 +14,6 @@ class HostLifecycleFeed {
     required this.close,
     this.hookSnapshot = const [],
     Stream<RelayedAgentHook>? hooks,
-    Stream<HostMcpCall>? mcpCalls,
-    void Function(List<Map<String, Object?>> tools)? offerMcpTools,
-    void Function(int callId, {Object? result, String? error})? answerMcpCall,
     Stream<CompanionEventMessage>? companionEvents,
     void Function({String? localRelayUrl})? attachCompanion,
     void Function(CompanionNoticeMessage notice)? noticeCompanion,
@@ -29,9 +26,6 @@ class HostLifecycleFeed {
   }) : hooks = hooks ?? const Stream.empty(),
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
-       mcpCalls = mcpCalls ?? const Stream.empty(),
-       offerMcpTools = offerMcpTools ?? _noOffer,
-       answerMcpCall = answerMcpCall ?? _noAnswer,
        companionEvents = companionEvents ?? const Stream.empty(),
        attachCompanion = attachCompanion ?? _noAttach,
        serverCall = serverCall ?? _noServerCalls,
@@ -54,8 +48,6 @@ class HostLifecycleFeed {
   final Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)
   answerPrompt;
 
-  static void _noOffer(List<Map<String, Object?>> tools) {}
-  static void _noAnswer(int callId, {Object? result, String? error}) {}
   static void _noAttach({String? localRelayUrl}) {}
   static Future<Map<String, Object?>> _noServerCalls(
     String method, [
@@ -79,17 +71,6 @@ class HostLifecycleFeed {
   /// Every hook after [hookSnapshot].
   final Stream<RelayedAgentHook> hooks;
 
-  /// Agents' tool calls the host took, once this app has offered its tools.
-  final Stream<HostMcpCall> mcpCalls;
-
-  /// Makes this app the one the host forwards tool calls to, with [tools] as
-  /// the catalogue it serves agents — also while this app is closed.
-  final void Function(List<Map<String, Object?>> tools) offerMcpTools;
-
-  /// How one forwarded call ended: its result, or the error text.
-  final void Function(int callId, {Object? result, String? error})
-  answerMcpCall;
-
   /// What the host's companion tells this app: a pairing window ended.
   final Stream<CompanionEventMessage> companionEvents;
 
@@ -112,15 +93,6 @@ class HostLifecycleFeed {
   /// Hangs up; the host's sessions are untouched.
   final Future<void> Function() close;
 }
-
-/// One tool call the host authenticated: [callerSessionId] is the session its
-/// token named, never anything the arguments say.
-typedef HostMcpCall = ({
-  int callId,
-  String tool,
-  Map<String, dynamic> arguments,
-  String? callerSessionId,
-});
 
 /// One administrative question to the server, and its answer.
 typedef ServerCall =

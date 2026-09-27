@@ -160,3 +160,41 @@ String rejectedValueNotice(String agentName, RejectedValue rejected) =>
     "This $agentName does not have '${rejected.value}' for "
     "'${rejected.flag}'; it has ${rejected.alternativesLabel}. It refused the "
     'command line and exited before starting.';
+
+/// A resume run in a directory the conversation was not written in. A caveat,
+/// never a refusal: an unmounted drive must not mean the session is gone.
+String? resumeDirectoryCaveatFor(
+  AgentRegistry registry,
+  String cli,
+  String? externalId, {
+  String? recordedDirectory,
+  String? launchDirectory,
+}) {
+  if (externalId == null || externalId.isEmpty) return null;
+  final descriptor = registry.byId(cli);
+  if (descriptor == null) return null;
+  if (descriptor.launch.resumeLocality.findsConversationAnywhere) return null;
+  if (!_directoryMoved(recordedDirectory, launchDirectory)) return null;
+  return 'This runs in $launchDirectory rather than $recordedDirectory, where '
+      'the conversation was written, and ${descriptor.displayName} has not been '
+      'verified to find a conversation from anywhere but its own launch '
+      'directory. It may open a new conversation rather than continue '
+      '$externalId.';
+}
+
+/// Whether the two directories are both known and different. No case folding,
+/// and paths rather than an agent's own lossy directory key.
+bool _directoryMoved(String? recorded, String? launch) {
+  if (recorded == null || launch == null) return false;
+  final a = _withoutTrailingSeparators(recorded);
+  final b = _withoutTrailingSeparators(launch);
+  return a.isNotEmpty && b.isNotEmpty && a != b;
+}
+
+String _withoutTrailingSeparators(String path) {
+  var end = path.length;
+  while (end > 1 && (path[end - 1] == '/' || path[end - 1] == r'\')) {
+    end--;
+  }
+  return path.substring(0, end);
+}

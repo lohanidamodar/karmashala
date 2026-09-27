@@ -15,8 +15,6 @@ import '../../environments/application/system_health.dart';
 import '../../environments/application/system_health_service.dart';
 import '../../environments/presentation/environment_health_dialog.dart'
     show healthColor, healthIcon;
-import '../../mcp/control_server_restart.dart';
-import '../../mcp/control_server_status.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'settings_catalog.dart';
 import 'settings_section.dart';
@@ -31,7 +29,7 @@ class McpBridgeSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final report = ref.watch(systemHealthProvider);
     final bridge = report.checkFor(SystemCheckId.mcpBridge);
-    final control = ref.watch(controlServerStatusProvider);
+    final tools = report.checkFor(SystemCheckId.agentTools);
     final hooks = ref.watch(agentHookInstallationReportProvider);
     return SettingsSection(
       title: SettingsAnchor.mcpBridge.heading,
@@ -46,22 +44,24 @@ class McpBridgeSection extends ConsumerWidget {
           // A completed handshake, not the file's existence: on 2026-09-03
           // WSL's interop handler went and a good file would not spawn.
           _BridgeVerdict(check: bridge, report: report),
-          // An installed bridge says nothing about the app answering it: a
-          // hardening failure withholds privileged RPC, silently.
-          if (control.failedClosed) ...[
+          // An installed bridge says nothing about the server answering it: a
+          // hardening failure withholds its credential, silently.
+          if (tools?.level == HealthLevel.failed) ...[
             const SizedBox(height: Insets.xs),
             SettingsNotice(
               tone: SettingsNoticeTone.danger,
-              message: control.message,
+              message: tools!.summary,
             ),
-            if (control.failureDetail case final detail?)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.xs, left: 20),
-                child: Text(detail, style: theme.textTheme.bodySmall),
-              ),
           ],
           const SizedBox(height: Insets.xs),
-          const _ControlServerRestartRow(),
+          Padding(
+            padding: const EdgeInsets.only(left: Insets.sm),
+            child: Text(
+              'The Karmashala server serves every agent tool; restarting the '
+              'server restarts them.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
           // A skipped environment loses the two states only a hook reports,
           // and a sweep that has not run yet is `unknown`, not clean (§19).
           if (!hooks.swept) ...[
@@ -298,87 +298,3 @@ class AgentSkillsSection extends ConsumerWidget {
   }
 }
 
-/// **Rebinds this app's own control server**, and says what that did.
-///
-/// Only this app's endpoint: the bridge an agent session spawns is the CLI's
-/// own child, bound when that session started, and nothing here can restart it
-/// (§19 — this app speaks for its own bridge and its own endpoint).
-class _ControlServerRestartRow extends ConsumerStatefulWidget {
-  const _ControlServerRestartRow();
-
-  @override
-  ConsumerState<_ControlServerRestartRow> createState() =>
-      _ControlServerRestartRowState();
-}
-
-class _ControlServerRestartRowState
-    extends ConsumerState<_ControlServerRestartRow> {
-  ControlServerRestart? _last;
-
-  Future<void> _restart() async {
-    final result = await restartControlServer(ref.container);
-    if (!mounted) return;
-    setState(() => _last = result);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final running = ref.watch(controlServerRestartingProvider);
-    final status = ref.watch(controlServerStatusProvider);
-    final started = ref.watch(controlServerHandleProvider) != null;
-    final up = status.transport != PrivilegedRpcTransport.notStarted;
-    if (status.transport == PrivilegedRpcTransport.sessionHost) {
-      return Padding(
-        padding: const EdgeInsets.only(left: Insets.sm),
-        child: Text(
-          'The session host serves agent tools, so this app has no control '
-          'server to restart. Restarting the session host restarts them.',
-          style: theme.textTheme.bodySmall,
-        ),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: running || !started ? null : _restart,
-            icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
-            label: Text(
-              running
-                  ? 'Restarting\u2026'
-                  : up
-                  ? 'Restart the control server'
-                  : 'Start the control server',
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: Insets.sm),
-          child: Text(
-            // Said before it is pressed, because it is the consequence a user
-            // cannot see: the token lives in every agent's own config file.
-            'Rebinds the port and the owner-only socket, then rewrites every '
-            "agent's hook token \u2014 a restart mints a new one.",
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-        if (_last case final ControlServerRestart result) ...[
-          const SizedBox(height: Insets.xs),
-          Padding(
-            padding: const EdgeInsets.only(left: Insets.sm),
-            child: Text(
-              result.message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: result.ok ? scheme.onSurfaceVariant : scheme.error,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}

@@ -355,7 +355,6 @@ void main() {
           ),
           prompts: prompts,
           registry: registry,
-          appConnected: () => true,
         );
         final result =
             await tools.call('session_answer', {
@@ -370,13 +369,13 @@ void main() {
           DecisionRecordDao(database).forSession('s1').single.decidedBy,
           'an agent in session caller-1',
         );
-        expect(
+        await expectLater(
           tools.call('session_answer', {
             'sessionId': 'elsewhere',
             'decision': 'approve',
           }, null),
-          isNull,
-          reason: 'a session this host does not hold is the app\'s',
+          throwsA(isA<StateError>()),
+          reason: 'a session nothing here holds is refused, never handed on',
         );
         expect(tools.call('open_session', {}, null), isNull);
       },

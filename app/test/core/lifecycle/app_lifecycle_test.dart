@@ -4,15 +4,14 @@ import 'dart:io';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
-import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_mcp/access.dart';
-import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_startup.dart';
+import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
+import 'package:karmashala/src/features/agents/application/host_hook_endpoint.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_ssh_host/host.dart' show HostDeployment;
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -20,7 +19,6 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
-import 'package:path/path.dart' as p;
 
 import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
@@ -76,106 +74,6 @@ void main() {
     }
   });
 
-  group('the control server it owns', () {
-    test('graceful shutdown deletes the handshake', () async {
-      final lifecycle = AppLifecycle(container);
-      final server = LauncherControlServer(container);
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      await server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      // `startControlServer` starts its own; this test owns the paths, so it
-      // hands over an already-started instance the same way the app hands over
-      // a freshly built one.
-      lifecycle.adopt(controlServer: server);
-      expect(File(bridge).existsSync(), isTrue);
-
-      await lifecycle.shutdown();
-
-      expect(
-        File(bridge).existsSync(),
-        isFalse,
-        reason: 'a stale handshake points a bridge at a dead port',
-      );
-      expect(File(p.join(tmp.path, 'ipc', 'rpc.sock')).existsSync(), isFalse);
-    });
-
-    test('it is retained before it is started, not after', () async {
-      // **What the app soak found.** `start()` publishes the handshake
-      // part-way through — the socket node is already bound, the WSL listener
-      // and the session configs are still to come — and this field used to be
-      // assigned only once `start()` returned. So from the moment
-      // `mcp_bridge.json` appeared there were several hundred milliseconds in
-      // which a quit found step 3 with nothing to stop, and it said nothing
-      // about it: no skip, no timeout, no failure. 18 of 20 quits left the
-      // handshake, the socket node and `data\mcp` behind that way.
-      final lifecycle = AppLifecycle(container);
-      final server = LauncherControlServer(container);
-
-      final starting = lifecycle.startControlServer(server: server);
-
-      expect(
-        lifecycle.controlServer,
-        same(server),
-        reason: 'a quit that lands mid-start must find something to stop',
-      );
-      await starting;
-      await server.stop();
-    });
-
-    test('a stop that lands mid-start leaves nothing published', () async {
-      // The other half. Retaining the instance is no use if the rest of the
-      // start then publishes over what `stop()` has just removed — and it did:
-      // the handshake is *written* several awaits after the empty file that
-      // carries its ACL is created, so a stop in between removed a file the
-      // start then put back, in full, on its way out.
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      final sessionConfigs = Directory(p.join(tmp.path, 'mcp'));
-      // The ACL call is the synchronisation point rather than a delay: it sits
-      // exactly where the soak's close message arrived, with the socket node
-      // already bound and the handshake not yet written.
-      final atRestrict = Completer<void>();
-      final release = Completer<bool>();
-      final server = LauncherControlServer(
-        container,
-        permissions: _GatedPermissions(atRestrict, release),
-      );
-
-      final starting = server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-        sessionConfigDirectory: sessionConfigs.path,
-      );
-      await atRestrict.future;
-
-      await server.stop();
-      release.complete(true);
-      await starting;
-
-      expect(
-        File(bridge).existsSync(),
-        isFalse,
-        reason: 'the rest of the start published on its way out',
-      );
-      expect(File(p.join(tmp.path, 'ipc', 'rpc.sock')).existsSync(), isFalse);
-      expect(sessionConfigs.existsSync(), isFalse);
-    });
-
-    test('the pid stays in the handshake for the crash case', () async {
-      // Graceful quit removes the file; a crash cannot, which is why the pid it
-      // publishes has to stay there for a reader to validate.
-      final server = LauncherControlServer(container);
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      await server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      addTearDown(server.stop);
-
-      expect(File(bridge).readAsStringSync(), contains('"pid":$pid'));
-    });
-  });
 
   group('the database it closes', () {
     test('a graceful quit closes the handle, not just the process', () async {
@@ -210,14 +108,13 @@ void main() {
       // Force the watcher to exist so the step has something to do.
       container.read(attentionPresenterProvider);
       lifecycle.adopt(
-        controlServer: _RecordingControlServer(container, order),
         hookInstallation: Future<void>(() => order.add('hooks')),
       );
       natives.tray.onDestroy = () => order.add('system integration');
 
       await lifecycle.shutdown();
 
-      expect(order, ['hooks', 'control server', 'system integration']);
+      expect(order, ['hooks', 'system integration']);
       expect(isDisposed(container), isTrue);
       // And the service really is detached, not merely marked so.
       expect(natives.window.listeners, isEmpty);
@@ -244,101 +141,6 @@ void main() {
     });
   });
 
-  group('nothing it started outlives it', () {
-    /// **The bug this group exists for, and the shape of it.**
-    ///
-    /// `_step` bounds the **wait**, not the work — a Dart future cannot be
-    /// cancelled — and the control server's slice is 100 ms. The handshake
-    /// delete used to sit *last* in `LauncherControlServer.stop`, behind three
-    /// awaited socket closes, so on a loaded machine `shutdown()` returned with
-    /// `mcp_bridge.json` still on disk and the deletes landed afterwards at a
-    /// moment nothing owned. Two symptoms, one event: the assertion this owner
-    /// exists for was false, and the stray deletes raced the suite's own
-    /// `deleteSync(recursive: true)` into a `PathNotFoundException` — a
-    /// different pair of tests each run, because which steps blow their slice
-    /// depends on the load.
-    ///
-    /// Both cases below are **counted, never timed**: the first observes the
-    /// files without awaiting anything, the second compares a removal count
-    /// across a pumped event queue.
-
-    test('the published files are gone before stop() suspends', () async {
-      final server = LauncherControlServer(container);
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      final socket = p.join(tmp.path, 'ipc', 'rpc.sock');
-      await server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      expect(File(bridge).existsSync(), isTrue);
-
-      // Deliberately not awaited. Everything between this line and the next is
-      // `stop`'s synchronous prefix, which is the only part of it a bounded
-      // step cannot be preempted out of.
-      final pending = server.stop();
-
-      expect(
-        File(bridge).existsSync(),
-        isFalse,
-        reason: 'the handshake outlived the first await',
-      );
-      expect(
-        File(socket).existsSync(),
-        isFalse,
-        reason: 'the socket node outlived the first await',
-      );
-
-      await pending;
-    });
-
-    test(
-      'a shutdown that abandons the step still leaves nothing behind',
-      () async {
-        final removals = <String>[];
-        final lifecycle = AppLifecycle(container);
-        final bridge = p.join(tmp.path, 'mcp_bridge.json');
-        final server = LauncherControlServer(
-          container,
-          unpublish: (path) {
-            removals.add(path);
-            final file = File(path);
-            if (file.existsSync()) file.deleteSync();
-          },
-        );
-        await server.start(
-          bridgeFilePath: bridge,
-          socketDirectory: p.join(tmp.path, 'ipc'),
-        );
-        // A hook step that never returns, so the budget is already under
-        // pressure when the control server's turn comes — the shape of the run
-        // that failed.
-        lifecycle.adopt(
-          controlServer: server,
-          hookInstallation: Completer<void>().future,
-        );
-
-        await lifecycle.shutdown();
-
-        final counted = removals.length;
-        expect(counted, 2, reason: 'the handshake and the socket node');
-        expect(File(bridge).existsSync(), isFalse);
-
-        // **The count, not the clock.** Every continuation the abandoned step
-        // left behind runs here; if any of them still removed something, this
-        // grows. A `pumpEventQueue` drains the microtask and event queues rather
-        // than waiting out a duration, so a slower machine cannot pass it by
-        // being slow.
-        await pumpEventQueue();
-        await pumpEventQueue();
-
-        expect(
-          removals.length,
-          counted,
-          reason: 'a filesystem removal outlived shutdown()',
-        );
-      },
-    );
-  });
 
   group('the panes it reaps', () {
     /// A container whose panes are fakes with a reap the test controls.
@@ -460,7 +262,7 @@ void main() {
       // Pinned to literals on purpose. The two bounds this replaces were
       // written against `kShutdownBudget` itself, so widening the constant —
       // the exact regression they existed to catch — kept them green.
-      expect(kShutdownBudget, const Duration(milliseconds: 3550));
+      expect(kShutdownBudget, const Duration(milliseconds: 3450));
       expect(
         kShutdownStepBudgets.values.reduce((a, b) => a + b),
         kShutdownBudget,
@@ -471,7 +273,7 @@ void main() {
         const Duration(milliseconds: 2500),
         reason: '1500 was under the measured cost of one taskkill.exe',
       );
-      expect(kShutdownStepBudgets, hasLength(9));
+      expect(kShutdownStepBudgets, hasLength(8));
     });
 
     test('a spent budget skips every step but still disposes', () async {
@@ -516,16 +318,7 @@ void main() {
         registerOsQuit: (_) {},
         adapters: natives.adapters,
       );
-      final server = LauncherControlServer(container);
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      await server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      // A hook rewrite that never returns — the shape of Loop 48's build that
-      // could not exit at all.
       lifecycle.adopt(
-        controlServer: server,
         hookInstallation: Completer<void>().future,
       );
 
@@ -546,7 +339,6 @@ void main() {
         isEmpty,
         reason: 'a hanging step helped itself to the shared budget',
       );
-      expect(File(bridge).existsSync(), isFalse, reason: 'handshake removed');
       expect(natives.tray.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
     });
@@ -595,12 +387,6 @@ void main() {
           registerOsQuit: (_) {},
           adapters: natives.adapters,
         );
-        final server = LauncherControlServer(container);
-        await server.start(
-          bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
-          socketDirectory: p.join(tmp.path, 'ipc'),
-        );
-        lifecycle.adopt(controlServer: server);
 
         await lifecycle.shutdown();
 
@@ -661,17 +447,9 @@ void main() {
         registerOsQuit: (_) {},
         adapters: natives.adapters,
       );
-      final server = LauncherControlServer(container);
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      await server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      lifecycle.adopt(controlServer: server);
 
       await service.quit();
 
-      expect(File(bridge).existsSync(), isFalse);
       expect(natives.window.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
     });
@@ -689,13 +467,6 @@ void main() {
         registerOsQuit: (_) {},
         adapters: natives.adapters,
       );
-      final server = LauncherControlServer(container);
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      await server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      lifecycle.adopt(controlServer: server);
 
       expect(
         natives.window.preventClose,
@@ -709,23 +480,18 @@ void main() {
       await lifecycle.shutdown();
       await pumpEventQueue();
 
-      expect(File(bridge).existsSync(), isFalse);
       expect(natives.window.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
     });
   });
 
   group('the agents\' hooks are installed behind the first frame', () {
-    /// A server with a hook endpoint and no bound port. `hookEndpoint` is the
-    /// only thing `installAgentHooks` reads, and binding one here would buy
-    /// nothing but a socket.
-    _HookOnlyServer serverFor(ProviderContainer container) =>
-        _HookOnlyServer(container);
-
     test('the sweep does not start until the gate is released', () async {
       final sweeps = <int>[];
       final scoped = ProviderContainer(
         overrides: [
+          agentHooksAtHostProvider.overrideWithValue(true),
+          localHostSessionAccessProvider.overrideWithValue(null),
           agentHookInstallationServiceProvider.overrideWith(
             (ref) => _RecordingHookService(ref, sweeps),
           ),
@@ -736,7 +502,6 @@ void main() {
       final gate = Completer<void>();
 
       lifecycle.installAgentHooks(
-        serverFor(scoped),
         afterFirstFrame: () => gate.future,
       );
       await pumpEventQueue();
@@ -764,6 +529,8 @@ void main() {
       final sweeps = <int>[];
       final scoped = ProviderContainer(
         overrides: [
+          agentHooksAtHostProvider.overrideWithValue(true),
+          localHostSessionAccessProvider.overrideWithValue(null),
           agentHookInstallationServiceProvider.overrideWith(
             (ref) => _RecordingHookService(ref, sweeps),
           ),
@@ -772,7 +539,6 @@ void main() {
       addTearDown(scoped.dispose);
 
       AppLifecycle(scoped).installAgentHooks(
-        serverFor(scoped),
         afterFirstFrame: () => Future<void>.error(StateError('no binding')),
       );
       await pumpEventQueue();
@@ -787,6 +553,8 @@ void main() {
       final starting = Completer<HostDeployment?>();
       final scoped = ProviderContainer(
         overrides: [
+          agentHooksAtHostProvider.overrideWithValue(true),
+          localHostSessionAccessProvider.overrideWithValue(null),
           agentHookInstallationServiceProvider.overrideWith(
             (ref) => _RecordingHookService(ref, sweeps),
           ),
@@ -797,7 +565,7 @@ void main() {
 
       AppLifecycle(
         scoped,
-      ).installAgentHooks(serverFor(scoped), afterFirstFrame: () async {});
+      ).installAgentHooks(afterFirstFrame: () async {});
       await pumpEventQueue();
       expect(sweeps, isEmpty, reason: 'the host has not started yet');
 
@@ -806,30 +574,6 @@ void main() {
       expect(sweeps, [1]);
     });
 
-    test('the WSL re-sweep waits for nothing', () async {
-      // By the time the switch binds the window has long since painted, so a
-      // re-sweep that waited for a *further* frame would be waiting on an idle
-      // app. The gate is only ever the first sweep's.
-      final sweeps = <int>[];
-      final scoped = ProviderContainer(
-        overrides: [
-          agentHookInstallationServiceProvider.overrideWith(
-            (ref) => _RecordingHookService(ref, sweeps),
-          ),
-        ],
-      );
-      addTearDown(scoped.dispose);
-      final server = serverFor(scoped);
-      final gate = Completer<void>();
-
-      AppLifecycle(
-        scoped,
-      ).installAgentHooks(server, afterFirstFrame: () => gate.future);
-      server.onWslInterfaceBound!();
-      await pumpEventQueue();
-
-      expect(sweeps, [1], reason: 'the first sweep is still behind the gate');
-    });
   });
 }
 
@@ -874,17 +618,6 @@ class _FrozenStopwatch implements Stopwatch {
   void reset() {}
 }
 
-/// A server that has a hook endpoint and nothing else. Binding a port would
-/// buy this test nothing: `installAgentHooks` reads `hookEndpoint` and sets
-/// `onWslInterfaceBound`, and neither needs a socket.
-class _HookOnlyServer extends LauncherControlServer {
-  _HookOnlyServer(super.container);
-
-  @override
-  AgentHookEndpoint? get hookEndpoint =>
-      const AgentHookEndpoint(port: 4242, token: 'tok');
-}
-
 /// Counts sweeps and touches no config file. The real service walks every
 /// located CLI store, which on this machine means the developer's own
 /// `~/.claude` — never something a unit test may write into.
@@ -900,35 +633,3 @@ class _RecordingHookService extends AgentHookInstallationService {
   }
 }
 
-/// A control server that records when it was stopped, without binding a port.
-class _RecordingControlServer extends LauncherControlServer {
-  _RecordingControlServer(super.container, this._order);
-
-  final List<String> _order;
-
-  @override
-  Future<void> stop() async {
-    _order.add('control server');
-    await super.stop();
-  }
-}
-
-/// Suspends the handshake file's ACL call, which is where a quit lands: the
-/// socket node is bound, `mcp_bridge.json` exists and is still empty, and the
-/// tokens have not been written into it yet.
-class _GatedPermissions extends HandshakePermissions {
-  _GatedPermissions(this._reached, this._release);
-
-  final Completer<void> _reached;
-  final Completer<bool> _release;
-
-  @override
-  Future<bool> restrictFile(File file, {AppLogger? logger}) {
-    if (!_reached.isCompleted) _reached.complete();
-    return _release.future;
-  }
-
-  @override
-  Future<bool> restrictDirectory(Directory dir, {AppLogger? logger}) async =>
-      true;
-}

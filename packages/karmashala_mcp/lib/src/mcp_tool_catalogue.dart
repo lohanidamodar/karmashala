@@ -126,8 +126,6 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     destructive: true,
     movesAttention: true,
   ),
-  // Spawns an external terminal window running the generated tmux script.
-  'open_sessions_in_tmux': McpToolAnnotations(movesAttention: true),
 
   // Terminal.
   'terminal_list': McpToolAnnotations.read,
@@ -499,10 +497,6 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'open_session': McpToolListing(
     McpToolCategory.sessions,
     'Reattach to a session or resume it; an imported one opens a window.',
-  ),
-  'open_sessions_in_tmux': McpToolListing(
-    McpToolCategory.sessions,
-    'Open several sessions as tmux windows in one terminal tab (WSL).',
   ),
   'session_transcript': McpToolListing(
     McpToolCategory.sessions,

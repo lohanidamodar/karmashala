@@ -50,12 +50,10 @@ enum MessageType {
   // spools itself (slice 5a).
   // 0x1c: `sessionChanged`, retired in protocol 13 — a status the daemon
   // records reaches clients as a change on the data channel (slice 1c).
-  // Protocol 3: the daemon serves agents' MCP and the app runs the tools.
-  // client → host: the tool catalogue; host → client: one call; client →
-  // host: its answer.
-  mcpTools(0x1d),
-  mcpCall(0x1e),
-  mcpResult(0x1f),
+  // 0x1d–0x1f (`mcpTools`, `mcpCall`, `mcpResult`: agents' tool calls
+  // forwarded to the app) are retired in protocol 28 — the server runs every
+  // agent-facing tool itself and asks a window only through a `ClientIntent`
+  // on the data channel (slice 5b).
   // Protocol 4: the daemon serves the phone companion. client → host: where
   // the desktop's embedded relay listens (protocol 10 — how phones are
   // served is the server's `server.json`, never sent on a link); client →

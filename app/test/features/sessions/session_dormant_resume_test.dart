@@ -20,6 +20,8 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionResume, SessionStart;
 
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
@@ -193,9 +195,13 @@ void main() {
                 .read(terminalSessionsControllerProvider.notifier)
                 .instanceFor(paneId)!
             as FakeTerminalInstance;
-    // The agent was resumed, not started afresh…
-    expect(started.agentLaunch!.arguments, contains('--resume'));
-    expect(started.agentLaunch!.arguments, contains('ext-1'));
+    // The agent was resumed, not started afresh — asked of the server, whose
+    // command line it is (slice 5b)…
+    final asked = db.server.sessionWork.asked
+        .whereType<SessionStart>()
+        .last
+        .spec;
+    expect(asked.resumeConversationId, 'ext-1');
     // …and the buffer that was the whole reason to keep the pane survived it.
     expect(started.restored, contains('what happened yesterday'));
   });
@@ -303,9 +309,9 @@ void main() {
       final paneId = paneOf(first, sessionId);
       final terminals = first.read(terminalSessionsControllerProvider.notifier);
       expect(
-        terminals.instanceFor(paneId)!.agentLaunch!.arguments,
-        contains('summarise yesterday'),
-        reason: 'the recorded line is the one Start used to re-run',
+        db.server.sessionWork.asked.whereType<SessionStart>().last.spec.prompt,
+        'summarise yesterday',
+        reason: 'the opening prompt the session was first started with',
       );
       terminals.instanceFor(paneId)!.terminal.write('what happened\r\n');
       terminals.persistLayout();
@@ -328,13 +334,18 @@ void main() {
                   .read(terminalSessionsControllerProvider.notifier)
                   .instanceFor(paneId)!
               as FakeTerminalInstance;
+      expect(started.agentLaunch?.sessionId, sessionId);
+      final resumed = db.server.sessionWork.asked.last;
       expect(
-        started.agentLaunch!.arguments,
-        containsAllInOrder(['--resume', 'ext-1']),
+        resumed is SessionResume ||
+            (resumed is SessionStart &&
+                resumed.spec.resumeConversationId == 'ext-1'),
+        isTrue,
+        reason: 'a resume of its own conversation, asked of the server',
       );
       expect(
-        started.agentLaunch!.arguments,
-        isNot(contains('summarise yesterday')),
+        resumed is SessionStart ? resumed.spec.prompt : null,
+        isNull,
         reason:
             'this is the whole bug: the opening prompt is not something to '
             'run again on the way back into a conversation',

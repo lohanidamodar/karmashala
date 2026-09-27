@@ -5,7 +5,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health_service.dart';
-import 'package:karmashala/src/features/mcp/control_server_status.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -62,9 +61,7 @@ void main() {
     required McpBridgeProbe probe,
     FakeCommandRunner? host,
     FakeCommandRunnerFactory? factory,
-    ControlServerStatus control = const ControlServerStatus.running(
-      PrivilegedRpcTransport.ownerOnlySocket,
-    ),
+    String? handshakePath,
   }) {
     final container = ProviderContainer(
       overrides: [
@@ -74,6 +71,9 @@ void main() {
           factory ?? FakeCommandRunnerFactory(),
         ),
         mcpBridgeProbeProvider.overrideWithValue(probe),
+        serverMcpHandshakePathProvider.overrideWithValue(
+          () async => handshakePath,
+        ),
         systemHealthServiceProvider.overrideWith((ref) {
           return SystemHealthService(ref)
             ..supportDirectory = (() async => temp)
@@ -82,7 +82,6 @@ void main() {
         }),
       ],
     );
-    container.read(controlServerStatusProvider.notifier).set(control);
     return container;
   }
 
@@ -209,51 +208,44 @@ void main() {
   });
 
   group('the agent tools endpoint sits beside the bridge, not inside it', () {
-    test(
-      'a fail-closed server is reported as the server reported it',
-      () async {
-        final container = containerWith(
-          probe: probeReturning(ProcessHandleScript.replies(initializeResult)),
-          control: const ControlServerStatus.failedClosed(
-            stage: ControlServerFailureStage.socketBind,
-            detail: 'bind failed: permission denied',
-          ),
-        );
-        addTearDown(container.dispose);
-
-        final checks = await container
-            .read(systemHealthServiceProvider)
-            .checkAll();
-        final endpoint = checks.firstWhere(
-          (c) => c.id == SystemCheckId.controlServer,
-        );
-
-        expect(endpoint.level, HealthLevel.failed);
-        expect(
-          endpoint.summary,
-          contains('the owner-only socket could not be'),
-        );
-        expect(endpoint.detail, contains('bind failed: permission denied'));
-        // This row is read from what the server recorded, not probed — and it
-        // says so, so the panel's timestamp cannot imply a fresh measurement.
-        expect(endpoint.detail, contains('nothing was probed for this row'));
-        expect(endpoint.took, Duration.zero);
-      },
-    );
-
-    test('a server that never started is unknown, not healthy', () async {
+    Future<SystemCheck> endpointWith(String? handshake) async {
+      String? path;
+      if (handshake != null) {
+        path = '${temp.path}/mcp_bridge.json';
+        File(path).writeAsStringSync(handshake);
+      }
       final container = containerWith(
         probe: probeReturning(ProcessHandleScript.replies(initializeResult)),
-        control: ControlServerStatus.notStarted,
+        handshakePath: path,
       );
       addTearDown(container.dispose);
+      final checks = await container.read(systemHealthServiceProvider).checkAll();
+      return checks.firstWhere((c) => c.id == SystemCheckId.agentTools);
+    }
 
-      final checks = await container
-          .read(systemHealthServiceProvider)
-          .checkAll();
-      final endpoint = checks.firstWhere(
-        (c) => c.id == SystemCheckId.controlServer,
+    test('a server that withheld its credential is failed, in its words',
+        () async {
+      final endpoint = await endpointWith('{"port": 4242, "pid": 7}');
+
+      expect(endpoint.level, HealthLevel.failed);
+      expect(endpoint.summary, contains('withheld its credential'));
+      // Read from the server's handshake, not probed — and it says so, so the
+      // panel's timestamp cannot imply a fresh measurement.
+      expect(endpoint.detail, contains('nothing was probed for this row'));
+      expect(endpoint.took, Duration.zero);
+    });
+
+    test('a server serving agents is healthy', () async {
+      final endpoint = await endpointWith(
+        '{"port": 4242, "pid": 7, "mcpToken": "t"}',
       );
+
+      expect(endpoint.level, HealthLevel.healthy);
+      expect(endpoint.summary, contains('port 4242'));
+    });
+
+    test('no server is unknown, not healthy', () async {
+      final endpoint = await endpointWith(null);
 
       expect(endpoint.level, HealthLevel.unknown);
     });

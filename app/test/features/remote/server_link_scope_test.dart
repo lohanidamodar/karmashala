@@ -47,7 +47,6 @@ void main() {
 
       expect(container.read(companionAtHostProvider), isTrue);
       expect(container.read(hostLifecycleSourceProvider), isNotNull);
-      expect(container.read(hostedSessionEnderProvider), isNotNull);
       expect(
         container.read(serverConfigSourceProvider),
         isA<HostServerConfigSource>(),
@@ -64,7 +63,6 @@ void main() {
 
       expect(container.read(companionAtHostProvider), isFalse);
       expect(container.read(hostLifecycleSourceProvider), isNull);
-      expect(container.read(hostedSessionEnderProvider), isNull);
     });
   });
 

@@ -3908,38 +3908,8 @@
       }
     },
     {
-      "name": "open_sessions_in_tmux",
-      "description": "Open several sessions together as windows in a single tmux session (WSL), in one new terminal tab. All sessions must live in the same WSL distribution. Pass the session ids from list_sessions. Non-destructive: if a tmux session with the given name already exists it is NOT killed — the sessions are appended as new windows without switching the focused window of any running tab.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Session ids to open together."
-          },
-          "name": {
-            "type": "string",
-            "description": "Optional tmux session name."
-          }
-        },
-        "required": [
-          "ids"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
       "name": "terminal_list",
-      "description": "The terminal layout: every tab, the panes in each, which pane is focused, and the panes still running with no tab showing them (detached). Also lists the shell profiles this machine offers, which is where terminal_open gets its profileId. Start here — every other terminal tool takes an id from this one.",
+      "description": "Every terminal the Karmashala server runs — shells, agent sessions, runs — each listed as a tab holding one pane (the tab id is the pane id), the one in front of the person marked active. Every terminal keeps running in the server whether or not a window shows it, so \"detached\" is always empty. Also lists the shell profiles this machine offers, which is where terminal_open gets its profileId. Start here — every other terminal tool takes an id from this one.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -4040,7 +4010,7 @@
     },
     {
       "name": "terminal_open",
-      "description": "Open a new terminal tab and return its tab and pane ids. The tab appears in Karmashala's own tab bar, so the user can see and take over whatever runs in it. Pass profileId to choose the shell — an unknown one is refused rather than quietly substituted, because a WSL command run in PowerShell is not a smaller version of the same thing.",
+      "description": "Open a new terminal and return its tab and pane ids. The Karmashala server runs it, and the Karmashala window a person is using shows it as a tab, so the user can see and take over whatever runs in it; with no window open it still runs, and the answer says so. Pass profileId to choose the shell — an unknown one is refused rather than quietly substituted, because a WSL command run in PowerShell is not a smaller version of the same thing.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -4218,7 +4188,7 @@
     },
     {
       "name": "terminal_close",
-      "description": "Close a terminal tab. A pane that is doing something — an agent session, a running command, a shell with real history — is DETACHED rather than ended: it keeps running and appears under \"detached\" in terminal_list, which is how a long build survives its tab being tidied away. An idle shell that has printed nothing is ended, because there is nothing to come back for. The result says which happened to each pane. Pass kill=true to skip that entirely and end them all — DESTRUCTIVE, and nothing brings back what they were part-way through.",
+      "description": "Close a terminal tab. A pane that is doing something — an agent session, a running command, a shell with real history — is DETACHED rather than ended: the window closes its tab and it keeps running in the Karmashala server, still listed by terminal_list, which is how a long build survives its tab being tidied away. An idle shell that has printed nothing is ended, because there is nothing to come back for. The result says which happened to each pane. Pass kill=true to skip that entirely and end them all — DESTRUCTIVE, and nothing brings back what they were part-way through.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -4279,7 +4249,7 @@
     },
     {
       "name": "terminal_record_start",
-      "description": "Start recording a terminal pane. The pane shows a banner for as long as it records and the user can stop it. Everything printed in the pane is captured, including anything secret — nothing is redacted. Answers with the formats terminal_record_stop can produce on this machine, so ask for one that exists.",
+      "description": "Start recording a terminal pane. The Karmashala server records the pane's own output from now on, whether or not a window shows it. Everything printed in the pane is captured, including anything secret — nothing is redacted. Answers with the formats terminal_record_stop can produce here, so ask for one that exists.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -4302,7 +4272,7 @@
     },
     {
       "name": "terminal_record_stop",
-      "description": "Stop a terminal recording and render it to a file. \"mp4\" is a finished 1920x1080 video written by the operating system's own encoder; \"gif\" is 960x540 and 256 colours and plays anywhere; \"pngSequence\" is numbered pictures plus an ffmpeg command this app does not bundle. Defaults to mp4 where it can be written, gif where it cannot. Answers with the file, and with isVideo=false when what it wrote is pictures rather than a video.",
+      "description": "Stop a terminal recording and write it to a file: an asciicast (.cast) — the pane's own bytes with their timing, which asciinema plays as they are. \"mp4\", \"gif\" and \"pngSequence\" are rendered from that cast by a Karmashala window, not by the server: this tool writes the cast and says plainly which of them it did not produce. Answers with the file, and with isVideo=false, because a cast is not a video.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -4328,7 +4298,7 @@
     },
     {
       "name": "device_record_start",
-      "description": "Start recording the screen of the device whose live view is running. Needs that live view: the recording is written from the frames the picture is made of, and there is nothing to record without one. \"mp4\" is the file every player opens; \"ts\" is MPEG-TS, the only one that survives the device rotating mid-recording. Neither re-encodes — both hold the handset's own H.264.",
+      "description": "Start recording the screen of a device on the Karmashala server's machine — the one this session holds, else the only one ready. An Android device records itself with its own screenrecord (MP4, at most 180 seconds, then it stops on its own); a simulator with simctl (a QuickTime movie). \"mp4\" is the file every player opens; \"ts\" (MPEG-TS) is only what a device pane's live view records, and is refused here.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -4823,10 +4793,6 @@
     "session_fork_from_checkpoint": {
       "category": "sessions",
       "summary": "Fork a session and roll its files back to a checkpoint; not its conversation."
-    },
-    "open_sessions_in_tmux": {
-      "category": "sessions",
-      "summary": "Open several sessions as tmux windows in one terminal tab (WSL)."
     },
     "terminal_list": {
       "category": "terminals",

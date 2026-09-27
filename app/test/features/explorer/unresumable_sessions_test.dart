@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionStart;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -19,7 +21,6 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
-import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
@@ -516,104 +517,19 @@ void main() {
         await notifier.refresh();
         final started = await notifier.restart(id);
 
-        final launch = container
-            .read(terminalSessionsControllerProvider.notifier)
-            .instanceFor(started.paneId!)!
-            .agentLaunch!;
+        // Asked of the server as a fresh conversation in this row (slice 5b:
+        // it starts the agent under the row's own id).
+        final asked = serverOf(container).sessionWork.asked.last;
+        expect(asked, isA<SessionStart>());
+        final spec = (asked as SessionStart).spec;
+        expect(spec.restartSessionId, id);
         expect(
-          launch.arguments,
-          isNot(contains('--resume')),
+          spec.resumeConversationId,
+          isNull,
           reason:
               'there is no conversation to resume — that is the whole state',
         );
-        expect(launch.arguments, containsAllInOrder(['--session-id', id]));
-      },
-    );
-
-    test('a launch that both restarts and resumes is refused', () async {
-      final db = seededDatabase();
-      emptyStore();
-      final container = await containerOver(db);
-      final id = seedDeadRow(container);
-
-      await expectLater(
-        container
-            .read(sessionLauncherProvider)
-            .launch(
-              SessionLaunchRequest(
-                repository: repository(),
-                installation: agentInstallation(agentId: 'claudeish'),
-                title: 'Both',
-                purpose: SessionPurpose.newSession,
-                restartSessionId: id,
-                resumeExternalSessionId: id,
-              ),
-            ),
-        throwsA(isA<ArgumentError>()),
-      );
-    });
-
-    test(
-      'refused on the shape of the request, before any store is read',
-      () async {
-        // The case the ordering matters for. With no readable store,
-        // `conversationToResume` answers "we cannot tell" and returns
-        // normally — so if the guard ran after it, this launch would proceed and
-        // the reuse would silently prefer the resume, giving the user a resume of
-        // a conversation they asked to replace.
-        final db = seededDatabase();
-        final container = await containerOver(db, locatable: false);
-        final id = seedDeadRow(container);
-
-        await expectLater(
-          container
-              .read(sessionLauncherProvider)
-              .launch(
-                SessionLaunchRequest(
-                  repository: repository(),
-                  installation: agentInstallation(agentId: 'claudeish'),
-                  title: 'Both',
-                  purpose: SessionPurpose.newSession,
-                  restartSessionId: id,
-                  resumeExternalSessionId: id,
-                ),
-              ),
-          throwsA(isA<ArgumentError>()),
-        );
-        expect(
-          locator.calls,
-          0,
-          reason:
-              'nothing may be read to turn down a request that makes no '
-              'sense',
-        );
-      },
-    );
-
-    test(
-      'a restart naming a row a pane is running falls back to a new row',
-      () async {
-        // The guard against abandoning a live conversation: the row is busy, so
-        // reuse is refused and the launch is an ordinary create.
-        final db = seededDatabase();
-        emptyStore();
-        final container = await containerOver(db);
-        final live = await startSession(container);
-
-        final launched = await container
-            .read(sessionLauncherProvider)
-            .launch(
-              SessionLaunchRequest(
-                repository: repository(),
-                installation: agentInstallation(agentId: 'claudeish'),
-                title: 'Second',
-                purpose: SessionPurpose.newSession,
-                restartSessionId: live,
-              ),
-            );
-
-        expect(launched.session.id, isNot(live));
-        expect(container.read(sessionsDataProvider).getById(live), isNotNull);
+        expect(started.id, id);
       },
     );
 
@@ -635,25 +551,5 @@ void main() {
       expect(container.read(sessionsDataProvider).getById(id)!.paneId, isNull);
     });
 
-    test('a restart naming nothing is an ordinary create', () async {
-      final db = seededDatabase();
-      emptyStore();
-      final container = await containerOver(db);
-
-      final launched = await container
-          .read(sessionLauncherProvider)
-          .launch(
-            SessionLaunchRequest(
-              repository: repository(),
-              installation: agentInstallation(agentId: 'claudeish'),
-              title: 'Fresh',
-              purpose: SessionPurpose.newSession,
-              restartSessionId: 'no-such-row',
-            ),
-          );
-
-      expect(launched.session.title, 'Fresh');
-      expect(launched.session.externalSessionId, launched.session.id);
-    });
   });
 }

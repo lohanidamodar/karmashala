@@ -7,10 +7,9 @@ import 'package:karmashala_core/util.dart';
 const Duration launchDedupeWindow = Duration(minutes: 2);
 
 /// Whether repeating [tool] would start something in the world.
-/// `open_sessions_in_tmux` counts: `buildTmuxScript` *appends* a second window.
 bool startsAnAgent(String tool, Map<String, dynamic> arguments) =>
     switch (tool) {
-      'open_new_session' || 'open_sessions_in_tmux' => true,
+      'open_new_session' => true,
       'session_handoff' ||
       'session_fork' ||
       'session_fork_from_checkpoint' => arguments['preview'] != true,

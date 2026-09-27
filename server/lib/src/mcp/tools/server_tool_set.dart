@@ -1,7 +1,6 @@
 /// One family of agent tools the server runs itself (slice 2b): the schemas
-/// it serves and the calls it answers. A call it answers `null` for is handed
-/// to the connected app — a session that runs in one of the app's own panes,
-/// a browser or device run — and refused in words with no app.
+/// it serves and the calls it answers. Since slice 5b every family answers
+/// every call to its own tools: nothing a family serves is handed to an app.
 library;
 
 import 'dart:async';
@@ -18,8 +17,8 @@ abstract class ServerToolSet {
   List<Map<String, Object?>> get schemas;
 
   /// Runs [tool] for [callerSessionId] — the session the transport
-  /// authenticated, null for an unattributed caller. Null hands the call on
-  /// to the app; only a tool this family serves is ever asked.
+  /// authenticated, null for an unattributed caller. Null only for a tool
+  /// this family does not serve; the relay refuses such a call in words.
   Future<Object?>? call(
     String tool,
     Map<String, dynamic> arguments,

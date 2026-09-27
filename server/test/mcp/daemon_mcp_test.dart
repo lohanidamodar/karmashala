@@ -1,6 +1,7 @@
 /// The daemon's MCP endpoint: tokens it issued are honoured across restarts,
-/// tool calls go to the connected app, and with no app agents are told so.
-/// In-process on temp directories, never on anyone's real host.
+/// and every tool call is run by the server itself — nothing is forwarded to
+/// an app (protocol 28). In-process on temp directories, never on anyone's
+/// real host.
 library;
 
 import 'dart:async';
@@ -8,20 +9,39 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_host/lifecycle_client.dart';
+import 'package:karmashala_host/src/mcp/tools/server_tool_set.dart';
+import 'package:karmashala_host/src/mcp/tools/server_tools.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-import '../serve/pipe_connection.dart';
-
 const _echo = <String, Object?>{
   'name': 'echo',
   'description': 'Answers with who called it.',
   'inputSchema': {'type': 'object'},
 };
+
+/// `echo`, run by the server as whoever called it — or failed, when told.
+class _Echo extends ServerToolSet {
+  String? fail;
+
+  @override
+  List<Map<String, Object?>> get schemas => const [_echo];
+
+  @override
+  Future<Object?>? call(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) {
+    if (tool != 'echo') return null;
+    final failing = fail;
+    if (failing != null) return Future.error(StateError(failing));
+    return Future.value({'caller': callerSessionId, 'arguments': arguments});
+  }
+}
 
 class _Refusing extends HandshakePermissions {
   const _Refusing();
@@ -37,7 +57,7 @@ void main() {
   late HostPaths paths;
   late String dataDir;
   late McpToolRelay relay;
-  late HostServer server;
+  late _Echo echo;
   DaemonMcp? daemon;
 
   setUp(() {
@@ -45,12 +65,8 @@ void main() {
     paths = HostPaths(Directory(p.join(root.path, 'host')))..ensureDirectory();
     dataDir = p.join(root.path, 'data');
     Directory(dataDir).createSync();
-    relay = McpToolRelay(cachePath: paths.mcpToolsPath);
-    server = HostServer(
-      registry: SessionRegistry(launcher: FakePtyLauncher()),
-      ptyLibrary: 'libc.so.6',
-      mcpTools: relay,
-    );
+    echo = _Echo();
+    relay = McpToolRelay(tools: ServerTools([echo]));
   });
 
   tearDown(() async {
@@ -69,27 +85,6 @@ void main() {
     preferredPort: 0,
     permissions: permissions,
   );
-
-  /// An app on the lifecycle link that runs `echo`, or fails it with [fail].
-  Future<HostLifecycleWatch> connectApp({String? fail}) async {
-    final (client, host) = PipeEnd.pair();
-    unawaited(server.serveConnection(host));
-    final watch = await HostLifecycleWatch.over(client, clientId: 'app');
-    watch.mcpCalls.listen((call) {
-      if (fail != null) {
-        watch.answerMcpCall(call.callId, error: fail);
-        return;
-      }
-      watch.answerMcpCall(
-        call.callId,
-        result: {'caller': call.callerSessionId, 'arguments': call.arguments},
-      );
-    });
-    watch.offerMcpTools([_echo]);
-    // The offer is a frame on the link; let it land before calling.
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    return watch;
-  }
 
   Future<(int, Map<String, Object?>?)> rpc(
     DaemonMcp mcp,
@@ -160,12 +155,11 @@ void main() {
     });
   });
 
-  group('forwarding', () {
+  group('calls', () {
     test(
-      'a tools/call runs in the app as the session its token names',
+      'a tools/call runs in the server as the session its token names',
       () async {
         final mcp = await start();
-        await connectApp();
         final (status, reply) = await rpc(
           mcp,
           mcp.credentials.callerKey.tokenFor('s1'),
@@ -184,9 +178,9 @@ void main() {
       },
     );
 
-    test('a tool the app fails comes back as an isError result', () async {
+    test('a tool that fails comes back as an isError result', () async {
       final mcp = await start();
-      await connectApp(fail: 'Bad state: boom');
+      echo.fail = 'boom';
       final (_, reply) = await rpc(
         mcp,
         mcp.credentials.callerKey.tokenFor('s1'),
@@ -197,58 +191,30 @@ void main() {
       expect(textOf(reply), 'Error: Bad state: boom');
     });
 
-    test('with no app connected, a call says the app is not running, and '
-        'the last catalogue is still listed', () async {
+    test('tools/list is the server\'s own catalogue, and a tool it does not '
+        'serve is answered at once, in words', () async {
       final mcp = await start();
-      final app = await connectApp();
-      await app.close();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-
       final token = mcp.credentials.callerKey.tokenFor('s1');
       final (_, listed) = await rpc(mcp, token, 'tools/list');
       final tools = (listed!['result']! as Map<String, Object?>)['tools'];
       expect([for (final t in tools! as List) (t as Map)['name']], ['echo']);
 
-      final (_, reply) = await rpc(mcp, token, 'tools/call', {'name': 'echo'});
-      expect(isError(reply), isTrue);
-      expect(textOf(reply), 'Error: $kMcpAppNotRunning');
+      final watch = Stopwatch()..start();
+      final (_, reply) = await rpc(mcp, token, 'tools/call', {
+        'name': 'inbox_gone',
+      });
+      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+      // A protocol error, as the spec puts an unknown tool — no app waited on.
+      final error = reply!['error']! as Map<String, Object?>;
+      expect(error['message'], 'Unknown tool: inbox_gone');
     });
-
-    test(
-      'a daemon started before any app lists the cached catalogue',
-      () async {
-        await connectApp();
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        final fresh = McpToolRelay(cachePath: paths.mcpToolsPath);
-        expect([for (final t in fresh.catalogue()) t['name']], ['echo']);
-      },
-    );
-
-    test(
-      'a call in flight when the app goes away fails, it does not hang',
-      () async {
-        final (client, host) = PipeEnd.pair();
-        unawaited(server.serveConnection(host));
-        final watch = await HostLifecycleWatch.over(client, clientId: 'app');
-        watch.offerMcpTools([_echo]);
-        final called = Completer<void>();
-        watch.mcpCalls.listen((_) => called.complete());
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-
-        final answer = relay.call('echo', const {}, 's1');
-        await called.future;
-        await watch.close();
-        await expectLater(answer, throwsA(isA<McpToolRelayFailure>()));
-      },
-    );
   });
 
   group('the bridge', () {
     test(
-      '/rpc over the owner-only socket is forwarded, and checks its token',
+      '/rpc over the owner-only socket is answered, and checks its token',
       () async {
         final mcp = await start();
-        await connectApp();
         final socket = mcp.socketPath!;
         final answer =
             jsonDecode(

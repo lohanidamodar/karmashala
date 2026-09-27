@@ -1,4 +1,3 @@
-import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/instructions.dart';
@@ -14,12 +13,8 @@ import 'package:karmashala_mcp/instructions.dart';
 /// has — to every session on the machine, until someone notices.
 void main() {
   final servedNames = <String>{
-    // What agents are served: the server's own tools, and the app's.
-    for (final schema in [
-      ...serverToolSchemas,
-      ...McpToolDispatcher.toolSchemas,
-    ])
-      schema['name']! as String,
+    // What agents are served: the server's tools, and nothing else.
+    for (final schema in [...serverToolSchemas]) schema['name']! as String,
   };
 
   /// Every tool name a body mentions.

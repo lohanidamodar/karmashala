@@ -288,14 +288,20 @@ class DaemonCompanion implements CompanionHandler {
   /// change the model or mode one runs under, with no app connected: each
   /// agent launched as the host's own session, reaching Karmashala's tools
   /// through [mcp]. Called once the MCP endpoint is up; until then those
-  /// calls say the app is not running.
-  void serveSessions({required SessionMcpAccessPoint mcp}) {
+  /// calls say the app is not running. [openAgent] starts each agent as one
+  /// of the server's terminals, so `terminal_list` shows it; null opens it in
+  /// the registry alone.
+  void serveSessions({
+    required SessionMcpAccessPoint mcp,
+    AgentTerminalOpener? openAgent,
+  }) {
     final facts = _facts;
     final launcher = HostedAgentLauncher(
       registry: registry,
       sessions: _sessions,
       onRowWritten: _announceSession,
       mcp: mcp,
+      openAgent: openAgent,
       now: () => _now().toUtc(),
       newId: _newId,
       environmentOf: _rows.environment,

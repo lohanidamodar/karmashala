@@ -51,6 +51,7 @@ import 'terminal_values.dart';
 import 'env_values.dart';
 import 'attention_values.dart';
 import 'usage_limit_values.dart';
+import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
 
 part 'changes/automations_changes.dart';
 part 'changes/checkpoints_changes.dart';
@@ -66,6 +67,7 @@ part 'changes/devices_changes.dart';
 part 'changes/terminals_changes.dart';
 part 'changes/env_changes.dart';
 part 'changes/attention_changes.dart';
+part 'changes/intents_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -605,7 +607,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _devicesChangeFromJson(name, json) ??
     _terminalsChangeFromJson(name, json) ??
     _envChangeFromJson(name, json) ??
-    _attentionChangeFromJson(name, json);
+    _attentionChangeFromJson(name, json) ??
+    _intentsChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

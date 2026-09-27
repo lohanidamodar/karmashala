@@ -179,6 +179,7 @@ TerminalInstance _serverPane(
   );
   final terminals = ref.read(terminalsClientProvider);
   final offered = ref.read(terminalServerProfilesProvider);
+  final rowId = agentLaunch?.sessionId;
   return HostTerminalInstance(
     id: id,
     title: title,
@@ -197,6 +198,19 @@ TerminalInstance _serverPane(
     closer: () => terminals.close(sessionId),
     opener: attachOnly
         ? null
+        // An agent pane is its session's: the server starts or resumes it
+        // (its row, its mode, its tools — slice 5b) and the pane attaches.
+        : rowId != null
+        ? (columns, rows) async {
+            final started = await ref
+                .read(sessionsClientProvider)
+                .resume(rowId, columns: columns, rows: rows);
+            return (
+              sessionId: started.hostSessionId,
+              adopted: started.adopted,
+              shellIntegration: false,
+            );
+          }
         : (columns, rows) async {
             final opened = await terminals.open(
               TerminalOpen(

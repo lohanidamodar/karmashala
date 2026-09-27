@@ -94,7 +94,6 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
       'get_usage',
       'open_new_session',
       'open_session',
-      'open_sessions_in_tmux',
     ],
     body: '''
 **A successful `session_send` means the text was delivered, and nothing else.**

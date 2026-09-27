@@ -99,6 +99,9 @@ Harness harness({
 }) {
   final db = TestMachine();
   final data = server.runsOn(db);
+  // The server starts every agent (slice 5b): one that will not start is its
+  // refusal, with the row it wrote marked failed.
+  server.sessionWork.failsFor = paneFailsFor;
 
   final runner = FakeCommandRunner(
     responder:

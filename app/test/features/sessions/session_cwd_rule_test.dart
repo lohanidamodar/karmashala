@@ -10,10 +10,9 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
-import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/resume.dart' show resumeDirectoryCaveatFor;
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -354,23 +353,6 @@ void main() {
   });
 
   group('the paths that move a session', () {
-    // Two agents, identical but for the one field: whether anybody has checked
-    // that its resume survives a change of directory.
-    const uncheckedAgent = AgentDescriptor(
-      id: 'roverCli',
-      displayName: 'Rover CLI',
-      binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
-      launch: AgentLaunchSpec(
-        permission: testPermissionSupport,
-        resume: AgentResume.flag('--resume'),
-        interactiveResume: AgentResume.flag('--resume'),
-        fork: AgentForkSupport.native(
-          resume: AgentResume.flag('--resume'),
-          extraArguments: ['--fork-session'],
-          evidence: 'a test that says so',
-        ),
-      ),
-    );
     const checkedAgent = AgentDescriptor(
       id: 'roverCli',
       displayName: 'Rover CLI',
@@ -459,128 +441,6 @@ void main() {
         ),
       );
     }
-
-    test('archived worktree → the resume still happens, and says the '
-        'conversation may not come with it', () async {
-      final h = await harness(
-        agent: uncheckedAgent,
-        missingDirectories: {worktreePath},
-      );
-      addTearDown(h.container.dispose);
-      insertArchivedWorktreeSession(h.db);
-
-      final result = await h.container
-          .read(sessionLauncherProvider)
-          .launch(
-            SessionLaunchRequest(
-              repository: repository(),
-              installation: agentInstallation(agentId: 'roverCli'),
-              title: 'resume',
-              purpose: SessionPurpose.existingSession,
-              resumeExternalSessionId: 'conv-1',
-            ),
-          );
-      // Both halves of the substitution in one line: the directory that went
-      // away, and what that may cost the conversation. A refusal was the other
-      // candidate and is the wrong answer — an archived worktree would then
-      // mean the session could never be opened again.
-      expect(result.workingDirectoryNotice, contains(worktreePath));
-      expect(result.workingDirectoryNotice, contains(r'C:\src\demo\app'));
-      expect(
-        result.workingDirectoryNotice,
-        contains('may open a new conversation'),
-      );
-      expect(result.workingDirectoryNotice, contains('conv-1'));
-    });
-
-    test('the same resume says only what the fallback says, for an agent that '
-        'was checked', () async {
-      final h = await harness(
-        agent: checkedAgent,
-        missingDirectories: {worktreePath},
-      );
-      addTearDown(h.container.dispose);
-      insertArchivedWorktreeSession(h.db);
-
-      final result = await h.container
-          .read(sessionLauncherProvider)
-          .launch(
-            SessionLaunchRequest(
-              repository: repository(),
-              installation: agentInstallation(agentId: 'roverCli'),
-              title: 'resume',
-              purpose: SessionPurpose.existingSession,
-              resumeExternalSessionId: 'conv-1',
-            ),
-          );
-      // The honest half that already existed, and nothing invented on top of
-      // it: this agent was checked, so there is no caveat to add.
-      expect(result.workingDirectoryNotice, contains(worktreePath));
-      expect(
-        result.workingDirectoryNotice,
-        isNot(contains('may open a new conversation')),
-      );
-    });
-
-    test(
-      'fork into a new worktree says so for an agent nobody has checked',
-      () async {
-        final h = await harness(agent: uncheckedAgent);
-        addTearDown(h.container.dispose);
-        insertArchivedWorktreeSession(h.db);
-
-        final result = await h.container
-            .read(sessionLauncherProvider)
-            .launch(
-              SessionLaunchRequest(
-                repository: repository(),
-                installation: agentInstallation(agentId: 'roverCli'),
-                title: 'fork',
-                purpose: SessionPurpose.newSession,
-                forkExternalSessionId: 'conv-1',
-                useWorktree: true,
-              ),
-            );
-        // Nothing "went away" here — the app chose a new directory — so there is
-        // no fallback notice, and the caveat is the whole message.
-        expect(result.session.worktree, isNotNull);
-        expect(
-          result.workingDirectoryNotice,
-          contains('may open a new conversation'),
-        );
-        expect(result.workingDirectoryNotice, contains(worktreePath));
-      },
-    );
-
-    test(
-      'fork into a new worktree says nothing for an agent that was checked',
-      () async {
-        final h = await harness(agent: checkedAgent);
-        addTearDown(h.container.dispose);
-        insertArchivedWorktreeSession(h.db);
-
-        final result = await h.container
-            .read(sessionLauncherProvider)
-            .launch(
-              SessionLaunchRequest(
-                repository: repository(),
-                installation: agentInstallation(agentId: 'roverCli'),
-                title: 'fork',
-                purpose: SessionPurpose.newSession,
-                forkExternalSessionId: 'conv-1',
-                useWorktree: true,
-              ),
-            );
-        expect(result.session.worktree, isNotNull);
-        expect(result.workingDirectoryNotice, isNull);
-        // A fork is a create: the source conversation is left where it is, and
-        // the row that named it is untouched.
-        expect(
-          h.db.server.sessionRows.getById('src-1')!.worktree!.path,
-          worktreePath,
-        );
-      },
-    );
 
     /// The third suspect, cleared. `select_checkout` was listed alongside
     /// archiving and handoff as a way an agent could move a session's checkout;

@@ -3,16 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
-import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import '../fanout/fanout_harness.dart' as fanout;
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 
@@ -279,94 +276,6 @@ void main() {
           isEmpty,
         );
       }
-    });
-  });
-
-  group('the real fan-out, measured rather than asserted', () {
-    test('N candidates get N worktrees of the primary and no link to any '
-        'other repository', () async {
-      // The `fanout` harness is a real `SessionLauncher` over fake terminals
-      // and a fake git, so worktree creation and the session rows are the
-      // production code path. A second repository is added to the project it
-      // builds — the multi-repo shape this whole file is about.
-      final h = await fanout.connectedHarness();
-      addTearDown(h.container.dispose);
-      h.server.repositoryRows.insert(
-        repository(id: 'r-api', name: 'api', path: r'C:\src\demo\api'),
-      );
-
-      final launched = await h.container
-          .read(fanOutServiceProvider)
-          .launch(
-            repository: repository(),
-            installations: [
-              fanout.roverInstall,
-              fanout.flakyInstall,
-              fanout.secondRoverInstall,
-            ],
-            prompt: 'compare these',
-          );
-      expect(launched.started, hasLength(3));
-
-      // Launches await their row, so the server holds each by now.
-      final linkDao = h.server.sessionLinks;
-      final worktrees = <String>{};
-      for (final result in launched.started) {
-        final id = result.session.id;
-        // Its own worktree of the primary…
-        expect(result.session.worktree, isNotNull);
-        worktrees.add(result.session.worktree!.path);
-        // …and no link to anything else. Fan-out passes no
-        // `additionalRepositories`, so a candidate does not even carry the
-        // project's other checkouts — it can still reach them through
-        // `list_checkouts` and its own shell, which is why that tool now names
-        // who is standing in each.
-        expect(linkDao.linksFor(id).map((l) => l.repositoryId), ['r1']);
-        expect(linkDao.linksFor(id).single.isPrimary, isTrue);
-      }
-      expect(worktrees, hasLength(3), reason: 'three distinct worktrees');
-
-      // And the secondary checkout nobody worktreed is recorded as holding
-      // nobody, which is the honest answer and not a promise it is free.
-      expect(
-        sessionsWorkingIn(
-          const EnvironmentPath(
-            environmentId: 'windows',
-            path: r'C:\src\demo\api',
-          ),
-          excluding: '',
-          among: h.server.sessionRows.getAll(),
-          pathsMatch: samePath,
-        ),
-        isEmpty,
-      );
-    });
-
-    test('each candidate is stamped with a port base of its own', () async {
-      // The other half of parallel isolation, and the one a worktree cannot
-      // give: two candidates running the same repository script must not both
-      // bind the same port. Derived, so it survives a restart — and a
-      // namespace rather than a lock, so this asserts distinctness for the
-      // ids actually minted and claims nothing stronger.
-      final h = await fanout.connectedHarness();
-      addTearDown(h.container.dispose);
-
-      final launched = await h.container
-          .read(fanOutServiceProvider)
-          .launch(
-            repository: repository(),
-            installations: [
-              fanout.roverInstall,
-              fanout.flakyInstall,
-              fanout.secondRoverInstall,
-            ],
-            prompt: 'compare these',
-          );
-      final bases = {
-        for (final result in launched.started)
-          sessionPortBase(result.session.id),
-      };
-      expect(bases, hasLength(3));
     });
   });
 

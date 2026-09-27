@@ -32,7 +32,6 @@ void main() {
   late DaemonPromptAnswers prompts;
   late ServerToolContext context;
   late Completer<void> deadline;
-  late bool appConnected;
   late SessionToolSet tools;
 
   void insertSession(String id, {String title = 'Fix the cart'}) =>
@@ -85,12 +84,10 @@ void main() {
       clock: () => t0,
     );
     deadline = Completer<void>();
-    appConnected = false;
     tools = SessionToolSet(
       context,
       prompts: prompts,
       registry: registry,
-      appConnected: () => appConnected,
       waits: HostedSessionWait(
         status: status,
         deadline: (_) => deadline.future,
@@ -232,11 +229,41 @@ void main() {
       );
     });
 
-    test('a session the host does not run is the app\'s to send to', () {
-      expect(
+    test('a session nothing runs is refused in words when it cannot be '
+        'resumed, and nothing is handed to an app', () async {
+      await expectLater(
         tools.call('session_send', {'sessionId': 's1', 'text': 'hi'}, null),
-        isNull,
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('open_session resumes it'),
+          ),
+        ),
       );
+    });
+
+    test('a session nothing runs is resumed with the message as its opening '
+        'prompt, under the sender\'s name', () async {
+      final resumed = <(String, String)>[];
+      final resuming = SessionToolSet(
+        context,
+        prompts: prompts,
+        registry: registry,
+        resumeWith: (sessionId, prompt) async =>
+            resumed.add((sessionId, prompt)),
+      );
+      final answer =
+          await resuming.call('session_send', {
+                'sessionId': 's1',
+                'text': 'carry on',
+              }, 'caller')!
+              as Map<String, Object?>;
+      expect(answer['delivered'], isTrue);
+      expect(answer['resumed'], isTrue);
+      expect(resumed.single.$1, 's1');
+      expect(resumed.single.$2, contains('carry on'));
+      expect(resumed.single.$2, contains('Orchestrator'));
     });
 
     test('a caller outside a session must name one', () async {
@@ -300,11 +327,6 @@ void main() {
         expect(answer['exitCode'], isNull);
       },
     );
-
-    test('with the app open, a session nothing here runs is the app\'s', () {
-      appConnected = true;
-      expect(tools.call('session_wait', {'sessionId': 's1'}, null), isNull);
-    });
   });
 
   group('session_transcript', () {
@@ -335,15 +357,6 @@ void main() {
       expect(answer['screen'], isNull);
       expect(answer['turnsSource'], startsWith('not recorded'));
     });
-
-    test('with the app open, a live row the host does not run is the app\'s '
-        '(its pane is the only screen)', () {
-      appConnected = true;
-      expect(
-        tools.call('session_transcript', {'sessionId': 's1'}, null),
-        isNull,
-      );
-    });
   });
 
   group('session_end', () {
@@ -367,12 +380,6 @@ void main() {
         ),
       );
     });
-
-    test('with the app open, a session the host does not run is the app\'s '
-        '(its pane)', () {
-      appConnected = true;
-      expect(tools.call('session_end', {'sessionId': 's1'}, null), isNull);
-    });
   });
 
   group('session_rename', () {
@@ -387,13 +394,24 @@ void main() {
       expect(row.titleByUser, isTrue);
     });
 
-    test('with the app open, it also renames the agent\'s own store: the '
-        'app\'s', () {
-      appConnected = true;
-      expect(
-        tools.call('session_rename', {'sessionId': 's1', 'title': 'x'}, null),
-        isNull,
-      );
+    test('every tool here answers itself: none is ever handed on', () {
+      for (final tool in [
+        'session_send',
+        'session_answer',
+        'session_wait',
+        'session_transcript',
+        'session_rename',
+        'session_end',
+      ]) {
+        final answer = tools.call(tool, {
+          'sessionId': 's1',
+          'text': 'x',
+          'title': 'x',
+          'decision': 'approve',
+        }, null);
+        expect(answer, isNotNull, reason: tool);
+        unawaited(answer!.then((_) {}, onError: (_) {}));
+      }
     });
   });
 }

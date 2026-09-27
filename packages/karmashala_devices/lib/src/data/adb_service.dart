@@ -958,6 +958,26 @@ class AdbService {
     }
   }
 
+  /// Starts `screenrecord` writing the display to [devicePath] on the device.
+  /// It ends on its own at its time limit (180 s by default), or when
+  /// [stopScreenRecord] interrupts it — the interrupt, never a kill, or the
+  /// MP4 is left without its index.
+  Future<ProcessHandle> startScreenRecord(String serial, String devicePath) =>
+      runner.start(_forDevice(serial, ['shell', 'screenrecord', devicePath]));
+
+  /// Interrupts every `screenrecord` on [serial], so each writes its file's
+  /// index and exits. Killing the local `adb shell` would leave the device's
+  /// process running and the file unplayable.
+  Future<void> stopScreenRecord(String serial) async {
+    try {
+      await runner.run(
+        _forDevice(serial, ['shell', 'pkill', '-INT', 'screenrecord']),
+      );
+    } on CommandException {
+      // Nothing left to interrupt: it already ended on its own.
+    }
+  }
+
   /// Copies a file off the device. No progress is reported: adb draws its bar
   /// only when stdout is a terminal, and here it is a pipe.
   Future<DeviceFileTransfer> pullFile(

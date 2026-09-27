@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show LocalHostSessionAccess;
 import 'package:karmashala_terminal_runtime/instances.dart'
@@ -12,7 +11,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../agents/application/agent_hook_intake.dart';
 import '../../../agents/application/agent_hook_sweep.dart';
-import '../../../mcp/mcp_tool_dispatcher.dart';
 import '../../../remote/application/host_companion_providers.dart';
 import '../../../terminal/application/local_host_providers.dart';
 import '../../../terminal/application/local_host_startup.dart';
@@ -81,8 +79,6 @@ hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
       unawaited(sweepHostHooks(ref.container, logger: hookLog));
     },
     onLost: () => supervisor?.hostLost('the lifecycle link to it closed'),
-    // The host serves agents' MCP; this app runs the tools it forwards.
-    mcpTools: ref.read(mcpToolDispatcherProvider),
     // The host serves the phone companion; this app answers what only it can.
     companion: ref.read(hostCompanionLinkProvider),
   );
@@ -131,16 +127,6 @@ final sessionRunningOnHostProvider = Provider<bool Function(String)>(
           ref.read(hostLifecycleSubscriberProvider)?.isRunning(sessionId) ??
           false,
 );
-
-/// Ends the session this machine's host runs for a row, when no pane of ours
-/// holds it; null where no host may be reached. The host records the ending;
-/// nothing here writes the row.
-final hostedSessionEnderProvider =
-    Provider<Future<void> Function(String sessionId)?>((ref) {
-      final access = ref.watch(localHostSessionAccessProvider);
-      if (access == null) return null;
-      return (sessionId) => access.endSession(hostSessionIdOf(sessionId));
-    });
 
 bool _isLocalHostPane(Ref ref, String paneId) {
   if (!ref.exists(terminalSessionsControllerProvider)) return false;

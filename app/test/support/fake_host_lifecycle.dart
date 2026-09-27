@@ -63,17 +63,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
   /// What each open said the app runs itself.
   final runByClient = <List<String>>[];
 
-  /// Each link's tool calls, pushed by the test as the daemon forwarding them.
-  final mcpCallLinks = <StreamController<HostMcpCall>>[];
-
-  /// The catalogues the app offered, one per link.
-  final offeredTools = <List<Map<String, Object?>>>[];
-
-  /// How the app answered each forwarded call.
-  final mcpAnswers = <({int callId, Object? result, String? error})>[];
-
-  StreamController<HostMcpCall> get mcpCallLink => mcpCallLinks.last;
-
   /// Each link's companion events, pushed by the test as the daemon.
   final companionEventLinks = <StreamController<CompanionEventMessage>>[];
 
@@ -111,8 +100,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
     if (!listening) return null;
     final link = StreamController<SessionLifecycleEvent>();
     final hooks = StreamController<RelayedAgentHook>();
-    final calls = StreamController<HostMcpCall>();
-    mcpCallLinks.add(calls);
     final companionEvents = StreamController<CompanionEventMessage>();
     companionEventLinks.add(companionEvents);
     final statuses = StreamController<HostAgentStatusChange>();
@@ -135,10 +122,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
       }),
       hookSnapshot: List.of(hookSnapshot),
       hooks: hooks.stream,
-      mcpCalls: calls.stream,
-      offerMcpTools: offeredTools.add,
-      answerMcpCall: (callId, {result, error}) =>
-          mcpAnswers.add((callId: callId, result: result, error: error)),
       companionEvents: companionEvents.stream,
       attachCompanion: ({localRelayUrl}) =>
           companionAttaches.add(localRelayUrl),
@@ -169,8 +152,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
             return answer(pairings.length);
           },
       close: () async {
-        // Not awaited: a link whose app offers no tools never listens.
-        if (!calls.isClosed) unawaited(calls.close());
         if (!companionEvents.isClosed) unawaited(companionEvents.close());
         if (!statuses.isClosed) unawaited(statuses.close());
         if (!link.isClosed) await link.close();

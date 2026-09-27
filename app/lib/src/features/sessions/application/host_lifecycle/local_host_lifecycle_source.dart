@@ -29,16 +29,6 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       close: watch.close,
       hookSnapshot: [for (final hook in watch.hookSnapshot) _hookOf(hook)],
       hooks: watch.hooks.map(_hookOf),
-      mcpCalls: watch.mcpCalls.map(
-        (call) => (
-          callId: call.callId,
-          tool: call.tool,
-          arguments: call.arguments.cast<String, dynamic>(),
-          callerSessionId: call.callerSessionId,
-        ),
-      ),
-      offerMcpTools: watch.offerMcpTools,
-      answerMcpCall: watch.answerMcpCall,
       companionEvents: watch.companionEvents,
       attachCompanion: watch.attachCompanion,
       serverCall: watch.serverCall,

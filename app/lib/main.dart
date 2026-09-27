@@ -31,7 +31,6 @@ import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/devices/application/device_bindings.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'src/features/environments/data/environments_data.dart';
-import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/terminal/application/local_host_providers.dart';
 import 'src/features/terminal/application/terminal_layout_providers.dart';
@@ -190,10 +189,6 @@ Future<void> _bootstrap(AppLogger logger) async {
   // the interval is long enough that bootstrap is over before it first fires.
   lifecycle.startMemoryCensus();
 
-  // Retained here so the hook sweep below can be started *after* `runApp` —
-  // see the sweep's own comment for why that ordering is the point.
-  LauncherControlServer? controlServer;
-
   // Desktop OS integration: window/tray/keep-awake/launch-at-login.
   if (SystemIntegrationService.isSupported) {
     try {
@@ -217,10 +212,6 @@ Future<void> _bootstrap(AppLogger logger) async {
       logger.warning('Window manager init failed.', error, stack);
     }
     await lifecycle.startSystemIntegration();
-
-    // Local control server for the launcher agent's MCP bridge (best-effort).
-    // The lifecycle owner keeps it: its `stop()` removes the handshake.
-    controlServer = await lifecycle.startControlServer();
   }
 
   runApp(
@@ -244,15 +235,14 @@ Future<void> _bootstrap(AppLogger logger) async {
     onTimeout: () {},
   );
 
-  if (controlServer != null || lifecycle.agentToolsAtHost) {
-    lifecycle.installAgentHooks(
-      controlServer,
-      afterFirstFrame: afterFirstFrame,
-    );
+  // Pointed at the server's hook endpoint: agents' tools and hooks are the
+  // server's (slice 5b), and this app serves neither.
+  if (SystemIntegrationService.isSupported) {
+    lifecycle.installAgentHooks(afterFirstFrame: afterFirstFrame);
   }
 
-  // The skills, beside the hooks because it is the same act. Not behind
-  // `controlServer`: a skill needs no address, and its bytes are constant.
+  // The skills, beside the hooks because it is the same act: a skill needs no
+  // address, and its bytes are constant.
   lifecycle.installAgentSkills(afterFirstFrame: afterFirstFrame);
 
   // The CLI stores, **once**, behind the same gate. The project row's "Refresh

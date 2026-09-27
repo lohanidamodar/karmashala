@@ -91,6 +91,11 @@ class DeviceRecorder {
   StreamSubscription<DeviceScreenSize>? _sizes;
   ProcessHandle? _process;
 
+  /// A device-side `screenrecord` running: the adb it runs through, the
+  /// device, the file it writes there, and its `adb shell` process.
+  ({AdbService adb, String serial, String devicePath, ProcessHandle process})?
+  _screenRecord;
+
   /// Events off the transport stream. The first is the container tables, so
   /// anything after it is how "nothing recorded" is told from "a header".
   int _chunks = 0;
@@ -236,8 +241,104 @@ class DeviceRecorder {
     );
   }
 
+  /// Records an Android device with its own `screenrecord`, on the device —
+  /// no live view needed, which is how a server with no pane open records one
+  /// (slice 5b). The file is written on the device, pulled here on [stop] and
+  /// removed there. `screenrecord` stops by itself at its time limit (180 s):
+  /// that is told as a recording that ended early, with what it captured.
+  Future<void> startScreenRecord(AndroidTarget target, AdbService adb) async {
+    if (_current is DeviceRecordingActive) return;
+    final startedAt = clock.nowUtc();
+    final String path;
+    final String devicePath;
+    final ProcessHandle process;
+    try {
+      path = deviceRecordingPath(
+        target: target,
+        directory: await recordingDirectory(),
+        startedAt: startedAt,
+        extension: DeviceRecordingContainer.mp4.extension,
+      );
+      devicePath =
+          '${adb.deviceTempDirectory}/karmashala-${recordingStamp(startedAt)}.mp4';
+      process = await adb.startScreenRecord(target.id, devicePath);
+    } on Object catch (error, stack) {
+      _log.warning('A recording of ${target.id} would not start', error, stack);
+      _set(
+        DeviceRecordingIdle(
+          DeviceRecordingOutcome.failed(target: target, reason: '$error'),
+        ),
+      );
+      return;
+    }
+    // Drained: an unread pipe blocks the process.
+    process.stdoutLines.listen((_) {}, onError: (_) {});
+    process.stderrLines.listen((_) {}, onError: (_) {});
+    _screenRecord = (
+      adb: adb,
+      serial: target.id,
+      devicePath: devicePath,
+      process: process,
+    );
+    _chunks = 0;
+    _gaps = 0;
+    _geometryChanges = 0;
+    _finishing = false;
+    _set(
+      DeviceRecordingActive(target: target, path: path, startedAt: startedAt),
+    );
+    unawaited(
+      process.exitCode
+          .then(
+            (code) => _finish(
+              endedEarly:
+                  'screenrecord stopped on its own (exit $code) — it records '
+                  'at most 180 seconds, and stops when the device sleeps or '
+                  'disconnects',
+            ),
+          )
+          .catchError((Object _) {}),
+    );
+  }
+
   /// Ends the recording and writes its outcome. Idempotent.
   Future<void> stop() => _finish();
+
+  /// Stops a device-side `screenrecord` (unless it [ended] already), copies
+  /// its file to [hostPath] and removes it from the device. Returns the error
+  /// that stopped the copy, or null.
+  Future<Object?> _collectScreenRecord(
+    ({AdbService adb, String serial, String devicePath, ProcessHandle process})
+    running,
+    String hostPath, {
+    required bool ended,
+  }) async {
+    if (!ended) {
+      await running.adb.stopScreenRecord(running.serial);
+      // The device writes the MP4's index as it exits; the pull must wait.
+      try {
+        await running.process.exitCode.timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        await running.process.kill();
+      }
+    }
+    Object? failure;
+    try {
+      await running.adb.pullFile(
+        running.serial,
+        devicePath: running.devicePath,
+        hostPath: hostPath,
+      );
+    } on Object catch (error) {
+      failure = error;
+    }
+    try {
+      await running.adb.removePath(running.serial, running.devicePath);
+    } on Object {
+      // Left in the device's temp folder; nothing of the recording depends on it.
+    }
+    return failure;
+  }
 
   /// Clears the last outcome once the user has read it — never on a timer:
   /// the message names a file on disk the user may come back for.
@@ -333,6 +434,15 @@ class DeviceRecorder {
 
     var bytes = 0;
     Object? closeError = writeFailure;
+    final screenRecord = _screenRecord;
+    _screenRecord = null;
+    if (screenRecord != null) {
+      closeError ??= await _collectScreenRecord(
+        screenRecord,
+        active.path,
+        ended: endedEarly != null,
+      );
+    }
     if (sink != null) {
       try {
         bytes = await sink.close();
@@ -350,9 +460,7 @@ class DeviceRecorder {
     }
     if (bytes == 0) bytes = await _sizeOf(active.path);
 
-    final length = clock
-        .nowUtc()
-        .difference(active.startedAt);
+    final length = clock.nowUtc().difference(active.startedAt);
     // A transport stream whose only event was the container tables holds no
     // picture, however many bytes. An MP4 counts access units, so one is real.
     final noPicture =
@@ -439,6 +547,11 @@ class DeviceRecorder {
     unawaited(video?.cancel());
     unawaited(sizes?.cancel());
     await process?.interrupt();
+    final screenRecord = _screenRecord;
+    _screenRecord = null;
+    if (screenRecord != null) {
+      await screenRecord.adb.stopScreenRecord(screenRecord.serial);
+    }
     try {
       await sink?.close();
       await mp4?.close();

@@ -30,6 +30,7 @@ import 'snippets_handler.dart';
 import 'ssh_work.dart';
 import 'data_streams.dart';
 import 'runs_work.dart';
+import 'session_work.dart';
 import 'sessions_handler.dart';
 import 'terminal_work.dart';
 import 'todos_handler.dart';
@@ -128,6 +129,11 @@ class DataService {
   /// A session's project checks run for a client (`checks.run`, slice 5c),
   /// set by `serve` once automations run; else refused `unavailable`.
   ChecksWork? checksWork;
+
+  /// The server's one launch path (slice 5b: a start, a resume, a handoff, a
+  /// fork, an end), set by `serve`; without it that work is refused
+  /// `unavailable`.
+  SessionWork? sessionWork;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -184,6 +190,36 @@ class DataService {
   /// How many clients are subscribed now — the windows a cue to show
   /// something (`inbox.open`) reaches.
   int get subscriberCount => _links.where((link) => link._subscribed).length;
+
+  /// Numbers each subscription and each [ClientActive], so "the client a
+  /// person last used" is an order, not a clock.
+  var _lastSignOfLife = 0;
+
+  /// The desktop client a window's intent goes to: the one whose last sign of
+  /// life — subscribing, or a person acting in it ([ClientActive]) — is the
+  /// newest. A link that died without closing is passed over as soon as
+  /// another client connects. Null with no desktop client connected.
+  DataSession? get intentTarget {
+    DataSession? best;
+    for (final link in _links) {
+      if (!link._subscribed) continue;
+      if (best == null || link._signOfLife > best._signOfLife) best = link;
+    }
+    return best;
+  }
+
+  /// Tells [intent] to [intentTarget] alone. False when no desktop client is
+  /// connected — the caller says so in words, never waits for one.
+  bool tellIntent(ClientIntent intent) {
+    final target = intentTarget;
+    if (target == null) return false;
+    target.tell([intent]);
+    return true;
+  }
+
+  /// The pane in front of a person in [intentTarget]'s window, as it last
+  /// said; null when it never said, or no desktop client is connected.
+  String? get focusedPaneId => intentTarget?._focusedPaneId;
 
   /// One client link. [deliver] gets the changes other links make once the
   /// client has sent [DataSubscribe].
@@ -385,6 +421,7 @@ class DataService {
         FilesWorkRequest() ||
         TerminalWorkRequest() ||
         ChecksWorkRequest() ||
+        SessionWorkRequest() ||
         EnvVaultRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
@@ -394,6 +431,9 @@ class DataService {
                     'this server keeps no session status',
                   )))
               .handle(r, origin),
+        final ClientActive r =>
+          origin?._active(r.focusedPaneId) ??
+              (throw const DataRefused.invalid('the server has no window')),
         final AutomationsRequest r => _automations.handle(r, changes),
         final CheckpointsRequest r => _evidence.handleCheckpoints(r, changes),
         // Runs git, so answered when done: `DataSession.handleLater`.
@@ -525,6 +565,14 @@ class DataSession implements FileWatchLink {
   final DataService _service;
   final void Function(DataChanges changes) _deliver;
   var _subscribed = false;
+  var _signOfLife = 0;
+  String? _focusedPaneId;
+
+  DataAck _active(String? focusedPaneId) {
+    _signOfLife = ++_service._lastSignOfLife;
+    _focusedPaneId = focusedPaneId;
+    return const DataAck();
+  }
 
   /// Answers [request] now, or throws [DataRefused]. A request that reads
   /// the disk ([isAnsweredLater]) is refused here: [handleLater] it.
@@ -545,6 +593,7 @@ class DataSession implements FileWatchLink {
       request is FilesWorkRequest ||
       request is TerminalWorkRequest ||
       request is ChecksWorkRequest ||
+      request is SessionWorkRequest ||
       request is EnvVaultRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
@@ -609,6 +658,15 @@ class DataSession implements FileWatchLink {
           _service.terminalWork ??
           (throw const DataRefused.unavailable(
             'this server runs no terminals',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final SessionWorkRequest<Object?> asked) {
+      final work =
+          _service.sessionWork ??
+          (throw const DataRefused.unavailable(
+            'this server starts no sessions',
           ));
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
@@ -691,6 +749,7 @@ class DataSession implements FileWatchLink {
 
   DataAck _subscribe() {
     _subscribed = true;
+    _signOfLife = ++_service._lastSignOfLife;
     // What is already under way — a connection's state, a question still
     // open — told to this client alone, at the revision it is joining at.
     final greeting = [

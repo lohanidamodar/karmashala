@@ -1,9 +1,10 @@
 import '../mcp/tools/server_tool_set.dart';
 
 /// `checks_run`: a session's project checks, run by the server — in sessions
-/// it owns when the checkout is on this machine, and as commands over its own
-/// connection when it is on an SSH box (slice 3a). A checkout only the app's
-/// panes reach (WSL) is handed to the app, which runs them there.
+/// it owns when the checkout is on this machine (a WSL distribution too, on a
+/// Windows server), and as commands over its own connection when it is on an
+/// SSH box (slice 3a). Anything else is refused in words (slice 5b: nothing
+/// is handed to an app).
 class ChecksToolSet extends ServerToolSet {
   const ChecksToolSet(this._run);
 
@@ -32,7 +33,15 @@ class ChecksToolSet extends ServerToolSet {
         ),
       );
     }
-    return _run(tool, arguments, callerSessionId);
+    return _run(tool, arguments, callerSessionId) ??
+        Future.error(
+          StateError(
+            'NOTHING WAS CHECKED: session $sessionId is not one this server '
+            'knows, or its checkout is somewhere it cannot run commands — not '
+            'this machine, a WSL distribution of a Windows server, or an SSH '
+            'box it reaches.',
+          ),
+        );
   }
 }
 

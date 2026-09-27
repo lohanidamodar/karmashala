@@ -1,4 +1,3 @@
-import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala_host/mcp_tools.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -78,9 +77,6 @@ void main() {
   });
 }
 
-/// What agents are served: the server's own tools, then the app's — the
-/// order the server's relay composes them in.
-final List<Map<String, dynamic>> _served = [
-  ...serverToolSchemas,
-  ...McpToolDispatcher.toolSchemas,
-];
+/// What agents are served: the server's tools, and nothing else — no tool
+/// is forwarded to an app since slice 5b (protocol 28).
+final List<Map<String, dynamic>> _served = [...serverToolSchemas];

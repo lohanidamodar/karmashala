@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
+import 'package:karmashala_host/mcp_tools.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
@@ -29,8 +29,7 @@ void main() {
     // could would let an agent schedule an agent — the line
     // `no_automation_tools_test.dart` holds for automations.
     final names = [
-      for (final schema in McpToolDispatcher.toolSchemas)
-        schema['name']! as String,
+      for (final schema in serverToolSchemas) schema['name']! as String,
     ];
     expect(
       names.where(

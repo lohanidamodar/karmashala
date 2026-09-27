@@ -23,7 +23,8 @@ import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/sessions/application/quit_resume_launch.dart';
 import '../../features/sessions/presentation/quit_sessions_dialog.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
-import '../../features/flutter_apps/application/hosted_run_panes.dart';
+import '../../features/terminal/application/client_intents.dart';
+import '../../features/terminal/application/client_presence.dart';
 import '../../features/notes/application/note_tabs.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -152,8 +153,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(hostLifecycleSubscriberProvider);
     // And for a model picked mid-turn, which is sent when the turn ends.
     ref.watch(pendingLiveSwitchesProvider);
-    // Same reason: a run the server hosts opens a pane here.
-    ref.watch(hostedRunPanesProvider);
+    // Same reason: what the server asks this window to show, and the
+    // presence that makes it this window it asks.
+    ref.watch(clientIntentsProvider);
+    ref.watch(clientPresenceProvider);
     // And for scheduled resumes.
     ref.watch(scheduledResumeObserverProvider);
     // And for a resume the server ended, which is announced here.

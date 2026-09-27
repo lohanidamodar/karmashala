@@ -1,20 +1,37 @@
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart' show PathProbe;
+import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
+import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
-/// `open_new_session` with no app open: started by the server in its own
-/// environment, recorded as the caller's child, under the same caps the app
-/// applied — and the app's own when it is open.
+/// Every executable path answers present: the launch's own stat is not what
+/// these tests are about.
+final class _Everywhere implements PathProbe {
+  const _Everywhere();
+  @override
+  bool? fileExists(String path) => true;
+  @override
+  bool isLink(String path) => false;
+  @override
+  String? linkTarget(String path) => null;
+}
+
+/// `open_new_session` (slice 5b): always the server's, through the one launch
+/// path — recorded as the caller's child, under the caps the app applied —
+/// and shown in the window a person last used, or said plainly that none is.
 void main() {
   final t0 = DateTime.utc(2026, 9, 27, 12);
 
@@ -22,7 +39,6 @@ void main() {
   late SessionRegistry registry;
   late FakePtyLauncher pty;
   late ServerToolContext context;
-  late bool appConnected;
   late LaunchToolSet tools;
   var ids = 0;
 
@@ -64,7 +80,7 @@ void main() {
       dataDirectory: '/nowhere',
       clock: () => t0,
     );
-    appConnected = false;
+    final rows = CheckoutRows(database);
     final launcher = HostedAgentLauncher(
       registry: registry,
       sessions: SessionDao(database),
@@ -72,11 +88,20 @@ void main() {
       now: () => t0,
       newId: () => 'new-${++ids}',
       hostEnvironment: const {},
+      environmentOf: rows.environment,
     );
     tools = LaunchToolSet(
       context,
-      appConnected: () => appConnected,
-      launcher: () => launcher,
+      launches: ServerSessionLauncher(
+        launcher: launcher,
+        registry: registry,
+        sessions: SessionDao(database),
+        rows: rows,
+        facts: DaemonCheckoutFacts(rows, windows: Platform.isWindows),
+        installationsIn: context.data.installationsIn,
+        pathProbe: const _Everywhere(),
+        directoryPresent: (_) => true,
+      ),
     );
   });
 
@@ -106,9 +131,29 @@ void main() {
     return row;
   }
 
-  test('with the app open, the tool is the app\'s', () {
-    appConnected = true;
-    expect(tools.call('open_new_session', {'projectId': 'p1'}, null), isNull);
+  test('with no window open, the session still starts and the answer says '
+      'nothing was shown — at once, no waiting for a window', () async {
+    final answer =
+        (await tools
+                .call('open_new_session', {'projectId': 'p1'}, null)!
+                .timeout(const Duration(seconds: 5)))
+            as Map<String, Object?>;
+    expect(registry.find('karmashala_new-1'), isNotNull);
+    expect(answer['where'], contains('no Karmashala window is open'));
+  });
+
+  test('a window a person last used is asked to open a tab on it', () async {
+    final told = <DataChange>[];
+    final window = context.data.open((batch) => told.addAll(batch.changes));
+    window.handle(const DataSubscribe());
+    final answer =
+        (await tools.call('open_new_session', {'projectId': 'p1'}, null)!)
+            as Map<String, Object?>;
+    expect(answer['where'], contains('shown in a tab'));
+    final intent = told.whereType<OpenSessionTab>().single;
+    expect(intent.sessionId, 'new-1');
+    expect(intent.launch?.sessionId, 'new-1');
+    window.close();
   });
 
   test('starts the agent here as the caller\'s child, the prompt under the '
@@ -166,19 +211,19 @@ void main() {
     );
   });
 
-  test('a checkout only the app reaches is refused in words', () async {
+  test('a WSL checkout off Windows is refused in words', () async {
+    if (Platform.isWindows) return;
     await expectLater(
-      tools.call('open_new_session', {
-        'projectId': 'p2',
-      }, null),
+      tools.call('open_new_session', {'projectId': 'p2'}, null),
       throwsA(
         isA<StateError>().having(
           (e) => e.message,
           'message',
-          contains('only the Karmashala app starts agents there'),
+          contains('this server is not on Windows'),
         ),
       ),
     );
+    expect(pty.started, isEmpty);
   });
 
   test('a cli nobody installed here is refused', () async {

@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart' show SessionResume;
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 
 import '../../support/fake_data_server.dart';
@@ -519,20 +520,13 @@ void main() {
 
     expect(h.db.server.sessionRows.getById('s1')!.permissionMode, _bypass);
 
-    // A second process, on the same conversation, carrying the flags the first
-    // one could not be told about.
-    final terminals = ProviderScope.containerOf(
-      tester.element(find.byType(PermissionModeChip)),
-    ).read(terminalSessionsControllerProvider.notifier);
-    final restarted = h.db.server.sessionRows.getById('s1')!.paneId!;
-    expect(restarted, isNot(pane));
-    expect(terminals.instanceFor(pane), isNull);
-    final arguments = terminals.instanceFor(restarted)!.agentLaunch!.arguments;
-    expect(
-      arguments,
-      containsAllInOrder(['--permission-mode', 'bypassPermissions']),
-    );
-    expect(arguments, containsAllInOrder(['--resume', 'ext-1']));
+    // Asked of the server, which ends the agent and starts it again on the
+    // same conversation with the mode the row now holds (slice 5b).
+    final restart = h.db.server.sessionWork.asked
+        .whereType<SessionResume>()
+        .single;
+    expect((restart.sessionId, restart.restart), ('s1', true));
+    expect(h.db.server.sessionRows.getById('s1')!.paneId, pane);
   });
 
   testWidgets('a safe mode offers the restart instead of performing it', (
@@ -592,16 +586,13 @@ void main() {
     await tester.tap(find.text('Restart to apply'));
     await tester.pumpAndSettle();
 
-    final terminals = ProviderScope.containerOf(
-      tester.element(find.byType(PermissionModeChip)),
-    ).read(terminalSessionsControllerProvider.notifier);
-    final restarted = h.db.server.sessionRows.getById('s1')!.paneId!;
-    expect(restarted, isNot(pane));
-    expect(terminals.instanceFor(pane), isNull);
-    expect(
-      terminals.instanceFor(restarted)!.agentLaunch!.arguments,
-      containsAllInOrder(['--resume', 'ext-1']),
-    );
+    // The restart is the server's (slice 5b): it ends the agent and resumes
+    // the conversation in the same terminal, which the pane stays on.
+    final restart = h.db.server.sessionWork.asked
+        .whereType<SessionResume>()
+        .single;
+    expect((restart.sessionId, restart.restart), ('s1', true));
+    expect(h.db.server.sessionRows.getById('s1')!.paneId, pane);
   });
 
   testWidgets('with nothing running there is nothing to restart', (

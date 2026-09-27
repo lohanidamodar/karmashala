@@ -19,7 +19,6 @@ class HostLifecycleWatch {
   final _parser = FrameParser();
   final _events = StreamController<LifecycleEvent>();
   final _hooks = StreamController<AgentHookEvent>();
-  final _mcpCalls = StreamController<McpCallMessage>();
   final _companionEvents = StreamController<CompanionEventMessage>();
 
   final _agentStatuses = StreamController<AgentStatusMessage>();
@@ -69,22 +68,6 @@ class HostLifecycleWatch {
   /// Every hook after [hookSnapshot], buffered like [events]. None is held:
   /// the agent was answered by the time it arrives.
   Stream<AgentHookEvent> get hooks => _hooks.stream;
-
-  /// Each agent tool call the daemon forwards, once this client has offered
-  /// tools with [offerMcpTools]; answer each with [answerMcpCall].
-  Stream<McpCallMessage> get mcpCalls => _mcpCalls.stream;
-
-  /// Makes this client the one that runs agents' tools, with [tools] as the
-  /// catalogue the daemon serves — and keeps serving when this client is gone.
-  void offerMcpTools(List<Map<String, Object?>> tools) =>
-      _write(McpToolsMessage(tools));
-
-  /// How the call [callId] ended: [result], or the [error] text when it failed.
-  void answerMcpCall(int callId, {Object? result, String? error}) => _write(
-    error == null
-        ? McpResultMessage.success(callId, result)
-        : McpResultMessage.failure(callId, error),
-  );
 
   /// What the host's companion tells this client: a pairing window this
   /// client opened ended.
@@ -283,10 +266,6 @@ class HostLifecycleWatch {
       if (!_hooks.isClosed) _hooks.add(message.hook);
       return;
     }
-    if (message is McpCallMessage) {
-      if (!_mcpCalls.isClosed) _mcpCalls.add(message);
-      return;
-    }
     if (message is CompanionEventMessage) {
       if (!_companionEvents.isClosed) _companionEvents.add(message);
       return;
@@ -343,7 +322,6 @@ class HostLifecycleWatch {
     }
     if (!_events.isClosed) unawaited(_events.close());
     if (!_hooks.isClosed) unawaited(_hooks.close());
-    if (!_mcpCalls.isClosed) unawaited(_mcpCalls.close());
     if (!_companionEvents.isClosed) unawaited(_companionEvents.close());
 
     if (!_agentStatuses.isClosed) unawaited(_agentStatuses.close());

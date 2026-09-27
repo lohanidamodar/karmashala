@@ -5,6 +5,8 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionStart;
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -102,20 +104,15 @@ void main() {
           'flakyCli',
         ]);
 
-        // Two worktrees, each on the branch its session names.
-        final adds = h.git.requests
-            .where((r) => r.arguments.contains('add'))
+        // Each asked of the server with a worktree of its own (the server
+        // makes it, on the session's branch — slice 5b), and each has one.
+        final starts = h.server.sessionWork.asked
+            .whereType<SessionStart>()
             .toList();
-        expect(adds, hasLength(2));
+        expect(starts, hasLength(2));
+        expect(starts.every((s) => s.spec.worktree), isTrue);
         for (final result in launched.started) {
           expect(result.session.worktree, isNotNull);
-          expect(
-            adds.any(
-              (a) => a.arguments.contains(sessionBranchName(result.session.id)),
-            ),
-            isTrue,
-            reason: 'a worktree on this session\'s branch',
-          );
         }
       },
     );
@@ -132,17 +129,10 @@ void main() {
             prompt: '  compare these  ',
           );
 
-      final controller = h.container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      for (final result in launched.started) {
-        final paneId = h.container
-            .read(sessionsDataProvider)
-            .getById(result.session.id)!
-            .paneId!;
-        final instance =
-            controller.instanceFor(paneId)! as FakeTerminalInstance;
-        expect(instance.agentLaunch!.arguments, contains('compare these'));
+      expect(launched.started, hasLength(2));
+      for (final start
+          in h.server.sessionWork.asked.whereType<SessionStart>()) {
+        expect(start.spec.prompt, 'compare these');
       }
     });
   });

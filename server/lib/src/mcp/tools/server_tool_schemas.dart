@@ -20,10 +20,20 @@ import 'inbox_tool_set.dart';
 import 'build_tool_schemas.dart';
 import 'device_tool_set.dart' show deviceToolSchemas;
 import 'flutter_tool_schemas.dart';
+import 'continuation_tool_set.dart' show sessionHandoffToolSchemas;
+import 'recording_tool_schemas.dart';
+import 'terminal_tool_schemas.dart';
+import 'window_tool_sets.dart'
+    show
+        openSessionToolSchemas,
+        snippetControlToolSchemas,
+        workspaceControlToolSchemas;
 
 /// Every tool the server runs itself, in the order `tools/list` serves them —
-/// before the app's own (panes, the editor, a device's recording).
-/// `serve` registers one family per group below, in this order.
+/// every agent tool since slice 5b, before the few the app still answers (the
+/// attention inbox, until slice 5c). `serve` registers one family per group
+/// below, in this order; the last six groups are the app's old list, in its
+/// old order, so the served catalogue only lost `open_sessions_in_tmux`.
 const List<Map<String, Object?>> serverToolSchemas = [
   ...instructionsToolSchemas,
   ...inventoryToolSchemas,
@@ -47,4 +57,10 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...flutterRunToolSchemas,
   ...projectBuildToolSchemas,
   ...deviceToolSchemas,
+  ...openSessionToolSchemas,
+  ...sessionHandoffToolSchemas,
+  ...terminalControlToolSchemas,
+  ...recordingControlToolSchemas,
+  ...snippetControlToolSchemas,
+  ...workspaceControlToolSchemas,
 ];

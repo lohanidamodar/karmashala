@@ -106,15 +106,13 @@ class _RecordingService extends SessionHandoffService {
   }
 
   @override
-  Future<HandoffPacket> buildPacket({
+  Future<String> previewPacket({
     required String sessionId,
     required String targetAgentName,
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool isFork = false,
     HandoffSourceBrief? sourceBrief,
-    HandoffRecapBudget budget = const HandoffRecapBudget(),
-    HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
   }) async => HandoffPacket(
     sourceAgentName: 'Prompting CLI',
     targetAgentName: targetAgentName,
@@ -123,7 +121,7 @@ class _RecordingService extends SessionHandoffService {
     instruction: instruction,
     unresolvedTasks: unresolvedTasks,
     isFork: isFork,
-  );
+  ).render();
 }
 
 void main() {

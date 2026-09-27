@@ -9,7 +9,6 @@ import 'wire.dart';
 part 'hook_messages.dart';
 part 'lifecycle_messages.dart';
 part 'companion_messages.dart';
-part 'mcp_messages.dart';
 part 'status_messages.dart';
 part 'server_messages.dart';
 part 'data_messages.dart';
@@ -19,7 +18,10 @@ part 'stop_messages.dart';
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
 /// 27: slice 5c (status, attention, the companion and automations at the
 /// server; 0x21–0x22, 0x25, 0x27–0x2a and 0x36–0x37 retired).
-const int kProtocolVersion = 27;
+/// 28: slice 5b (sessions and every agent-facing MCP tool at the server,
+/// which asks windows through `ClientIntent`s; 0x1d–0x1f retired — nothing
+/// agent-facing is forwarded to an app).
+const int kProtocolVersion = 28;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -890,9 +892,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.watching => WatchingMessage.decode(frame),
   MessageType.lifecycle => LifecycleMessage.decode(frame),
   MessageType.hook => HookMessage.decode(frame),
-  MessageType.mcpTools => McpToolsMessage.decode(frame),
-  MessageType.mcpCall => McpCallMessage.decode(frame),
-  MessageType.mcpResult => McpResultMessage.decode(frame),
   MessageType.companionAttach => CompanionAttachMessage.decode(frame),
   MessageType.companionNotice => CompanionNoticeMessage.decode(frame),
   MessageType.companionEvent => CompanionEventMessage.decode(frame),

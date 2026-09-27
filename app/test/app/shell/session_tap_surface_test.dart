@@ -300,6 +300,9 @@ void main() {
     await framesDuring(
       tester,
       () => container.read(explorerActionsProvider).openNative('old'),
+      // The start is asked of the server now (slice 5b): a few more round
+      // trips before it has answered and the tab is shown.
+      frames: 200,
     );
 
     await tester.tap(find.byTooltip('Chat view'));

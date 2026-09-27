@@ -357,59 +357,6 @@ void main() {
     expect(launcher.effectiveModelFor(session.id)!.inherited, isTrue);
   });
 
-  test('what the chip reads is what the next launch passes', () async {
-    // Rule one of the permission chip, one field over: there is no second
-    // resolution to drift from, so this asserts the same value twice from the
-    // two places that must never disagree.
-    for (final live in [true, false]) {
-      final h = await harness(
-        status: live ? AgentActivityStatus.idle : AgentActivityStatus.working,
-      );
-      addTearDown(h.container.dispose);
-      final session = await launched(h.container);
-      final launcher = h.container.read(sessionLauncherProvider);
-
-      expect(launcher.setModel(session.id, 'haiku').switchedNow, live);
-      final effective = launcher.effectiveModelFor(session.id)!;
-      expect(effective.modelId, 'haiku');
-      expect(effective.inherited, isFalse);
-
-      // The pane stops first, or Claude Code's concurrent resume mints a
-      // second row rather than continuing this one — and it is *this* row that
-      // carries the model.
-      (h.container
-                  .read(terminalSessionsControllerProvider.notifier)
-                  .instanceFor(
-                    h.container
-                        .read(sessionsDataProvider)
-                        .getById(session.id)!
-                        .paneId!,
-                  )!
-              as FakeTerminalInstance)
-          .exitCleanly();
-
-      final resumed = await launcher.launch(
-        SessionLaunchRequest(
-          repository: repository(),
-          installation: agentInstallation(agentId: AgentIds.claudeCode),
-          title: 'Session',
-          purpose: SessionPurpose.existingSession,
-          resumeExternalSessionId: session.id,
-        ),
-      );
-      final arguments = h.container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(resumed.paneId!)!
-          .agentLaunch!
-          .arguments;
-      expect(
-        arguments,
-        containsAllInOrder(['--model', 'haiku']),
-        reason: 'the model the chip shows is the one on the command line',
-      );
-    }
-  });
-
   test('a session that never chose passes no model flag at all', () async {
     final h = await harness();
     addTearDown(h.container.dispose);

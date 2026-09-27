@@ -6,11 +6,8 @@ import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_skill_installation_service.dart';
 import '../../features/agents/application/agent_hook_sweep.dart';
 import '../../features/agents/application/host_hook_endpoint.dart';
-import '../../features/mcp/control_server_restart.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
-import '../../features/mcp/host_agent_tools.dart';
-import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/remote/application/remote_access_controller.dart';
@@ -30,7 +27,7 @@ import 'package:karmashala_core/logging.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
 /// regardless. The sum of the per-step caps: one hang cannot starve the rest.
-const kShutdownBudget = Duration(milliseconds: 3550);
+const kShutdownBudget = Duration(milliseconds: 3450);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -59,7 +56,6 @@ const kShutdownStepBudgets = <String, Duration>{
   'background watchers': _kStepBudget,
   'remote access': _kStepBudget,
   'local relay': _kStepBudget,
-  'control server': _kStepBudget,
   'system integration': _kStepBudget,
   'terminal processes': _kTerminalStepBudget,
   'provider teardown': _kContainerStepBudget,
@@ -86,8 +82,6 @@ class AppLifecycle {
   final Stopwatch? _stopwatch;
 
   SystemIntegrationService? _systemIntegration;
-  LauncherControlServer? _controlServer;
-  HostAgentTools? _hostAgentTools;
   MemoryCensusLogger? _memoryCensus;
   Future<void>? _hookInstallation;
   Future<void>? _shutdown;
@@ -105,11 +99,6 @@ class AppLifecycle {
   Duration? lastShutdownDuration;
 
   SystemIntegrationService? get systemIntegration => _systemIntegration;
-  LauncherControlServer? get controlServer => _controlServer;
-
-  /// Whether the session host serves agents' tools this run, so no control
-  /// server was started.
-  bool get agentToolsAtHost => _hostAgentTools != null;
 
   /// Whether this instance is a probe, which leaves every global store alone.
   bool get isProbe => _container.read(probeModeProvider).enabled;
@@ -140,62 +129,18 @@ class AppLifecycle {
     return service;
   }
 
-  /// Starts the local control server and retains it *before* `start()` returns,
-  /// which publishes the handshake part-way. `null` if it never started at all
-  /// — and whenever the session host serves agents' tools instead.
-  Future<LauncherControlServer?> startControlServer({
-    LauncherControlServer? server,
-  }) async {
-    if (server == null && _container.read(agentToolsAtHostProvider)) {
-      final atHost = HostAgentTools(_container, logger: _logger);
-      _hostAgentTools = atHost;
-      try {
-        if (!await atHost.start()) _hostAgentTools = null;
-      } on Object catch (error, stack) {
-        _logger.warning(
-          'Agent tools at the host failed to start.',
-          error,
-          stack,
-        );
-      }
-      return null;
-    }
-    final instance =
-        server ?? LauncherControlServer(_container, logger: _logger);
-    // Before the await: a partially started server may hold a port and files,
-    // and `stop()` is safe on one that never bound.
-    _controlServer = instance;
-    // Published so Settings can restart the one that is actually up.
-    _container.read(controlServerHandleProvider.notifier).set(instance);
-    try {
-      await instance.start();
-      return instance;
-    } on Object catch (error, stack) {
-      _logger.warning('Launcher control server failed to start.', error, stack);
-      return null;
-    }
-  }
-
-  /// Installs the agents' status hooks in the background and retains the future,
-  /// so shutdown can wait for a config rewrite rather than cut it off.
-  void installAgentHooks(
-    LauncherControlServer? server, {
-    Future<void> Function()? afterFirstFrame,
-  }) {
+  /// Installs the agents' status hooks — pointed at the server's endpoint — in
+  /// the background and retains the future, so shutdown can wait for a config
+  /// rewrite rather than cut it off.
+  void installAgentHooks({Future<void> Function()? afterFirstFrame}) {
     if (isProbe) {
       _logger.info(
         'Probe: agent hooks are not installed; the real app owns them.',
       );
       return;
     }
-    // The WSL switch usually does not exist yet when the app launches, so the
-    // first sweep skips WSL; the server says when it binds and a re-sweep is free.
-    server?.onWslInterfaceBound = () {
-      _logger.info('The WSL switch is up; installing hooks for it now.');
-      _installAgentHooksNow(server);
-    };
     // Skipped when the host's start has already swept the same endpoint.
-    _installAgentHooksNow(server, gate: afterFirstFrame, unlessCurrent: true);
+    _hookInstallation = _sweepAgentHooks(afterFirstFrame, true);
   }
 
   /// Starts, or adopts, this machine's session host now rather than on the
@@ -235,19 +180,10 @@ class AppLifecycle {
     }
   }
 
-  void _installAgentHooksNow(
-    LauncherControlServer? server, {
-    Future<void> Function()? gate,
-    bool unlessCurrent = false,
-  }) {
-    _hookInstallation = _sweepAgentHooks(server, gate, unlessCurrent);
-  }
-
   /// One sweep, behind [gate] and the session host's start, with everything it
   /// reports published. Retained so shutdown can wait for a config rewrite
   /// instead of cutting it off.
   Future<void> _sweepAgentHooks(
-    LauncherControlServer? server,
     Future<void> Function()? gate,
     bool unlessCurrent,
   ) async {
@@ -268,10 +204,7 @@ class AppLifecycle {
     // The host first: while hooks go there, its endpoint is what agents are
     // given, and before it has started there is none to give.
     await _container.read(localHostStartupProvider);
-    final endpoint = installableHookEndpoint(
-      _container,
-      appRoute: server?.hookEndpoint,
-    );
+    final endpoint = installableHookEndpoint(_container, appRoute: null);
     if (endpoint == null) return;
     await sweepAgentHooks(
       _container,
@@ -378,11 +311,9 @@ class AppLifecycle {
   /// Takes ownership of components built elsewhere, so there is still exactly
   /// one object that will shut them down.
   void adopt({
-    LauncherControlServer? controlServer,
     SystemIntegrationService? systemIntegration,
     Future<void>? hookInstallation,
   }) {
-    if (controlServer != null) _controlServer = controlServer;
     if (systemIntegration != null) _systemIntegration = systemIntegration;
     if (hookInstallation != null) _hookInstallation = hookInstallation;
   }
@@ -447,13 +378,6 @@ class AppLifecycle {
       if (_container.exists(localRelayServiceProvider)) {
         await _container.read(localRelayServiceProvider).stop();
       }
-    });
-
-    // 3. The control server. `stop()` deletes the handshake — the whole reason
-    //    this owner exists.
-    await _step('control server', watch, () async {
-      await _controlServer?.stop();
-      await _hostAgentTools?.stop();
     });
 
     // 4. The OS integration: hotkeys, tray, listeners.

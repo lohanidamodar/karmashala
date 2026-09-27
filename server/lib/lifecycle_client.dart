@@ -18,7 +18,6 @@ export 'src/protocol/messages.dart'
         HostSessionState,
         LifecycleEvent,
         LifecycleEventKind,
-        McpCallMessage,
         PairedMessage,
         PromptAnsweredMessage,
         PromptRefusalKind,

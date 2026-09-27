@@ -343,6 +343,12 @@ class DataClient {
   /// The server's apps, runs and browser moving.
   Stream<RunsChange> get runsChanges => _runsChanges.stream;
 
+  final _intents = StreamController<ClientIntent>.broadcast(sync: true);
+
+  /// What the server asks this window to show (slice 5b) — told to this
+  /// client alone, as the one a person last used.
+  Stream<ClientIntent> get intents => _intents.stream;
+
   /// A live stream of the server's [source] (`kFlutterLogsStream`), on the
   /// link there is now; it ends with that link.
   Stream<DataStreamItems> openStream(String source, String key) {
@@ -886,6 +892,8 @@ class DataClient {
           if (!_envChanges.isClosed) _envChanges.add(variables);
         case final AttentionChange change:
           _applyAttention(change);
+        case final ClientIntent intent:
+          if (!_intents.isClosed) _intents.add(intent);
       }
     }
   }
@@ -1061,6 +1069,7 @@ class DataClient {
     unawaited(_envChanges.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
+    unawaited(_intents.close());
     unawaited(_fileChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());

@@ -7,22 +7,40 @@ import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_environments/store.dart'
     show ExecutionEnvironmentDao;
 
+import 'package:karmashala_checkpoints/store.dart' show CheckpointDao;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
+        AnthropicSignIn,
         DecisionAppend,
         DecisionRecorded,
+        OpenSessionTab,
+        TerminalOpen,
         UsageLimitNotice,
         UsageLimitNoticed,
         kFlutterLogsStream;
 import 'package:karmashala_flutter_apps/flutter_apps.dart'
     show FlutterAppException;
+import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
-import 'package:karmashala_session_engine/store.dart' show SessionDao;
+import 'package:karmashala_session_engine/store.dart'
+    show DecisionRecordDao, SessionDao, SessionRepositoryDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
 import '../agents/server_agent_work.dart';
+import '../automations/hosted_agent_launcher.dart';
+import '../mcp/tools/continuation_tool_set.dart';
+import '../mcp/tools/recording_tool_set.dart';
+import '../mcp/tools/terminal_tool_set.dart';
+import '../mcp/tools/window_tool_sets.dart';
+import '../sessions/launch/conversation_presence.dart';
+import '../sessions/launch/handoff_packet_files.dart';
+import '../sessions/launch/launch_settings.dart';
+import '../sessions/launch/server_session_launcher.dart';
+import '../sessions/launch/server_session_work.dart';
+import '../sessions/launch/session_continuations.dart';
+import '../status/hosted_session_wait.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/server_resume_runner.dart';
@@ -85,6 +103,7 @@ import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
 import '../data/conversations_handler.dart';
 import '../data/data_service.dart';
+import '../data/hosted_run_intents.dart';
 import '../server/server_config.dart';
 import '../server/server_config_service.dart';
 import '../server/server_data_directory.dart';
@@ -446,6 +465,8 @@ Future<int> runServe(
   data
     ..flutterWork = flutter
     ..streamSources[kFlutterLogsStream] = flutter.logs;
+  // Each run started is shown in the window a person last used (slice 5b).
+  HostedRunIntents(data).attach();
   // A phone on this machine announcing a Flutter app is attached while the
   // apps are being looked at — with no client on this machine at all.
   final appDiscovery = DeviceAppDiscovery(
@@ -462,7 +483,6 @@ Future<int> runServe(
   flutter.apps.onLooked = () => unawaited(appDiscovery.looked());
   final checkoutRows = CheckoutRows(database);
   final mcpTools = McpToolRelay(
-    cachePath: paths.mcpToolsPath,
     tools: ServerTools([
       const InstructionsToolSet(),
       InventoryToolSet(tools),
@@ -499,7 +519,6 @@ Future<int> runServe(
     ptyLibrary: pty.library,
     companion: companion,
     build: hostBuildOf(Platform.resolvedExecutable),
-    mcpTools: mcpTools,
   )..prompts = prompts;
   server.lifecycle.statusSnapshot = status.snapshot;
   // Every turn's before and after checkpoints, taken here (slice 2b): off the
@@ -627,6 +646,20 @@ Future<int> runServe(
     settings.mcpPort,
     errSink,
   );
+  // Every agent this server starts — a person's, a phone's, an automation's
+  // — is one of its own terminals, under the session's own id, so
+  // `terminal_list` and the windows see it (slice 5b).
+  Future<void> openAgent(AgentPaneLaunch launch, int columns, int rows) async {
+    terminals.open(
+      TerminalOpen(
+        paneId: 'session-${launch.sessionId}',
+        agentLaunch: launch,
+        columns: columns,
+        rows: rows,
+      ),
+    );
+  }
+
   // A phone starts and resumes sessions here with no app, once a launched
   // agent can be handed its tools.
   companion.serveSessions(
@@ -634,6 +667,7 @@ Future<int> runServe(
       mcp: mcp,
       configDirectory: p.join(dataDirectory, 'mcp'),
     ),
+    openAgent: openAgent,
   );
   final automations = await _startAutomations(
     database: database,
@@ -655,33 +689,127 @@ Future<int> runServe(
     // it told to every window (slice 5c).
     raise: attention.attention.raise,
     noticeUsageLimit: (notice) => data.announce([UsageLimitNoticed(notice)]),
+    openAgent: openAgent,
   );
   // Event rules and usage limits follow every status the server keeps,
   // app or no app.
   final statusFollow = automations == null
       ? null
       : attention.status.statusChanges.listen(automations.observeStatus);
+  // The one launch path (slice 5b): a person's New session, a resume, an
+  // agent's open_new_session, a handoff, a fork — each decided here and
+  // started as one of this server's terminals, under the session's own id.
+  final sessionRows = SessionDao(database);
+  LaunchSettings launchSettings() =>
+      LaunchSettings.parse(database.readMetadata(kLaunchSettingsKey));
+  final hostedLauncher = HostedAgentLauncher(
+    registry: registry,
+    sessions: sessionRows,
+    mcp: SessionMcpAccessPoint(
+      mcp: mcp,
+      configDirectory: p.join(dataDirectory, 'mcp'),
+    ),
+    now: () => DateTime.now().toUtc(),
+    newId: newUuid,
+    worktrees: worktrees,
+    onRowWritten: (sessionId) => data.announceSessions([sessionId]),
+    environmentOf: checkoutRows.environment,
+    openAgent: openAgent,
+    settings: launchSettings,
+    hasUsableLogin: (installation) async {
+      final signIn = await agentWork.accounts.current(installation.id);
+      return signIn is AnthropicSignIn && signIn.usableLogin;
+    },
+    vaultNames: () => {for (final name in envVault.names) name.name},
+    handoffFiles: HandoffPacketFiles(
+      Directory(p.join(dataDirectory, 'handoff')),
+    ),
+    links: SessionRepositoryDao(database),
+    hostEnvironment: hostEnvironment,
+  );
+  final checkoutFacts = DaemonCheckoutFacts(checkoutRows);
+  final presence = ConversationPresenceReader(
+    locator: CliStoreLocator(
+      runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
+        checkoutRows.environment(id) ??
+            localHostEnvironment(DateTime.now().toUtc()),
+      ),
+      installations: data.installations,
+      environment: hostEnvironment,
+    ),
+    environmentsHere: () => [
+      for (final environment in data.environments)
+        if (checkoutFacts.isHere(environment)) environment,
+    ],
+  );
+  final launches = ServerSessionLauncher(
+    launcher: hostedLauncher,
+    registry: registry,
+    sessions: sessionRows,
+    rows: checkoutRows,
+    facts: checkoutFacts,
+    installationsIn: data.installationsIn,
+    settings: launchSettings,
+    presenceOf: presence.presenceOf,
+    repairAgents: () async {
+      await agentWork.detection.repair();
+    },
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final sessionWaits = HostedSessionWait(status: prompts.status);
+  final typist = SessionToolSet.typistOver(prompts);
+  final continuations = SessionContinuations(
+    launches: launches,
+    sessions: sessionRows,
+    rows: checkoutRows,
+    decisions: DecisionRecordDao(database),
+    checkpoints: CheckpointDao(database),
+    reach: reach,
+    transcripts: TranscriptStores.over(database),
+    carryDecision: (record) => data.applyAsServer(DecisionAppend(record)),
+    forks: checkpoints,
+    waits: sessionWaits,
+    send: typist.send,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  data.sessionWork = ServerSessionWork(
+    launches: launches,
+    continuations: continuations,
+  );
+  // Recordings the server writes itself (slice 5b): a terminal's output as
+  // an asciicast, and its own machine's devices.
+  final recordings = RecordingToolSet.over(
+    terminals: terminals,
+    registry: registry,
+    recordingsDirectory: p.join(dataDirectory, 'recordings'),
+    devices: devices,
+  );
   // `checks_run` for a checkout on this machine or an SSH box is the
   // automations'.
   mcpTools.tools
     ..add(ChecksToolSet(automations?.localTool ?? (_, _, _) => null))
-    // A session this host runs is operated here, app or no app.
+    // Every session is operated here: every agent runs in this server.
     ..add(
       SessionToolSet(
         tools,
         prompts: prompts,
         registry: registry,
-        appConnected: () => mcpTools.appConnected,
+        waits: sessionWaits,
+        typist: typist,
+        resumeWith: (sessionId, prompt) async {
+          final started = await launches.resume(sessionId, prompt: prompt);
+          data.tellIntent(
+            OpenSessionTab(
+              sessionId: started.sessionId,
+              title: started.session.title,
+              launch: started.launch,
+            ),
+          );
+        },
       ),
     )
-    // With no app open, an agent's `open_new_session` starts here.
-    ..add(
-      LaunchToolSet(
-        tools,
-        appConnected: () => mcpTools.appConnected,
-        launcher: () => companion.launcher,
-      ),
-    )
+    // An agent's `open_new_session`, through the one launch path.
+    ..add(LaunchToolSet(tools, launches: launches))
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
     // The inbox is the server's (slice 5c), app or no app.
@@ -697,7 +825,15 @@ Future<int> runServe(
     )
     ..add(BuildToolSet(builds: flutter.builds, rows: checkoutRows))
     // list_devices and device_* drive this machine's devices (slice 4a).
-    ..add(DeviceToolSet(devices));
+    ..add(DeviceToolSet(devices))
+    // What the app's own tools did, the server's since slice 5b: a window
+    // is only asked to show the result.
+    ..add(OpenSessionToolSet(tools, launches: launches))
+    ..add(ContinuationToolSet(tools, continuations: continuations))
+    ..add(TerminalToolSet(terminals: terminals, registry: registry, data: data))
+    ..add(recordings)
+    ..add(SnippetInsertToolSet(tools, terminals: terminals))
+    ..add(SelectCheckoutToolSet(tools));
   // A client composes its catalogue from `serverToolSchemas`: a family
   // served here but missing there is a tool no client lists (found once).
   assert(
@@ -826,7 +962,7 @@ Future<int> runServe(
   spools?.close();
   await hookServer?.close();
   await mcp?.close();
-  mcpTools.close();
+  await recordings.close();
   tools.close();
   await companion.close();
   agentWork.stop();
@@ -979,6 +1115,7 @@ Future<DaemonAutomations?> _startAutomations({
   ResumeUsage? usage,
   void Function(InboxItem item)? raise,
   void Function(UsageLimitNotice notice)? noticeUsageLimit,
+  AgentTerminalOpener? openAgent,
 }) async {
   if (database == null || recording == null) return null;
   final automations = DaemonAutomations(
@@ -999,6 +1136,7 @@ Future<DaemonAutomations?> _startAutomations({
     usage: usage,
     raise: raise,
     noticeUsageLimit: noticeUsageLimit,
+    openAgent: openAgent,
     onDecision: (decision) => data.applyAsServer(
       DecisionAppend(
         DecisionRecord(

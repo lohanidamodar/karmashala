@@ -13,7 +13,6 @@ import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
 import '../host_version.dart';
-import '../mcp/mcp_tool_relay.dart';
 import '../protocol/frame.dart';
 import '../protocol/messages.dart';
 import '../protocol/wire.dart';
@@ -33,7 +32,6 @@ class HostServer {
     this.hostVersion = kHostVersion,
     this.companion,
     this.build,
-    this.mcpTools,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
        lifecycle = LifecycleFeed(registry, clock: clock ?? _utcNow);
@@ -50,9 +48,6 @@ class HostServer {
   /// store must refuse rather than pretend. Null is that refusal.
   final CompanionHandler? companion;
   final String hostVersion;
-
-  /// Where agents' tool calls go to the app that runs them; null serves none.
-  final McpToolRelay? mcpTools;
 
   /// Answers the prompts of the agents this host holds; null when there is no
   /// store to keep their status by. Set after construction.
@@ -153,7 +148,6 @@ class _ClientSession {
     _data?.close();
     _streams?.closeAll();
     await _lifecycleWatch?.cancel();
-    _server.mcpTools?.detach(this);
     await _server.companion?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
@@ -309,10 +303,6 @@ class _ClientSession {
           _send,
           runByClient: message.runByClient,
         );
-      case McpToolsMessage():
-        _server.mcpTools?.adopt(this, message.tools, _send);
-      case McpResultMessage():
-        _server.mcpTools?.answer(this, message);
       case CompanionAttachMessage(:final localRelayUrl):
         await _server.companion?.adopt(
           this,

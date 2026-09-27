@@ -9,10 +9,10 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_device_pane/ports.dart';
 import 'package:karmashala_devices/devices.dart';
-import '../../mcp/control_server_status.dart';
-import '../../mcp/host_session_mcp.dart';
-import '../../mcp/session_mcp.dart';
 import 'package:karmashala_mcp/access.dart';
+import 'package:karmashala_mcp/protocol.dart' show McpBridgeHandshake;
+import 'package:path/path.dart' as p;
+import '../../terminal/application/local_host_providers.dart';
 import 'environment_health.dart';
 import 'environment_providers.dart';
 import 'system_health.dart';
@@ -46,9 +46,9 @@ class SystemHealthService {
     final results = await Future.wait([
       _guard(SystemCheckId.mcpBridge, 'MCP bridge', _checkMcpBridge),
       _guard(
-        SystemCheckId.controlServer,
+        SystemCheckId.agentTools,
         'Agent tools endpoint',
-        _checkControlServer,
+        _checkAgentTools,
       ),
       ...environments
           .where((e) => e.kind == EnvironmentKind.wsl)
@@ -156,40 +156,43 @@ class SystemHealthService {
     };
   }
 
-  // --- Control server ------------------------------------------------------
+  // --- Agent tools --------------------------------------------------------
 
-  /// Whether the app will answer the bridge it just spawned. **Read, not
-  /// probed** — the server records which hardening step failed as it starts.
-  Future<SystemCheck> _checkControlServer() async {
-    final status = ref.read(controlServerStatusProvider);
-    final level = switch (status.transport) {
-      PrivilegedRpcTransport.ownerOnlySocket ||
-      PrivilegedRpcTransport.loopbackHttp => HealthLevel.healthy,
-      PrivilegedRpcTransport.notStarted => HealthLevel.unknown,
-      PrivilegedRpcTransport.unavailable => HealthLevel.failed,
-      // Read off the host's handshake: whether it published a credential.
-      PrivilegedRpcTransport.sessionHost => switch (ref.read(
-        sessionMcpProvider,
-      )) {
-        HostSessionMcp(:final serving) when serving => HealthLevel.healthy,
-        _ => HealthLevel.unknown,
-      },
+  /// Whether the server serves agents' tools: its handshake says so by
+  /// carrying a credential. **Read, not probed** — the server writes it as
+  /// it starts, and withholds the credential when it cannot be owner-only.
+  Future<SystemCheck> _checkAgentTools() async {
+    final handshakePath = await ref.read(serverMcpHandshakePathProvider)();
+    final handshake = handshakePath == null
+        ? null
+        : McpBridgeHandshake.read(handshakePath);
+    final (level, summary) = switch (handshake) {
+      null => (
+        HealthLevel.unknown,
+        'No Karmashala server has published an agent tools endpoint here.',
+      ),
+      McpBridgeHandshake(:final mcpToken) when mcpToken != null => (
+        HealthLevel.healthy,
+        'Served by the Karmashala server on port ${handshake.port}.',
+      ),
+      _ => (
+        HealthLevel.failed,
+        'The Karmashala server withheld its credential: its handshake could '
+            'not be made owner-only, so every agent is refused.',
+      ),
     };
     return SystemCheck(
-      id: SystemCheckId.controlServer,
+      id: SystemCheckId.agentTools,
       title: 'Agent tools endpoint',
       level: level,
-      summary: status.message,
+      summary: summary,
       detail: [
-        'Recorded by the control server as it started; nothing was probed '
-            'for this row.',
-        ?status.failureDetail,
+        'Read off the server\'s handshake; nothing was probed for this row.',
+        ?handshakePath,
       ].join('\n'),
-      remedy: status.failedClosed
-          ? 'The app withheld privileged RPC on purpose rather than serving it '
-                'unprotected. Agents can still report status, but every '
-                'Karmashala tool is off until the owner-only channel can be '
-                'made. Restarting the app retries it.'
+      remedy: level == HealthLevel.failed
+          ? 'The server withheld its tools on purpose rather than serving them '
+                'unprotected. Restarting the server retries it.'
           : null,
       took: Duration.zero,
     );
@@ -528,6 +531,18 @@ class SystemHealthService {
 
 final systemHealthServiceProvider = Provider<SystemHealthService>(
   SystemHealthService.new,
+);
+
+/// Where this machine's server writes its MCP handshake
+/// (`<data dir>/mcp_bridge.json`), or null when no server can be reached.
+/// A provider so a test points it at a temporary file.
+final serverMcpHandshakePathProvider = Provider<Future<String?> Function()>(
+  (ref) => () async {
+    final access = ref.read(localHostSessionAccessProvider);
+    final dataDirectory = await access?.dataDirectory?.call();
+    if (dataDirectory == null) return null;
+    return p.join(dataDirectory, McpBridgeHandshake.fileName);
+  },
 );
 
 /// The bridge probe, injectable so a widget test never spawns a process.

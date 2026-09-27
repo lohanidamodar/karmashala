@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala/src/features/sessions/application/session_mcp_arguments.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_test/flutter_test.dart';

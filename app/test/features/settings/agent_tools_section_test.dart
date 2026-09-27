@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
+import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_tools_section.dart';
 import 'package:flutter/material.dart';
@@ -12,8 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// against the served schemas rather than against a copy of them.
 void main() {
   final served = <String>[
-    for (final schema in McpToolDispatcher.toolSchemas)
-      schema['name']! as String,
+    for (final schema in serverToolSchemas) schema['name']! as String,
   ];
 
   // No ProviderScope, deliberately. The listing is static data compiled into

@@ -220,21 +220,6 @@ void main() {
     expect(where.note, isNull);
   });
 
-  test('an external surface is a record, never a claim', () async {
-    final h = await harness();
-    addTearDown(h.container.dispose);
-
-    // No pane: it was handed to a terminal window we do not own.
-    final id = await launch(h.container, surface: SessionSurface.external);
-    final where = h.container.read(sessionWhereaboutsProvider(id));
-
-    expect(where.external, isTrue);
-    expect(where.note, 'opened in an external terminal');
-    // The whole point: "we started a window once" never becomes "it is running".
-    expect(where.knownHeldElsewhere, isFalse);
-    expect(where.hostedLive, isFalse);
-  });
-
   test('a session we know nothing about says nothing', () async {
     final h = await harness();
     addTearDown(h.container.dispose);

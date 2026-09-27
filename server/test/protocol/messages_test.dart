@@ -17,7 +17,32 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 8, 14, 0, 30);
 
   test('the protocol version is pinned; changing it is a deliberate act', () {
-    expect(kProtocolVersion, 27);
+    expect(kProtocolVersion, 28);
+  });
+
+  test('protocol 28 retired the forwarded agent tools: 0x1d–0x1f are no '
+      'frame any more, and the data streams and stop frames stay', () {
+    // mcpTools, mcpCall, mcpResult (slice 5b): the server runs every tool.
+    for (final code in [0x1d, 0x1e, 0x1f]) {
+      expect(
+        MessageType.fromCode(code),
+        isNull,
+        reason: '0x${code.toRadixString(16)}',
+      );
+      expect(
+        () =>
+            FrameParser().add(Uint8List.fromList([code, 0, 0, 0, 0, 0, 0, 0])),
+        throwsA(isA<FrameFormatException>()),
+      );
+    }
+    expect(MessageType.dataStreamOpen.code, 0x3b);
+    expect(MessageType.dataStreamItems.code, 0x3c);
+    expect(MessageType.dataStreamClose.code, 0x3d);
+    // 0x3e and 0x3f stay reserved.
+    expect(MessageType.fromCode(0x3e), isNull);
+    expect(MessageType.fromCode(0x3f), isNull);
+    expect(MessageType.stopCheck.code, 0xf0);
+    expect(MessageType.stopCheckAnswer.code, 0xf1);
   });
 
   test('protocol 27 retired the forwarded companion calls, the automations '

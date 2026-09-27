@@ -97,7 +97,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
       final brief = await _briefFromSource();
       final packet = await ref
           .read(sessionHandoffServiceProvider)
-          .buildPacket(
+          .previewPacket(
             sessionId: widget.sessionId,
             targetAgentName: _mode == _Mode.fork
                 ? (target?.agentName ?? 'the same agent')
@@ -109,7 +109,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
             isFork: _mode == _Mode.fork,
             sourceBrief: brief,
           );
-      if (mounted) setState(() => _preview = packet.render());
+      if (mounted) setState(() => _preview = packet);
     } catch (e) {
       if (mounted) setState(() => _error = _message(e));
     } finally {

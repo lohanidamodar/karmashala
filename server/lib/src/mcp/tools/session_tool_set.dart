@@ -19,18 +19,17 @@ import 'package:agent_cli/stream.dart';
 
 /// **Operating a session that already exists**, by the server — `session_send`,
 /// `session_answer`, `session_wait`, `session_transcript`, `session_rename`,
-/// `session_end`. A session this machine's server runs is answered here
-/// whether or not the app is open: its status is the server's, its screen and
-/// its PTY are the server's. A session that runs in one of the app's own
-/// panes (no server holds it) is handed to the app, which alone reaches it;
-/// with no app, what the server knows is answered — a transcript from the
-/// record, a wait that reads `ended`.
+/// `session_end` — for every session (slice 5b: every agent runs in the
+/// server, so nothing is handed to an app). Its status, its screen and its PTY
+/// are the server's; a session not running here is answered from what the
+/// server knows — a transcript from the record, a wait that reads `ended` —
+/// and a message to one is its resume, the message its opening prompt.
 class SessionToolSet extends ServerToolSet {
   SessionToolSet(
     this._context, {
     required this.prompts,
     required this.registry,
-    required this.appConnected,
+    this.resumeWith,
     HostedSessionWait? waits,
     SessionMessageTypist? typist,
   }) : _sessions = SessionDao(_context.database),
@@ -42,8 +41,9 @@ class SessionToolSet extends ServerToolSet {
   final DaemonPromptAnswers prompts;
   final SessionRegistry registry;
 
-  /// Whether an app is connected to be handed what only it reaches.
-  final bool Function() appConnected;
+  /// Resumes a session that is not running with [prompt] as its opening
+  /// message, and shows it in the person's window; null refuses instead.
+  final Future<void> Function(String sessionId, String prompt)? resumeWith;
   final HostedSessionWait waits;
   late final SessionMessageTypist typist;
   final SessionDao _sessions;
@@ -76,14 +76,18 @@ class SessionToolSet extends ServerToolSet {
     final held = _runsHere(sessionId);
     switch (tool) {
       case 'session_answer':
-        // A prompt is answered off the screen of whoever runs the session.
-        if (!held || !prompts.holds(sessionId)) return null;
-        return runTool(
-          () => _answer(sessionId, arguments['decision'], callerSessionId),
-        );
+        // A prompt is answered off the screen of the server that runs it.
+        return runTool(() {
+          if (!held) {
+            _session(sessionId);
+            throw StateError(
+              'Nothing is running that session, so there is no prompt to '
+              'answer. open_session resumes it.',
+            );
+          }
+          return _answer(sessionId, arguments['decision'], callerSessionId);
+        });
       case 'session_send':
-        // A session not running here is typed into (or resumed) by the app.
-        if (!held) return null;
         return runTool(
           () => _send(
             sessionId,
@@ -91,10 +95,10 @@ class SessionToolSet extends ServerToolSet {
             callerSessionId: callerSessionId,
             wait: arguments['wait'] == true,
             timeoutSeconds: arguments['timeoutSeconds'] as num?,
+            held: held,
           ),
         );
       case 'session_wait':
-        if (!held && appConnected()) return null;
         return runTool(
           () => _wait(
             sessionId,
@@ -102,8 +106,6 @@ class SessionToolSet extends ServerToolSet {
           ),
         );
       case 'session_transcript':
-        // The app's pane is the only screen of a session it runs itself.
-        if (!held && appConnected() && _claimsLive(sessionId)) return null;
         return runTool(
           () => _transcript(
             sessionId,
@@ -112,13 +114,10 @@ class SessionToolSet extends ServerToolSet {
           ),
         );
       case 'session_rename':
-        // The app also renames the conversation in the agent's own store.
-        if (appConnected()) return null;
         return runTool(
           () => _rename(sessionId, (arguments['title'] as String?) ?? ''),
         );
       case 'session_end':
-        if (!held && appConnected()) return null;
         return runTool(() => _end(sessionId, held: held));
     }
     return null;
@@ -127,9 +126,6 @@ class SessionToolSet extends ServerToolSet {
   /// Whether this server runs the session [sessionId] right now.
   bool _runsHere(String sessionId) =>
       prompts.status.runningSessionOf(sessionId) != null;
-
-  bool _claimsLive(String sessionId) =>
-      _sessions.getById(sessionId)?.status.claimsLive ?? false;
 
   Session _session(String id) {
     final session = _sessions.getById(id);
@@ -185,11 +181,18 @@ class SessionToolSet extends ServerToolSet {
     required String? callerSessionId,
     bool wait = false,
     num? timeoutSeconds,
+    bool held = true,
   }) async {
     if (text.trim().isEmpty) {
       throw ArgumentError('text is required and cannot be blank.');
     }
     final session = _session(sessionId);
+    if (!held && resumeWith == null) {
+      throw StateError(
+        'That session is not running, so there is nothing to type into. '
+        'open_session resumes it.',
+      );
+    }
     final report = prompts.status.statusOf(sessionId)?.report;
     if (report?.hasOpenQuestion ?? false) {
       throw StateError(
@@ -248,10 +251,12 @@ class SessionToolSet extends ServerToolSet {
     final attribution = sender == null
         ? null
         : SessionAttribution(sessionId: sender.id, title: sender.title);
-    final delivered = await typist.send(
-      sessionId,
-      attribution == null ? text : attribution.render(text),
-    );
+    final message = attribution == null ? text : attribution.render(text);
+    // Not running: the message is its resume's opening prompt, as the app's
+    // composer resumed a stopped session with what was typed.
+    final delivered = held
+        ? await typist.send(sessionId, message)
+        : await resumeWith!(sessionId, message).then((_) => true);
     if (!delivered) {
       throw StateError(
         'That session\'s process ended before the message could be typed '
@@ -278,6 +283,7 @@ class SessionToolSet extends ServerToolSet {
       // honest answer, never a claim that it went in as the user.
       'attribution': attribution?.line,
       'live': true,
+      if (!held) 'resumed': true,
     };
     if (!wait) return answer;
     // `inputSent: true` is the fact a timeout has to carry: a caller that

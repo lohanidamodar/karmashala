@@ -80,6 +80,7 @@ class DaemonAutomations implements ChecksWork {
     UsageLimitSettings Function()? usageLimitSettings,
     void Function(InboxItem item)? raise,
     void Function(UsageLimitNotice notice)? noticeUsageLimit,
+    AgentTerminalOpener? openAgent,
   }) : _db = database,
        _tell = tell,
        _log = log ?? _ignore {
@@ -151,6 +152,8 @@ class DaemonAutomations implements ChecksWork {
         hostEnvironment: hostEnvironment,
         onRowWritten: sessionWritten,
         environmentOf: rows.environment,
+        // One of the server's terminals, so `terminal_list` shows the run.
+        openAgent: openAgent,
         onLaunched: (sessionId, agentId, directory) => firstRunPrompts.follow(
           sessionId: sessionId,
           agentId: agentId,

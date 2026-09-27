@@ -2,63 +2,48 @@ import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
-import '../../workspaces/data/workspace_data.dart';
-
 import 'package:karmashala_core/logging.dart';
 import '../../../core/util/agent_cli_bridge.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/application/agent_self_update_providers.dart';
-import '../../agents/application/claude_credential_strip.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show EnvVariableName;
-import '../../env_secrets/application/env_secrets_controller.dart';
+    show SessionStartSpec, SessionStarted;
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/launch.dart';
 import 'package:agent_cli/discovery.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
-import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
-import '../../git/application/git_providers.dart';
-import '../../mcp/session_mcp.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/grid.dart';
-import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_agent_reporting/status.dart'
     show TerminalGridStatusSource;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show PermissionCycleOutcome, cyclePermissionTo, kPermissionCycleSettle;
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/resume.dart';
+import '../data/sessions_client.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
-import 'handoff_packet_files.dart';
 import 'session_launch_exceptions.dart';
-import 'session_mcp_arguments.dart';
 import 'pending_live_switches.dart';
 import 'session_notice.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';
 import 'session_ui_providers.dart';
-import 'session_working_directory.dart';
 
-// The four refusals are a library of their own — they carry no state, only
-// words — and are re-exported here because every caller reaches for them here.
+// The refusals are a library of their own — they carry no state, only words —
+// and are re-exported here because every caller reaches for them here.
 export 'session_launch_exceptions.dart';
 
-// And `agentPaneArguments`, for the same reason: a pure function of a
-// descriptor and a set of choices, reached through the launcher.
+// A pure function of a descriptor and a set of choices, reached through the
+// launcher.
 export 'package:karmashala_session/launch.dart'
     show agentMcpArguments, agentPaneArguments;
 
@@ -66,14 +51,13 @@ export 'package:karmashala_session/launch.dart'
 export 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show kPermissionCycleSettle;
 
-// The launcher's body, one `part` per concern — start, resume_guards, policy,
-// surfaces, input — because privacy in Dart is per library.
+// The launcher's body, one `part` per concern, because privacy in Dart is per
+// library.
 part 'session_launcher_permission_live.dart';
 part 'session_launcher_start.dart';
 part 'session_launcher_executable.dart';
 part 'session_launcher_resume_guards.dart';
 part 'session_launcher_policy.dart';
-part 'session_launcher_surfaces.dart';
 part 'session_launcher_input.dart';
 part 'session_launcher_hosted.dart';
 
@@ -95,23 +79,23 @@ class SessionLaunchResult {
   final String? workingDirectoryNotice;
 }
 
-/// Every launch says what it decided: four bugs here were silent by
-/// construction, each a plausible session wrong only on its command line.
 final _log = AppLogger.named('sessions.launch');
 
-/// **The** way a session comes into existence. Every in-app session runs in a
-/// PTY, every started session gets a row, and permission mode resolves here.
+/// **The client of the one launch path** (slice 5b): a session is started by
+/// the server — [launch] asks it and shows what it started — and this is
+/// where a running one is found on screen, typed into, and has its mode and
+/// model chosen.
 class SessionLauncher {
   SessionLauncher(this._ref);
 
   final Ref _ref;
 
-  /// Sessions this launcher asked the host to end, not yet reported ended by
-  /// its feed: nothing attaches to one of them in the meantime.
+  /// Sessions this launcher asked the server to end, not yet reported ended
+  /// by its feed: nothing attaches to one of them in the meantime.
   final Set<String> _endingOnHost = {};
 
-  /// The single default-installation resolution. Four variants of this existed,
-  /// and only some of them consulted the user's configured default at all.
+  /// The single default-installation resolution, as the New-session dialog
+  /// shows it (the server applies the same rule to an agent's request).
   AgentInstallation? defaultInstallationIn(String environmentId) {
     final installs = _ref
         .read(agentInstallationsDataProvider)
@@ -126,17 +110,15 @@ class SessionLauncher {
         installs.first;
   }
 
-  /// Creates the session row and starts it on the requested surface. The body
-  /// is `_launch`, because two test doubles override this by subclassing.
-  /// [externalTerminal] is a value, not part of the request: the record of what
-  /// a session is knows nothing about the emulators installed on this machine.
+  /// Asks the server to start [request] and shows it. The body is `_launch`,
+  /// because two test doubles override this by subclassing.
   Future<SessionLaunchResult> launch(
     SessionLaunchRequest request, {
     SystemTerminal? externalTerminal,
   }) => _launch(request, externalTerminal: externalTerminal);
 
-  /// Where a depth walk reads from. Exposed so the MCP surface can check the
-  /// cap before doing any work it would have to undo.
+  /// How deep a child of [parentSessionId] would be — for a surface that says
+  /// so before asking; the server applies the cap.
   SessionDepth depthForChildOf(String? parentSessionId) =>
       SessionDepth.forChildOf(
         parentSessionId,

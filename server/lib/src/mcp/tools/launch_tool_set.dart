@@ -1,42 +1,41 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' hide Clock;
-import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart' show Clock;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_projects/store.dart' show RepositoryDao;
-import 'package:karmashala_session/lineage.dart';
-import 'package:karmashala_session/session.dart';
-import 'package:karmashala_session_engine/store.dart' show SessionDao;
+import 'package:karmashala_session/launch.dart';
 
 import '../../automations/daemon_agents.dart';
-import '../../automations/daemon_checkout_facts.dart';
-import '../../automations/hosted_agent_launcher.dart';
+import '../../sessions/launch/server_session_launcher.dart';
 import 'agent_names.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 
-/// **Starting a session when no app is open** — `open_new_session`, run by
-/// the server in its own environment through the launcher an automation's
-/// run and a phone's start take. With the app open the tool is the app's: it
-/// opens the session as a visible tab and reaches every environment.
+/// What an agent is told when a tool would show something and no Karmashala
+/// window is connected to show it in.
+const String kNoWindowOpen =
+    'no Karmashala window is open, so nothing was shown';
+
+/// **Starting a session**, by the server — `open_new_session`, for every
+/// session an agent asks for (slice 5b), through [ServerSessionLauncher], the
+/// path a person's New session takes. The session runs in the server whether
+/// or not a window is open; the window the person last used is asked to show
+/// it in a tab ([OpenSessionTab]).
 ///
-/// What the server decides as the app did: the checkout (the project's
-/// first, unless named), the agent (named, or the environment's first), the
-/// spawn-depth cap, and the permission carry — a session an agent starts
-/// holds no more than the least of its caller's mode and "autoRun". Without
-/// the app, "the mode configured in Settings" is the agent's own declared
-/// default, as for a phone's start.
+/// What the server decides as the app did: the checkout (the project's first,
+/// unless named — the project's own folder when none is recorded), the agent
+/// (named, or the default Settings names), the spawn-depth cap, and the
+/// permission carry — a session an agent starts holds no more than the least
+/// of its caller's mode and "autoRun".
 class LaunchToolSet extends ServerToolSet {
   LaunchToolSet(
     this._context, {
-    required this.appConnected,
-    required this.launcher,
-    DaemonCheckoutFacts? facts,
+    required this.launches,
     this.agents = const DaemonAgents(),
-  }) : _sessions = SessionDao(_context.database),
-       _repositories = RepositoryDao(_context.database),
-       facts = facts ?? DaemonCheckoutFacts(CheckoutRows(_context.database)) {
+  }) : _repositories = RepositoryDao(_context.database) {
     _launches = LaunchDedupe(
       clock: _ContextClock(_context),
       onCollapsed: (tool) => _context.log(
@@ -52,14 +51,8 @@ class LaunchToolSet extends ServerToolSet {
   late final LaunchDedupe _launches;
 
   final ServerToolContext _context;
-  final bool Function() appConnected;
-
-  /// The server's launcher, once agents can be handed their tools; null
-  /// until then (the tool is then the app's, or refused).
-  final HostedAgentLauncher? Function() launcher;
-  final DaemonCheckoutFacts facts;
+  final ServerSessionLauncher launches;
   final DaemonAgents agents;
-  final SessionDao _sessions;
   final RepositoryDao _repositories;
 
   @override
@@ -71,19 +64,16 @@ class LaunchToolSet extends ServerToolSet {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
-    if (tool != 'open_new_session' || appConnected()) return null;
-    final start = launcher();
-    if (start == null) return null;
+    if (tool != 'open_new_session') return null;
     return _launches.run(
       tool: tool,
       arguments: arguments,
       callerSessionId: callerSessionId,
-      start: () => runTool(() => _open(start, arguments, callerSessionId)),
+      start: () => runTool(() => _open(arguments, callerSessionId)),
     );
   }
 
   Future<Object?> _open(
-    HostedAgentLauncher start,
     Map<String, dynamic> args,
     String? callerSessionId,
   ) async {
@@ -98,24 +88,23 @@ class LaunchToolSet extends ServerToolSet {
         orElse: () => throw StateError('Repository not found in this project.'),
       );
     } else {
-      final first = repos.firstOrNull;
-      if (first == null) {
-        throw StateError(
-          'That project has no checkout recorded, and without the Karmashala '
-          'app nothing here can make one. Open the project in the app once, '
-          'or name a repositoryId.',
-        );
-      }
-      repo = first;
+      repo = repos.firstOrNull ?? _runLocationOf(projectId);
     }
-    if (!facts.isHostLocal(repo.path)) {
+    final environment = _context.data.environments
+        .where((e) => e.id == repo.path.environmentId)
+        .firstOrNull;
+    // An SSH box's agents are run by a window until slice 5d: with none
+    // open, nothing could run this one.
+    if (environment?.kind == EnvironmentKind.ssh &&
+        _context.data.intentTarget == null) {
       throw StateError(
-        'That checkout is in ${facts.describeEnvironment(repo.path)}, and '
-        'only the Karmashala app starts agents there — it is not running.',
+        'That checkout is on ${environment!.name}, an SSH machine, whose '
+        'agents a Karmashala window runs — and $kNoWindowOpen. Open '
+        'Karmashala, then ask again.',
       );
     }
 
-    final installs = _context.data.installationsIn(repo.path.environmentId);
+    final installs = launches.installationsIn(repo.path.environmentId);
     if (installs.isEmpty) {
       throw StateError('No agent is installed in ${repo.path.environmentId}.');
     }
@@ -138,14 +127,10 @@ class LaunchToolSet extends ServerToolSet {
         );
       }
     } else {
-      install = installs.first;
+      install =
+          launches.defaultInstallationIn(repo.path.environmentId) ??
+          installs.first;
     }
-
-    final depth = SessionDepth.forChildOf(
-      callerSessionId,
-      (id) => _sessions.getById(id)?.parentSessionId,
-    );
-    if (!depth.isAllowed) throw StateError(depth.refusal);
 
     final permission = _spawnPermission(
       args['permissionMode'] as String?,
@@ -153,26 +138,25 @@ class LaunchToolSet extends ServerToolSet {
       callerSessionId,
     );
     final title = args['title'] as String?;
-    final prompt = args['prompt'] as String?;
-    final parent = callerSessionId == null
-        ? null
-        : _sessions.getById(callerSessionId);
-    final attribution = parent == null
-        ? null
-        : SessionAttribution(sessionId: parent.id, title: parent.title);
-    final session = await start.start(
-      HostedLaunch(
-        repository: repo,
-        installation: install,
+    final started = await launches.start(
+      SessionStartSpec(
+        repositoryId: repo.id,
+        installationId: install.id,
         title: (title == null || title.trim().isEmpty)
             ? 'Agent session'
             : title.trim(),
-        prompt: prompt == null || attribution == null
-            ? prompt
-            : attribution.render(prompt),
+        prompt: args['prompt'] as String?,
         worktree: args['useWorktree'] == true,
         permissionMode: permission.selection?.canonical,
-        parentSessionId: parent?.id,
+        parentSessionId: callerSessionId,
+      ),
+    );
+    final session = started.session;
+    final shown = _context.data.tellIntent(
+      OpenSessionTab(
+        sessionId: session.id,
+        title: session.title,
+        launch: started.launch,
       ),
     );
     return <String, Object?>{
@@ -181,21 +165,34 @@ class LaunchToolSet extends ServerToolSet {
       'title': session.title,
       'repository': repo.name,
       'environmentId': repo.path.environmentId,
-      'depth': depth.depth,
+      'depth': started.depth ?? launches.depthForChildOf(callerSessionId).depth,
       'permissionMode': session.permissionMode ?? 'not recorded',
       if (permission.capped != null) 'permissionCapped': permission.capped,
       if (session.worktree != null) 'worktree': session.worktree!.path,
-      // Said, because the app would have shown it: nobody is looking.
-      'where':
-          'started by the server with no Karmashala app open; it attaches '
-          'to a tab when the app opens it',
+      'where': shown
+          ? 'running in the Karmashala server, shown in a tab of the '
+                'Karmashala window'
+          : 'running in the Karmashala server; $kNoWindowOpen — a window '
+                'shows it when it is opened',
     };
   }
 
+  /// Where a session started at [projectId] runs when the workspace records
+  /// no checkout for it: the project's own folder, recorded now.
+  Repository _runLocationOf(String projectId) {
+    final added = _context.write(CheckoutsAdd(projectId: projectId));
+    final first =
+        added.firstOrNull ?? _repositories.getByProject(projectId).firstOrNull;
+    if (first == null) {
+      throw StateError('This project is no longer in the workspace.');
+    }
+    return first;
+  }
+
   /// The mode a session an agent asked for launches under: the least of what
-  /// it named (or the agent's declared default), what the calling session
-  /// holds, and the spawn ceiling. A named mode above that is refused rather
-  /// than quietly lowered; an omitted one is lowered and `capped` says so.
+  /// it named (or the Settings default), what the calling session holds, and
+  /// the spawn ceiling. A named mode above that is refused rather than
+  /// quietly lowered; an omitted one is lowered and `capped` says so.
   ({PermissionSelection? selection, String? capped}) _spawnPermission(
     String? raw,
     String agentId,
@@ -212,7 +209,9 @@ class LaunchToolSet extends ServerToolSet {
       throw _unknownMode(raw!, support);
     }
     final defaultRisk =
-        support.riskOf(agents.permissionOf(agentId, null)) ??
+        support.riskOf(
+          launches.permissionFor(agentId, SessionPurpose.newSession),
+        ) ??
         PermissionRisk.ask;
     final callerRisk = _callerRisk(callerSessionId) ?? defaultRisk;
 
@@ -228,7 +227,7 @@ class LaunchToolSet extends ServerToolSet {
       return (
         selection: capped.selection,
         capped:
-            'Started at ${capped.carried.label} rather than the agent\'s '
+            'Started at ${capped.carried.label} rather than the Settings '
             'default (${defaultRisk.label.toLowerCase()}): ${capped.reason}.',
       );
     }
@@ -253,13 +252,18 @@ class LaunchToolSet extends ServerToolSet {
   /// as unbounded.
   PermissionRisk? _callerRisk(String? callerSessionId) {
     if (callerSessionId == null) return null;
-    final caller = _sessions.getById(callerSessionId);
+    final effective = launches.effectivePermissionOf(callerSessionId);
+    if (effective == null) return null;
+    final caller = _context.data.installations
+        .where(
+          (i) =>
+              i.id ==
+              launches.sessions.getById(callerSessionId)?.agentInstallationId,
+        )
+        .firstOrNull;
     if (caller == null) return null;
-    final agentId = facts.installation(caller.agentInstallationId)?.agentId;
-    if (agentId == null) return null;
-    final support = agents.descriptorOf(agentId)?.launch.permission;
-    if (support == null) return null;
-    return support.riskOf(agents.permissionOf(agentId, caller.permissionMode));
+    final support = agents.descriptorOf(caller.agentId)?.launch.permission;
+    return support?.riskOf(effective.selection);
   }
 
   static ArgumentError _unknownMode(
@@ -280,8 +284,8 @@ final class _ContextClock implements Clock {
   DateTime nowUtc() => _context.now();
 }
 
-/// The schemas of the launch tools the server runs while no app is open,
-/// moved from the app with their words unchanged.
+/// The schemas of the launch tools the server runs, moved from the app with
+/// their words unchanged.
 const List<Map<String, Object?>> launchToolSchemas = [
   {
     'name': 'open_new_session',

@@ -11,6 +11,8 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 
 import '../support/fake_data_server.dart';
+import '../support/fixtures.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart' show SessionResume;
 
 /// Which pane the *real* factory builds (slice 5a): every local and WSL pane
 /// is a terminal the server runs — asked for with `terminals.open`, attached
@@ -109,8 +111,13 @@ void main() {
     expect(server.terminals.opened.single.profileId, isNull);
   });
 
-  test('an agent pane runs under its session row, launch and all', () async {
+  test('an agent pane is its session\'s: the server resumes it, and the '
+      'pane attaches under its row (slice 5b)', () async {
     final server = FakeDataServer();
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    server.installationRows.insert(agentInstallation());
+    server.sessionRows.insert(session(id: 's1', title: 'Fix it'));
     final container = await containerWith(server, access: inertAccess());
     final pane =
         open(
@@ -126,11 +133,14 @@ void main() {
             )
             as HostTerminalInstance;
     expect(pane.sessionId, 'karmashala_s1');
-    await pane.opener!(80, 24);
-    final asked = server.terminals.opened.single;
-    expect(asked.agentLaunch?.mcpArguments, ['--mcp-config', '/tmp/m.json']);
-    expect(asked.agentLaunch?.sessionId, 's1');
-    expect(asked.profileId, isNull);
+    final opened = await pane.opener!(80, 24);
+    expect(opened.sessionId, 'karmashala_s1');
+    // The server was asked to resume the row — never handed this client's
+    // command line, MCP flags and all.
+    final asked = server.sessionWork.asked.whereType<SessionResume>().single;
+    expect(asked.sessionId, 's1');
+    expect((asked.columns, asked.rows), (80, 24));
+    expect(server.terminals.opened, isEmpty);
   });
 
   test('a refusal is thrown in the server\'s words', () async {

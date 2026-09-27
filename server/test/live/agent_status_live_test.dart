@@ -115,15 +115,7 @@ void main() {
       // The app is open and launches the agent in the row's host session.
       final app = await HostLifecycleWatch.connect(host.socketPath);
       expect(app, isNotNull);
-      // Its tools, which the daemon keeps serving once the app is gone.
-      app!.offerMcpTools(const [
-        {
-          'name': 'session_answer',
-          'description': 'Answers a session\'s open prompt.',
-          'inputSchema': {'type': 'object'},
-        },
-      ]);
-      final firstStatuses = StreamIterator(app.agentStatuses);
+      final firstStatuses = StreamIterator(app!.agentStatuses);
       final pane = await LocalHostClient.connect(host.socketPath, 'app-pane');
       await pane.expect<WelcomeMessage>();
       pane.send(

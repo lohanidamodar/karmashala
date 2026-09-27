@@ -56,6 +56,7 @@ import 'package:agent_cli/descriptors.dart'
         AgentActivityStatus,
         AgentStatusReport,
         AgentStatusSource,
+        AgentRegistry,
         AgentWaitKind;
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -67,7 +68,10 @@ import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/lineage.dart'
+    show HandoffSourceBrief, SessionLink;
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_terminal_core/profiles.dart' show AgentPaneLaunch;
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
@@ -80,6 +84,7 @@ import 'fake_command_runner.dart';
 part 'fake_evidence.dart';
 part 'fake_terminals_work.dart';
 part 'fake_attention.dart';
+part 'fake_session_work.dart';
 part 'fake_hosts.dart';
 part 'fake_sessions.dart';
 part 'fake_pairings.dart';
@@ -265,6 +270,13 @@ class FakeDataServer {
   /// a test, told to every window.
   late final attention = FakeAttention._(this);
 
+  /// The server's launch path: starts, resumes, handoffs, forks — nothing
+  /// spawned; the rows it writes are told.
+  late final sessionWork = FakeSessionWork._(this);
+
+  /// The window a person last used, as `client.active` last said.
+  String? focusedPaneId;
+
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
   /// and verification switches.
@@ -406,7 +418,9 @@ class FakeDataServer {
         case ForgeReadingChanged(:final checkout, :final reading):
           attention.forgeReadings[checkout] = reading;
         case AttentionNewsTold() || InboxOpenWanted() || UsageLimitNoticed():
-          // Nothing kept: told as it is.
+        // Nothing kept: told as it is.
+        case ClientIntent():
+          // Told to a window, never kept.
           break;
       }
     }
@@ -541,6 +555,13 @@ class FakeDataServer {
     }
     if (request case final ChecksRun work) {
       return DataReply(attention._checks(work) as R, revision, const []);
+    }
+    if (request case final SessionWorkRequest<Object?> work) {
+      return DataReply(sessionWork._handle(work) as R, revision, const []);
+    }
+    if (request case ClientActive(:final focusedPaneId)) {
+      this.focusedPaneId = focusedPaneId;
+      return DataReply(const DataAck() as R, revision, const []);
     }
     if (request case final FlutterWorkRequest<Object?> work) {
       return DataReply(runs._flutter(work) as R, revision, const []);
@@ -683,6 +704,8 @@ class FakeDataServer {
       TerminalWorkRequest() ||
       AttentionRequest() ||
       ChecksWorkRequest() ||
+      SessionWorkRequest() ||
+      ClientActive() ||
       EnvVaultRequest() => throw StateError('answered above'),
       GitWorkRequest() ||
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),

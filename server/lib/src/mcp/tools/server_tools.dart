@@ -1,8 +1,8 @@
 import 'server_tool_set.dart';
 
-/// Every agent tool the server runs itself, by name. A tool none of these
-/// families serves is the app's — its UI, or a device attached to its
-/// machine — and is forwarded to it.
+/// Every agent tool the server runs itself, by name — all of them since slice
+/// 5b. A tool none of these families serves is one the app still answers
+/// (the attention inbox, until slice 5c), and is forwarded to it.
 class ServerTools {
   ServerTools([Iterable<ServerToolSet> families = const []]) {
     families.forEach(add);
@@ -32,8 +32,7 @@ class ServerTools {
     for (final family in _families) ...family.schemas,
   ];
 
-  /// Runs [tool] here; null when the server does not serve it, or its family
-  /// hands this call to the app.
+  /// Runs [tool] here; null when the server does not serve it.
   Future<Object?>? call(
     String tool,
     Map<String, dynamic> arguments,

@@ -1,4 +1,3 @@
-import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/instructions.dart';
 import 'package:karmashala_mcp/catalogue.dart';
@@ -13,8 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// decided whether it can be undone.
 void main() {
   final servedNames = <String>{
-    for (final schema in _served)
-      schema['name']! as String,
+    for (final schema in _served) schema['name']! as String,
   };
 
   test('every served tool declares what it does', () {
@@ -107,8 +105,6 @@ void main() {
       'session_handoff',
       'session_fork',
       'session_fork_from_checkpoint',
-      // A new external terminal window running the generated tmux script.
-      'open_sessions_in_tmux',
       // Takes the pane away; the next tab becomes active and takes the keys.
       'session_end',
       'terminal_open',
@@ -328,9 +324,6 @@ void main() {
   });
 }
 
-/// What agents are served: the server's own tools, then the app's — the
-/// order the server's relay composes them in.
-final List<Map<String, dynamic>> _served = [
-  ...serverToolSchemas,
-  ...McpToolDispatcher.toolSchemas,
-];
+/// What agents are served: the server's tools, and nothing else — no tool
+/// is forwarded to an app since slice 5b (protocol 28).
+final List<Map<String, dynamic>> _served = [...serverToolSchemas];

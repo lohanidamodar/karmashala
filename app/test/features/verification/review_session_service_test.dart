@@ -6,21 +6,31 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionStart;
 
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../fanout/fanout_harness.dart';
-import '../terminal/fake_instance.dart';
 
 /// The argv the reviewer's pane was actually launched with — the only place
 /// the brief can be observed leaving the app.
+/// The opening prompt the pane [paneId]'s session was asked of the server
+/// with (slice 5b: the server builds the command line).
 String promptSentTo(Harness h, String paneId) {
-  final instance =
-      h.container
-              .read(terminalSessionsControllerProvider.notifier)
-              .instanceFor(paneId)!
-          as FakeTerminalInstance;
-  return instance.agentLaunch!.arguments.join('\n');
+  final sessionId = h.container
+      .read(terminalSessionsControllerProvider.notifier)
+      .instanceFor(paneId)!
+      .agentLaunch!
+      .sessionId;
+  final started = h.server.sessionRows.getById(sessionId!)!;
+  return h.server.sessionWork.asked
+          .whereType<SessionStart>()
+          .where((s) => s.spec.title == started.title)
+          .lastOrNull
+          ?.spec
+          .prompt ??
+      '';
 }
 
 void main() {
