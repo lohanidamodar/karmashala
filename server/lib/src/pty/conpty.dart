@@ -16,12 +16,9 @@ import 'win32.dart';
 /// `128 + signal`; and [PtySpawnRequest.environment] is layered *over* this
 /// process's own, because a child with no `SystemRoot` cannot load a DLL.
 class ConPtyLauncher implements PtyLauncher {
-  ConPtyLauncher({Kernel32? kernel32, void Function(String line)? log})
-    : _k = kernel32 ?? Kernel32.open(),
-      _log = log ?? stderr.writeln;
+  ConPtyLauncher({Kernel32? kernel32}) : _k = kernel32 ?? Kernel32.open();
 
   final Kernel32 _k;
-  final void Function(String line) _log;
 
   /// Which library carried the pty entry points here — measured, not assumed.
   String get ptyLibrary => _k.ptyLibrary;
@@ -85,18 +82,9 @@ class ConPtyLauncher implements PtyLauncher {
       _k.closeHandle(outWrite);
       outWrite = 0;
 
-      // Redirection Guard off for the child (BACKLOG §2). A failure with it is
-      // tried once more without it, whatever its error: the error is read by
-      // a second FFI call, which the VM can clobber (a first pane read 0).
-      var created = _createChild(arena, hPc, request, mitigation: true);
-      if (created.info == null) {
-        _log(
-          'karmashala_host: this Windows refused the redirection-trust '
-          'mitigation for ${request.argv.first} (error ${created.error}); '
-          "started it without, so it inherits the server's policy",
-        );
-        created = _createChild(arena, hPc, request, mitigation: false);
-      }
+      // No mitigation policy: the redirection-trust "off" value it set is not
+      // in the SDK, and Windows refused it for every pane (2026-09-27).
+      final created = _createChild(arena, hPc, request);
       final info =
           created.info ??
           (throw PtyException(
@@ -134,16 +122,15 @@ class ConPtyLauncher implements PtyLauncher {
     }
   }
 
-  /// Starts the child on [hPc], suspended, with a fresh attribute list: the
-  /// pseudoconsole, and the redirection-trust policy when [mitigation]. The
-  /// info, or the error `CreateProcess` gave (null info).
+  /// Starts the child on [hPc], suspended, with a fresh attribute list holding
+  /// the pseudoconsole. The info, or the error `CreateProcess` gave (null
+  /// info).
   ({ProcessInformation? info, int error}) _createChild(
     Arena arena,
     int hPc,
-    PtySpawnRequest request, {
-    required bool mitigation,
-  }) {
-    final count = paneAttributeCount(mitigation: mitigation);
+    PtySpawnRequest request,
+  ) {
+    const count = kPaneAttributeCount;
     var attributes = nullptr as Pointer<Void>;
     var initialised = false;
     try {
@@ -181,28 +168,6 @@ class ConPtyLauncher implements PtyLauncher {
           errno: _k.getLastError(),
         );
       }
-      if (mitigation) {
-        final words = redirectionTrustOffPolicy();
-        // Lives in the arena, past CreateProcess: the list points at it.
-        final policy = arena<Uint64>(words.length);
-        for (var i = 0; i < words.length; i++) {
-          policy[i] = words[i];
-        }
-        if (_k.updateProcThreadAttribute(
-              attributes,
-              0,
-              kProcThreadAttributeMitigationPolicy,
-              policy.cast<Void>(),
-              sizeOf<Uint64>() * words.length,
-              nullptr,
-              nullptr,
-            ) ==
-            0) {
-          // Not the launch: the policy alone was refused, so start without it.
-          return (info: null, error: kErrorInvalidParameter);
-        }
-      }
-
       final startup = arena<StartupInfoExW>();
       startup.ref
         ..cb = sizeOf<StartupInfoExW>()

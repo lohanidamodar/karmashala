@@ -93,31 +93,11 @@ final class ProcessEntry32W extends Struct {
 /// arithmetic so it can be checked against the SDK header.
 const int kProcThreadAttributePseudoConsole = 22 | 0x00020000;
 
-/// `ProcThreadAttributeValue(7, FALSE, TRUE, FALSE)` —
-/// `PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY` (0x00020007).
-const int kProcThreadAttributeMitigationPolicy = 7 | 0x00020000;
-
-/// The redirection-trust (Redirection Guard) creation flag, turned **off**
-/// for a pane's child (BACKLOG §2): which of the policy's DWORD64 words it
-/// sits in, and its bits there. **Not in the SDK**: 10.0.26100's winbase.h
-/// defines POLICY2 fields only up to bit 56 (`FSCTL_SYSTEM_CALL_DISABLE`), and
-/// Windows 11 26200 fails `CreateProcess` with error 87 for this value
-/// (2026-09-27), so every child is started again without it.
-const int kRedirectionTrustPolicyWord = 1;
-const int kRedirectionTrustAlwaysOff = 0x2 << 60;
-
-/// The words `UpdateProcThreadAttribute` is handed for the mitigation policy:
-/// the redirection-trust bit in its word, every other policy left to Windows'
-/// default (zero). Two DWORD64s, the size Windows 10 accepts.
-List<int> redirectionTrustOffPolicy() {
-  final words = List<int>.filled(2, 0);
-  words[kRedirectionTrustPolicyWord] = kRedirectionTrustAlwaysOff;
-  return words;
-}
-
-/// How many attributes a pane's list carries: the pseudoconsole, and the
-/// mitigation policy when [mitigation] is asked for.
-int paneAttributeCount({required bool mitigation}) => mitigation ? 2 : 1;
+/// How many attributes a pane's list carries: the pseudoconsole alone. There
+/// is no redirection-trust policy: the creation flag it needed is not in the
+/// SDK (10.0.26100 defines POLICY2 fields only up to bit 56), and Windows 11
+/// 26200 refused the guessed one for every pane (2026-09-27).
+const int kPaneAttributeCount = 1;
 
 const int kExtendedStartupInfoPresent = 0x00080000;
 
@@ -144,10 +124,6 @@ const int kJobObjectLimitKillOnJobClose = 0x00002000;
 const int kJobExtendedLimitBytes = 144;
 const int kJobLimitFlagsOffset = 16;
 const int kErrorInsufficientBuffer = 122;
-
-/// `ERROR_INVALID_PARAMETER`: what a Windows that does not know a mitigation
-/// bit answers `CreateProcess` or `UpdateProcThreadAttribute` with.
-const int kErrorInvalidParameter = 87;
 
 typedef CreatePseudoConsoleNative =
     Int32 Function(Coord, IntPtr, IntPtr, Uint32, Pointer<IntPtr>);
