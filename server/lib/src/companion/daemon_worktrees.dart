@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show hostedRunSessionId;
 import 'package:karmashala_git/git.dart' show GitException, WorktreeSetupReport;
 import 'package:karmashala_git/store.dart' show WorktreeSetupDao;
 import 'package:karmashala_git/worktrees.dart';
@@ -13,13 +15,13 @@ import '../domain/session_registry.dart';
 import '../pty/pty.dart';
 
 /// The pane id prefix of a worktree's setup or teardown command. Its host
-/// session is named the way a desktop pane's is (`karmashala_local_<pane>`,
-/// `hostSessionIdFor`), so a client opens a pane on it — attaching, never
-/// starting another — and no session row is ever read into it.
+/// session is named as every server-hosted run's is (`hostedRunSessionId`,
+/// the terminal's `hostSessionIdFor` rule), so a client opens an attach-only
+/// pane on it, and no session row is ever read into it.
 const String kWorktreeSetupPanePrefix = 'setup-';
 
 /// The host session a setup pane [paneId] runs in.
-String worktreeSetupHostSessionId(String paneId) => 'karmashala_local_$paneId';
+String worktreeSetupHostSessionId(String paneId) => hostedRunSessionId(paneId);
 
 /// Worktree creation and removal as the server does them — for a client's
 /// `worktrees.create`, an agent's tool and a session a phone starts in a

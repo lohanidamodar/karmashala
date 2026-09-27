@@ -14,6 +14,8 @@ import 'package:karmashala_remote/remote.dart'
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart'
+    show FlutterAppRegistry;
 
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -41,6 +43,8 @@ import 'git_values.dart';
 import 'session_values.dart';
 import 'ssh_values.dart';
 import 'worktree_values.dart';
+import 'flutter_values.dart';
+import 'browser_values.dart';
 
 part 'changes/automations_changes.dart';
 part 'changes/checkpoints_changes.dart';
@@ -49,6 +53,8 @@ part 'changes/snippets_changes.dart';
 part 'changes/pairings_changes.dart';
 part 'changes/ssh_changes.dart';
 part 'changes/git_changes.dart';
+part 'changes/flutter_changes.dart';
+part 'changes/browser_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -581,7 +587,9 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _snippetsChangeFromJson(name, json) ??
     _pairingsChangeFromJson(name, json) ??
     _sshChangeFromJson(name, json) ??
-    _gitChangeFromJson(name, json);
+    _gitChangeFromJson(name, json) ??
+    _flutterChangeFromJson(name, json) ??
+    _browserChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

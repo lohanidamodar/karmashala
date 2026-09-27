@@ -123,6 +123,47 @@ class HostDataLink implements DataEndpoint {
     return pending.answer.future;
   }
 
+  final _streams = <int, StreamController<DataStreamItems>>{};
+  var _lastStreamId = 0;
+
+  @override
+  Stream<DataStreamItems> openStream(String source, String key) {
+    late final StreamController<DataStreamItems> controller;
+    final id = ++_lastStreamId;
+    controller = StreamController<DataStreamItems>(
+      onListen: () {
+        if (_done.isCompleted) {
+          controller
+            ..addError(
+              const DataRefused.unavailable(
+                'the link to the Karmashala server is closed',
+              ),
+            )
+            ..close();
+          return;
+        }
+        _streams[id] = controller;
+        _sendQuietly(
+          DataStreamOpenMessage(DataStreamEnvelope.open(id, source, key)),
+        );
+      },
+      onCancel: () {
+        if (_streams.remove(id) != null) {
+          _sendQuietly(DataStreamCloseMessage(DataStreamEnvelope.close(id)));
+        }
+      },
+    );
+    return controller.stream;
+  }
+
+  void _sendQuietly(HostMessage message) {
+    try {
+      _connection.add(message.toFrame().encode());
+    } on Object {
+      // The link is going; `_end` closes every stream.
+    }
+  }
+
   void _onBytes(List<int> chunk) {
     final List<Frame> frames;
     try {
@@ -158,6 +199,16 @@ class HostDataLink implements DataEndpoint {
           // A batch this build cannot read is skipped; the next snapshot
           // after a redial is whole.
         }
+      case DataStreamItemsMessage(:final envelope):
+        final batch = DataStreamEnvelope.readItems(envelope);
+        if (batch == null) break;
+        final controller = _streams[batch.streamId];
+        if (controller == null) break;
+        controller.add(batch);
+        if (batch.ended != null) {
+          _streams.remove(batch.streamId);
+          unawaited(controller.close());
+        }
       default:
         break;
     }
@@ -171,6 +222,12 @@ class HostDataLink implements DataEndpoint {
       pending.fail(DataRefused.unavailable(reason));
     }
     _pending.clear();
+    final streams = [..._streams.values];
+    _streams.clear();
+    for (final stream in streams) {
+      stream.add(DataStreamItems(0, const [], ended: reason));
+      unawaited(stream.close());
+    }
     if (!_changes.isClosed) unawaited(_changes.close());
     if (!_done.isCompleted) _done.complete();
   }

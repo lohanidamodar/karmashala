@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
@@ -45,6 +47,7 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 import 'agent_work_values.dart';
 import 'automation_values.dart';
@@ -55,6 +58,8 @@ import 'session_values.dart';
 import 'ssh_values.dart';
 import 'workspace_values.dart';
 import 'worktree_values.dart';
+import 'flutter_values.dart';
+import 'browser_values.dart';
 
 part 'requests/subscription_requests.dart';
 part 'requests/sessions_requests.dart';
@@ -72,6 +77,8 @@ part 'requests/conversations_requests.dart';
 part 'requests/agent_work_requests.dart';
 part 'requests/ssh_requests.dart';
 part 'requests/git_requests.dart';
+part 'requests/flutter_requests.dart';
+part 'requests/browser_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -258,6 +265,8 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _agentWorkRequestFromJson(kind, args) ??
     _sshRequestFromJson(kind, args) ??
     _gitRequestFromJson(kind, args) ??
+    _flutterRequestFromJson(kind, args) ??
+    _browserRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.

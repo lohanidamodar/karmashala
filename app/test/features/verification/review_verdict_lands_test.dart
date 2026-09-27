@@ -12,7 +12,6 @@ import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
-import '../browser/fake_browser.dart';
 import '../fanout/fanout_harness.dart';
 
 /// The claim the whole feature rests on: a review session's verdict reaches the
@@ -33,7 +32,6 @@ void main() {
     verification = VerificationService(
       VerificationData(h.container.read(dataClientProvider)),
       VerificationArtifactStore(root),
-      browserOf: () => FakeBrowser().service,
       adbOf: () => null,
     );
   });

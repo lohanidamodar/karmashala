@@ -47,6 +47,46 @@ class DataChangesMessage extends HostMessage {
       DataChangesMessage(_jsonPayload(frame, 'data changes'));
 }
 
+/// client → host: open a live stream, `{streamId, source, key}`.
+class DataStreamOpenMessage extends HostMessage {
+  const DataStreamOpenMessage(this.envelope);
+
+  final Map<String, Object?> envelope;
+
+  @override
+  Frame toFrame() => _jsonFrame(MessageType.dataStreamOpen, envelope);
+
+  static DataStreamOpenMessage decode(Frame frame) =>
+      DataStreamOpenMessage(_jsonPayload(frame, 'data stream open'));
+}
+
+/// host → client: one batch of an open stream, `{streamId, items, dropped?,
+/// ended?}`.
+class DataStreamItemsMessage extends HostMessage {
+  const DataStreamItemsMessage(this.envelope);
+
+  final Map<String, Object?> envelope;
+
+  @override
+  Frame toFrame() => _jsonFrame(MessageType.dataStreamItems, envelope);
+
+  static DataStreamItemsMessage decode(Frame frame) =>
+      DataStreamItemsMessage(_jsonPayload(frame, 'data stream items'));
+}
+
+/// client → host: close a stream, `{streamId}`.
+class DataStreamCloseMessage extends HostMessage {
+  const DataStreamCloseMessage(this.envelope);
+
+  final Map<String, Object?> envelope;
+
+  @override
+  Frame toFrame() => _jsonFrame(MessageType.dataStreamClose, envelope);
+
+  static DataStreamCloseMessage decode(Frame frame) =>
+      DataStreamCloseMessage(_jsonPayload(frame, 'data stream close'));
+}
+
 Frame _jsonFrame(MessageType type, Map<String, Object?> body) =>
     Frame(type, 0, (WireWriter()..str(jsonEncode(body))).take());
 

@@ -75,6 +75,37 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return tabId;
   }
 
+  /// Opens a tab attached to a session the server hosts — [paneId] names it
+  /// session (`hostedRunSessionId`) — or brings the open one forward. The
+  /// pane never starts a process of its own. Null when this machine's server
+  /// is not reachable for panes.
+  String? openHostedRunTab({required String paneId, required String title}) {
+    final open = _tabContaining(paneId);
+    if (open != null) {
+      activateTab(open.id);
+      return open.id;
+    }
+    final instance = ref.read(hostedRunPaneFactoryProvider)(
+      id: paneId,
+      title: title,
+    );
+    if (instance == null) return null;
+    _adopt(paneId, instance);
+    final tabId = _newId();
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(paneId),
+        focusedPaneId: paneId,
+      ),
+    );
+    _tabsMutated();
+    _activeTabId = tabId;
+    _publish();
+    persistStructure();
+    return tabId;
+  }
+
   /// Settings is one document over one store, so a second tab would be the
   /// same page disagreeing with itself.
   String openSettingsTab() => openDocumentTab(kSettingsPaneId);

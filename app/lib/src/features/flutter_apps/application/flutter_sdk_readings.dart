@@ -1,44 +1,35 @@
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'package:agent_cli/process.dart';
-import '../../../core/process/command_runner_providers.dart';
-import '../../../core/util/clock_provider.dart';
 import '../../settings/application/settings_controller.dart';
-import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import '../data/flutter_data.dart';
 
-/// The Flutter SDK reading per environment, in memory only — PATH moves. [build]
-/// empties every held reading when a hand-set path changes.
+/// The Flutter SDK readings the server took, per environment — it reads
+/// them on its own machine (slice 3d), a hand-set path included. Emptied
+/// when a hand-set path changes, so the next ask reads again.
 class FlutterSdkReadings extends Notifier<Map<String, FlutterSdkReading>> {
   @override
   Map<String, FlutterSdkReading> build() {
-    _handSet = ref.watch(
+    ref.watch(
       settingsControllerProvider.select((settings) => settings.flutterSdkPaths),
     );
     return const <String, FlutterSdkReading>{};
   }
 
-  Map<String, String> _handSet = const {};
-
   /// What was last read for [environmentId], however old — or null, which is
   /// "we have not looked" and not "there is no Flutter" (§19).
   FlutterSdkReading? cached(String environmentId) => state[environmentId];
 
-  /// Where `flutter` is in [environment], reusing a reading that is still
-  /// fresh unless [force] says to look again.
+  /// Where `flutter` is in [environment], asked of the server; [force] reads
+  /// again rather than reusing a fresh reading.
   Future<FlutterSdkReading> readFor(
     ExecutionEnvironment environment, {
     bool force = false,
   }) async {
-    final now = ref.read(clockProvider).nowUtc();
-    final held = state[environment.id];
-    if (!force && held != null && held.isFreshAt(now)) return held;
-
-    final CommandRunnerFactory factory = ref.read(commandRunnerFactoryProvider);
-    final reading = await FlutterSdkService(
-      runner: factory.forEnvironment(environment),
-      environment: environment,
-      handSetExecutable: _handSet[environment.id],
-    ).read(now);
+    final reading = await ref
+        .read(flutterDataProvider)
+        .sdk(environment.id, force: force);
     state = <String, FlutterSdkReading>{...state, environment.id: reading};
     return reading;
   }

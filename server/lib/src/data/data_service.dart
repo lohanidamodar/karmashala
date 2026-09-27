@@ -25,6 +25,8 @@ import 'pairings_handler.dart';
 import 'preferences_handler.dart';
 import 'snippets_handler.dart';
 import 'ssh_work.dart';
+import 'data_streams.dart';
+import 'runs_work.dart';
 import 'sessions_handler.dart';
 import 'todos_handler.dart';
 import 'workspace_handler.dart';
@@ -88,10 +90,19 @@ class DataService {
   /// The server's own SSH (a test connection, a disconnect, a prompt's
   /// answer), set by `serve`; without it that work is refused `unavailable`.
   SshWork? sshWork;
+
   /// The server's git work (reads and writes of a checkout, worktrees and
   /// their cleanup, GitHub), set by `serve`; without it that work is refused
   /// `unavailable`.
   GitWork? gitWork;
+
+  /// The server's Flutter loop and its browser (slice 3d), set by `serve`;
+  /// without them that work is refused `unavailable`.
+  FlutterWork? flutterWork;
+  BrowserWork? browserWork;
+
+  /// The live streams a client can open (`DataStreamEnvelope`), by source.
+  final streamSources = <String, DataStreamSource>{};
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -327,7 +338,9 @@ class DataService {
         // `DataSession.handleLater`.
         AgentWorkRequest() ||
         SshWorkRequest() ||
-        GitWorkRequest() => throw DataRefused.invalid(
+        GitWorkRequest() ||
+        FlutterWorkRequest() ||
+        BrowserWorkRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
         final AutomationsRequest r => _automations.handle(r, changes),
@@ -475,7 +488,9 @@ class DataSession {
       request is CheckpointWorkRequest ||
       request is AgentWorkRequest ||
       request is SshWorkRequest ||
-      request is GitWorkRequest;
+      request is GitWorkRequest ||
+      request is FlutterWorkRequest ||
+      request is BrowserWorkRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
@@ -513,6 +528,24 @@ class DataSession {
       final work =
           _service.gitWork ??
           (throw const DataRefused.unavailable('this server does no git work'));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final FlutterWorkRequest<Object?> asked) {
+      final work =
+          _service.flutterWork ??
+          (throw const DataRefused.unavailable(
+            'this server runs no Flutter apps',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final BrowserWorkRequest<Object?> asked) {
+      final work =
+          _service.browserWork ??
+          (throw const DataRefused.unavailable(
+            'this server drives no browser',
+          ));
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }
@@ -559,7 +592,11 @@ class DataSession {
     _subscribed = true;
     // What is already under way — a connection's state, a question still
     // open — told to this client alone, at the revision it is joining at.
-    final greeting = _service.sshWork?.greeting() ?? const <DataChange>[];
+    final greeting = [
+      ...?_service.sshWork?.greeting(),
+      ...?_service.flutterWork?.greeting(),
+      ...?_service.browserWork?.greeting(),
+    ];
     if (greeting.isNotEmpty) {
       _deliver(DataChanges(_service._revision, List.unmodifiable(greeting)));
     }

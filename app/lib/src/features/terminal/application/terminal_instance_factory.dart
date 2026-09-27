@@ -14,6 +14,30 @@ final restoreLivePanesProvider = Provider<bool>(
 
 /// The production factory: a real ConPTY per pane, carrying the user's
 /// variables. The overlay is read *inside* the closure, so a change is next-pane.
+/// A pane on a session the server hosts — a Flutter run or build, a
+/// worktree's setup (slices 3b, 3d) — attaching only, never starting one; null
+/// when this machine's server is not reachable for panes.
+typedef HostedRunPaneFactory =
+    TerminalInstance? Function({required String id, required String title});
+
+final hostedRunPaneFactoryProvider = Provider<HostedRunPaneFactory>(
+  (ref) => ({required String id, required String title}) {
+    final access = ref.read(localHostSessionAccessProvider);
+    if (access == null) return null;
+    return createHostTerminalInstance(
+      id: id,
+      // What a restore reopens this pane as, when the run is long gone.
+      profile: resolveTerminalProfile(
+        ref.read(settingsControllerProvider).defaultTerminalProfileId,
+        ref.read(terminalProfilesProvider),
+      ),
+      access: access,
+      attachOnly: true,
+      label: title,
+    );
+  },
+);
+
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
   (ref) =>
       ({

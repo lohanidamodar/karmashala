@@ -1,16 +1,20 @@
-import 'package:karmashala_ui/tokens.dart';
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
-import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_browser/browser.dart'
+    show ElementBox, ElementCapture;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_ui/dialogs.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/tokens.dart';
 
-import 'fake_browser.dart';
+import '../../support/fake_data_server.dart';
 
 /// Records what the pane sends, instead of launching an agent.
 class RecordingSessionActions extends SessionActions {
@@ -23,29 +27,63 @@ class RecordingSessionActions extends SessionActions {
       sent.add((sessionId, text));
 }
 
-/// The picker payload the page reports when the user clicks an element.
-const String _pickPayload =
-    '{"ok":true,"selector":"#hero","tagName":"section","id":"hero",'
-    '"classNames":["banner"],"box":{"x":0,"y":0,"width":320,"height":180},'
-    '"url":"https://example.com/app","title":"Example"}';
+/// One transparent pixel, so the preview has something to draw.
+final _pixel = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGA'
+  'hKmMIQAAAABJRU5ErkJggg==',
+);
 
+BrowserState attached({
+  List<String> tabs = const ['PAGE-1'],
+  bool headless = false,
+}) => BrowserState(
+  status: BrowserStatus.connected,
+  connection: 'Attached to the browser already listening on port 9222',
+  url: 'https://example.com/app',
+  title: 'Example',
+  tabs: [
+    for (final id in tabs)
+      BrowserTab(id: id, title: 'Tab $id', url: 'https://example.com/app'),
+  ],
+  currentTargetId: tabs.firstOrNull,
+  headless: headless,
+);
+
+final _pick = BrowserPick(
+  ElementCapture(
+    selector: '#hero',
+    tagName: 'section',
+    elementId: 'hero',
+    classNames: const ['banner'],
+    outerHtml: '<section id="hero" class="banner"></section>',
+    computedStyles: const {'display': 'block'},
+    box: const ElementBox(x: 0, y: 0, width: 320, height: 180),
+    pageUrl: 'https://example.com/app',
+    pageTitle: 'Example',
+    capturedAt: DateTime.utc(2026, 9, 27),
+    screenshotPng: _pixel,
+  ),
+  captureFile: '/data/captures/element_1.png',
+);
+
+/// The server's browser as the pane is a client of it (slice 3d): the pane
+/// asks, and what the browser then is arrives as the server's change.
 class Harness {
-  Harness({List<String> targets = const ['PAGE-1']})
-    : fake = FakeBrowser(
-        targets: [for (final id in targets) fakeTarget(id, title: 'Tab $id')],
-      ) {
-    fake.onEvaluate = (expression) {
-      if (expression.contains('__karmashalaPicker')) return true;
-      if (expression == 'location.href') return 'https://example.com/app';
-      if (expression == 'document.title') return 'Example';
-      return null;
-    };
-  }
+  Harness({BrowserState? whenAttached})
+    : _attached = whenAttached ?? attached();
 
-  final FakeBrowser fake;
+  final server = FakeDataServer();
+  final BrowserState _attached;
   RecordingSessionActions? actions;
 
   Future<void> pump(WidgetTester tester, {String? sessionId}) async {
+    server.runs.onBrowser = (request) => switch (request) {
+      BrowserConnect() => _attach(),
+      BrowserPickElement() => _pick,
+      BrowserCancelPick() => const DataAck(),
+      _ => server.runs.browser,
+    };
+    final data = await server.override();
     tester.view
       ..physicalSize = const Size(900, 1100)
       ..devicePixelRatio = 1.0;
@@ -53,7 +91,7 @@ class Harness {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          browserServiceProvider.overrideWithValue(fake.service),
+          data,
           sessionActionsProvider.overrideWith((ref) {
             actions = RecordingSessionActions(ref);
             return actions!;
@@ -69,22 +107,21 @@ class Harness {
     await tester.pumpAndSettle();
   }
 
-  /// Attaches and then picks an element, as the developer would.
-  Future<void> attachAndPick(WidgetTester tester) async {
+  BrowserState _attach() {
+    server.runs.setBrowser(_attached);
+    return _attached;
+  }
+
+  Future<void> attach(WidgetTester tester) async {
     await tester.tap(find.text('Attach · 9222'));
+    await tester.runAsync(pumpEventQueue);
     await tester.pumpAndSettle();
+  }
+
+  Future<void> attachAndPick(WidgetTester tester) async {
+    await attach(tester);
     await tester.tap(find.text('Pick element'));
-    await tester.pump();
-    await tester.pump();
-    expect(
-      fake.expressions.any((e) => e.contains('__karmashalaPicker')),
-      isTrue,
-      reason: 'the pane must have installed the picker before a click counts',
-    );
-    fake.socket.emitEvent('Runtime.bindingCalled', {
-      'name': '__karmashalaPick',
-      'payload': _pickPayload,
-    });
+    await tester.runAsync(pumpEventQueue);
     await tester.pumpAndSettle();
   }
 }
@@ -110,64 +147,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('--remote-debugging-port=9222'), findsOneWidget);
     expect(find.textContaining('throwaway profile'), findsOneWidget);
-    // Attach-first still works, and since Chrome 136 it takes two switches.
-    // The flag on its own is ignored on the user's normal profile, so a pane
-    // that promises "your window, your logins" for it is promising a session
-    // they will not get.
     expect(find.textContaining('--user-data-dir'), findsOneWidget);
   });
 
-  testWidgets('a lost browser is reported in the house error banner', (
+  testWidgets('attaching asks the server and shows which browser, verbatim', (
     tester,
   ) async {
     final harness = Harness();
     await harness.pump(tester);
-    await tester.tap(find.text('Attach · 9222'));
-    await tester.pumpAndSettle();
-    harness.fake.socket.drop();
-    await tester.pumpAndSettle();
-
-    expect(find.byType(DesktopErrorBanner), findsOneWidget);
-    await tester.tap(find.byTooltip('Dismiss'));
-    await tester.pumpAndSettle();
-    expect(find.byType(DesktopErrorBanner), findsNothing);
-  });
-
-  testWidgets('attaching reports which browser, verbatim', (tester) async {
-    final harness = Harness();
-    await harness.pump(tester);
-    await tester.tap(find.text('Attach · 9222'));
-    await tester.pumpAndSettle();
+    await harness.attach(tester);
+    expect(harness.server.runs.asked.whereType<BrowserConnect>(), hasLength(1));
     expect(
       find.text('Attached to the browser already listening on port 9222'),
       findsOneWidget,
     );
     expect(find.text('Detach'), findsOneWidget);
-    expect(harness.fake.service.isConnected, isTrue);
   });
 
-  testWidgets('a failure shows the browser\'s own message, not "went wrong"', (
+  testWidgets('a browser the server lost is reported in the error banner', (
     tester,
   ) async {
-    final harness = Harness(targets: const []);
+    final harness = Harness();
     await harness.pump(tester);
-    await tester.tap(find.text('Attach · 9222'));
+    await harness.attach(tester);
+    harness.server.runs.setBrowser(
+      const BrowserState(error: 'The browser disconnected.'),
+    );
+    await tester.runAsync(pumpEventQueue);
     await tester.pumpAndSettle();
+
+    expect(find.byType(DesktopErrorBanner), findsOneWidget);
+    expect(find.text('Not connected'), findsOneWidget);
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DesktopErrorBanner), findsNothing);
+  });
+
+  testWidgets('a refusal shows the server\'s own words, not "went wrong"', (
+    tester,
+  ) async {
+    final harness = Harness();
+    await harness.pump(tester);
+    harness.server.runs.onBrowser = (_) => throw const DataRefused(
+      DataRefusalCode.failed,
+      'Chrome on port 9222 has no page to drive.',
+    );
+    await harness.attach(tester);
     expect(find.textContaining('has no page to drive'), findsOneWidget);
     expect(find.text('Not connected'), findsOneWidget);
   });
 
-  testWidgets('the address bar navigates the attached page', (tester) async {
+  testWidgets('the address bar asks the server to go there, as typed', (
+    tester,
+  ) async {
     final harness = Harness();
     await harness.pump(tester);
-    await tester.tap(find.text('Attach · 9222'));
-    await tester.pumpAndSettle();
+    await harness.attach(tester);
     // `.first`: the console under the picture has a field of its own.
     await tester.enterText(find.byType(TextField).first, 'localhost:3000');
     await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.runAsync(pumpEventQueue);
     await tester.pumpAndSettle();
-    final navigations = harness.fake.framesFor('Page.navigate');
-    expect(navigations.single['url'], 'http://localhost:3000');
+    // Spelling it as a URL is the server's: one place for the rule.
+    final asked = harness.server.runs.asked.whereType<BrowserNavigate>();
+    expect(asked.single.url, 'localhost:3000');
   });
 
   testWidgets('picking shows the element, its selector and a preview', (
@@ -195,7 +238,9 @@ void main() {
     expect(find.textContaining('Open a session'), findsOneWidget);
   });
 
-  testWidgets('sends the whole bundle to the open session', (tester) async {
+  testWidgets('sends the whole bundle, the server\'s picture file included', (
+    tester,
+  ) async {
     final harness = Harness();
     await harness.pump(tester, sessionId: 'S-1');
     await harness.attachAndPick(tester);
@@ -206,17 +251,31 @@ void main() {
     expect(sent.$2, contains('### section#hero.banner'));
     expect(sent.$2, contains('Selector: `#hero`'));
     expect(sent.$2, contains('```html'));
-    expect(sent.$2, contains('Screenshot file:'));
+    expect(sent.$2, contains('Screenshot file: /data/captures/element_1.png'));
     expect(find.text('Sent to the open session.'), findsOneWidget);
+  });
+
+  testWidgets('a headless server has nothing to pick in, and says so', (
+    tester,
+  ) async {
+    final harness = Harness(whenAttached: attached(headless: true));
+    await harness.pump(tester);
+    await harness.attach(tester);
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Pick element'),
+    );
+    expect(button.onPressed, isNull);
+    expect(find.byTooltip(RegExp('headless')), findsOneWidget);
   });
 
   testWidgets('every drivable tab is offered, with the driven one selected', (
     tester,
   ) async {
-    final harness = Harness(targets: const ['PAGE-1', 'PAGE-2']);
+    final harness = Harness(
+      whenAttached: attached(tabs: const ['PAGE-1', 'PAGE-2']),
+    );
     await harness.pump(tester);
-    await tester.tap(find.text('Attach · 9222'));
-    await tester.pumpAndSettle();
+    await harness.attach(tester);
     final picker = tester.widget<DropdownButton<String>>(
       find.byType(DropdownButton<String>),
     );
@@ -228,24 +287,18 @@ void main() {
   testWidgets('the tab picker is sized like the pane around it', (
     tester,
   ) async {
-    // `DropdownButton` is Material 2 and ignores the app's
-    // `dropdownMenuTheme`, which only reaches Material 3's `DropdownMenu`. Left
-    // alone it drew Material's ~16px `titleMedium` with a 24px chevron, in a
-    // pane whose status line, address bar and buttons are all `bodySmall` and
-    // `Chrome.icon`. The tab title carried a literal `fontSize: 12` to
-    // compensate, which fixed the open list and left the closed button and its
-    // chevron oversized.
-    final harness = Harness(targets: const ['PAGE-1', 'PAGE-2']);
+    // `DropdownButton` is Material 2 and ignores the app's dropdown theme.
+    final harness = Harness(
+      whenAttached: attached(tabs: const ['PAGE-1', 'PAGE-2']),
+    );
     await harness.pump(tester);
-    await tester.tap(find.text('Attach · 9222'));
-    await tester.pumpAndSettle();
+    await harness.attach(tester);
     final finder = find.byType(DropdownButton<String>);
     final picker = tester.widget<DropdownButton<String>>(finder);
     final theme = Theme.of(tester.element(finder));
     expect(picker.style, theme.textTheme.bodySmall);
     expect(picker.iconSize, Chrome.icon);
     expect(picker.isDense, isTrue);
-    // Nothing under it re-decides the size for itself.
     for (final item in picker.items!) {
       expect((item.child as Text).style, isNull);
     }
@@ -254,13 +307,7 @@ void main() {
   testWidgets('the address bar is the same box as every other text field', (
     tester,
   ) async {
-    // It used to declare `border: OutlineInputBorder()` for itself, which is
-    // Material's 4px radius and default stroke — a visibly different box from
-    // the `Radii.sm` / `outlineVariant` one the theme draws for the logs
-    // panel's filter field a tab away.
-    final harness = Harness();
-    await harness.pump(tester);
-    // `.first` — the address bar; the console's field is the other one.
+    await Harness().pump(tester);
     final field = tester.widget<TextField>(find.byType(TextField).first);
     expect(field.decoration!.border, isNull);
     expect(field.decoration!.contentPadding, isNull);
@@ -271,168 +318,46 @@ void main() {
   testWidgets('a single tab does not get a picker', (tester) async {
     final harness = Harness();
     await harness.pump(tester);
-    await tester.tap(find.text('Attach · 9222'));
-    await tester.pumpAndSettle();
+    await harness.attach(tester);
     expect(find.byType(DropdownButton<String>), findsNothing);
   });
 
-  group('the controller', () {
-    test('adds a scheme so localhost:3000 is not read as one', () async {
-      final fake = FakeBrowser();
-      final container = ProviderContainer(
-        overrides: [browserServiceProvider.overrideWithValue(fake.service)],
-      );
+  group('coming back to Karmashala', () {
+    // A landed pick brings the person back; one that landed nothing must not
+    // take them off whatever they moved on to.
+    Future<(ProviderContainer, FakeDataServer)> attachedPane() async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
       addTearDown(container.dispose);
-      final controller = container.read(browserPaneControllerProvider.notifier);
-      await controller.navigate('localhost:3000');
-      expect(
-        fake.framesFor('Page.navigate').single['url'],
-        'http://localhost:3000',
-      );
-      expect(
-        container.read(browserPaneControllerProvider).status,
-        BrowserPaneStatus.connected,
-      );
-    });
+      server.runs.setBrowser(attached());
+      await pumpEventQueue();
+      return (container, server);
+    }
 
-    test('leaves a real URL alone', () async {
-      final fake = FakeBrowser();
-      final container = ProviderContainer(
-        overrides: [browserServiceProvider.overrideWithValue(fake.service)],
-      );
-      addTearDown(container.dispose);
+    test('a pick that lands asks for the window, exactly once', () async {
+      final (container, server) = await attachedPane();
+      server.runs.onBrowser = (_) => _pick;
       await container
           .read(browserPaneControllerProvider.notifier)
-          .navigate('https://example.com/x?y=1');
-      expect(
-        fake.framesFor('Page.navigate').single['url'],
-        'https://example.com/x?y=1',
+          .pickElement();
+      expect(container.read(browserPaneControllerProvider).capture, isNotNull);
+      expect(container.read(windowRaiseRequestProvider), 1);
+    });
+
+    test('a pick the server refused leaves the window where it was', () async {
+      final (container, server) = await attachedPane();
+      server.runs.onBrowser = (_) => throw const DataRefused(
+        DataRefusalCode.failed,
+        'The pick was cancelled.',
       );
+      await container
+          .read(browserPaneControllerProvider.notifier)
+          .pickElement();
+      expect(
+        container.read(browserPaneControllerProvider).error,
+        contains('cancelled'),
+      );
+      expect(container.read(windowRaiseRequestProvider), 0);
     });
-
-    test(
-      'switching tabs drives the other page, and reports no false failure',
-      () async {
-        final fake = FakeBrowser(
-          targets: [fakeTarget('PAGE-1'), fakeTarget('PAGE-2')],
-        );
-        final container = ProviderContainer(
-          overrides: [browserServiceProvider.overrideWithValue(fake.service)],
-        );
-        addTearDown(container.dispose);
-        final controller = container.read(
-          browserPaneControllerProvider.notifier,
-        );
-        await controller.connect();
-        await controller.selectTab('PAGE-2');
-        expect(fake.service.session!.page.target.id, 'PAGE-2');
-        final state = container.read(browserPaneControllerProvider);
-        expect(state.currentTargetId, 'PAGE-2');
-        expect(state.status, BrowserPaneStatus.connected);
-        expect(
-          state.error,
-          isNull,
-          reason: 'tearing down our own session is not a disconnection',
-        );
-      },
-    );
-
-    group('coming back to Karmashala', () {
-      // The pick sends the user to another window. Landing one has to bring
-      // them back, and a pick that landed nothing must not: a window that
-      // jumps forward on a timeout takes the user off whatever they moved on
-      // to. The seam is `windowRaiseRequestProvider`, the same one a clicked
-      // toast uses — `SystemIntegrationService` listens and calls the injected
-      // `WindowAdapter`, so no test here moves a real window.
-      FakeBrowser picking({Duration? pickTimeout}) =>
-          FakeBrowser(pickTimeout: pickTimeout)
-            ..onEvaluate = (expression) {
-              if (expression.contains('__karmashalaPicker')) return true;
-              if (expression == 'location.href') return 'https://example.com';
-              if (expression == 'document.title') return 'Example';
-              return null;
-            };
-
-      Future<(ProviderContainer, BrowserPaneController, FakeBrowser)> attach({
-        Duration? pickTimeout,
-      }) async {
-        final fake = picking(pickTimeout: pickTimeout);
-        final container = ProviderContainer(
-          overrides: [browserServiceProvider.overrideWithValue(fake.service)],
-        );
-        addTearDown(container.dispose);
-        final controller = container.read(
-          browserPaneControllerProvider.notifier,
-        );
-        await controller.connect();
-        expect(container.read(windowRaiseRequestProvider), 0);
-        return (container, controller, fake);
-      }
-
-      test('a pick that lands asks for the window, exactly once', () async {
-        final (container, controller, fake) = await attach();
-        final pending = controller.pickElement();
-        await pumpEventQueue();
-        fake.socket.emitEvent('Runtime.bindingCalled', {
-          'name': '__karmashalaPick',
-          'payload': _pickPayload,
-        });
-        await pending;
-        expect(
-          container.read(browserPaneControllerProvider).capture,
-          isNotNull,
-        );
-        expect(container.read(windowRaiseRequestProvider), 1);
-      });
-
-      test('a cancelled pick leaves the window where it was', () async {
-        final (container, controller, _) = await attach();
-        final pending = controller.pickElement();
-        await pumpEventQueue();
-        controller.cancelPick();
-        await pending;
-        expect(
-          container.read(browserPaneControllerProvider).error,
-          contains('cancelled'),
-        );
-        expect(container.read(windowRaiseRequestProvider), 0);
-      });
-
-      test('so does one nobody ever clicked', () async {
-        final (container, controller, _) = await attach(
-          pickTimeout: const Duration(milliseconds: 40),
-        );
-        await controller.pickElement();
-        expect(
-          container.read(browserPaneControllerProvider).error,
-          contains('did not answer in time'),
-        );
-        expect(container.read(windowRaiseRequestProvider), 0);
-      });
-    });
-
-    test(
-      'a browser that goes away stops being reported as connected',
-      () async {
-        final fake = FakeBrowser();
-        final container = ProviderContainer(
-          overrides: [browserServiceProvider.overrideWithValue(fake.service)],
-        );
-        addTearDown(container.dispose);
-        final controller = container.read(
-          browserPaneControllerProvider.notifier,
-        );
-        await controller.connect();
-        expect(
-          container.read(browserPaneControllerProvider).isConnected,
-          isTrue,
-        );
-        fake.socket.drop();
-        await Future<void>.delayed(Duration.zero);
-        final state = container.read(browserPaneControllerProvider);
-        expect(state.status, BrowserPaneStatus.disconnected);
-        expect(state.error, contains('The browser disconnected'));
-      },
-    );
   });
 }

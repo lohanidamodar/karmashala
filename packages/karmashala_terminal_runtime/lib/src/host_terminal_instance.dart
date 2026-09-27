@@ -72,6 +72,7 @@ class HostTerminalInstance
     AppLogger? logger,
     bool shellIntegration = false,
     this.redialDelays = kHostRedialDelays,
+    this.attachOnly = false,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
@@ -137,6 +138,10 @@ class HostTerminalInstance
 
   /// See [kHostRedialDelays]; shorter in tests.
   final List<Duration> redialDelays;
+
+  /// Attaches to a session somebody else started (a run the server hosts) and
+  /// never starts one: a session that is gone ends the pane.
+  final bool attachOnly;
 
   final AppLogger _logger;
   final WorkingDirectoryTracker _cwd;
@@ -585,7 +590,7 @@ class HostTerminalInstance
       // or any other refusal may mean the session is there and alive.
       if (e.code != ProtocolErrorCode.unknownSession) rethrow;
       // A pane coming back to its session never starts another in its place.
-      if (redialing) throw const _SessionGone();
+      if (redialing || attachOnly) throw const _SessionGone();
     }
     // An older host still serves the sessions it holds, but a new one started
     // in it would run with that build's behaviour.
@@ -757,6 +762,8 @@ TerminalInstance createHostTerminalInstance({
   Terminal? adoptTerminal,
   Map<String, String> environmentOverlay = const {},
   bool shellIntegration = false,
+  bool attachOnly = false,
+  String? label,
 }) {
   final PtyLaunch launch;
   final String title;
@@ -795,7 +802,7 @@ TerminalInstance createHostTerminalInstance({
 
   return HostTerminalInstance(
     id: id,
-    title: title,
+    title: label ?? title,
     profileId: profileId,
     access: access,
     launch: launch,
@@ -806,6 +813,7 @@ TerminalInstance createHostTerminalInstance({
     // Windows only, as on the PTY path: elsewhere the launch carries no
     // bootstrap, so there would be no markers to record.
     shellIntegration: integrate && Platform.isWindows,
+    attachOnly: attachOnly,
   );
 }
 

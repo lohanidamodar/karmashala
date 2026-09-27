@@ -19,7 +19,7 @@ part 'stop_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 20;
+const int kProtocolVersion = 22;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -912,6 +912,9 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.dataRequest => DataRequestMessage.decode(frame),
   MessageType.dataAnswer => DataAnswerMessage.decode(frame),
   MessageType.dataChanges => DataChangesMessage.decode(frame),
+  MessageType.dataStreamOpen => DataStreamOpenMessage.decode(frame),
+  MessageType.dataStreamItems => DataStreamItemsMessage.decode(frame),
+  MessageType.dataStreamClose => DataStreamCloseMessage.decode(frame),
   MessageType.paneFacts => PaneFactsMessage.decode(frame),
   MessageType.paneTailsWanted => PaneTailsWantedMessage.decode(frame),
   MessageType.stopCheck => StopCheckMessage.decode(frame),

@@ -1,271 +1,147 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'package:karmashala_browser/browser.dart' show ElementCapture;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../notifications/application/notification_providers.dart';
-import 'package:karmashala_browser/browser.dart';
-import 'browser_providers.dart';
+import '../data/browser_data.dart';
 
-/// What the pane is doing, so it can say so instead of guessing.
-enum BrowserPaneStatus {
-  /// No session. The browser may well be open; we are not attached to it.
-  disconnected,
-
-  /// Attaching or launching.
-  connecting,
-
-  /// Attached, idle.
-  connected,
-
-  /// Attached, with a command in flight.
-  busy,
-
-  /// Attached, waiting for the user to click an element in the page.
-  picking,
-}
-
-/// Everything the browser pane renders.
+/// Everything the browser pane renders: the server's browser, and what this
+/// pane picked and sent.
 class BrowserPaneState {
   const BrowserPaneState({
-    this.status = BrowserPaneStatus.disconnected,
-    this.connection,
-    this.port = 9222,
-    this.url = '',
-    this.title = '',
+    this.browser = const BrowserState(),
     this.error,
     this.capture,
     this.captureFile,
-    this.tabs = const [],
-    this.currentTargetId,
     this.sentToSession,
   });
 
-  final BrowserPaneStatus status;
+  /// The Chrome the server drives, as it last said.
+  final BrowserState browser;
 
-  /// How we got hold of the browser, shown verbatim: whether we drive the user's
-  /// own window or a throwaway one is the difference between working and lying.
-  final String? connection;
-  final int port;
-  final String url;
-  final String title;
-
-  /// The last failure's message, from the [BrowserFailure] taxonomy.
+  /// The failure to show — a refusal this pane got, or the server's last.
   final String? error;
   final ElementCapture? capture;
 
-  /// Where the capture's screenshot was written, so a prompt can point an
-  /// agent at the actual image.
+  /// Where the server wrote the capture's picture, on its own machine.
   final String? captureFile;
-  final List<BrowserTarget> tabs;
-  final String? currentTargetId;
 
   /// A short confirmation of the last "send to session", shown then dropped.
   final String? sentToSession;
 
-  bool get isConnected =>
-      status != BrowserPaneStatus.disconnected &&
-      status != BrowserPaneStatus.connecting;
+  BrowserStatus get status => browser.status;
+  String? get connection => browser.connection;
+  int get port => browser.port;
+  String get url => browser.url;
+  String get title => browser.title;
+  List<BrowserTab> get tabs => browser.tabs;
+  String? get currentTargetId => browser.currentTargetId;
 
-  bool get isBusy =>
-      status == BrowserPaneStatus.connecting ||
-      status == BrowserPaneStatus.busy;
+  /// A server with no window: screenshots only, nothing to pick in.
+  bool get headless => browser.headless;
+  bool get isConnected => browser.isConnected;
+  bool get isBusy => browser.isBusy;
 
   BrowserPaneState copyWith({
-    BrowserPaneStatus? status,
-    String? connection,
-    int? port,
-    String? url,
-    String? title,
+    BrowserState? browser,
     String? error,
     ElementCapture? capture,
     String? captureFile,
-    List<BrowserTarget>? tabs,
-    String? currentTargetId,
     String? sentToSession,
     bool clearError = false,
     bool clearCapture = false,
     bool clearSent = false,
   }) => BrowserPaneState(
-    status: status ?? this.status,
-    connection: connection ?? this.connection,
-    port: port ?? this.port,
-    url: url ?? this.url,
-    title: title ?? this.title,
+    browser: browser ?? this.browser,
     error: clearError ? null : (error ?? this.error),
     capture: clearCapture ? null : (capture ?? this.capture),
     captureFile: clearCapture ? null : (captureFile ?? this.captureFile),
-    tabs: tabs ?? this.tabs,
-    currentTargetId: currentTargetId ?? this.currentTargetId,
     sentToSession: clearSent ? null : (sentToSession ?? this.sentToSession),
   );
 }
 
-/// Drives [BrowserService] for the pane. Every action funnels through [_run],
-/// which puts a [BrowserException]'s own message onto the pane unchanged.
+/// The pane's side of the server's browser: every action is a request, and
+/// what the browser then is arrives as the server's change, to every pane.
 class BrowserPaneController extends Notifier<BrowserPaneState> {
-  StreamSubscription<void>? _watch;
-
   @override
   BrowserPaneState build() {
-    final port = ref.watch(browserDebugPortProvider);
-    final service = ref.read(browserServiceProvider);
-    ref.onDispose(() => _watch?.cancel());
-    if (service.isConnected) {
-      final session = service.session!;
-      _watchForDeath(session);
-      return BrowserPaneState(
-        status: BrowserPaneStatus.connected,
-        connection: session.endpoint.description,
-        port: session.endpoint.port,
-        url: session.page.target.url,
-        title: session.page.target.title,
-        currentTargetId: session.page.target.id,
-      );
-    }
-    return BrowserPaneState(port: port);
+    final data = ref.watch(browserDataProvider);
+    final changes = data.changes.listen(_follow);
+    ref.onDispose(changes.cancel);
+    return BrowserPaneState(browser: data.state, error: data.state.error);
   }
 
-  BrowserService get _service => ref.read(browserServiceProvider);
+  BrowserData get _data => ref.read(browserDataProvider);
 
-  /// Attaches to a browser on the pane's port, launching one if [spawn] and
-  /// nothing is listening.
-  Future<void> connect({bool spawn = true, String? url}) async {
-    // Stop watching the session we are about to replace: a teardown we asked
-    // for must not surface as "the browser disconnected".
-    await _stopWatching();
+  void _follow(BrowserState browser) {
+    final changedError = browser.error != state.browser.error;
     state = state.copyWith(
-      status: BrowserPaneStatus.connecting,
-      clearError: true,
+      browser: browser,
+      error: changedError ? browser.error : null,
+      clearError: changedError && browser.error == null,
     );
-    try {
-      final session = await _service.connect(
-        port: state.port,
-        spawnIfNeeded: spawn,
-        url: url == null || url.isEmpty ? null : _normalizeUrl(url),
-      );
-      _watchForDeath(session);
-      state = state.copyWith(
-        status: BrowserPaneStatus.connected,
-        connection: session.endpoint.description,
-        currentTargetId: session.page.target.id,
-      );
-      await _readLocation();
-      await refreshTabs();
-    } on Object catch (error) {
-      state = state.copyWith(
-        status: BrowserPaneStatus.disconnected,
-        error: _message(error),
-      );
-    }
   }
 
-  Future<void> disconnect() async {
-    await _stopWatching();
-    await _service.disconnect();
-    state = BrowserPaneState(port: state.port);
-  }
+  Future<void> connect({bool spawn = true, String? url}) =>
+      _run(() => _data.connect(spawn: spawn, url: url));
 
-  /// Goes to [url], connecting first if we are not attached yet.
+  Future<void> disconnect() => _run(_data.disconnect);
+
+  /// Goes to [url]; the server connects first when nothing is attached.
   Future<void> navigate(String url) async {
     if (url.trim().isEmpty) return;
-    if (!_service.isConnected) {
-      await connect(url: url);
-      return;
-    }
-    await _run(() async {
-      await _service.navigate(_normalizeUrl(url));
-      await _readLocation();
-      await refreshTabs();
-    });
+    await _run(() => _data.navigate(url.trim()));
   }
 
-  /// Hands the page over to the user to point at an element, and takes the
-  /// window back. Raising is a shell concern, and only this knows how it went.
+  /// Hands the page to the person to point at an element, and takes the
+  /// window back. Refused in words on a headless server.
   Future<void> pickElement() async {
-    if (!_service.isConnected) return;
+    if (!state.isConnected) return;
     state = state.copyWith(
-      status: BrowserPaneStatus.picking,
       clearError: true,
       clearCapture: true,
       clearSent: true,
     );
     try {
-      final capture = await _service.pickElement();
+      final pick = await _data.pick();
       state = state.copyWith(
-        status: BrowserPaneStatus.connected,
-        capture: capture,
-        captureFile: _writeScreenshot(capture),
-        url: capture.pageUrl,
-        title: capture.pageTitle,
+        capture: pick.capture,
+        captureFile: pick.captureFile,
       );
-      // The same seam a clicked toast uses: `SystemIntegrationService` listens
-      // and drives the injected `WindowAdapter`. Nothing here touches
-      // `window_manager`.
       ref.read(windowRaiseRequestProvider.notifier).bump();
-    } on Object catch (error) {
-      state = state.copyWith(
-        status: _service.isConnected
-            ? BrowserPaneStatus.connected
-            : BrowserPaneStatus.disconnected,
-        error: _message(error),
-      );
+    } on DataRefused catch (refusal) {
+      state = state.copyWith(error: refusal.message);
     }
   }
 
-  void cancelPick() {
-    _service.cancelPick();
-    if (state.status == BrowserPaneStatus.picking) {
-      state = state.copyWith(status: BrowserPaneStatus.connected);
-    }
-  }
+  void cancelPick() => unawaited(_data.cancelPick().catchError((Object _) {}));
 
-  /// Re-reads the browser's tab list.
+  /// Re-reads the browser's tab list; a list that could not be read keeps
+  /// what it had.
   Future<void> refreshTabs() async {
-    if (!_service.isConnected) return;
+    if (!state.isConnected) return;
     try {
-      final targets = await _service.listTargets();
-      state = state.copyWith(
-        tabs: [
-          for (final target in targets)
-            if (target.isDrivablePage) target,
-        ],
-      );
-    } on Object {
-      // A tab list we could not read is not worth failing the pane over; the
-      // dropdown simply keeps what it had.
+      _follow(await _data.tabs());
+    } on DataRefused {
+      // The dropdown keeps what it had.
     }
   }
 
   /// Drives a different tab in the same browser.
   Future<void> selectTab(String targetId) async {
     if (targetId == state.currentTargetId) return;
-    await _stopWatching();
-    await _run(() async {
-      final session = await _service.connect(
-        port: state.port,
-        spawnIfNeeded: false,
-        targetId: targetId,
-      );
-      _watchForDeath(session);
-      state = state.copyWith(
-        connection: session.endpoint.description,
-        currentTargetId: targetId,
-        clearCapture: true,
-      );
-      await _readLocation();
-    });
+    state = state.copyWith(clearCapture: true);
+    await _run(() => _data.selectTab(targetId));
   }
 
-  /// The captured element as prompt text, with the screenshot's path when we
-  /// managed to write one — an agent can open the file and look at it.
+  /// The captured element as prompt text, with the picture's path on the
+  /// server's machine — where the agents that read it run.
   String? capturePrompt() {
     final capture = state.capture;
     if (capture == null) return null;
-    final file = state.captureFile;
-    return file == null
-        ? capture.toPromptText()
-        : '${capture.toPromptText()}\n\nScreenshot file: $file';
+    return BrowserPick(capture, captureFile: state.captureFile).promptText;
   }
 
   void noteSent(String message) =>
@@ -276,92 +152,13 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
 
   void clearError() => state = state.copyWith(clearError: true);
 
-  Future<void> _run(Future<void> Function() action) async {
-    state = state.copyWith(status: BrowserPaneStatus.busy, clearError: true);
+  Future<void> _run(Future<BrowserState> Function() action) async {
+    state = state.copyWith(clearError: true);
     try {
-      await action();
-      state = state.copyWith(status: BrowserPaneStatus.connected);
-    } on Object catch (error) {
-      state = state.copyWith(
-        status: _service.isConnected
-            ? BrowserPaneStatus.connected
-            : BrowserPaneStatus.disconnected,
-        error: _message(error),
-      );
+      _follow(await action());
+    } on DataRefused catch (refusal) {
+      state = state.copyWith(error: refusal.message);
     }
-  }
-
-  Future<void> _readLocation() async {
-    try {
-      state = state.copyWith(
-        url: await _service.currentUrl(),
-        title: await _service.currentTitle(),
-      );
-    } on BrowserException {
-      // Where we are is a nicety; a failure here must not mask the action that
-      // just succeeded.
-    }
-  }
-
-  Future<void> _stopWatching() async {
-    final watch = _watch;
-    _watch = null;
-    await watch?.cancel();
-  }
-
-  /// Notices the browser going away, so the pane stops claiming a connection
-  /// it no longer has.
-  void _watchForDeath(BrowserSession session) {
-    _watch = session.done.asStream().listen((_) {
-      if (_service.isConnected) return;
-      state = state.copyWith(
-        status: BrowserPaneStatus.disconnected,
-        error: describeBrowserFailure(BrowserFailure.disconnected),
-        tabs: const [],
-      );
-    });
-  }
-
-  /// Written synchronously: it is a few kilobytes, and the pick's result
-  /// should land in one state change rather than leaving the pane in a
-  /// half-updated state while the disk catches up.
-  String? _writeScreenshot(ElementCapture capture) {
-    final png = capture.screenshotPng;
-    if (png == null) return null;
-    try {
-      final directory = Directory(
-        '${Directory.systemTemp.path}${Platform.pathSeparator}karmashala'
-        '${Platform.pathSeparator}captures',
-      );
-      if (!directory.existsSync()) directory.createSync(recursive: true);
-      final file = File(
-        '${directory.path}${Platform.pathSeparator}'
-        'element_${DateTime.now().microsecondsSinceEpoch}.png',
-      );
-      file.writeAsBytesSync(png, flush: true);
-      return file.path;
-    } on Object {
-      return null;
-    }
-  }
-
-  static String _message(Object error) => switch (error) {
-    BrowserException(:final message) => message,
-    _ => '$error',
-  };
-
-  /// Lets the user type `localhost:3000` instead of a full URL. Note the `//`:
-  /// a bare scheme test reads `localhost:3000` as the scheme `localhost`.
-  static String _normalizeUrl(String input) {
-    final trimmed = input.trim();
-    if (trimmed.isEmpty) return trimmed;
-    if (RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(trimmed)) {
-      return trimmed;
-    }
-    for (final scheme in const ['about:', 'data:', 'chrome:', 'view-source:']) {
-      if (trimmed.toLowerCase().startsWith(scheme)) return trimmed;
-    }
-    return 'http://$trimmed';
   }
 }
 

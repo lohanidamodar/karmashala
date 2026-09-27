@@ -88,13 +88,18 @@ String? locateChromeExecutable({HostKind? host, Map<String, String>? env}) =>
 /// [userDataDir] is always a throwaway of ours: it keeps us out of the user's
 /// profile, stops a running Chrome on the default profile swallowing the launch,
 /// and since Chrome 136 `--remote-debugging-port` is ignored on the default one.
+///
+/// [headless] is for a machine with no desktop (a server on a box): Chrome's
+/// new headless mode, which renders and screenshots like a windowed one.
 List<String> chromeLaunchArguments({
   required int port,
   required String userDataDir,
   String? initialUrl,
+  bool headless = false,
 }) => [
   '--remote-debugging-port=$port',
   '--user-data-dir=$userDataDir',
+  if (headless) '--headless=new',
   '--no-first-run',
   '--no-default-browser-check',
   '--disable-background-networking',

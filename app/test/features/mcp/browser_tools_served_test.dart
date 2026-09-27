@@ -1,24 +1,33 @@
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala_browser/tools.dart';
+import 'package:karmashala_host/mcp_tools.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The one case from `browser_tools_test` that could not move into
-/// `karmashala_browser` with the rest of it.
-///
-/// Everything else in that suite is about the tools themselves and runs under
-/// `dart test` in the package now. This asserts that the app actually *serves*
-/// them — that `browserToolSchemas` is wired into the control server's
-/// catalogue beside the session tools, and that adding it collided with no
-/// existing name. The package cannot know either fact, and losing it would
-/// mean the browser tools could quietly stop being offered while every browser
-/// test stayed green.
+/// The browser, the Flutter loop and builds are the server's since slice 3d:
+/// `serverToolSchemas` serves every one of their tools, and this app serves
+/// none of them — a tool in both would reach an agent twice, and one in
+/// neither would quietly stop being offered.
 void main() {
-  test('the control server serves the browser tools alongside its own', () {
-    final names = [for (final s in McpToolDispatcher.toolSchemas) s['name']];
-    expect(names, containsAll(['inbox_list', 'browser_click']));
-    expect(names.toSet(), hasLength(names.length));
-    // The package's own list is the source: every schema it publishes has to
-    // reach a client, not just the one named above.
-    expect(names, containsAll([for (final s in browserToolSchemas) s['name']]));
+  test('the server serves the browser, Flutter and build tools; the app none '
+      'of them', () {
+    final server = [for (final s in serverToolSchemas) s['name']];
+    final app = [for (final s in McpToolDispatcher.toolSchemas) s['name']];
+    final moved = [
+      for (final s in browserToolSchemas) s['name'],
+      'flutter_apps',
+      'flutter_attach',
+      'flutter_reload',
+      'flutter_logs',
+      'flutter_pick_widget',
+      'flutter_run',
+      'project_build',
+    ];
+
+    expect(server, containsAll(moved));
+    for (final name in moved) {
+      expect(app, isNot(contains(name)), reason: '$name is the server\'s');
+    }
+    final all = [...server, ...app];
+    expect(all.toSet(), hasLength(all.length));
   });
 }

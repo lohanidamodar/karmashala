@@ -8,7 +8,10 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_devices/devices.dart' show describeDriveAge;
 import '../application/browser_pane_controller.dart';
-import '../application/browser_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
+
+import '../data/browser_data.dart';
 
 /// A picture of the whole viewport, and when it was taken.
 class BrowserViewportShot {
@@ -34,14 +37,14 @@ class BrowserViewportShotController extends Notifier<BrowserViewportShot> {
 
   Future<void> capture() async {
     try {
-      final png = await ref.read(browserServiceProvider).screenshot();
+      final png = await ref.read(browserDataProvider).screenshot();
       state = BrowserViewportShot(
         png: png,
         takenAt: ref.read(clockProvider).nowUtc(),
       );
-    } on Object catch (error) {
+    } on DataRefused catch (refusal) {
       state = BrowserViewportShot(
-        problem: '$error',
+        problem: refusal.message,
         takenAt: ref.read(clockProvider).nowUtc(),
       );
     }

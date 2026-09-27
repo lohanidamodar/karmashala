@@ -3,12 +3,6 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../core/util/clock_provider.dart';
 import '../automations/application/project_check_tools.dart';
-import '../browser/application/browser_consent_providers.dart';
-import '../browser/application/browser_providers.dart';
-import 'package:karmashala_browser/tools.dart';
-import '../flutter_apps/application/flutter_app_tools.dart';
-import '../app_projects/application/project_build_tools.dart';
-import '../flutter_apps/application/flutter_run_tools.dart';
 import '../verification/application/verification_providers.dart';
 import 'package:karmashala_verification/tools.dart';
 import 'attention_tools.dart';
@@ -63,7 +57,7 @@ class McpToolDispatcher implements HostMcpTools {
       ]);
 
   /// The server's tools a forwarded call still lands here for: a session in
-  /// one of this app's panes, a browser or device verification run, a check
+  /// one of this app's panes, a device verification run, a check
   /// in a checkout only this app's panes reach. An SSH checkout is the
   /// server's own since slice 3a.
   static const Set<String> answeredForOwnPanes = {
@@ -150,28 +144,6 @@ class McpToolDispatcher implements HostMcpTools {
         return RecordingControlTools(_container).call(name, args);
       case final String name when SnippetControlTools.handles(name):
         return SnippetControlTools(_container).call(name, args);
-      // Consent is resolved here, not in features/browser: which project a call
-      // is for is a sessions question, and nothing about it is cached.
-      case final String name when BrowserTools.handles(name):
-        return BrowserTools(
-          _container.read(browserServiceProvider),
-          consent: browserConsentFor(
-            _container,
-            callerSessionId: callerSessionId,
-          ),
-        ).call(name, args);
-      case final String name when FlutterAppTools.handles(name):
-        return FlutterAppTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when FlutterRunTools.handles(name):
-        return FlutterRunTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when ProjectBuildTools.handles(name):
-        return ProjectBuildTools(_container).call(name, args);
       case final String name when ProjectCheckTools.handles(name):
         return ProjectCheckTools(
           _container,
@@ -199,7 +171,7 @@ class McpToolDispatcher implements HostMcpTools {
     }
   }
 
-  /// The tools only this app can run — its panes, the editor, browsers,
+  /// The tools only this app can run — its panes, the editor,
   /// devices, recordings, the inbox, and continuing a session into a visible
   /// tab. The server runs every other tool itself and serves these beside its
   /// own; a call it forwards for a tool it also serves (a session in one of
@@ -214,10 +186,6 @@ class McpToolDispatcher implements HostMcpTools {
     ...workspaceControlToolSchemas,
     ...deviceControlToolSchemas,
     ...attentionControlToolSchemas,
-    ...browserToolSchemas,
-    ...flutterAppToolSchemas,
-    ...flutterRunToolSchemas,
-    ...projectBuildToolSchemas,
   ];
 }
 

@@ -1,0 +1,219 @@
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import 'package:test/test.dart';
+
+import 'support/fake_command_runner.dart';
+
+/// **A Flutter SDK a person names for one environment.**
+///
+/// The loop refuses in words when nothing named `flutter` is on an
+/// environment's PATH — the right refusal, and it was the whole answer.
+/// Somebody whose SDK is unpacked somewhere PATH does not mention had no row
+/// to say so.
+///
+/// Two rules make this more than a text field, and both are §20's:
+///
+/// * the hand-set path is read **before** the PATH probe, and PATH is then not
+///   asked at all — a fallback that quietly finds something else is how a user
+///   comes to believe their answer is being used when it is not;
+/// * no measurement or sweep may overrule it, which here is structural rather
+///   than remembered: discovery writes `execution_environments`, and this is
+///   kept in `Settings`, which discovery never touches.
+///
+/// And §17 applies to a typed path exactly as it does to a located one: a
+/// person can type `/mnt/c/…/flutter` as easily as WSL's PATH can resolve to
+/// it, and running it is the same disaster.
+final DateTime _now = DateTime.utc(2026, 9, 9, 12);
+
+ExecutionEnvironment _environment(
+  EnvironmentKind kind, {
+  String name = 'Ubuntu',
+}) => ExecutionEnvironment(
+  id: 'env',
+  kind: kind,
+  name: name,
+  wslDistribution: kind == EnvironmentKind.wsl ? 'Ubuntu' : null,
+  createdAt: _now,
+);
+
+void main() {
+  group('FlutterSdkService, given a hand-set path', () {
+    late FakeCommandRunner runner;
+
+    setUp(() {
+      runner = FakeCommandRunner(environmentId: 'env')
+        ..responder = (request) => const CommandResult(
+          exitCode: 0,
+          stdout: 'Flutter 3.38.5 • channel stable\n',
+          stderr: '',
+        );
+    });
+
+    Future<FlutterSdkReading> read(
+      EnvironmentKind kind, {
+      String name = 'Ubuntu',
+      String? path,
+    }) => FlutterSdkService(
+      runner: runner,
+      environment: _environment(kind, name: name),
+      handSetExecutable: path,
+    ).read(_now);
+
+    test('it is used, and PATH is never asked', () async {
+      final reading = await read(
+        EnvironmentKind.windowsNative,
+        name: 'Windows',
+        path: r'D:\sdk\flutter\bin\flutter.bat',
+      );
+      expect(reading.isUsable, isTrue);
+      expect(reading.executable, r'D:\sdk\flutter\bin\flutter.bat');
+      expect(reading.version, '3.38.5');
+      // One call, and it is the version probe. `where flutter.bat` never ran:
+      // a lookup that could contradict the person's own answer is a lookup
+      // this must not make.
+      expect(runner.requests, hasLength(1));
+      expect(
+        runner.requests.single.executable,
+        r'D:\sdk\flutter\bin\flutter.bat',
+      );
+      expect(
+        runner.requests.any((request) => request.executable == 'where'),
+        isFalse,
+      );
+    });
+
+    test('blank is not a path — PATH answers again', () async {
+      runner.responder = (request) => request.executable == 'where'
+          ? const CommandResult(
+              exitCode: 0,
+              stdout: 'C:\\found\\flutter.bat\n',
+              stderr: '',
+            )
+          : const CommandResult(
+              exitCode: 0,
+              stdout: 'Flutter 3.1.0',
+              stderr: '',
+            );
+      final reading = await read(
+        EnvironmentKind.windowsNative,
+        name: 'Windows',
+        path: '   ',
+      );
+      expect(reading.executable, 'C:\\found\\flutter.bat');
+      expect(
+        runner.requests.any((request) => request.executable == 'where'),
+        isTrue,
+      );
+    });
+
+    test(
+      'the §17 trap is refused when typed, and NOTHING is spawned at it',
+      () async {
+        runner.responder = (request) =>
+            const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        final reading = await read(
+          EnvironmentKind.wsl,
+          path: '/mnt/c/Users/dlohani/flutter/bin/flutter',
+        );
+        expect(reading.refusal, FlutterSdkRefusal.windowsInstallOnPosixPath);
+        expect(reading.reason, contains('§17'));
+        // The danger is identical to a located path's; where the path came from
+        // is not, and the sentence must not claim PATH resolved something the
+        // person typed.
+        expect(reading.reason, contains('The Flutter SDK path set for'));
+        expect(reading.reason, isNot(contains("distribution's PATH is")));
+        expect(reading.reason, contains('clear it'));
+        expect(reading.reason, isNot(contains('Install Flutter inside')));
+        // The reachability probe, and nothing else. The version probe would have
+        // been the run that swaps a Linux dart-sdk into the Windows install.
+        expect(runner.requests, hasLength(1));
+        expect(
+          runner.requests.any(
+            (request) => request.executable.contains('/mnt/c/'),
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'an unreachable environment is still unknown, not a bad path',
+      () async {
+        runner.responder = (request) => request.arguments.contains('exit 0')
+            ? const CommandResult(
+                exitCode: 1,
+                stdout: '',
+                stderr: 'not running',
+              )
+            : const CommandResult(
+                exitCode: 0,
+                stdout: 'Flutter 3.38.5',
+                stderr: '',
+              );
+        final reading = await read(
+          EnvironmentKind.wsl,
+          path: '/home/me/flutter/bin/flutter',
+        );
+        expect(reading.refusal, FlutterSdkRefusal.environmentUnreachable);
+        expect(runner.requests, hasLength(1));
+      },
+    );
+
+    test('a path that will not run names the row, not the PATH', () async {
+      runner.throwError = CommandException('No such file or directory');
+      final reading = await read(
+        EnvironmentKind.localPosix,
+        name: 'macOS',
+        path: '/opt/flutter/bin/flutter',
+      );
+      expect(reading.refusal, FlutterSdkRefusal.handSetUnusable);
+      expect(reading.isUsable, isFalse);
+      expect(reading.reason, contains('/opt/flutter/bin/flutter'));
+      expect(reading.reason, contains('No such file or directory'));
+      // The fix is the row, and the sentence names it and both ways out.
+      expect(reading.reason, contains('Settings'));
+      expect(reading.reason, contains('clear it'));
+      // Never `notFound`: "install one there" is the wrong advice for a
+      // machine that has one and was told where.
+      expect(reading.reason, isNot(contains('Install one')));
+    });
+
+    test(
+      'a version that will not read leaves the hand-set path usable',
+      () async {
+        runner.responder = (request) =>
+            const CommandResult(exitCode: 2, stdout: '', stderr: 'boom');
+        final reading = await read(
+          EnvironmentKind.localPosix,
+          name: 'macOS',
+          path: '/opt/flutter/bin/flutter',
+        );
+        expect(reading.isUsable, isTrue);
+        expect(reading.version, isNull);
+      },
+    );
+
+    test(
+      'with nothing set, the PATH probe is exactly what it always was',
+      () async {
+        runner.responder = (request) => request.executable == 'where'
+            ? const CommandResult(
+                exitCode: 0,
+                stdout: 'C:\\found\\flutter.bat\n',
+                stderr: '',
+              )
+            : const CommandResult(
+                exitCode: 0,
+                stdout: 'Flutter 3.1.0',
+                stderr: '',
+              );
+        final reading = await read(
+          EnvironmentKind.windowsNative,
+          name: 'Windows',
+        );
+        expect(reading.executable, 'C:\\found\\flutter.bat');
+        expect(runner.requests.first.arguments, ['flutter.bat']);
+      },
+    );
+  });
+}

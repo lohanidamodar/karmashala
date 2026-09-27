@@ -90,6 +90,7 @@ class BrowserLauncher {
     DevToolsHttpEndpoint Function(int port)? endpointFactory,
     Future<String> Function()? createUserDataDir,
     this.pollInterval = const Duration(milliseconds: 250),
+    this.headless = false,
   }) : _locateExecutable = locateExecutable ?? locateChromeExecutable,
        _endpointFactory =
            endpointFactory ?? ((port) => DevToolsHttpEndpoint(port: port)),
@@ -103,6 +104,10 @@ class BrowserLauncher {
 
   /// How often the debugging port is re-probed while a spawn starts up.
   final Duration pollInterval;
+
+  /// Whether a browser this launches has no window — a machine with no
+  /// desktop. Attaching is unaffected.
+  final bool headless;
 
   final String? Function() _locateExecutable;
   final DevToolsHttpEndpoint Function(int port) _endpointFactory;
@@ -160,6 +165,7 @@ class BrowserLauncher {
           port: port,
           userDataDir: userDataDir,
           initialUrl: initialUrl,
+          headless: headless,
         ),
       );
     } on Object catch (e) {

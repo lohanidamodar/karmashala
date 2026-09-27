@@ -4,6 +4,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 import '../../flutter_apps/application/flutter_sdk_readings.dart';
@@ -61,17 +63,11 @@ class ToolchainReadings
         found[toolchain] = ToolchainReading.impossible(toolchain, now);
         continue;
       }
-      // Flutter is not probed here. `FlutterSdkService` already locates it —
-      // `flutter.bat` on Windows, a hand-set path never overruled, and §17's
-      // refusal for a POSIX `flutter` that is really the Windows install
-      // through a drive mount. A second lookup got all three wrong.
+      // Flutter is not probed here: the server's `FlutterSdkService` locates
+      // it (slice 3d) — `flutter.bat` on Windows, a hand-set path never
+      // overruled, §17's refusal of the Windows install through a mount.
       found[toolchain] = toolchain == Toolchain.flutterSdk
-          ? _fromFlutterReading(
-              await ref
-                  .read(flutterSdkReadingsProvider.notifier)
-                  .readFor(environment, force: force),
-              now,
-            )
+          ? await _flutter(environment, force, now)
           : await _probe(runner, environment, toolchain, now);
     }
     state = {...state, environment.id: found};
@@ -82,6 +78,29 @@ class ToolchainReadings
   void forget(String environmentId) {
     if (!state.containsKey(environmentId)) return;
     state = {...state}..remove(environmentId);
+  }
+
+  /// The server's reading; no server to ask is "could not ask", never "no".
+  Future<ToolchainReading> _flutter(
+    ExecutionEnvironment environment,
+    bool force,
+    DateTime now,
+  ) async {
+    try {
+      return _fromFlutterReading(
+        await ref
+            .read(flutterSdkReadingsProvider.notifier)
+            .readFor(environment, force: force),
+        now,
+      );
+    } on DataRefused catch (refusal) {
+      return ToolchainReading(
+        toolchain: Toolchain.flutterSdk,
+        status: ToolchainStatus.unknown,
+        readAt: now,
+        detail: refusal.message,
+      );
+    }
   }
 
   ToolchainReading _fromFlutterReading(

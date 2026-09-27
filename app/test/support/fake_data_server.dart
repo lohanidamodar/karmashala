@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:karmashala_automations/karmashala_automations.dart';
 
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -50,6 +52,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
@@ -72,6 +75,7 @@ part 'fake_conversations.dart';
 part 'fake_agent_work.dart';
 part 'fake_ssh_work.dart';
 part 'fake_git_work.dart';
+part 'fake_runs_work.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -223,9 +227,13 @@ class FakeDataServer {
   /// The server's own SSH: test connections, disconnects and the answers a
   /// window gives its questions — scripted.
   late final sshWork = FakeSshWork._(this);
+
   /// The git the server does — reads and writes of a checkout, worktrees,
   /// their cleanup, a project's folders, GitHub — scripted.
   late final gitWork = FakeGitWork._(this);
+
+  /// The server's Flutter apps, hosted runs and browser — scripted.
+  late final runs = FakeRunsWork._(this);
 
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
@@ -336,8 +344,8 @@ class FakeDataServer {
         case PairingsChange():
           // Seed devices through [deviceRows]; a change carries no key.
           break;
-        case SshChange():
-          // Nothing kept: told as it is.
+        case SshChange() || RunsChange():
+        // Nothing kept: told as it is.
         case GitChange():
           // Nothing kept: it says what to read again.
           break;
@@ -454,6 +462,12 @@ class FakeDataServer {
     requests.add(request.kind);
     if (request case final SshWorkRequest<Object?> work) {
       return DataReply(sshWork._handle(work) as R, revision, const []);
+    }
+    if (request case final FlutterWorkRequest<Object?> work) {
+      return DataReply(runs._flutter(work) as R, revision, const []);
+    }
+    if (request case final BrowserWorkRequest<Object?> work) {
+      return DataReply(runs._browser(work) as R, revision, const []);
     }
     if (request case final AgentWorkRequest<Object?> work) {
       // Agent work is answered when done, and what it wrote is told to every
@@ -584,6 +598,8 @@ class FakeDataServer {
       CodexAccountDelete() ||
       UsageHistory() => _handleHosts(request, changes),
       AgentWorkRequest() ||
+      FlutterWorkRequest() ||
+      BrowserWorkRequest() ||
       SshWorkRequest() => throw StateError('answered above'),
       GitWorkRequest() => throw StateError('answered in FakeDataLink.send'),
     };
@@ -1120,6 +1136,10 @@ class FakeDataLink implements DataEndpoint {
 
   @override
   Stream<DataChanges> get changes => _changes.stream;
+
+  @override
+  Stream<DataStreamItems> openStream(String source, String key) =>
+      _server.runs._open(source, key);
 
   @override
   Future<void> get done => _done.future;

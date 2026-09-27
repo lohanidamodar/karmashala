@@ -1,14 +1,13 @@
 import 'dart:async';
 
-import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/verification.dart';
 
 import '../data/verification_data.dart';
 
-/// Turns what the browser and device services report into a run's steps and
-/// files. Both sinks are synchronous, so writes queue and [drain] is what a
+/// Turns what the device service reports into a run's steps and
+/// files. The sink is synchronous, so writes queue and [drain] is what a
 /// caller awaits; nothing here throws at the service it is watching.
 class VerificationRecorder {
   VerificationRecorder(
@@ -35,19 +34,6 @@ class VerificationRecorder {
 
   /// Everything queued has been written.
   Future<void> drain() => _queue;
-
-  void recordBrowser(BrowserAction action) => _append(
-    kind: _browserKind(action.verb),
-    summary: action.summary,
-    detail: action.detail,
-    ok: action.ok,
-    png: action.png,
-    text: action.text,
-    textKind: action.verb == 'capture'
-        ? VerificationArtifactKind.elementCapture
-        : VerificationArtifactKind.other,
-    slug: action.verb,
-  );
 
   void recordDevice(DeviceAction action) => _append(
     kind: _deviceKind(action.verb),
@@ -172,18 +158,6 @@ class VerificationRecorder {
       }
     });
   }
-
-  static VerificationStepKind _browserKind(String verb) => switch (verb) {
-    'navigate' => VerificationStepKind.navigate,
-    'click' => VerificationStepKind.click,
-    'type' => VerificationStepKind.type,
-    'key' => VerificationStepKind.key,
-    'evaluate' => VerificationStepKind.evaluate,
-    'find' => VerificationStepKind.find,
-    'screenshot' => VerificationStepKind.screenshot,
-    'capture' => VerificationStepKind.capture,
-    _ => VerificationStepKind.other,
-  };
 
   static VerificationStepKind _deviceKind(String verb) => switch (verb) {
     'launch' => VerificationStepKind.launch,

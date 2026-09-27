@@ -4,15 +4,15 @@ import 'server_tool_set.dart';
 import 'server_verification_runs.dart';
 import 'verification_tool_schemas.dart';
 
-/// `verification_*`: a review of a change is recorded here, and every run is
-/// read here. A page or a device run drives the app's browser or a device on
-/// the app's machine, so its start is handed to the app — and so are `note`,
-/// `finish` and a `get` with no id while this server records nothing, since
-/// the run they mean is then the app's.
+/// `verification_*`: a review of a change, and a page on the server's own
+/// browser (slice 3d), are recorded here, and every run is read here. A
+/// device run drives a device on the app's machine, so its start is handed
+/// to the app — and so are `note`, `finish` and a `get` with no id while this
+/// server records nothing, since the run they mean is then the app's.
 ///
-/// Known gap: the server cannot see a page or device run the app holds, so a
-/// change run can be started beside one (the app still refuses the reverse
-/// only for its own slot; this server refuses any start while it records).
+/// Known gap: the server cannot see a device run the app holds, so a run can
+/// be started here beside one (the app still refuses the reverse only for
+/// its own slot; this server refuses any start while it records).
 class VerificationToolSet extends ServerToolSet {
   VerificationToolSet(this.runs);
 
@@ -42,14 +42,13 @@ class VerificationToolSet extends ServerToolSet {
     );
   }
 
-  /// Exactly one of a page or a device, and not a change: a run only the app
-  /// can drive. Anything else is a change run or a refusal, both answered
-  /// here in the app's words.
+  /// A device and nothing else: the one run only the app can drive. Anything
+  /// else is a change or a page run, or a refusal, all answered here.
   static bool _drivesTheApp(Map<String, dynamic> arguments) {
     if (arguments['change'] == true) return false;
     final url = _text(arguments['url']) != null;
     final serial = _text(arguments['serial']) != null;
-    return url != serial;
+    return serial && !url;
   }
 
   static String? _text(Object? value) =>

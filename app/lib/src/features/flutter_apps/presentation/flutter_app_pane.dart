@@ -10,6 +10,8 @@ import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'flutter_console.dart';
 
@@ -171,7 +173,7 @@ class _ActionsState extends ConsumerState<_Actions> {
     setState(() => _busy = true);
     try {
       await action();
-    } on FlutterAppException catch (error) {
+    } on DataRefused catch (error) {
       // Out loud, and in the failure's own words: a dropped failure here looks
       // exactly like a reload that silently did nothing.
       _say('$verb: ${error.message}');
@@ -194,9 +196,9 @@ class _ActionsState extends ConsumerState<_Actions> {
           .read(attachedAppsProvider.notifier)
           .pickWidget(widget.app.id);
       if (!mounted) return;
-      _say(selection.toPromptText());
-      await Clipboard.setData(ClipboardData(text: selection.toPromptText()));
-    } on FlutterAppException catch (error) {
+      _say(selection);
+      await Clipboard.setData(ClipboardData(text: selection));
+    } on DataRefused catch (error) {
       _say(error.message);
     } finally {
       if (mounted) setState(() => _picking = false);
@@ -350,7 +352,7 @@ class _AttachByAddressState extends ConsumerState<_AttachByAddress> {
     try {
       await ref.read(attachedAppsProvider.notifier).attach(_address.text);
       if (mounted) setState(() => _open = false);
-    } on FlutterAppException catch (error) {
+    } on DataRefused catch (error) {
       if (mounted) {
         ScaffoldMessenger.maybeOf(
           context,

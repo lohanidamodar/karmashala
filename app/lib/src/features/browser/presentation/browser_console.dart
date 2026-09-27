@@ -6,8 +6,9 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_devices/devices.dart' show describeDriveAge;
 import '../application/browser_pane_controller.dart';
-import '../application/browser_providers.dart';
-import 'package:karmashala_browser/browser.dart' show FindResult;
+import '../data/browser_data.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show BrowserStatus, DataRefused;
 import 'browser_viewport_shot.dart';
 
 /// What the console last asked, and what came back.
@@ -48,7 +49,7 @@ enum BrowserConsoleMode {
   final String hint;
 }
 
-/// A console for the attached page, over the same [BrowserService] the tools
+/// A console for the attached page, through the server's browser the tools
 /// call. Not behind the evaluate gate: the person is typing it themselves.
 class BrowserConsole extends ConsumerStatefulWidget {
   const BrowserConsole({required this.state, super.key});
@@ -57,7 +58,7 @@ class BrowserConsole extends ConsumerStatefulWidget {
 
   /// Whether there is a page to ask. False disables the field rather than
   /// hiding it: a control that vanishes reads as a fault.
-  bool get enabled => state.status == BrowserPaneStatus.connected;
+  bool get enabled => state.status == BrowserStatus.connected;
 
   @override
   ConsumerState<BrowserConsole> createState() => _BrowserConsoleState();
@@ -87,25 +88,24 @@ class _BrowserConsoleState extends ConsumerState<BrowserConsole> {
     final query = _query.text.trim();
     if (query.isEmpty || _busy) return;
     setState(() => _busy = true);
-    final service = ref.read(browserServiceProvider);
+    final browser = ref.read(browserDataProvider);
     String text;
     var failed = false;
     try {
       text = switch (_mode) {
-        BrowserConsoleMode.evaluate => _renderValue(
-          await service.evaluate(query),
+        BrowserConsoleMode.evaluate => await browser.evaluate(query),
+        BrowserConsoleMode.selector => await browser.find(
+          selector: query,
+          limit: shownMatches,
         ),
-        BrowserConsoleMode.selector => _renderMatches(
-          await service.findElements(selector: query, limit: shownMatches),
-        ),
-        BrowserConsoleMode.text => _renderMatches(
-          await service.findElements(text: query, limit: shownMatches),
+        BrowserConsoleMode.text => await browser.find(
+          text: query,
+          limit: shownMatches,
         ),
       };
-    } on Object catch (error) {
-      // The service's own refusal, unwrapped: `BrowserException` carries the
-      // sentence the taxonomy wrote, which is better than anything here.
-      text = '$error';
+    } on DataRefused catch (refusal) {
+      // The server's refusal in the browser taxonomy's own sentence.
+      text = refusal.message;
       failed = true;
     }
     if (!mounted) return;
@@ -121,28 +121,6 @@ class _BrowserConsoleState extends ConsumerState<BrowserConsole> {
         failed: failed,
       );
     });
-  }
-
-  static String _renderValue(Object? value) =>
-      value == null ? 'null' : '$value';
-
-  static String _renderMatches(FindResult found) {
-    if (found.elements.isEmpty) {
-      // Never an empty list: "nothing matched" and "everything that matched is
-      // hidden" are different answers about the page.
-      return found.hidden > 0
-          ? 'No visible match for ${found.query} — ${found.hidden} matched and '
-                'were hidden.'
-          : 'No match for ${found.query}.';
-    }
-    final listing = found.indexedListing(max: shownMatches);
-    final notShown = found.total - found.elements.length;
-    return [
-      '${found.total} match${found.total == 1 ? '' : 'es'} for ${found.query}',
-      listing,
-      if (notShown > 0) '… $notShown more not listed',
-      if (found.hidden > 0) '${found.hidden} hidden match(es) not counted here',
-    ].join('\n');
   }
 
   @override

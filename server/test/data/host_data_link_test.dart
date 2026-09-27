@@ -5,6 +5,7 @@ import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_host/src/data/data_streams.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -140,10 +141,94 @@ void main() {
     await link.close();
   });
 
+  group('a live stream (slice 3d)', () {
+    late StreamController<Object?> live;
+    var cancelled = false;
+
+    setUp(() {
+      live = StreamController<Object?>.broadcast(
+        onCancel: () => cancelled = true,
+      );
+      cancelled = false;
+      server.data!.streamSources['test.lines'] = _Source(
+        backlog: const ['one', 'two'],
+        live: live.stream,
+      );
+    });
+
+    test('the backlog comes first, then what arrives, and a cancel closes '
+        'it at the server', () async {
+      final link = (await HostDataLink.connect(listener.path))!;
+      final items = <Object?>[];
+      final got = Completer<void>();
+      final subscription = link.openStream('test.lines', 'app').listen((b) {
+        items.addAll(b.items);
+        if (items.length == 3 && !got.isCompleted) got.complete();
+      });
+      await Future.doWhile(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return !live.hasListener;
+      }).timeout(const Duration(seconds: 5));
+      live.add('three');
+      await got.future.timeout(const Duration(seconds: 5));
+      expect(items, ['one', 'two', 'three']);
+
+      await subscription.cancel();
+      await Future.doWhile(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return !cancelled;
+      }).timeout(const Duration(seconds: 5));
+      await link.close();
+    });
+
+    test('a key the source does not hold ends at once, in words', () async {
+      final link = (await HostDataLink.connect(listener.path))!;
+      final batches = await link
+          .openStream('test.lines', 'missing')
+          .toList()
+          .timeout(const Duration(seconds: 5));
+      expect(batches.single.ended, contains('no app missing'));
+      final unknown = await link
+          .openStream('no.such', 'x')
+          .toList()
+          .timeout(const Duration(seconds: 5));
+      expect(unknown.single.ended, contains('no.such'));
+      await link.close();
+    });
+
+    test('the link going away ends every stream it had open', () async {
+      final link = (await HostDataLink.connect(listener.path))!;
+      final done = link.openStream('test.lines', 'app').toList();
+      await Future.doWhile(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return !live.hasListener;
+      }).timeout(const Duration(seconds: 5));
+      await link.close();
+      final batches = await done.timeout(const Duration(seconds: 5));
+      expect(batches.last.ended, isNotNull);
+    });
+  });
+
   test('the frames keep their numbers', () {
     expect(MessageType.dataRequest.code, 0x32);
     expect(MessageType.dataAnswer.code, 0x33);
     expect(MessageType.dataChanges.code, 0x34);
-    expect(kProtocolVersion, 20);
+    expect(MessageType.dataStreamOpen.code, 0x3b);
+    expect(MessageType.dataStreamItems.code, 0x3c);
+    expect(MessageType.dataStreamClose.code, 0x3d);
+    expect(kProtocolVersion, 22);
   });
+}
+
+class _Source implements DataStreamSource {
+  _Source({required this.backlog, required this.live});
+
+  final List<Object?> backlog;
+  final Stream<Object?> live;
+
+  @override
+  DataStreamFeed open(String key) {
+    if (key != 'app') throw DataRefused.notFound('no app $key');
+    return DataStreamFeed(backlog, live);
+  }
 }

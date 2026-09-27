@@ -4,7 +4,6 @@ import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/data/data_providers.dart';
-import '../../browser/application/browser_providers.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_session/session.dart';
 import '../../sessions/application/session_providers.dart';
@@ -85,7 +84,6 @@ final verificationServiceProvider = Provider<VerificationService>((ref) {
   final service = VerificationService(
     ref.watch(verificationDataProvider),
     ref.watch(verificationArtifactStoreProvider),
-    browserOf: () => ref.read(browserServiceProvider),
     adbOf: () => ref.read(adbServiceProvider),
     changes: ref.watch(verificationChangesProvider),
   );

@@ -10,6 +10,8 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/browser_pane_controller.dart';
 import 'package:karmashala_browser/browser.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show BrowserStatus;
 import 'browser_console.dart';
 import 'browser_viewport_shot.dart';
 
@@ -98,17 +100,17 @@ class _ConnectionBar extends StatelessWidget {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final (colour, label) = switch (state.status) {
-      BrowserPaneStatus.disconnected => (
+      BrowserStatus.disconnected => (
         theme.colorScheme.outline,
         'Not connected',
       ),
-      BrowserPaneStatus.connecting => (semantic.working, 'Connecting…'),
-      BrowserPaneStatus.busy => (semantic.working, 'Working…'),
-      BrowserPaneStatus.picking => (
+      BrowserStatus.connecting => (semantic.working, 'Connecting…'),
+      BrowserStatus.busy => (semantic.working, 'Working…'),
+      BrowserStatus.picking => (
         theme.colorScheme.tertiary,
         'Click an element in the browser…',
       ),
-      BrowserPaneStatus.connected => (
+      BrowserStatus.connected => (
         theme.colorScheme.primary,
         state.connection ?? 'Connected',
       ),
@@ -249,7 +251,7 @@ class _Actions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(browserPaneControllerProvider.notifier);
-    final picking = state.status == BrowserPaneStatus.picking;
+    final picking = state.status == BrowserStatus.picking;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.sm,
@@ -270,12 +272,20 @@ class _Actions extends ConsumerWidget {
               label: const Text('Cancel pick'),
             )
           else
-            FilledButton.tonalIcon(
-              onPressed: state.isConnected && !state.isBusy
-                  ? controller.pickElement
-                  : null,
-              icon: const Icon(AppIcons.target),
-              label: const Text('Pick element'),
+            Tooltip(
+              // Said where the person looks: a headless server has no window
+              // to click in, so the pane shows screenshots instead.
+              message: state.headless
+                  ? 'The server runs Chrome headless, with no window to '
+                        'click in. Take a screenshot to see the page.'
+                  : 'Point at an element in the page',
+              child: FilledButton.tonalIcon(
+                onPressed: state.isConnected && !state.isBusy && !state.headless
+                    ? controller.pickElement
+                    : null,
+                icon: const Icon(AppIcons.target),
+                label: const Text('Pick element'),
+              ),
             ),
           if (state.capture != null)
             TextButton(
@@ -303,16 +313,16 @@ class _Body extends ConsumerWidget {
       if (!shot.isEmpty) return BrowserViewportShotView(shot: shot);
       return PanePlaceholder(
         message: switch (state.status) {
-          BrowserPaneStatus.disconnected =>
+          BrowserStatus.disconnected =>
             'Attach to a browser to drive it from here.',
-          BrowserPaneStatus.picking =>
+          BrowserStatus.picking =>
             'Point at an element in the browser and click it.\n'
                 'Escape cancels.',
           _ =>
             'Connected. Pick an element to capture its HTML, styles and a '
                 'cropped screenshot, then send it to a session.',
         },
-        action: state.status == BrowserPaneStatus.disconnected
+        action: state.status == BrowserStatus.disconnected
             ? _HowAttachingWorks(port: state.port)
             : null,
       );

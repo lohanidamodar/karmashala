@@ -165,6 +165,17 @@ void main() {
       expect(args, isNot(contains(startsWith('--headless'))));
       expect(args.where((a) => a.startsWith('--user-data-dir')), hasLength(1));
     });
+
+    test('headless adds only the new headless mode, url still last', () {
+      final args = chromeLaunchArguments(
+        port: 1,
+        userDataDir: 'd',
+        headless: true,
+      );
+      expect(args.where((a) => a.startsWith('--headless')), ['--headless=new']);
+      expect(args, isNot(contains('--no-sandbox')));
+      expect(args.last, 'about:blank');
+    });
   });
 
   test('throwChromeNotFound raises the standard failure', () {

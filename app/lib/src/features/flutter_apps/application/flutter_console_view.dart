@@ -1,7 +1,7 @@
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'attached_apps.dart';
+import 'app_console_feed.dart';
 import 'flutter_app_ui_providers.dart';
 
 /// One app's console view: the query, the selected match, and where the view
@@ -19,7 +19,7 @@ class FlutterConsoleView {
   /// Sequence number of the selected match.
   final int? currentMatch;
 
-  /// The link [clearedBefore] numbers lines on — a re-attach starts from zero.
+  /// The feed [clearedBefore] numbers lines on — a re-attach starts from zero.
   final Object? clearedLink;
   final int clearedBefore;
 
@@ -80,7 +80,7 @@ class FlutterConsoleViews extends Notifier<Map<String, FlutterConsoleView>> {
 
   /// Hides what is there now. The app's buffer, and what an MCP call reads, keep
   /// it.
-  void clear(String appId, FlutterAppLink link) => _put(
+  void clear(String appId, AppConsoleFeed link) => _put(
     appId,
     FlutterConsoleView(
       query: of(appId).query,
@@ -103,23 +103,24 @@ final flutterConsoleViewProvider = Provider.family<FlutterConsoleView, String>(
   ),
 );
 
-final _filterCacheProvider = Provider.family<AppLogFilterCache, String>(
-  (ref, appId) => AppLogFilterCache(),
-);
+/// One per feed: a re-attach numbers its lines from zero again.
+final _filterCacheProvider = Provider.autoDispose
+    .family<AppLogFilterCache, String>((ref, appId) {
+      ref.watch(appConsoleFeedProvider(appId));
+      return AppLogFilterCache();
+    });
 
-/// The console under its view, recomputed per line but searching only the new
-/// ones. Null when the app has no link.
-final flutterConsoleFilterProvider =
-    Provider.family<AppLogFilterResult?, String>((ref, appId) {
+/// The console under its view, recomputed per batch but searching only the
+/// new lines. Null when the app has no feed.
+final flutterConsoleFilterProvider = Provider.autoDispose
+    .family<AppLogFilterResult?, String>((ref, appId) {
       ref.watch(flutterAppConsoleTickProvider(appId));
-      // A re-attach replaces the link before its first line ticks.
-      ref.watch(attachedAppsProvider);
       final view = ref.watch(flutterConsoleViewProvider(appId));
-      final link = ref.read(attachedAppsProvider.notifier).linkFor(appId);
-      if (link == null) return null;
-      return link.filterConsole(
-        ref.read(_filterCacheProvider(appId)),
+      final feed = ref.watch(appConsoleFeedProvider(appId));
+      if (feed == null) return null;
+      return feed.filterConsole(
+        ref.watch(_filterCacheProvider(appId)),
         view.query,
-        hideBefore: identical(view.clearedLink, link) ? view.clearedBefore : 0,
+        hideBefore: identical(view.clearedLink, feed) ? view.clearedBefore : 0,
       );
     });

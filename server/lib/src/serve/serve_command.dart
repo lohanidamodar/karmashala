@@ -5,7 +5,7 @@ import 'package:agent_cli/process.dart'
     show CommandRunnerFactory, localHostEnvironment;
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DecisionRecorded;
+    show DecisionRecorded, kFlutterLogsStream;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
@@ -22,6 +22,12 @@ import '../git/server_git.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
 import '../mcp/tools/usage_tool_set.dart';
+import '../mcp/tools/server_tool_schemas.dart';
+import '../browser/server_browser.dart';
+import '../flutter/server_flutter_work.dart';
+import '../mcp/tools/browser_tool_set.dart';
+import '../mcp/tools/build_tool_set.dart';
+import '../mcp/tools/flutter_tool_set.dart';
 import '../mcp/daemon_mcp.dart';
 import '../mcp/mcp_tool_relay.dart';
 import '../mcp/tools/instructions_tool_set.dart';
@@ -330,6 +336,29 @@ Future<int> runServe(
     environmentOf: reach.environmentOf,
     runners: ssh.runners,
   );
+  // The browser, Flutter runs and builds (slice 3d): a Chrome on this
+  // machine, and commands run as sessions this server hosts, any client
+  // attaches to — with every client closed as much as with one open.
+  final browser = ServerBrowser(
+    database: database,
+    dataDirectory: dataDirectory,
+    tell: data.announce,
+    hostEnvironment: hostEnvironment,
+  );
+  data.browserWork = browser;
+  final flutter = ServerFlutterWork(
+    registry: registry,
+    database: database,
+    tell: data.announce,
+    dataDirectory: dataDirectory,
+    hostEnvironment: hostEnvironment,
+    runners: ssh.runners,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  data
+    ..flutterWork = flutter
+    ..streamSources[kFlutterLogsStream] = flutter.logs;
+  final checkoutRows = CheckoutRows(database);
   final mcpTools = McpToolRelay(
     cachePath: paths.mcpToolsPath,
     tools: ServerTools([
@@ -358,7 +387,7 @@ Future<int> runServe(
         worktrees: worktrees,
         liveness: liveness,
       ),
-      VerificationToolSet(ServerVerificationRuns(tools)),
+      VerificationToolSet(ServerVerificationRuns(tools, browser: browser)),
     ]),
   );
   server = HostServer(
@@ -496,7 +525,24 @@ Future<int> runServe(
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).
-    ..add(UsageToolSet(agentWork.usage));
+    ..add(UsageToolSet(agentWork.usage))
+    // The browser, the Flutter loop and builds are the server's (slice 3d).
+    ..add(BrowserToolSet(browser))
+    ..add(
+      FlutterToolSet(
+        apps: flutter.apps,
+        loop: flutter.loop,
+        rows: checkoutRows,
+      ),
+    )
+    ..add(BuildToolSet(builds: flutter.builds, rows: checkoutRows));
+  // A client composes its catalogue from `serverToolSchemas`: a family
+  // served here but missing there is a tool no client lists (found once).
+  assert(
+    _names(mcpTools.tools.schemas).join(',') ==
+        _names(serverToolSchemas).join(','),
+    'serverToolSchemas does not list what serve registers',
+  );
   // `server.config.set` brings the phone listener in line at once.
   if (companionServing) {
     config.apply = (settings) => companion.reconfigure(
@@ -626,6 +672,10 @@ Future<int> runServe(
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await automations?.close();
+  // Its links and watchers, before the sessions it hosts end; then the
+  // Chrome this server launched (never one it only attached to).
+  await flutter.close();
+  await browser.close();
   await recording.close();
   await registry.shutdown();
   await sessionSync.close();
@@ -640,6 +690,10 @@ Future<int> runServe(
   ]).timeout(const Duration(seconds: 1), onTimeout: () => const []);
   return code;
 }
+
+List<Object?> _names(List<Map<String, Object?>> schemas) => [
+  for (final schema in schemas) schema['name'],
+];
 
 /// The loopback hook listener, on the last run's port and token when that port
 /// is still free, with [HostPaths.hookEndpointPath] written for the app. Null,

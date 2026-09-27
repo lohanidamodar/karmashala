@@ -1,5 +1,8 @@
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -7,6 +10,7 @@ import 'package:karmashala/src/features/environments/application/toolchain_readi
 import 'package:karmashala/src/features/environments/domain/toolchain.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -17,12 +21,19 @@ import '../../support/fixtures.dart';
 /// states a single boolean would flatten: it is there, it is not there, and
 /// **nobody could ask** — which §19 says must never be reported as absence.
 void main() {
+  late FakeDataServer server;
+  late Override data;
+
+  setUp(() async {
+    server = FakeDataServer();
+    data = await server.override();
+  });
+
   ProviderContainer containerWith(FakeCommandRunner runner) {
-    // The Flutter row is answered by `FlutterSdkReadings`, which reads the
-    // hand-set SDK paths out of settings — so this needs a database even
-    // though nothing here stores anything.
+    // The Flutter row is the server's reading (slice 3d).
     final container = ProviderContainer(
       overrides: [
+        data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
@@ -41,34 +52,37 @@ void main() {
     expect(readings.cached('windows'), isEmpty);
   });
 
-  test('Flutter is asked for by the name Windows actually has', () async {
-    // CLAUDE.md §17: the SDK ships `flutter.bat`, and a bare `flutter` is not
-    // found at all — Windows resolves PATHEXT only through a shell. Probing
-    // the wrong name reported "not found" on a machine that has Flutter.
+  test('Flutter is the server\'s reading, never probed here', () async {
+    // Slice 3d: the server's `FlutterSdkService` locates it (§17's
+    // `flutter.bat` and the mount refusal are tested there).
     final runner = FakeCommandRunner();
     final container = containerWith(runner);
 
-    await container
+    final found = await container
         .read(toolchainReadingsProvider.notifier)
         .readAll(windowsEnv());
 
     expect(
-      runner.requests
-          .where((r) => r.executable == 'where')
-          .map((r) => r.arguments.first),
-      contains('flutter.bat'),
+      runner.requests.map((r) => r.arguments.join(' ')).join(' '),
+      isNot(contains('flutter')),
     );
+    expect(
+      server.runs.asked.whereType<FlutterSdk>().single.environmentId,
+      windowsEnv().id,
+    );
+    expect(found[Toolchain.flutterSdk]!.status, ToolchainStatus.present);
   });
 
-  test('a POSIX machine is asked for plain flutter', () async {
-    final runner = FakeCommandRunner();
-    final container = containerWith(runner);
+  test('no server to ask is "could not ask", not "missing"', () async {
+    final container = containerWith(FakeCommandRunner());
+    server.runs.onFlutter = (_) =>
+        throw const DataRefused.unavailable('no server');
 
-    await container.read(toolchainReadingsProvider.notifier).readAll(wslEnv());
+    final found = await container
+        .read(toolchainReadingsProvider.notifier)
+        .readAll(wslEnv());
 
-    final located = runner.requests.map((r) => r.arguments.join(' ')).join(' ');
-    expect(located, contains('flutter'));
-    expect(located, isNot(contains('flutter.bat')));
+    expect(found[Toolchain.flutterSdk]!.status, ToolchainStatus.unknown);
   });
 
   test('a tool nothing can locate is missing, without being run', () async {
@@ -147,22 +161,23 @@ void main() {
   test(
     'a non-zero exit is missing; a machine that cannot be asked is not',
     () async {
-      final refused = containerWith(
-        FakeCommandRunner(
-          responder: (_) => const CommandResult(
-            exitCode: 9009,
-            stdout: '',
-            stderr: "'flutter' is not recognized",
-          ),
-        ),
-      );
-      final unreachable = containerWith(
-        FakeCommandRunner(throwError: CommandException('no shell there')),
+      // The server's reading says which: nothing on PATH, or a machine it
+      // could not reach.
+      final refused = containerWith(FakeCommandRunner());
+      final unreachable = containerWith(FakeCommandRunner());
+      FlutterSdkReading refusal(FlutterSdkRefusal why) => FlutterSdkReading(
+        environmentId: windowsEnv().id,
+        readAt: testTime,
+        refusal: why,
+        reason: why.name,
       );
 
+      server.runs.onFlutter = (_) => refusal(FlutterSdkRefusal.notFound);
       final answered = await refused
           .read(toolchainReadingsProvider.notifier)
           .readAll(windowsEnv());
+      server.runs.onFlutter = (_) =>
+          refusal(FlutterSdkRefusal.environmentUnreachable);
       final silent = await unreachable
           .read(toolchainReadingsProvider.notifier)
           .readAll(windowsEnv());

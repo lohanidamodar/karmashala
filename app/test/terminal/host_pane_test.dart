@@ -160,6 +160,45 @@ void main() {
     });
   });
 
+  group('a run the server hosts (attach only, slice 3d)', () {
+    HostTerminalInstance attachingPaneOn(PaneAccess access) {
+      final instance = HostTerminalInstance(
+        id: 'hosted-r1',
+        title: 'run · app',
+        profileId: 'powershell',
+        access: access,
+        launch: launch,
+        attachOnly: true,
+      );
+      instance.terminal.resize(120, 40);
+      addTearDown(instance.dispose);
+      return instance;
+    }
+
+    test('attaches to the session the server started', () async {
+      final access = PaneAccess(readyDeployment());
+      access.liveSessions.add('karmashala_local_hosted-r1');
+      final pane = attachingPaneOn(access);
+      await settle();
+
+      final attach = access.channels.single.only<AttachMessage>();
+      expect(attach.sessionId, 'karmashala_local_hosted-r1');
+      expect(access.channels.single.all<OpenMessage>(), isEmpty);
+      expect(pane.liveness.value, PaneLiveness.live);
+    });
+
+    test('a session that is gone ends the pane; nothing is started in its '
+        'place', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = attachingPaneOn(access);
+      await settle();
+
+      expect(access.channels.single.all<OpenMessage>(), isEmpty);
+      expect(pane.liveness.value, PaneLiveness.exited);
+      expect(pane.exitCode, isNull);
+    });
+  });
+
   test(
     'bytes from the host reach the buffer, and typing reaches the host',
     () async {

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
+import 'package:karmashala_host/src/browser/server_browser.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/mcp/tools/server_verification_runs.dart';
 import 'package:karmashala_host/src/mcp/tools/verification_tool_set.dart';
@@ -13,6 +14,8 @@ import 'package:karmashala_verification/tools.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import '../../support/fake_browser.dart';
 
 /// The blocks of an `_mcpContent` result.
 List<Map<String, Object?>> blocks(Object? result) => [
@@ -120,11 +123,11 @@ void main() {
   );
 
   group('what the server hands to the app', () {
-    test('a page or a device run drives the app, so its start is the '
-        'app\'s', () {
-      expect(
-        tools.call('verification_start', {'url': 'https://a.test'}, 's'),
-        isNull,
+    test('a device run drives the app, so its start is the app\'s; a page '
+        'run is the server\'s', () async {
+      await expectLater(
+        call('verification_start', {'url': 'https://a.test'}),
+        refusal('This Karmashala server drives no browser'),
       );
       expect(
         tools.call('verification_start', {
@@ -402,5 +405,97 @@ void main() {
         contains('STILL RECORDING — the page saves'),
       );
     });
+  });
+
+  group('a page on the server\'s browser', () {
+    late FakeBrowser fake;
+    late ServerBrowser browser;
+
+    setUp(() {
+      fake = FakeBrowser();
+      browser = ServerBrowser(
+        database: db,
+        dataDirectory: dataDirectory.path,
+        tell: data.announce,
+        hostEnvironment: const {},
+        operatingSystem: 'macos',
+        service: fake.service,
+      );
+      runs = ServerVerificationRuns(
+        context,
+        newId: () => 'run-${(++ids).toString().padLeft(3, '0')}',
+        browser: browser,
+      );
+      tools = VerificationToolSet(runs);
+    });
+    tearDown(() => browser.close());
+
+    test('is started here, and every browser action is a step with its '
+        'evidence', () async {
+      final started = tools.call('verification_start', {
+        'url': 'https://example.com/app',
+        'sessionId': 'work-1',
+      }, 'review-1');
+      expect(started, isNotNull, reason: 'no longer handed to the app');
+      expect(textOf(await started), contains('Every browser_* call'));
+      expect(fake.service.actionSink, isNotNull);
+      await fake.service.screenshot();
+
+      final text = textOf(
+        await call('verification_finish', {'verdict': 'pass'}, 'review-1'),
+      );
+      expect(text, startsWith('PASS'));
+      expect(fake.service.actionSink, isNull, reason: 'the sink comes off');
+
+      final run = (await runs.get('run-001'))!;
+      expect(run.target.kind, VerificationTargetKind.browser);
+      final kinds = run.steps.map((s) => s.kind).toList();
+      expect(kinds, contains(VerificationStepKind.navigate));
+      // The screenshot the agent took and the closing one.
+      expect(
+        kinds.where((k) => k == VerificationStepKind.screenshot),
+        hasLength(2),
+      );
+      final shots = run.artifacts.where(
+        (a) => a.kind == VerificationArtifactKind.screenshot,
+      );
+      expect(shots, hasLength(2));
+      for (final shot in shots) {
+        expect(await runs.readArtifact(shot), isNotEmpty);
+      }
+      // The pane followed what the run did.
+      expect(browser.state.status, BrowserStatus.connected);
+    });
+
+    test(
+      'an unreachable page keeps the run, finishable, and says why',
+      () async {
+        await browser.close();
+        fake = FakeBrowser(targets: []);
+        fake.endpoint.openTabError = Exception('no page will open');
+        browser = ServerBrowser(
+          database: db,
+          dataDirectory: dataDirectory.path,
+          tell: data.announce,
+          hostEnvironment: const {},
+          operatingSystem: 'macos',
+          service: fake.service,
+        );
+        runs = ServerVerificationRuns(
+          context,
+          newId: () => 'run-x',
+          browser: browser,
+        );
+        tools = VerificationToolSet(runs);
+        await expectLater(
+          call('verification_start', {'url': 'https://a.test'}),
+          throwsA(anything),
+        );
+        expect(runs.activeRun, isNotNull);
+        await call('verification_finish', {'verdict': 'inconclusive'});
+        final run = (await runs.get('run-x'))!;
+        expect(run.steps.first.summary, 'Could not reach the target');
+      },
+    );
   });
 }

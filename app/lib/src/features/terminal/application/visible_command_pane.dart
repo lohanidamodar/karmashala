@@ -65,8 +65,3 @@ final visibleCommandOpenerProvider = Provider<VisibleCommandOpener>((ref) {
     return opened.paneId;
   };
 });
-
-/// The `agentId` a Flutter loop pane is opened under. Namespaced like
-/// `kWorktreeSetupAgentId`, so it cannot collide with a registry agent and a
-/// restored pane under it replays nothing.
-const String kFlutterLoopAgentId = 'karmashala:flutter';

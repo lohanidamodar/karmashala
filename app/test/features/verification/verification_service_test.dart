@@ -8,43 +8,38 @@ import 'package:path/path.dart' as p;
 
 import 'verification_harness.dart';
 
-/// Lets the observer's CDP listeners run. Steps are already durable when the
-/// call that produced them returns; the recorder's file writes are drained with
-/// `service.flush()`.
-Future<void> settle() => Future<void>.delayed(Duration.zero);
-
+/// The app's verification runs drive a device on its machine; a page run is
+/// the server's since slice 3d (`server/test/mcp/tools/verification_*`).
 void main() {
   late VerificationHarness h;
 
   setUp(() async => h = await VerificationHarness.start());
   tearDown(() => h.dispose());
 
-  group('starting', () {
-    test('a browser run attaches, navigates and starts watching', () async {
-      final run = await h.service.start(
-        target: const VerificationTarget.browser('https://example.com/app'),
-        title: 'the settings page saves',
-      );
+  const device = VerificationTarget.device(
+    serial: 'FAKE123',
+    packageName: 'com.example.app',
+  );
 
-      expect(run.title, 'the settings page saves');
-      expect(run.isOpen, isTrue);
-      expect(h.service.activeRun!.id, run.id);
-      expect(h.browser.service.isConnected, isTrue);
-      expect(h.browser.service.observer, isNotNull);
-      // The navigation is the run's first step, not a silent prelude.
-      expect(
-        (await h.service.get(run.id))!.steps.map((s) => s.kind),
-        contains(VerificationStepKind.navigate),
+  group('starting', () {
+    test('a page run is the server\'s, and is refused here in words', () async {
+      await expectLater(
+        h.service.start(
+          target: const VerificationTarget.browser('https://example.com'),
+        ),
+        throwsA(
+          isA<VerificationException>().having(
+            (e) => e.message,
+            'message',
+            contains('verified by the Karmashala server'),
+          ),
+        ),
       );
+      expect(h.service.activeRun, isNull);
     });
 
     test('a device run launches the package as its first step', () async {
-      final run = await h.service.start(
-        target: const VerificationTarget.device(
-          serial: 'FAKE123',
-          packageName: 'com.example.app',
-        ),
-      );
+      final run = await h.service.start(target: device);
 
       expect(h.adb.called('monkey -p com.example.app'), isTrue);
       final steps = (await h.service.get(run.id))!.steps;
@@ -53,13 +48,7 @@ void main() {
     });
 
     test('launch:false verifies what is already on screen', () async {
-      await h.service.start(
-        target: const VerificationTarget.device(
-          serial: 'FAKE123',
-          packageName: 'com.example.app',
-        ),
-        launch: false,
-      );
+      await h.service.start(target: device, launch: false);
 
       expect(h.adb.called('monkey'), isFalse);
     });
@@ -86,14 +75,10 @@ void main() {
     );
 
     test('a second run is refused while the first is recording', () async {
-      await h.service.start(
-        target: const VerificationTarget.browser('https://example.com'),
-      );
+      await h.service.start(target: device, launch: false);
 
       await expectLater(
-        h.service.start(
-          target: const VerificationTarget.browser('https://other.test'),
-        ),
+        h.service.start(target: device, launch: false),
         throwsA(
           isA<VerificationException>().having(
             (e) => e.message,
@@ -121,48 +106,22 @@ void main() {
   });
 
   group('recording', () {
-    test('browser actions become steps with their screenshots', () async {
-      final run = await h.service.start(
-        target: const VerificationTarget.browser('https://example.com'),
-      );
-      await h.browser.service.screenshot();
-      h.service.note('the header is where it should be');
-      await h.service.flush();
-
-      final recorded = (await h.service.get(run.id))!;
-      expect(
-        recorded.steps.map((s) => s.kind),
-        containsAll([
-          VerificationStepKind.screenshot,
-          VerificationStepKind.note,
-        ]),
-      );
-      final shot = recorded.artifacts.firstWhere((a) => a.kind.isImage);
-      expect(
-        File(
-          p.join(recorded.artifactDirectory, shot.relativePath),
-        ).existsSync(),
-        isTrue,
-      );
-    });
-
     test(
       'device actions become steps, and the UI tree becomes a file',
       () async {
-        final run = await h.service.start(
-          target: const VerificationTarget.device(
-            serial: 'FAKE123',
-            packageName: 'com.example.app',
-          ),
-        );
+        final run = await h.service.start(target: device);
         await h.adb.service.tap('FAKE123', 100, 200);
         await h.adb.service.dumpUiHierarchy('FAKE123');
+        h.service.note('the header is where it should be');
         await h.service.flush();
 
         final recorded = (await h.service.get(run.id))!;
         expect(
           recorded.steps.map((s) => s.summary),
-          contains('Tapped (100, 200)'),
+          containsAll([
+            'Tapped (100, 200)',
+            'the header is where it should be',
+          ]),
         );
         final tree = recorded.artifacts.firstWhere(
           (a) => a.kind == VerificationArtifactKind.uiTree,
@@ -176,42 +135,16 @@ void main() {
       },
     );
 
-    test(
-      'a failed action is recorded as a failed step, and still throws',
-      () async {
-        final run = await h.service.start(
-          target: const VerificationTarget.browser('https://example.com'),
-        );
-        h.browser.onEvaluate = (expression) =>
-            expression.contains('__karmashala') ? null : null;
-
-        await expectLater(
-          h.browser.service.click(selector: '#nothing'),
-          throwsA(anything),
-        );
-        await h.service.flush();
-
-        final failed = (await h.service.get(
-          run.id,
-        ))!.steps.where((s) => !s.ok).toList();
-        expect(failed, isNotEmpty);
-        expect(failed.last.kind, VerificationStepKind.click);
-        expect(failed.last.detail, isNotNull);
-      },
-    );
-
     test('nothing is recorded once the run is finished', () async {
-      final run = await h.service.start(
-        target: const VerificationTarget.browser('https://example.com'),
-      );
+      final run = await h.service.start(target: device, launch: false);
       await h.service.finish(verdict: VerificationVerdict.pass);
       final before = (await h.service.get(run.id))!.steps.length;
 
-      await h.browser.service.screenshot();
+      await h.adb.service.tap('FAKE123', 1, 1);
       await h.service.flush();
 
       expect((await h.service.get(run.id))!.steps, hasLength(before));
-      expect(h.browser.service.actionSink, isNull);
+      expect(h.adb.service.actionSink, isNull);
     });
   });
 
@@ -220,21 +153,19 @@ void main() {
       'records the verdict and writes a report beside the artifacts',
       () async {
         final run = await h.service.start(
-          target: const VerificationTarget.browser('https://example.com'),
+          target: device,
           title: 'the save button saves',
+          launch: false,
         );
         h.service.note('clicked save');
 
         final finished = await h.service.finish(
           verdict: VerificationVerdict.pass,
-          reason: 'the row appeared and the console stayed quiet',
+          reason: 'the row appeared and the log stayed quiet',
         );
 
         expect(finished.verdict, VerificationVerdict.pass);
-        expect(
-          finished.reason,
-          'the row appeared and the console stayed quiet',
-        );
+        expect(finished.reason, 'the row appeared and the log stayed quiet');
         expect(finished.isOpen, isFalse);
         expect(h.service.activeRun, isNull);
 
@@ -247,79 +178,9 @@ void main() {
       },
     );
 
-    test(
-      'console errors seen during the run are collected without asking',
-      () async {
-        final run = await h.service.start(
-          target: const VerificationTarget.browser('https://example.com'),
-        );
-        h.browser.socket.emitEvent('Runtime.consoleAPICalled', {
-          'type': 'error',
-          'args': [
-            {'type': 'string', 'value': 'TypeError: save is not a function'},
-          ],
-        });
-        h.browser.socket.emitEvent('Network.requestWillBeSent', {
-          'requestId': 'R1',
-          'request': {'method': 'POST', 'url': 'https://api.test/save'},
-        });
-        h.browser.socket.emitEvent('Network.responseReceived', {
-          'requestId': 'R1',
-          'response': {'url': 'https://api.test/save', 'status': 500},
-        });
-        await settle();
-
-        final finished = await h.service.finish(
-          verdict: VerificationVerdict.fail,
-          reason: 'save throws',
-        );
-
-        final console = finished.artifacts.firstWhere(
-          (a) => a.kind == VerificationArtifactKind.consoleErrors,
-        );
-        final network = finished.artifacts.firstWhere(
-          (a) => a.kind == VerificationArtifactKind.networkFailures,
-        );
-        expect(
-          utf8.decode((await h.service.readArtifact(console))!),
-          contains('save is not a function'),
-        );
-        expect(
-          utf8.decode((await h.service.readArtifact(network))!),
-          contains('500'),
-        );
-        // And the report a person reads has them in it.
-        expect(
-          File(p.join(run.artifactDirectory, 'report.md')).readAsStringSync(),
-          contains('save is not a function'),
-        );
-      },
-    );
-
-    test('a quiet page produces no console file at all', () async {
-      await h.service.start(
-        target: const VerificationTarget.browser('https://example.com'),
-      );
-      final finished = await h.service.finish(
-        verdict: VerificationVerdict.pass,
-      );
-
-      expect(
-        finished.artifacts.where(
-          (a) => a.kind == VerificationArtifactKind.consoleErrors,
-        ),
-        isEmpty,
-      );
-    });
-
     test('a device run closes with a logcat slice and a UI tree', () async {
       final finished = await h.service
-          .start(
-            target: const VerificationTarget.device(
-              serial: 'FAKE123',
-              packageName: 'com.example.app',
-            ),
-          )
+          .start(target: device)
           .then(
             (_) => h.service.finish(
               verdict: VerificationVerdict.pass,
@@ -348,12 +209,7 @@ void main() {
       'an app that was not running says so instead of an empty file',
       () async {
         h.adb.packageRunning = false;
-        await h.service.start(
-          target: const VerificationTarget.device(
-            serial: 'FAKE123',
-            packageName: 'com.example.app',
-          ),
-        );
+        await h.service.start(target: device);
         final finished = await h.service.finish(
           verdict: VerificationVerdict.inconclusive,
         );
@@ -387,24 +243,27 @@ void main() {
       'an ambiguous prefix resolves to nothing, and lists the candidates',
       () async {
         await h.service.start(
-          target: const VerificationTarget.browser('https://a.test'),
+          target: const VerificationTarget.device(
+            serial: 'FAKE123',
+            packageName: 'com.example.a',
+          ),
+          launch: false,
         );
         await h.service.finish(verdict: VerificationVerdict.pass);
-        await h.service.start(
-          target: const VerificationTarget.browser('https://b.test'),
-        );
+        await h.service.start(target: device, launch: false);
         await h.service.finish(verdict: VerificationVerdict.pass);
 
-        expect((await h.service.find('run-001'))!.target.url, 'https://a.test');
+        expect(
+          (await h.service.find('run-001'))!.target.packageName,
+          'com.example.a',
+        );
         expect((await h.service.find('run-')), isNull);
         expect((await h.service.matching('run-')), hasLength(2));
       },
     );
 
     test('deleting a run removes its files as well as its rows', () async {
-      final run = await h.service.start(
-        target: const VerificationTarget.browser('https://example.com'),
-      );
+      final run = await h.service.start(target: device, launch: false);
       await h.service.finish(verdict: VerificationVerdict.pass);
       expect(Directory(run.artifactDirectory).existsSync(), isTrue);
 
@@ -414,15 +273,13 @@ void main() {
       expect(Directory(run.artifactDirectory).existsSync(), isFalse);
     });
 
-    test('abandoning leaves the run open and takes the sinks off', () async {
-      final run = await h.service.start(
-        target: const VerificationTarget.browser('https://example.com'),
-      );
+    test('abandoning leaves the run open and takes the sink off', () async {
+      final run = await h.service.start(target: device, launch: false);
       await h.service.abandon();
 
       expect(h.service.activeRun, isNull);
       expect((await h.service.get(run.id))!.isOpen, isTrue);
-      expect(h.browser.service.actionSink, isNull);
+      expect(h.adb.service.actionSink, isNull);
     });
   });
 }

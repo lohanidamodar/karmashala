@@ -150,6 +150,22 @@ void main() {
       expect(starter.starts.single.arguments.last, 'https://example.com');
     });
 
+    test('a headless launcher spawns without a window', () async {
+      final endpoint = ScriptedEndpoint([
+        DevToolsEndpointState.notListening,
+        DevToolsEndpointState.available,
+      ], port: 9333);
+      await BrowserLauncher(
+        startProcess: starter.call,
+        locateExecutable: () => '/usr/bin/chromium',
+        endpointFactory: (_) => endpoint,
+        createUserDataDir: () async => '/tmp/profile',
+        pollInterval: const Duration(milliseconds: 5),
+        headless: true,
+      ).connect();
+      expect(starter.starts.single.arguments, contains('--headless=new'));
+    });
+
     test('polls until the port opens rather than assuming it did', () async {
       final endpoint = ScriptedEndpoint([
         DevToolsEndpointState.notListening,

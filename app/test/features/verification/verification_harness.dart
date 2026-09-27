@@ -11,7 +11,6 @@ import 'package:karmashala_verification/verification.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
-import '../browser/fake_browser.dart';
 
 /// A 1×1 PNG, so an artifact written by a test is a real image.
 final Uint8List tinyPng = Uint8List.fromList([
@@ -143,7 +142,6 @@ class VerificationHarness {
     service = VerificationService(
       data,
       store,
-      browserOf: () => browser.service,
       adbOf: () => adb.service,
       changes: changes,
       now: now,
@@ -181,7 +179,6 @@ class VerificationHarness {
   /// following a run live — which is the whole point of the stream.
   final changes = VerificationChangeSignal();
 
-  final browser = FakeBrowser();
   final adb = FakeAdb();
 
   var _ids = 0;

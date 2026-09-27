@@ -7,7 +7,15 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
-import 'attached_apps.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
+
+import '../data/flutter_data.dart';
+
+/// Hands the server an app a device announced, at the address `adb forward`
+/// made for it on this machine — reachable by a server on this machine only.
+typedef DeviceAppOffer =
+    Future<void> Function({required Uri hostUri, required String serial});
 
 /// How many distinct announcements one device's log may produce — `logcat`
 /// replays its ring buffer, so the bound is on `adb forward` calls, not time.
@@ -22,18 +30,18 @@ const List<String> kVmServiceLogTags = <String>['flutter', 'DartVM'];
 class AndroidAppDiscovery {
   AndroidAppDiscovery({
     required AdbService? adb,
-    required AttachedApps apps,
+    required DeviceAppOffer offer,
     AppLogger? logger,
     // Public parameter names over private fields: `_adb:` would be a poor
     // argument to write at a call site.
     // ignore: prefer_initializing_formals
   }) : _adb = adb,
        // ignore: prefer_initializing_formals
-       _apps = apps,
+       _offer = offer,
        _logger = logger ?? AppLogger.named('flutter_apps');
 
   final AdbService? _adb;
-  final AttachedApps _apps;
+  final DeviceAppOffer _offer;
   final AppLogger _logger;
 
   final Map<String, ProcessHandle> _streams = <String, ProcessHandle>{};
@@ -109,7 +117,7 @@ class AndroidAppDiscovery {
       return;
     }
     if (hostPort == null || _disposed) return;
-    await _apps.offerFromDevice(
+    await _offer(
       hostUri: vmServiceUriOnHost(deviceUri, hostPort),
       serial: serial,
     );
@@ -136,7 +144,15 @@ final androidAppDiscoveryProvider =
     FutureProvider.autoDispose<AndroidAppDiscovery>((ref) async {
       final discovery = AndroidAppDiscovery(
         adb: ref.watch(adbServiceProvider),
-        apps: ref.read(attachedAppsProvider.notifier),
+        offer: ({required hostUri, required serial}) async {
+          try {
+            await ref
+                .read(flutterDataProvider)
+                .attach(hostUri.toString(), deviceSerial: serial);
+          } on DataRefused {
+            // Nothing answered at the server; its registry says why.
+          }
+        },
       );
       ref.onDispose(discovery.dispose);
       final devices = await ref.watch(devicesProvider.future);

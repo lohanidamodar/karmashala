@@ -15,7 +15,7 @@ import '../../explorer/application/session_context.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../application/attached_apps.dart';
+import '../application/app_console_feed.dart';
 import '../application/flutter_console_view.dart';
 import 'flutter_console_toolbar.dart';
 
@@ -203,9 +203,9 @@ class _FlutterConsoleState extends ConsumerState<FlutterConsole> {
   }
 
   void _clear() {
-    final link = ref.read(attachedAppsProvider.notifier).linkFor(_id);
-    if (link == null) return;
-    ref.read(flutterConsoleViewsProvider.notifier).clear(_id, link);
+    final feed = ref.read(appConsoleFeedProvider(_id));
+    if (feed == null) return;
+    ref.read(flutterConsoleViewsProvider.notifier).clear(_id, feed);
     _anchor.value = null;
   }
 
@@ -216,11 +216,7 @@ class _FlutterConsoleState extends ConsumerState<FlutterConsole> {
         (result) =>
             result == null ||
             (result.total == 0 &&
-                (ref
-                            .read(attachedAppsProvider.notifier)
-                            .linkFor(_id)
-                            ?.consoleAppended ??
-                        0) ==
+                (ref.read(appConsoleFeedProvider(_id))?.consoleAppended ?? 0) ==
                     0),
       ),
     );
@@ -463,7 +459,8 @@ class _ConsoleStatus extends ConsumerWidget {
     ref.read(composerDraftProvider.notifier).queue(sessionId, text);
     ref.read(selectedSessionIdProvider.notifier).select(sessionId);
     final title =
-        ref.read(sessionsDataProvider).getById(sessionId)?.title ?? 'the session';
+        ref.read(sessionsDataProvider).getById(sessionId)?.title ??
+        'the session';
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content: Text('Waiting in $title\'s message box.')),
     );

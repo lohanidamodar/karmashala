@@ -1,56 +1,22 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/flutter_apps/application/attached_apps.dart';
-import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_console_toolbar.dart';
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../support/fakes.dart';
-import 'fake_vm_service.dart';
+import 'flutter_apps_harness.dart';
 
+/// One app's console as the server streams it (slice 3d): the view — search,
+/// filters, follow, clear — is this app's; the lines are the server's.
 void main() {
-  late Directory temp;
-  late FakeVmService fake;
-  const uri = 'ws://127.0.0.1:1/a=/ws';
+  late ConsoleFake fake;
 
-  setUp(() {
-    temp = Directory.systemTemp.createTempSync('karmashala-flutter-console');
-    File(
-      '${temp.path}${Platform.pathSeparator}windows.uri',
-    ).writeAsStringSync(uri);
-  });
-
-  tearDown(() {
-    if (temp.existsSync()) temp.deleteSync(recursive: true);
-  });
-
-  ProviderContainer makeContainer() {
-    // Built inside the test body: its streams must run in the test zone.
-    fake = FakeVmService(selectedWidget: null);
-    final container = ProviderContainer(
-      overrides: [
-        clockProvider.overrideWithValue(FixedClock(DateTime.utc(2026, 9, 8))),
-        flutterAppDiscoveryDirectoryProvider.overrideWith(
-          (ref) async => VmServiceUriDirectory(temp),
-        ),
-        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(<String>[])),
-        adbServiceProvider.overrideWithValue(null),
-        devicesProvider.overrideWith((ref) async => const []),
-        vmServiceConnectorProvider.overrideWithValue((u) async {
-          if (u.toString() != uri) throw StateError('refused');
-          return fake.client;
-        }),
-      ],
-    );
+  Future<ProviderContainer> makeContainer() async {
+    final (container, server) = await flutterPaneContainer();
     addTearDown(container.dispose);
+    fake = ConsoleFake(server);
     return container;
   }
 
@@ -63,21 +29,23 @@ void main() {
       ..physicalSize = size
       ..devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final scope = container ?? makeContainer();
+    final scope = container ?? await makeContainer();
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: scope,
         child: const MaterialApp(home: Scaffold(body: FlutterAppPane())),
       ),
     );
+    await tester.runAsync(pumpEventQueue);
     await tester.pumpAndSettle();
     return scope;
   }
 
   Future<void> say(WidgetTester tester, List<String> lines) async {
     for (final line in lines) {
-      fake.emitStdout('$line\n');
+      fake.emitStdout(line);
     }
+    await tester.runAsync(pumpEventQueue);
     await tester.pumpAndSettle();
   }
 
@@ -130,7 +98,7 @@ void main() {
       'framework errors', (tester) async {
     await pump(tester);
     await say(tester, ['out one', 'out two']);
-    fake.emitStdout('bad\n', stderr: true);
+    fake.emitStdout('bad', stderr: true);
     fake.emitFlutterError(flutterErrorTree());
     fake.emitDeveloperLog('net up', loggerName: 'net');
     fake.emitDeveloperLog('db ready', loggerName: 'db');
@@ -252,7 +220,7 @@ void main() {
   testWidgets('query and filters survive a remount', (tester) async {
     final container = await pump(tester);
     await say(tester, ['keep me', 'other']);
-    fake.emitStdout('bad\n', stderr: true);
+    fake.emitStdout('bad', stderr: true);
     await tester.pumpAndSettle();
     await search(tester, 'keep');
     await tester.tap(find.textContaining('Output '));
@@ -290,7 +258,7 @@ void main() {
   });
 
   testWidgets('clearing empties the view, not the app', (tester) async {
-    final container = await pump(tester);
+    await pump(tester);
     await say(tester, ['old news']);
     await tester.tap(
       find.byTooltip('Clear the console (the app keeps running)'),
@@ -298,10 +266,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('old news'), findsNothing);
     expect(find.text('Cleared. New lines will appear here.'), findsOneWidget);
-    final link = container
-        .read(attachedAppsProvider.notifier)
-        .linkFor(container.read(attachedAppsProvider).apps.single.id)!;
-    expect(link.console.map((r) => r.message), contains('old news'));
+    // The server still holds it: clearing is this view's alone.
+    expect(
+      fake.server.runs.logged(fake.appId).map((r) => r.message),
+      contains('old news'),
+    );
 
     await say(tester, ['fresh']);
     expect(find.text('fresh'), findsOneWidget);
@@ -312,7 +281,7 @@ void main() {
   ) async {
     await pump(tester, size: const Size(240, 700));
     await say(tester, ['fine']);
-    fake.emitStdout('bad\n', stderr: true);
+    fake.emitStdout('bad', stderr: true);
     await tester.pumpAndSettle();
     expect(find.byType(FilterChip), findsNothing);
 
@@ -334,7 +303,7 @@ void main() {
     await pump(tester);
     await say(tester, [for (var i = 0; i < 520; i++) 'row $i']);
     expect(
-      find.textContaining('showing newest 500 of 521 lines'),
+      find.textContaining('showing newest 500 of 520 lines'),
       findsOneWidget,
     );
   });

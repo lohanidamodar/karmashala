@@ -11,6 +11,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_verification/verification.dart'
     show VerificationRun, sameVerificationHeader;
 import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart'
+    show FlutterAppRegistry;
 import 'package:karmashala_git/git.dart'
     show ReviewThread, WorktreeSetup, WorktreeSetupReport;
 import 'package:karmashala_git/repositories.dart';
@@ -259,6 +261,29 @@ class DataClient {
   /// The server's SSH connections moving, and the questions they put to a
   /// person opening and closing.
   Stream<SshChange> get sshChanges => _sshChanges.stream;
+
+  /// The Flutter apps the server is attached to, as last told (slice 3d);
+  /// null until the server has said.
+  FlutterAppRegistry? flutterApps;
+
+  /// The runs the server hosts for everybody to watch, by run id.
+  final hostedRuns = <String, HostedRun>{};
+
+  /// The server's browser, as last told; null until the server has said.
+  BrowserState? browserState;
+
+  final _runsChanges = StreamController<RunsChange>.broadcast(sync: true);
+
+  /// The server's apps, runs and browser moving.
+  Stream<RunsChange> get runsChanges => _runsChanges.stream;
+
+  /// A live stream of the server's [source] (`kFlutterLogsStream`), on the
+  /// link there is now; it ends with that link.
+  Stream<DataStreamItems> openStream(String source, String key) {
+    final endpoint = _endpoint;
+    if (_closed || endpoint == null) return Stream.error(_notRunning());
+    return endpoint.openStream(source, key);
+  }
 
   static bool _sameLinks(
     List<SessionRepositoryLink> a,
@@ -766,6 +791,18 @@ class DataClient {
           if (!_sshChanges.isClosed) _sshChanges.add(change);
         case final GitChange change:
           if (!_gitChanges.isClosed) _gitChanges.add(change);
+        case final RunsChange change:
+          switch (change) {
+            case FlutterAppsChanged(:final registry):
+              flutterApps = registry;
+            case HostedRunChanged(:final run):
+              hostedRuns[run.runId] = run;
+            case HostedRunRemoved(:final runId):
+              hostedRuns.remove(runId);
+            case BrowserStateChanged(:final state):
+              browserState = state;
+          }
+          if (!_runsChanges.isClosed) _runsChanges.add(change);
       }
     }
   }
@@ -910,6 +947,7 @@ class DataClient {
     unawaited(_evidenceChanges.close());
     unawaited(_sshChanges.close());
     unawaited(_gitChanges.close());
+    unawaited(_runsChanges.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());

@@ -24,7 +24,7 @@ import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/sessions/application/quit_resume_launch.dart';
 import '../../features/sessions/presentation/quit_sessions_dialog.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
-import '../../features/flutter_apps/application/flutter_gate_observer.dart';
+import '../../features/flutter_apps/application/hosted_run_panes.dart';
 import '../../features/notes/application/note_tabs.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -153,9 +153,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(hostLifecycleSubscriberProvider);
     // And for a model picked mid-turn, which is sent when the turn ends.
     ref.watch(pendingLiveSwitchesProvider);
-    // Same reason: the Flutter gates run in their own panes, and only a
-    // listening observer turns an exit code into a recorded verdict.
-    ref.watch(flutterGateObserverProvider);
+    // Same reason: a run the server hosts opens a pane here.
+    ref.watch(hostedRunPanesProvider);
     // And again for scheduled automations: an unwatched observer records no
     // verdict, silently.
     ref.watch(automationRunObserverProvider);

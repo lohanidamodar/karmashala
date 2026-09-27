@@ -55,6 +55,12 @@ dependencies:
   # change a client asks of it, its records, and the imported history.
   karmashala_session:
     path: ../karmashala_session
+  # Attached Flutter apps, SDK readings and console lines, and the browser's
+  # element captures: what the server's runs and browser tell a client.
+  karmashala_flutter_apps:
+    path: ../karmashala_flutter_apps
+  karmashala_browser:
+    path: ../karmashala_browser
 
 dev_dependencies:
   # `VerificationVerdict`, in the automations envelope test.

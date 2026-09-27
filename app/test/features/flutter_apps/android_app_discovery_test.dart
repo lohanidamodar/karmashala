@@ -1,18 +1,9 @@
-import 'dart:io';
-
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala_devices/devices.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/flutter_apps/application/android_app_discovery.dart';
-import 'package:karmashala/src/features/flutter_apps/application/attached_apps.dart';
-import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
-import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import 'package:karmashala_devices/devices.dart';
 
 import '../../support/fake_command_runner.dart';
-import '../../support/fakes.dart';
-import 'fake_vm_service.dart';
 
 /// The line captured from a real emulator on 2026-09-09, device port and all.
 const String kCapturedLine =
@@ -27,21 +18,17 @@ AndroidSdk _sdk() => const AndroidSdk(
   ),
 );
 
+/// A phone's announcement, forwarded here and handed to the server, which
+/// attaches (slice 3d): the devices are this app's, the attaching the
+/// server's.
 void main() {
-  late Directory outFiles;
-  late Directory pidFiles;
-  late Map<String, FakeVmService> reachable;
   late FakeCommandRunner runner;
   late FakeProcessHandle logcat;
-  late ProviderContainer container;
-
-  final at = DateTime.utc(2026, 9, 9, 12);
+  late List<(Uri, String)> offered;
 
   setUp(() {
-    outFiles = Directory.systemTemp.createTempSync('karmashala-vmservice');
-    pidFiles = Directory.systemTemp.createTempSync('karmashala-dtd');
-    reachable = <String, FakeVmService>{};
     logcat = FakeProcessHandle();
+    offered = [];
     runner = FakeCommandRunner(
       // `adb forward tcp:0 tcp:<port>` prints the port adb picked. Measured on
       // the owner's emulator: 42771 on the device came back as 59152 here.
@@ -49,41 +36,17 @@ void main() {
           const CommandResult(exitCode: 0, stdout: '59152\n', stderr: ''),
       processFactory: (_) => logcat,
     );
-    container = ProviderContainer(
-      overrides: [
-        clockProvider.overrideWithValue(FixedClock(at)),
-        flutterAppDiscoveryDirectoryProvider.overrideWith(
-          (ref) async => VmServiceUriDirectory(outFiles),
-        ),
-        dtdPidFilesProvider.overrideWithValue(DtdPidFiles([pidFiles.path])),
-        vmServiceConnectorProvider.overrideWithValue((uri) async {
-          final fake = reachable[uri.toString()];
-          if (fake == null) throw const _Refused();
-          return fake.client;
-        }),
-      ],
-    );
   });
 
-  tearDown(() {
-    container.dispose();
-    for (final directory in [outFiles, pidFiles]) {
-      if (directory.existsSync()) directory.deleteSync(recursive: true);
-    }
-  });
-
-  AttachedApps apps() => container.read(attachedAppsProvider.notifier);
-  FlutterAppRegistry registry() => container.read(attachedAppsProvider);
-
-  AndroidAppDiscovery discovery() => AndroidAppDiscovery(
-    adb: AdbService(runner: runner, sdk: _sdk()),
-    apps: apps(),
+  AndroidAppDiscovery discovery({bool adb = true}) => AndroidAppDiscovery(
+    adb: adb ? AdbService(runner: runner, sdk: _sdk()) : null,
+    offer: ({required hostUri, required serial}) async =>
+        offered.add((hostUri, serial)),
   );
 
   test(
-    'the log line becomes an attached app, through one adb forward',
+    'the log line is handed to the server, through one adb forward',
     () async {
-      reachable['ws://127.0.0.1:59152/nQyjZWDSaNM=/ws'] = FakeVmService();
       final found = discovery();
       await found.watch(const ['emulator-5554']);
 
@@ -91,17 +54,15 @@ void main() {
       await pumpEventQueue();
 
       expect(found.forwardsMade, 1);
-      final row = registry().apps.single;
-      expect(row.reachability, AppReachability.attached);
-      expect(row.discovery, AppDiscovery.deviceLog);
-      expect(row.sourcePath, 'emulator-5554');
-      expect(row.observedAt, at);
+      final (uri, serial) = offered.single;
+      expect(uri.port, 59152);
+      expect(uri.path, contains('nQyjZWDSaNM='));
+      expect(serial, 'emulator-5554');
       found.dispose();
     },
   );
 
-  test('the same announcement twice is one app and one forward', () async {
-    reachable['ws://127.0.0.1:59152/nQyjZWDSaNM=/ws'] = FakeVmService();
+  test('the same announcement twice is one offer and one forward', () async {
     final found = discovery();
     await found.watch(const ['emulator-5554']);
 
@@ -112,7 +73,7 @@ void main() {
     await pumpEventQueue();
 
     expect(found.forwardsMade, 1);
-    expect(registry().apps, hasLength(1));
+    expect(offered, hasLength(1));
     found.dispose();
   });
 
@@ -127,7 +88,7 @@ void main() {
     await pumpEventQueue();
 
     expect(found.forwardsMade, 0);
-    expect(registry().apps, isEmpty);
+    expect(offered, isEmpty);
     found.dispose();
   });
 
@@ -182,15 +143,11 @@ void main() {
   });
 
   test('no Android SDK is not a crash, it is no devices', () async {
-    final found = AndroidAppDiscovery(adb: null, apps: apps());
+    final found = discovery(adb: false);
     await found.watch(const ['emulator-5554']);
 
     expect(found.watching, isEmpty);
     expect(found.forwardsMade, 0);
     found.dispose();
   });
-}
-
-class _Refused implements Exception {
-  const _Refused();
 }

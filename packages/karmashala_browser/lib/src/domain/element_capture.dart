@@ -179,4 +179,30 @@ $shot''';
     if (includeScreenshot && screenshotPng != null)
       'screenshotPngBase64': base64Encode(screenshotPng!),
   };
+
+  /// [toJson]'s inverse, for a capture that crossed a wire.
+  static ElementCapture fromJson(Map<String, Object?> json) {
+    final shot = json['screenshotPngBase64'];
+    return ElementCapture(
+      selector: json['selector']! as String,
+      tagName: json['tagName']! as String,
+      elementId: json['id'] as String?,
+      classNames: [
+        for (final name in json['classNames'] as List? ?? const []) '$name',
+      ],
+      outerHtml: json['outerHtml'] as String? ?? '',
+      computedStyles: {
+        for (final entry
+            in ((json['computedStyles'] as Map?) ?? const {}).entries)
+          '${entry.key}': '${entry.value}',
+      },
+      box: ElementBox.fromJson(
+        ((json['box'] as Map?) ?? const {}).cast<String, Object?>(),
+      ),
+      pageUrl: json['pageUrl'] as String? ?? '',
+      pageTitle: json['pageTitle'] as String? ?? '',
+      capturedAt: DateTime.parse(json['capturedAt']! as String),
+      screenshotPng: shot is String ? base64Decode(shot) : null,
+    );
+  }
 }

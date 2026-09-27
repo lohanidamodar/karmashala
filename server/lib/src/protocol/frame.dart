@@ -106,6 +106,12 @@ enum MessageType {
   paneTailsWanted(0x37),
   // 0x38–0x3a (protocol 18: commands the server ran through the app over
   // SSH) are gone: since protocol 19 the server reaches SSH itself.
+  // Protocol 22 (slice 3d): a live stream of a server source — a Flutter
+  // app's console. client → host: open, close; host → client: a batch of
+  // items. Each carries a `DataStreamEnvelope` as JSON.
+  dataStreamOpen(0x3b),
+  dataStreamItems(0x3c),
+  dataStreamClose(0x3d),
 
   // 0xf0 and up never change and are answered without hello, whatever the
   // protocol: `karmashala_host stop` must reach a host of any version

@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/artifacts.dart';
@@ -35,14 +34,13 @@ class VerificationChangeSignal {
 }
 
 /// Starts, records and finishes verification runs. One at a time: the evidence
-/// sink goes on the app's single browser and adb services. The server records
-/// a review of a change itself; the runs here are the ones that drive this
-/// app's browser or a device attached to its machine.
+/// sink goes on the app's single adb service. The server records a review of
+/// a change and a page run itself (its browser, slice 3d); the runs here
+/// drive a device attached to this app's machine.
 class VerificationService implements VerificationToolBackend {
   VerificationService(
     this._data,
     this._store, {
-    required this.browserOf,
     required this.adbOf,
     VerificationChangeSignal? changes,
     String Function()? newId,
@@ -54,10 +52,6 @@ class VerificationService implements VerificationToolBackend {
 
   final VerificationData _data;
   final VerificationArtifactStore _store;
-
-  /// The app's single browser driver — a run installs its sink on this exact
-  /// object, which is what makes the pane and the MCP tools self-record.
-  final BrowserService Function() browserOf;
 
   /// adb, or null when no Android SDK was found.
   final AdbService? Function() adbOf;
@@ -83,8 +77,8 @@ class VerificationService implements VerificationToolBackend {
 
   void _changed() => _changes.bump();
 
-  /// Begins recording against [target]. A browser target attaches and
-  /// navigates; a device target fronts its package unless [launch] is false.
+  /// Begins recording against [target]: a device target fronts its package
+  /// unless [launch] is false. A page is the server's to verify.
   @override
   Future<VerificationRun> start({
     required VerificationTarget target,
@@ -93,6 +87,12 @@ class VerificationService implements VerificationToolBackend {
     String? producedBySessionId,
     bool launch = true,
   }) async {
+    if (target.isBrowser) {
+      throw const VerificationException(
+        'A page is verified by the Karmashala server, which drives the '
+        'browser; this app records device runs only.',
+      );
+    }
     final open = _recorder;
     if (open != null) {
       throw VerificationException(
@@ -122,12 +122,10 @@ class VerificationService implements VerificationToolBackend {
 
     try {
       switch (target.kind) {
-        case VerificationTargetKind.browser:
-          await _openBrowser(recorder, target);
         case VerificationTargetKind.device:
           await _openDevice(recorder, target, launch: launch);
-        case VerificationTargetKind.change:
-          // A change run must not touch the browser or adb even to ask.
+        case VerificationTargetKind.browser || VerificationTargetKind.change:
+          // A change run must not touch adb even to ask.
           break;
       }
     } on Object catch (error) {
@@ -139,26 +137,6 @@ class VerificationService implements VerificationToolBackend {
       _changed();
     }
     return run;
-  }
-
-  Future<void> _openBrowser(
-    VerificationRecorder recorder,
-    VerificationTarget target,
-  ) async {
-    final browser = browserOf()..actionSink = recorder.recordBrowser;
-    final url = target.url;
-    if (!browser.isConnected) {
-      try {
-        await browser.connect();
-      } on BrowserException {
-        // Nothing to attach to: opening a tab is the only way to a page.
-        if (url == null || url.isEmpty) rethrow;
-        await browser.connect(url: url);
-      }
-    }
-    // Before the navigation: the errors a page throws while loading count.
-    await browser.startObserving();
-    if (url != null && url.isNotEmpty) await browser.navigate(url);
   }
 
   Future<void> _openDevice(
@@ -304,45 +282,7 @@ class VerificationService implements VerificationToolBackend {
     VerificationRun run,
   ) async {
     // A change run's evidence is the reviewer's notes and the verdict's reason.
-    if (run.target.isChange) return;
-    if (run.target.isBrowser) {
-      final browser = browserOf();
-      final observer = browser.observer;
-      if (observer != null) {
-        final errors = observer.consoleMessages
-            .where((m) => m.isError)
-            .toList();
-        final warnings = observer.consoleMessages
-            .where((m) => !m.isError)
-            .toList();
-        if (observer.consoleMessages.isNotEmpty) {
-          recorder.attach(
-            kind: VerificationArtifactKind.consoleErrors,
-            label:
-                '${errors.length} console error'
-                '${errors.length == 1 ? '' : 's'}'
-                '${warnings.isEmpty ? '' : ', ${warnings.length} warning'
-                          '${warnings.length == 1 ? '' : 's'}'}',
-            name: 'console',
-            text: observer.consoleMessages.map((m) => m.toLine()).join('\n'),
-          );
-        }
-        if (observer.networkFailures.isNotEmpty) {
-          recorder.attach(
-            kind: VerificationArtifactKind.networkFailures,
-            label:
-                '${observer.networkFailures.length} failed request'
-                '${observer.networkFailures.length == 1 ? '' : 's'}',
-            name: 'network',
-            text: observer.networkFailures.map((f) => f.toLine()).join('\n'),
-          );
-        }
-      }
-      // Taken with the sink still installed, so it is a step as well.
-      await _bestEffort(() => browser.screenshot());
-      return;
-    }
-
+    if (!run.target.isDevice) return;
     final adb = adbOf();
     final serial = run.target.serial;
     if (adb == null || serial == null) return;
@@ -369,15 +309,10 @@ class VerificationService implements VerificationToolBackend {
 
   /// Removes the sinks. Always runs: a leftover one records the next person.
   Future<void> _detach(VerificationRun run) async {
-    // No sink was installed; building a browser to remove one is an excuse.
-    if (run.target.isChange) return;
+    // No sink was installed on a change run.
+    if (!run.target.isDevice) return;
     final adb = adbOf();
     if (adb != null) adb.actionSink = null;
-    final browser = browserOf();
-    if (run.target.isBrowser) {
-      await _bestEffort(browser.stopObserving);
-    }
-    browser.actionSink = null;
   }
 
   /// Abandons the active run without a verdict, leaving it open in the record.
@@ -486,8 +421,6 @@ class VerificationService implements VerificationToolBackend {
   Future<T?> _bestEffort<T>(Future<T> Function() action) async {
     try {
       return await action();
-    } on BrowserException {
-      return null;
     } on Object {
       return null;
     }

@@ -322,6 +322,7 @@ fakeTerminalOverrides({
   bool shellIntegration = false,
   bool restoreLivePanes = true,
   PathProbe? pathProbe,
+  bool realHostedPanes = false,
 }) {
   return [
     // No disk by default here either: a launch reads the agent's executable
@@ -383,6 +384,16 @@ fakeTerminalOverrides({
     terminalInstanceFactoryProvider.overrideWithValue(
       instanceFactory ?? defaultFakeInstanceFactory,
     ),
+    // A server-hosted run's pane, process-free unless a test is about the
+    // real attach (it then gives a real host to attach to).
+    if (!realHostedPanes)
+      hostedRunPaneFactoryProvider.overrideWithValue(
+        ({required String id, required String title}) =>
+            defaultFakeInstanceFactory(
+              id: id,
+              profile: TerminalProfile.powerShell,
+            ),
+      ),
   ];
 }
 

@@ -19,8 +19,8 @@ int imagesIn(Object? result) =>
     blocks(result).where((b) => b['type'] == 'image').length;
 
 /// The tools over the app's own recorder: the runs it holds are the ones that
-/// drive its browser or a device (the server forwards those calls here). A
-/// review of a change is the server's — `server/test/mcp/tools/`.
+/// drive a device (the server forwards those calls here). A page and a
+/// review of a change are the server's — `server/test/mcp/tools/`.
 void main() {
   late VerificationHarness h;
   late VerificationTools tools;
@@ -47,17 +47,21 @@ void main() {
   });
 
   group('verification_start', () {
-    test('a URL starts a browser run and says what is now recorded', () async {
-      final result = await tools.call('verification_start', {
-        'url': 'https://example.com',
-        'title': 'the save button saves',
-      });
-
-      final text = textOf(result);
-      expect(text, contains('Recording run-001'));
-      expect(text, contains('the save button saves'));
-      expect(text, contains('browser_*'));
-      expect(h.service.activeRun, isNotNull);
+    test('a URL is the server\'s run, refused here in words', () async {
+      await expectLater(
+        tools.call('verification_start', {
+          'url': 'https://example.com',
+          'title': 'the save button saves',
+        }),
+        throwsA(
+          isA<VerificationException>().having(
+            (e) => e.message,
+            'message',
+            contains('Karmashala server'),
+          ),
+        ),
+      );
+      expect(h.service.activeRun, isNull);
     });
 
     test('a serial starts a device run', () async {
@@ -97,7 +101,7 @@ void main() {
 
   group('verification_note and finish', () {
     test('a note needs something to say', () async {
-      await tools.call('verification_start', {'url': 'https://example.com'});
+      await tools.call('verification_start', {'serial': 'FAKE123'});
       await expectLater(
         tools.call('verification_note', const {'text': '   '}),
         throwsA(isA<VerificationException>()),
@@ -105,7 +109,7 @@ void main() {
     });
 
     test('an unknown verdict lists the ones that exist', () async {
-      await tools.call('verification_start', {'url': 'https://example.com'});
+      await tools.call('verification_start', {'serial': 'FAKE123'});
       await expectLater(
         tools.call('verification_finish', const {'verdict': 'maybe'}),
         throwsA(
@@ -122,7 +126,7 @@ void main() {
       'finishing reports the verdict, the counts and where to look',
       () async {
         await tools.call('verification_start', {
-          'url': 'https://example.com',
+          'serial': 'FAKE123',
           'title': 'the save button saves',
         });
         await tools.call('verification_note', const {'text': 'clicked save'});
@@ -148,9 +152,15 @@ void main() {
     });
 
     test('one line per run, newest first, and no JSON', () async {
-      await tools.call('verification_start', {'url': 'https://a.test'});
+      await tools.call('verification_start', {
+        'serial': 'FAKE123',
+        'package': 'com.example.a',
+      });
       await tools.call('verification_finish', const {'verdict': 'pass'});
-      await tools.call('verification_start', {'url': 'https://b.test'});
+      await tools.call('verification_start', {
+        'serial': 'FAKE123',
+        'package': 'com.example.b',
+      });
       await tools.call('verification_finish', const {'verdict': 'fail'});
 
       final result = await tools.call('verification_list', const {});
@@ -158,8 +168,8 @@ void main() {
       expect(blocks(result), hasLength(1));
       expect(text, isNot(contains('{')));
       expect(
-        text.indexOf('https://b.test'),
-        lessThan(text.indexOf('https://a.test')),
+        text.indexOf('com.example.b'),
+        lessThan(text.indexOf('com.example.a')),
       );
       expect(text, contains('FAIL'));
       expect(text, contains('pass'));
@@ -171,17 +181,11 @@ void main() {
   group('verification_get', () {
     Future<String> finishedRun() async {
       await tools.call('verification_start', {
-        'url': 'https://example.com',
+        'serial': 'FAKE123',
+        'package': 'com.example.app',
         'title': 'a run with evidence',
       });
-      await h.browser.service.screenshot();
-      h.browser.socket.emitEvent('Runtime.consoleAPICalled', {
-        'type': 'error',
-        'args': [
-          {'type': 'string', 'value': 'TypeError: save is not a function'},
-        ],
-      });
-      await Future<void>.delayed(Duration.zero);
+      await h.adb.service.screenshot('FAKE123');
       await tools.call('verification_finish', const {
         'verdict': 'fail',
         'reason': 'save throws',
@@ -198,7 +202,7 @@ void main() {
       expect(text, contains('FAIL — a run with evidence'));
       expect(text, contains('Steps ('));
       expect(text, contains('Captured ('));
-      expect(text, isNot(contains('TypeError: save is not a function')));
+      expect(text, isNot(contains('boom')));
       // And it tells the caller what it is holding back, and how to get it.
       expect(text, contains('images:true'));
       expect(text, contains('full:true'));
@@ -224,7 +228,7 @@ void main() {
       final text = textOf(
         await tools.call('verification_get', {'id': id, 'full': true}),
       );
-      expect(text, contains('TypeError: save is not a function'));
+      expect(text, contains('boom'));
     });
 
     test('a prefix works, and an ambiguous one lists the candidates', () async {
@@ -275,7 +279,7 @@ void main() {
 
     test('with no id it reads the run that is recording now', () async {
       await tools.call('verification_start', {
-        'url': 'https://example.com',
+        'serial': 'FAKE123',
         'title': 'in progress',
       });
       final text = textOf(await tools.call('verification_get', const {}));
@@ -292,7 +296,7 @@ void main() {
     setUp(() => called = VerificationTools(h.service, callerSessionId: 's-1'));
 
     test('a run started over MCP knows who started it', () async {
-      await called.call('verification_start', {'url': 'https://example.com'});
+      await called.call('verification_start', {'serial': 'FAKE123'});
       final run = h.service.activeRun!;
       expect(run.producedBySessionId, 's-1');
       // With no explicit subject the caller is also the work under test, and
@@ -303,7 +307,7 @@ void main() {
 
     test('verifying another session names both sides', () async {
       await called.call('verification_start', {
-        'url': 'https://example.com',
+        'serial': 'FAKE123',
         'sessionId': 's-2',
       });
       final run = h.service.activeRun!;
@@ -314,7 +318,7 @@ void main() {
 
     test('finishing attributes the session that signed off', () async {
       await called.call('verification_start', {
-        'url': 'https://example.com',
+        'serial': 'FAKE123',
         'sessionId': 's-2',
       });
       final result = await VerificationTools(
@@ -328,7 +332,7 @@ void main() {
 
     test('a pass the session gave itself says it is self-verified, and how '
         'to get an independent one', () async {
-      await called.call('verification_start', {'url': 'https://example.com'});
+      await called.call('verification_start', {'serial': 'FAKE123'});
       final result = await called.call('verification_finish', {
         'verdict': 'pass',
       });
@@ -338,7 +342,7 @@ void main() {
 
     test('an independent pass carries no such warning', () async {
       await called.call('verification_start', {
-        'url': 'https://example.com',
+        'serial': 'FAKE123',
         'sessionId': 's-2',
       });
       final result = await called.call('verification_finish', {
@@ -348,7 +352,7 @@ void main() {
     });
 
     test('a caller outside a session leaves the run unattributed', () async {
-      await tools.call('verification_start', {'url': 'https://example.com'});
+      await tools.call('verification_start', {'serial': 'FAKE123'});
       await tools.call('verification_finish', {'verdict': 'pass'});
 
       final run = (await h.service.list()).single;
@@ -357,7 +361,7 @@ void main() {
     });
 
     test('the list column says which runs graded themselves', () async {
-      await called.call('verification_start', {'url': 'https://example.com'});
+      await called.call('verification_start', {'serial': 'FAKE123'});
       await called.call('verification_finish', {'verdict': 'pass'});
 
       final text = textOf(await called.call('verification_list', const {}));

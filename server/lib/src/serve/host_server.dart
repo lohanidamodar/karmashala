@@ -4,11 +4,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DataEnvelope, DataRefused;
+    show DataEnvelope, DataRefused, DataStreamEnvelope, DataStreamItems;
 
 import '../automations/automation_handler.dart';
 import '../companion/companion_handler.dart';
 import '../data/data_service.dart';
+import '../data/data_streams.dart';
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
@@ -127,6 +128,7 @@ class _ClientSession {
   final _exitWatches = <int, StreamSubscription<void>>{};
   StreamSubscription<HostMessage>? _lifecycleWatch;
   DataSession? _data;
+  DataStreamSession? _streams;
 
   Future<void> run() async {
     final parser = FrameParser();
@@ -165,6 +167,7 @@ class _ClientSession {
     _subscriptions.clear();
     _exitWatches.clear();
     _data?.close();
+    _streams?.closeAll();
     await _lifecycleWatch?.cancel();
     _server.mcpTools?.detach(this);
     _server.automations?.detach(this);
@@ -350,6 +353,10 @@ class _ClientSession {
         _onPromptAnswer(message);
       case ServerCallMessage():
         _onServerCall(message);
+      case DataStreamOpenMessage(:final envelope):
+        _onDataStreamOpen(envelope);
+      case DataStreamCloseMessage(:final envelope):
+        _streams?.closeJson(envelope);
       case DataRequestMessage():
         _onDataRequest(message);
       case PaneFactsMessage(:final panes):
@@ -441,6 +448,34 @@ class _ClientSession {
     } else {
       _send(DataAnswerMessage(answer));
     }
+  }
+
+  /// A live stream (a Flutter app's console) on this link, batched and
+  /// bounded by [DataStreamSession]. With no data service there is nothing
+  /// to follow: the stream is ended at once.
+  void _onDataStreamOpen(Map<String, Object?> envelope) {
+    final service = _server.data;
+    if (service == null) {
+      final read = DataStreamEnvelope.readOpen(envelope);
+      if (read == null) return;
+      _send(
+        DataStreamItemsMessage(
+          DataStreamEnvelope.items(
+            DataStreamItems(
+              read.streamId,
+              const [],
+              ended: 'this host keeps no data: no store',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    final streams = _streams ??= DataStreamSession(
+      service.streamSources,
+      (batch) => _send(DataStreamItemsMessage(DataStreamEnvelope.items(batch))),
+    );
+    streams.open(envelope);
   }
 
   /// Not awaited: a test suite takes minutes, and this client's other frames
