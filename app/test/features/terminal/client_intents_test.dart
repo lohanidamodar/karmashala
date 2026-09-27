@@ -20,6 +20,9 @@ import 'fake_instance.dart';
 /// to it — against a real host over a real socket, so the pane finds the
 /// session by the id both sides spell the same way.
 void main() {
+  // An attached pane's output is coalesced per frame; on Windows it can
+  // arrive before a test ends.
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory home;
   late HostPaths paths;
   late SessionRegistry registry;
@@ -77,38 +80,35 @@ void main() {
 
   void runOnHost(String hostSessionId) => registry.open(
     hostSessionId,
-    const PtySpawnRequest(
-      argv: ['sh'],
-      environment: {},
-      columns: 80,
-      rows: 24,
-    ),
+    const PtySpawnRequest(argv: ['sh'], environment: {}, columns: 80, rows: 24),
   );
 
-  test('a terminal the server runs opens as a tab attached to it, once',
-      () async {
-    final (container, server) = await start();
-    runOnHost(hostedRunSessionId('hosted-r1'));
+  test(
+    'a terminal the server runs opens as a tab attached to it, once',
+    () async {
+      final (container, server) = await start();
+      runOnHost(hostedRunSessionId('hosted-r1'));
 
-    server.sessionWork.tellIntent(
-      const OpenTerminalTab(paneId: 'hosted-r1', title: 'run · app'),
-    );
-    await pumpEventQueue();
+      server.sessionWork.tellIntent(
+        const OpenTerminalTab(paneId: 'hosted-r1', title: 'run · app'),
+      );
+      await pumpEventQueue();
 
-    expect(tabsWith(container, 'hosted-r1'), 1);
-    final pane = container
-        .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor('hosted-r1');
-    expect(pane, isA<HostTerminalInstance>());
-    expect(pane!.title, 'run · app');
+      expect(tabsWith(container, 'hosted-r1'), 1);
+      final pane = container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor('hosted-r1');
+      expect(pane, isA<HostTerminalInstance>());
+      expect(pane!.title, 'run · app');
 
-    // Asked again, it is the same tab brought forward, not a second.
-    server.sessionWork.tellIntent(
-      const OpenTerminalTab(paneId: 'hosted-r1', title: 'run · app'),
-    );
-    await pumpEventQueue();
-    expect(tabsWith(container, 'hosted-r1'), 1);
-  });
+      // Asked again, it is the same tab brought forward, not a second.
+      server.sessionWork.tellIntent(
+        const OpenTerminalTab(paneId: 'hosted-r1', title: 'run · app'),
+      );
+      await pumpEventQueue();
+      expect(tabsWith(container, 'hosted-r1'), 1);
+    },
+  );
 
   test('closing a tab the server asked about leaves no tab', () async {
     final (container, server) = await start();
@@ -139,9 +139,7 @@ void main() {
     await pumpEventQueue();
 
     final state = container.read(terminalSessionsControllerProvider);
-    final panes = [
-      for (final tab in state.tabs) ...tab.layout.panes,
-    ];
+    final panes = [for (final tab in state.tabs) ...tab.layout.panes];
     final agentPanes = [
       for (final id in panes)
         if (container

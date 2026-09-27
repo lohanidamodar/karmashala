@@ -157,8 +157,15 @@ void main() {
     // The front pane was re-attached too (the launch rule), and its terminal
     // is gone: it ends, and its Start is what asks the server for a new one —
     // a restore never starts anything by itself.
-    await pumpEventQueue();
-    expect(state.livenessOf(panes.foreground), isNot(PaneLiveness.live));
+    // Read afresh: the refused attach can land after the survivors settle
+    // (about 45ms on Windows' AF_UNIX).
+    PaneLiveness front() => next
+        .read(terminalSessionsControllerProvider)
+        .livenessOf(panes.foreground);
+    for (var i = 0; i < 250 && front() == PaneLiveness.live; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(front(), isNot(PaneLiveness.live));
     expect(starts, 0);
   });
 
