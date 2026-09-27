@@ -38,6 +38,10 @@ import 'package:karmashala_git/git.dart'
         WorktreeSetup,
         WorktreeSetupReport;
 import 'package:karmashala_files/values.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
+import 'package:karmashala_host_protocol/protocol.dart' show SessionSummary;
+import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart'
+    show kDefaultRelayPort;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/delivery.dart' show SessionDelivery;
 import 'package:karmashala_snippets/karmashala_snippets.dart';

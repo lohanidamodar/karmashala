@@ -7,7 +7,7 @@ import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart';
 
 import 'companion_port.dart';
 import 'host_deploy_target.dart';
-import 'privileged_command.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'remote_detach.dart';
 import 'remote_home.dart';
 import 'package:karmashala_ssh/connection.dart';
@@ -16,79 +16,6 @@ import 'package:karmashala_ssh/connection.dart';
 /// default, read from its contract (this package drives a relay over SSH and
 /// never runs one, so it takes the contract and not the server).
 const int kDefaultSshRelayPort = kDefaultRelayPort;
-
-/// How the relay on one box ended up, separated by who can fix it.
-enum SshRelayStatus {
-  /// Running from this app version's bundle, and its health check answered
-  /// from this computer.
-  running,
-
-  /// Nothing is running. Not a fault: never started, stopped, or the box
-  /// restarted — like `serve`, the relay does not come back by itself.
-  stopped,
-
-  /// Running, from a bundle other than the one this app version deployed.
-  /// `start()` replaces it, which is what "Update" means.
-  outdated,
-
-  /// Running on the box and not answering from here. A firewall, usually one
-  /// in a provider's console; the reading carries the port check's own words.
-  unreachable,
-
-  /// It would not start: an old bundle with no `relay` command, a busy port,
-  /// a token file that could not be made private.
-  cannotStart,
-
-  /// The machine could not be asked. A missing reading, not a negative one.
-  unknown,
-}
-
-/// One reading about one box's relay, with the time it was taken.
-class SshRelayReading {
-  const SshRelayReading({
-    required this.status,
-    required this.observedAt,
-    required this.reason,
-    required this.port,
-    this.command,
-    this.privileged,
-    this.outsideTheMachine = false,
-    this.url,
-    this.runningPath,
-  });
-
-  final SshRelayStatus status;
-  final DateTime observedAt;
-
-  /// One sentence, with its remedy when it has one. Never holds the token.
-  final String reason;
-
-  /// What to run by hand, when that is the remedy.
-  final String? command;
-
-  /// [command] as a step for a terminal on the box, when `sudo` there wants a
-  /// password. Built from the port alone — never the token.
-  final PrivilegedCommand? privileged;
-
-  /// Whether what shuts the port is a firewall no command on the box can see.
-  final bool outsideTheMachine;
-
-  /// `ws://<address>:<port>/k/<token>` — what the desktop serves through and a
-  /// pairing carries. Present whenever the token could be read. **Holds the
-  /// access token: never log it, and [toString] leaves it out.**
-  final Uri? url;
-
-  final int port;
-
-  /// The executable the running relay was started from.
-  final String? runningPath;
-
-  bool get isServing => status == SshRelayStatus.running;
-
-  @override
-  String toString() =>
-      'SshRelayReading(${status.name}, port $port${url == null ? '' : ', url held'})';
-}
 
 /// Runs the relay a desktop serves through on one of its SSH hosts.
 ///

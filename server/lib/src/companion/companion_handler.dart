@@ -1,4 +1,4 @@
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 /// One open pairing window: what to type, until when, the payload a QR shows,
 /// and the id of the phone that paired through it — or an error when the

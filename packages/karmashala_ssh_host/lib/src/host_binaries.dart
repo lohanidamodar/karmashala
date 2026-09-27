@@ -1,15 +1,20 @@
 import 'dart:io';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import 'host_deployment.dart';
 
-/// Where the host binaries come from on this machine.
+/// Where the host bundles for other machines come from, on the machine that
+/// deploys them (the server's, slice 5d).
 abstract class HostBinarySource {
-  /// Null when this build ships nothing for [platform]. The deployer reports
-  /// that as `noBinary` rather than trying and failing on the far end.
+  /// Null when there is nothing for [platform]. The deployer reports that as
+  /// `noBinary` rather than trying and failing on the far end.
   Future<HostBinary?> binaryFor(HostPlatform platform);
 
-  /// Every target this build could serve, for a message that says what it has.
+  /// Every target there is a bundle for, for a message that says what it has.
   Future<List<String>> availableTargets();
+
+  /// Where it looked, in words, for a refusal a person can act on.
+  String describeSearch();
 }
 
 /// Binaries named `karmashala_host-<version>-<os>-<arch>`, with or without a
@@ -27,23 +32,10 @@ class DirectoryHostBinaries implements HostBinarySource {
   /// the highest version does.
   final List<Directory> directories;
 
-  /// Beside the running executable first, then the repository's build output,
-  /// so a debug run picks up what was just compiled.
-  factory DirectoryHostBinaries.standard({
-    String? executableDirectory,
-    String? repositoryRoot,
-  }) {
-    final beside =
-        executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
-    return DirectoryHostBinaries([
-      Directory(beside),
-      // The server's own build output. A debug run starts in `app/`, the
-      // repository's Flutter client, so the repository is its parent.
-      Directory(
-        '${repositoryRoot ?? Directory.current.parent.path}/server/build',
-      ),
-    ]);
-  }
+  @override
+  String describeSearch() => directories.isEmpty
+      ? 'nowhere: no folder was named'
+      : directories.map((d) => d.path).join(', ');
 
   static final _name = RegExp(
     r'^karmashala_host-(?:([0-9][^-]*)-)?([a-z]+)-([a-z0-9]+)(\.tar\.gz)?$',
@@ -73,7 +65,7 @@ class DirectoryHostBinaries implements HostBinarySource {
       candidates.sort((a, b) {
         final byShape = (b.$2 ? 1 : 0) - (a.$2 ? 1 : 0);
         if (byShape != 0) return byShape;
-        return compareFilenameVersions(b.$1, a.$1);
+        return compareHostVersions(b.$1, a.$1);
       });
       final (version, isArchive, file) = candidates.first;
       return HostBinary(
@@ -90,27 +82,6 @@ class DirectoryHostBinaries implements HostBinarySource {
       );
     }
     return null;
-  }
-
-  /// Compares two filename versions segment by segment, as numbers: a string
-  /// sort puts `1.9.0` above `1.20.1`, which is the whole bug.
-  static int compareFilenameVersions(String? a, String? b) {
-    if (a == null || b == null) {
-      return (a == null ? 0 : 1) - (b == null ? 0 : 1);
-    }
-    final left = a.split('.');
-    final right = b.split('.');
-    for (var i = 0; i < left.length || i < right.length; i++) {
-      final l = i < left.length ? left[i] : '0';
-      final r = i < right.length ? right[i] : '0';
-      final ln = int.tryParse(l);
-      final rn = int.tryParse(r);
-      final order = ln != null && rn != null
-          ? ln.compareTo(rn)
-          : l.compareTo(r);
-      if (order != 0) return order;
-    }
-    return 0;
   }
 
   @override

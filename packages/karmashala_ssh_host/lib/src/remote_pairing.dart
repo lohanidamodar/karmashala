@@ -1,55 +1,10 @@
 import 'dart:async';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 import 'host_deploy_target.dart';
-
-/// What asking a deployed host to pair came back with.
-enum PairingRequestStatus {
-  /// A window is open. [PairingWindow.code] is what to type into the phone.
-  open('PAIRING OPEN'),
-
-  /// The host answered, and it is older than pairing. `pair` is a message it
-  /// has never heard of, so it refused — which is the whole reason the type was
-  /// added without moving the protocol version.
-  hostTooOld('PAIRING UNSUPPORTED'),
-
-  /// The host is serving sessions and cannot pair: no store, or its companion
-  /// port was taken. It says which, in its own words.
-  hostCannotPair('PAIRING REFUSED'),
-
-  /// Nothing answered in time. Not a refusal — a reading nobody could take.
-  noAnswer('PAIRING UNKNOWN');
-
-  const PairingRequestStatus(this.token);
-
-  final String token;
-}
-
-/// One open pairing window on one machine.
-class PairingWindow {
-  const PairingWindow({
-    required this.status,
-    required this.observedAt,
-    required this.reason,
-    this.code,
-    this.expiresAt,
-  });
-
-  final PairingRequestStatus status;
-  final DateTime observedAt;
-
-  /// One sentence for whoever is holding the phone.
-  final String reason;
-
-  /// Grouped for reading: `K7QM-3X2W-…`. Null unless [status] is open.
-  final String? code;
-
-  final DateTime? expiresAt;
-
-  bool get isOpen => status == PairingRequestStatus.open;
-}
 
 /// Asks a host that is already serving to open a pairing window.
 ///

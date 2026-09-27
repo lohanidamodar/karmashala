@@ -17,6 +17,17 @@ String terminalSessionId({required String paneId, String? agentSessionId}) =>
     ? 'karmashala_$agentSessionId'.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')
     : hostedRunSessionId(paneId);
 
+/// The pane a shell's session [sessionId] was opened by — the inverse of
+/// [terminalSessionId] for a pane with no agent, here or on an SSH box (slice
+/// 5d) — so reattaching means opening a pane under that id again. Null for
+/// an agent's session, which carries its row's id.
+String? paneIdOfTerminalSession(String sessionId) {
+  const prefix = 'karmashala_local_';
+  if (!sessionId.startsWith(prefix)) return null;
+  final paneId = sessionId.substring(prefix.length);
+  return paneId.isEmpty ? null : paneId;
+}
+
 Map<String, Object?> terminalProfileToJson(TerminalProfile profile) => {
   'id': profile.id,
   'label': profile.label,

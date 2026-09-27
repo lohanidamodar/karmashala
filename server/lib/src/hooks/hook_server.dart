@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'hook_endpoint_file.dart';
 
 /// The header a hook names its pane's `KARMASHALA_SESSION_ID` in. Must equal

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import 'package:karmashala_core/logging.dart';
 

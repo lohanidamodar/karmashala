@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_remote/remote.dart' show kHostCompanionPort;
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh_host/host.dart';
 import 'package:test/test.dart';

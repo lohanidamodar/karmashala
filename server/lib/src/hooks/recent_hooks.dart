@@ -1,4 +1,4 @@
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 /// The latest hook per agent session, in memory and bounded. A restarted host
 /// starts empty: hooks describe the conversation, and the next one an agent

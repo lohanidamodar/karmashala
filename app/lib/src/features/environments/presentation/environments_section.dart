@@ -10,7 +10,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import '../../ssh/application/companion_route_store.dart';
 import '../../ssh/presentation/pair_phone_dialog.dart';
 import '../../ssh/presentation/pair_phone_entry.dart';

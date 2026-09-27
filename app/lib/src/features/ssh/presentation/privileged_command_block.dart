@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 

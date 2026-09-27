@@ -7,23 +7,23 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/ssh/application/companion_route_store.dart';
-import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
-import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala_remote/pairing.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SshBoxAnswer, SshDeployAction;
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import 'fake_host_box.dart';
 
-/// A box that answers the two questions the dialog asks, and remembers how it
-/// was asked the second one.
-class _Setup implements SshCompanionSetup {
+/// What the server answers about a box, for the two questions the dialog
+/// asks it (`ssh.companionEndpoint`, `ssh.pairPhone`, slice 5d), and how it
+/// was asked them.
+class _Setup {
   _Setup(
     this.host, {
     required this.reachable,
@@ -31,7 +31,6 @@ class _Setup implements SshCompanionSetup {
     this.privileged,
   });
 
-  @override
   final SshHost host;
   bool reachable;
   final Duration ttl;
@@ -42,15 +41,11 @@ class _Setup implements SshCompanionSetup {
   /// Whether each dial was a check after that step.
   final byHand = <bool>[];
 
-  @override
-  int get port => 47820;
-
   /// The relay each pairing window was opened with; empty is the direct route.
   final relays = <String>[];
   int dials = 0;
 
-  @override
-  Future<CompanionEndpoint> prepare({bool ruleAddedByHand = false}) async {
+  CompanionEndpoint prepare({bool ruleAddedByHand = false}) {
     dials++;
     byHand.add(ruleAddedByHand);
     final step = ruleAddedByHand ? null : privileged;
@@ -72,11 +67,7 @@ class _Setup implements SshCompanionSetup {
     );
   }
 
-  @override
-  Future<PairingWindow> openWindow({
-    required int capabilities,
-    String relay = '',
-  }) async {
+  PairingWindow openWindow({required int capabilities, String relay = ''}) {
     relays.add(relay);
     return PairingWindow(
       status: PairingRequestStatus.open,
@@ -88,8 +79,6 @@ class _Setup implements SshCompanionSetup {
     );
   }
 
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
@@ -120,16 +109,29 @@ void main() {
   final terminals = <({String host, String? typed})>[];
   setUp(terminals.clear);
 
-  /// What the scope is built with beyond the setup: a test that needs the
-  /// setup to fail, or a machine to install on, hands them in here.
-  Future<SshCompanionSetup> Function(SshHost host)? setupFor;
-  FakeHostBox? box;
-  setUp(() {
-    setupFor = null;
-    box = null;
-  });
+  /// The deploy the server answers with instead, until a client installs.
+  HostDeployment? notDeployed;
+  setUp(() => notDeployed = null);
+
+  void serve(_Setup setup) {
+    bool installed() => server.sshWork.deploys.any(
+      (d) => d.action == SshDeployAction.install,
+    );
+    server.sshWork.onEndpoint = (request) => notDeployed != null && !installed()
+        ? SshBoxAnswer.notDeployed(notDeployed!)
+        : SshBoxAnswer.of(
+            setup.prepare(ruleAddedByHand: request.ruleAddedByHand),
+          );
+    server.sshWork.onPair = (request) => SshBoxAnswer.of(
+      setup.openWindow(
+        capabilities: request.capabilities,
+        relay: request.relay,
+      ),
+    );
+  }
 
   Future<void> open(WidgetTester tester, _Setup setup) async {
+    serve(setup);
     // Tall enough that nothing the tests tap is scrolled out of the dialog.
     tester.view.physicalSize = const Size(1200, 1100);
     tester.view.devicePixelRatio = 1.0;
@@ -142,17 +144,10 @@ void main() {
         overrides: [
           dataClientProvider.overrideWithValue(data),
           clockProvider.overrideWithValue(FixedClock(testTime)),
-          sshCompanionSetupProvider.overrideWith(
-            (ref, host) async => await (setupFor?.call(host) ?? setup),
-          ),
           sshTerminalOpenerProvider.overrideWithValue((host, {typed}) {
             terminals.add((host: host.name, typed: typed));
             return true;
           }),
-          if (box != null)
-            hostInstallerFactoryProvider.overrideWithValue(
-              (host) => installerOver(box!),
-            ),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -189,21 +184,12 @@ void main() {
   group('a machine with no session host to pair with', () {
     testWidgets('says why and what to do, and its button installs and carries '
         'on to a code', (tester) async {
-      box = FakeHostBox();
       final setup = _Setup(host, reachable: true);
-      setupFor = (host) async {
-        if (box!.installed.isEmpty) {
-          throw HostDeployFailure(
-            hostName: host.name,
-            deployment: HostDeployment(
-              status: HostDeploymentStatus.cannotInstall,
-              observedAt: testTime.subtract(const Duration(minutes: 1)),
-              reason: 'Could not write the bundle on do-box.',
-            ),
-          );
-        }
-        return setup;
-      };
+      notDeployed = HostDeployment(
+        status: HostDeploymentStatus.cannotInstall,
+        observedAt: testTime.subtract(const Duration(minutes: 1)),
+        reason: 'Could not write the bundle on do-box.',
+      );
       await open(tester, setup);
 
       expect(find.textContaining('Bad state'), findsNothing);
@@ -213,9 +199,10 @@ void main() {
       expect(setup.relays, isEmpty, reason: 'no code was asked for');
 
       await tester.tap(find.widgetWithText(FilledButton, 'Install'));
-      await settleHostBox(tester);
+      await tester.runAsync(pumpEventQueue);
+      await settle(tester);
 
-      expect(box!.uploads, hasLength(1));
+      expect(server.sshWork.deploys.last.action, SshDeployAction.install);
       expect(setup.relays, [''], reason: 'installed, so the code is fetched');
       expect(find.text('Code'), findsOneWidget);
     });
@@ -452,14 +439,12 @@ void main() {
         authMethod: SshAuthMethod.password,
         createdAt: testTime,
       );
+      serve(_Setup(local, reachable: true));
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             dataClientProvider.overrideWithValue(data),
             clockProvider.overrideWithValue(FixedClock(testTime)),
-            sshCompanionSetupProvider.overrideWith(
-              (ref, host) async => _Setup(local, reachable: true),
-            ),
           ],
           child: MaterialApp(
             home: Scaffold(

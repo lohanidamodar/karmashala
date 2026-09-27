@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_ssh/connection.dart';
-import 'ssh_providers.dart';
+import 'package:karmashala_environments/ssh.dart';
+import '../data/ssh_hosts_data.dart';
 
 /// The host keys Karmashala trusts — its `known_hosts`, kept by the server
 /// and followed as they change. Visible, because spotting a rebuilt machine

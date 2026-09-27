@@ -2,10 +2,9 @@ import 'dart:async';
 
 import '../domain/host_session.dart';
 import '../domain/registry_change.dart';
-import '../domain/session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../domain/session_registry.dart';
 import '../hooks/recent_hooks.dart';
-import '../protocol/messages.dart';
 
 /// The host as the recorder of each session's lifecycle: started, exited with
 /// the code it collected or none, closed on request — and the relay of every

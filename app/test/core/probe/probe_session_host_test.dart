@@ -3,15 +3,12 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/probe/probe_mode.dart';
-import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
-import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_local_ipc/socket_location.dart';
-import 'package:karmashala_ssh_host/host.dart';
 import 'package:path/path.dart' as p;
 
-import '../../features/ssh/fake_host_box.dart';
 
 /// A probe never meets the owner's session host (PROJECT.md §23).
 ///
@@ -159,33 +156,5 @@ void main() {
     expect(reading.status, HostDeploymentStatus.ready);
   }, skip: desktop ? null : 'no local host off the desktop');
 
-  group('an SSH machine', () {
-    test("a probe's panes are given no session host there", () {
-      final container = containerFor(
-        ProbeMode(enabled: true, dataDirectory: data.path),
-      );
-      expect(container.read(hostSessionAccessLookupProvider)(boxHost), isNull);
-    });
 
-    test("a probe never lists or ends the sessions held there", () async {
-      final service = containerFor(
-        ProbeMode(enabled: true, dataDirectory: data.path),
-      ).read(hostSessionsServiceProvider);
-
-      await expectLater(
-        service.list(boxHost),
-        throwsA(
-          isA<HostSessionsUnavailable>().having(
-            (e) => e.message,
-            'message',
-            contains('probe'),
-          ),
-        ),
-      );
-      await expectLater(
-        service.end(boxHost, 'karmashala_h1_p1'),
-        throwsA(isA<HostSessionsUnavailable>()),
-      );
-    });
-  });
 }

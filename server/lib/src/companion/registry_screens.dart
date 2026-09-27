@@ -5,7 +5,7 @@ import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 
 import '../domain/host_session.dart';
-import '../domain/session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../domain/session_registry.dart';
 
 /// The write token's holder while a phone types, for as long as the typing

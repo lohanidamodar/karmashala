@@ -7,10 +7,11 @@ import 'package:xterm2/core.dart';
 import '../pty/pty.dart';
 import 'output_backlog.dart';
 import 'screen_facts.dart';
+import 'screen_session.dart';
 import 'screen_snapshot.dart';
 import 'screen_tail.dart';
 import 'screen_text.dart';
-import 'session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'session_recorder.dart';
 import 'write_token.dart';
 
@@ -25,7 +26,7 @@ class OutputChunk {
 
 /// One pty, its backlog, and its single writer. The session outlives every
 /// client of it, and nothing here is driven by a timer.
-class HostSession {
+class HostSession implements ScreenSession {
   HostSession({
     required this.id,
     required this.request,
@@ -97,14 +98,17 @@ class HostSession {
     _ended.complete(lifecycle);
   }
 
+  @override
   final String id;
   final PtySpawnRequest request;
+  @override
   final DateTime startedAt;
   final OutputBacklog backlog;
 
   /// What the program has told its terminal — title, directory, last command
   /// — off the host's copy of the screen; null for a session read back from
   /// disk, whose screen nobody watched.
+  @override
   late final ScreenFacts? facts;
 
   /// Where the ring is mirrored so it outlives this process. Null for a restored
@@ -132,6 +136,7 @@ class HostSession {
   var _outputDone = false;
   var _released = false;
 
+  @override
   SessionLifecycle get lifecycle => _lifecycle;
 
   /// Somebody asked to close this session while its process still ran, so
@@ -159,6 +164,7 @@ class HostSession {
   var _stoppingWithHost = false;
 
   int get pid => _pty.pid;
+  @override
   Future<SessionLifecycle> get ended => _ended.future;
 
   void _onOutput(Uint8List bytes) {
@@ -292,6 +298,7 @@ class HostSession {
 
   /// The last [lines] rows of the screen and its scrollback as plain text, or
   /// empty when there is no screen.
+  @override
   List<String> tailText(int lines) {
     final screen = _screen;
     return screen == null ? const [] : screenTailOf(screen, lines: lines);

@@ -51,6 +51,7 @@ workspace:
   - packages/karmashala_files
   - packages/karmashala_flutter_apps
   - packages/karmashala_git
+  - packages/karmashala_host_protocol
   - packages/karmashala_launch
   - packages/karmashala_mcp
   - packages/karmashala_media

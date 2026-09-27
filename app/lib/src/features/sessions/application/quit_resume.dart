@@ -48,7 +48,7 @@ final sessionIsHostedLiveProvider = Provider<bool Function(String)>(
 );
 
 /// The pane running [String] session when that session lives outside the app
-/// — in a session host, or under tmux over SSH — so a quit disconnects from it
+/// — in the server, or on an SSH box it relays — so a quit disconnects from it
 /// and it keeps running; or null.
 final sessionHostedPaneProvider =
     Provider<HostedTerminalInstance? Function(String)>(
@@ -87,7 +87,7 @@ class InterruptedSession {
   final bool working;
 
   /// Where it keeps running after a quit unless it is ended — "the session
-  /// host", "tmux on build-box" — or null when a quit stops it.
+  /// host" — or null when a quit stops it.
   final String? keptBy;
 
   bool get keepsRunning => keptBy != null;

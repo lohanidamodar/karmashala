@@ -5,7 +5,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart'
 import 'package:karmashala_session_engine/store.dart' as store;
 import 'package:karmashala_store/database.dart';
 
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'lifecycle_feed.dart';
 
 /// The daemon writing its own sessions' lifecycle status to the shared store:
@@ -47,6 +47,11 @@ class SessionStatusRecording {
       runByClient: runByClient,
     );
   }
+
+  /// Records [event] from an SSH box's host (slice 5d): a session there that
+  /// runs a row's agent starts and exits as the box says — its facts, never
+  /// a guess made here.
+  void applyRemote(LifecycleEvent event) => _keeper.applyEvent(eventOf(event));
 
   Future<void> close() async {
     _feed.onWatched = null;

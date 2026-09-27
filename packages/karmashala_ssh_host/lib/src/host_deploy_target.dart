@@ -1,34 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import 'package:dartssh2/dartssh2.dart';
 
 import 'package:karmashala_ssh/connection.dart';
-
-/// What one command said.
-class RemoteRun {
-  const RemoteRun(this.exitCode, this.stdout, this.stderr);
-
-  final int exitCode;
-  final String stdout;
-  final String stderr;
-
-  bool get ok => exitCode == 0;
-  String get output => '$stdout$stderr'.trim();
-}
-
-/// A long-lived exec channel: the transport the app speaks the host protocol
-/// over. Bytes only, exactly as `karmashala_host attach` expects them.
-abstract class RemoteChannel {
-  Stream<Uint8List> get stdout;
-  Stream<Uint8List> get stderr;
-  void add(Uint8List bytes);
-  Future<int> get exitCode;
-
-  /// Ends our side. The host observes the disconnect and keeps the sessions.
-  Future<void> close();
-}
 
 /// The three things deploying a host needs from a machine. A narrow interface
 /// on purpose: the deployer's logic is then testable against a fake.

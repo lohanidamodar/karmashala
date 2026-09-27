@@ -6,7 +6,7 @@ export 'src/client/lifecycle_watch.dart';
 export 'src/hooks/hook_endpoint_file.dart';
 export 'src/hooks/hook_server.dart' show kHookSessionHeader;
 export 'src/mcp/mcp_credentials.dart' show McpCredentials;
-export 'src/protocol/messages.dart'
+export 'package:karmashala_host_protocol/protocol.dart'
     show
         AgentHookEvent,
         AgentStatusMessage,

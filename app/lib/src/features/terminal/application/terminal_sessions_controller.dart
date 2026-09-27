@@ -18,8 +18,6 @@ import '../../notes/application/notes_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../../ssh/application/host_session_providers.dart';
-import '../../ssh/application/ssh_providers.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
@@ -32,7 +30,13 @@ import 'local_host_providers.dart';
 import '../data/terminals_client.dart';
 import '../../sessions/data/sessions_client.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show TerminalOpen, TerminalRecord, hostedRunSessionId, terminalSessionId;
+    show
+        TerminalOpen,
+        TerminalRecord,
+        hostedRunSessionId,
+        terminalSessionId;
+import 'package:karmashala_host_protocol/protocol.dart' show boxSessionRef;
+import 'package:karmashala_environments/ssh.dart' show sshEnvironmentId;
 import 'terminal_layout_providers.dart';
 import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';

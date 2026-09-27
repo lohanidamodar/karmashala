@@ -12,7 +12,6 @@ import '../../features/notifications/application/notification_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/remote/application/remote_access_controller.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
-import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/local_host_startup.dart';
@@ -438,9 +437,6 @@ class AppLifecycle {
     for (final start in <Future<void> Function()>[
       () => _container.exists(sessionEngineProvider)
           ? _container.read(sessionEngineProvider).dispose()
-          : Future<void>.value(),
-      () => _container.exists(sshConnectionPoolProvider)
-          ? _container.read(sshConnectionPoolProvider).closeAll()
           : Future<void>.value(),
       () => _container.exists(dataClientProvider)
           ? _container.read(dataClientProvider).close()

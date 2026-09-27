@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:karmashala_host/protocol.dart';
-import 'package:meta/meta.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'host_deployment.dart';
 import 'host_binaries.dart';
 import 'host_deploy_target.dart';
-import 'privileged_command.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'relay_setup.dart';
 import 'remote_detach.dart';
 import 'remote_home.dart';
@@ -237,8 +236,11 @@ class HostDeployer {
       platform: platform,
       availableTargets: have,
       reason:
-          'No host binary for ${platform.targetKey} in this build'
-          '${have.isEmpty ? '' : ' (it has ${have.join(', ')})'}.',
+          '${target.address} is ${platform.targetKey}, and the Karmashala '
+          'server has no host bundle for it (it looked in '
+          '${binaries.describeSearch()}'
+          '${have.isEmpty ? '' : '; it has ${have.join(', ')}'}). Nothing was '
+          'put on the machine.',
     );
   }
 

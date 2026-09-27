@@ -6,7 +6,7 @@ import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'package:path/path.dart' as p;
 
-import '../serve/host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 import 'mcp_callers.dart';
 import 'mcp_credentials.dart';
 import 'mcp_endpoint_server.dart';

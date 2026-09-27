@@ -101,6 +101,39 @@ void main() {
     expect(asked.agentLaunch, isNull);
   });
 
+  test('an SSH pane is the server\'s terminal on the box, named for it '
+      '`ssh:<hostId>/<id>` — nothing is dialled here (slice 5d)', () async {
+    final server = FakeDataServer();
+    final container = await containerWith(server, access: inertAccess());
+    final pane =
+        open(
+              container,
+              profile: TerminalProfile.ssh('h1', hostName: 'do-box'),
+              workingDirectory: '/home/dev/api',
+            )
+            as HostTerminalInstance;
+    expect(pane.sessionId, 'ssh:h1/karmashala_local_p1');
+
+    final opening = await pane.opener!(100, 30);
+    expect(opening.sessionId, 'ssh:h1/karmashala_local_p1');
+    final asked = server.terminals.opened.single;
+    expect(asked.environmentId, 'ssh:h1');
+    expect(asked.workingDirectory, '/home/dev/api');
+    expect(server.sshWork.tests, isEmpty);
+  });
+
+  test('a restored SSH pane attaches to its box session at the server', () async {
+    final server = FakeDataServer();
+    final container = await containerWith(server, access: inertAccess());
+    final pane = container.read(restoredPaneFactoryProvider)(
+      id: 'p9',
+      profile: TerminalProfile.ssh('h1', hostName: 'do-box'),
+    )! as HostTerminalInstance;
+    addTearDown(pane.dispose);
+    expect(pane.attachOnly, isTrue);
+    expect(pane.sessionId, 'ssh:h1/karmashala_local_p9');
+  });
+
   test('a profile the server does not offer asks for its default', () async {
     final server = FakeDataServer();
     final container = await containerWith(server, access: inertAccess());

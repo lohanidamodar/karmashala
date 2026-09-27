@@ -16,7 +16,7 @@ import '../data/data_service.dart';
 import '../domain/host_session.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
-import '../protocol/messages.dart' show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
 import 'pane_source.dart';
 import 'directory_attribution.dart';
 import 'launched_attribution.dart';

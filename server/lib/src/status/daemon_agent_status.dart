@@ -9,8 +9,9 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../domain/host_session.dart';
+import '../domain/screen_session.dart';
 import '../domain/session_registry.dart';
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart';
 
 /// How often the daemon reads the screens of the agents it holds. The app's
@@ -25,8 +26,10 @@ const Duration kDaemonStatusInterval = Duration(milliseconds: 1200);
 /// [changes], for the companion, automations and `session_answer`.
 ///
 /// Only sessions whose host id is a row's (`karmashala_<rowId>`) and whose row
-/// names an agent installation are kept: a check the daemon runs, or a
-/// session on a box no app writes rows for, has no agent to read.
+/// names an agent installation are kept: a check the daemon runs has no
+/// agent to read. An agent on an SSH box (slice 5d) is read the same way,
+/// off the server's copy of its screen ([remoteScreens]) and the hooks its
+/// box's host relays.
 class DaemonAgentStatus {
   DaemonAgentStatus({
     required this.registry,
@@ -35,6 +38,7 @@ class DaemonAgentStatus {
     AgentRegistry agents = AgentRegistry.builtIn,
     Clock clock = const SystemClock(),
     this.interval = kDaemonStatusInterval,
+    this.remoteScreens,
   }) : keeper = HostedStatusKeeper(agents: agents, clock: clock),
        _sessions = SessionDao(database),
        _checkouts = CheckoutRows(database);
@@ -45,6 +49,9 @@ class DaemonAgentStatus {
   /// or, with null, that it is no longer kept.
   final void Function(String sessionId, Map<String, Object?>? status) publish;
   final Duration interval;
+
+  /// The server's copies of the sessions on SSH boxes, read like its own.
+  final Iterable<ScreenSession> Function()? remoteScreens;
   final HostedStatusKeeper keeper;
   final SessionDao _sessions;
   final CheckoutRows _checkouts;
@@ -73,6 +80,17 @@ class DaemonAgentStatus {
     return session;
   }
 
+  /// Whether the server holds row [sessionId]'s agent — one of its own
+  /// PTYs, or a session on an SSH box it keeps a copy of (slice 5d).
+  bool holds(String sessionId) {
+    if (runningSessionOf(sessionId) != null) return true;
+    final id = hostSessionIdOf(sessionId);
+    for (final screen in remoteScreens?.call() ?? const <ScreenSession>[]) {
+      if (screen.id == id && !screen.lifecycle.hasEnded) return true;
+    }
+    return false;
+  }
+
   void start() {
     tick();
     _timer ??= Timer.periodic(interval, (_) => tick());
@@ -88,7 +106,10 @@ class DaemonAgentStatus {
   /// and lets go of what has ended.
   void tick() {
     final running = <String>{};
-    for (final session in registry.sessions) {
+    for (final session in <ScreenSession>[
+      ...registry.sessions,
+      ...?remoteScreens?.call(),
+    ]) {
       if (session.lifecycle.hasEnded) continue;
       final rowId = _rowOf(session.id);
       if (rowId == null) continue;

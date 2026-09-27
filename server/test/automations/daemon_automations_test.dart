@@ -12,6 +12,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
 import 'package:karmashala_session/session.dart'
     show SessionEnding, SessionStatus;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
@@ -89,9 +90,15 @@ void main() {
     final at = DateTime.utc(2026, 9, 1).toIso8601String();
     for (final (id, kind) in [('local', 'localPosix'), ('box', 'ssh')]) {
       db.execute(
-        'INSERT INTO execution_environments (id, kind, name, created_at) '
-        'VALUES (?, ?, ?, ?);',
-        [id, kind, id == 'box' ? 'the build box' : 'this machine', at],
+        'INSERT INTO execution_environments (id, kind, name, ssh_host_id, '
+        'created_at) VALUES (?, ?, ?, ?, ?);',
+        [
+          id,
+          kind,
+          id == 'box' ? 'the build box' : 'this machine',
+          id == 'box' ? 'h1' : null,
+          at,
+        ],
       );
     }
     for (final (id, env) in [('r1', 'local'), ('r2', 'box')]) {
@@ -140,8 +147,31 @@ void main() {
     data.deleteSync(recursive: true);
   });
 
-  Future<void> startDaemon() async {
+  /// What the server started on an SSH box (slice 5d), by launch.
+  final onBox = <AgentPaneLaunch>[];
+
+  Future<void> startDaemon({bool reachesBoxes = false}) async {
+    onBox.clear();
     automations = DaemonAutomations(
+      reachesBox: reachesBoxes ? (_) => true : null,
+      openAgent: reachesBoxes
+          ? (launch, columns, rows) async {
+              if (launch.sshHostId != null) {
+                onBox.add(launch);
+                return;
+              }
+              registry.open(
+                hostSessionIdOf(launch.sessionId!),
+                PtySpawnRequest(
+                  argv: [launch.executable, ...launch.commandArguments],
+                  workingDirectory: launch.workingDirectory,
+                  environment: const {},
+                  columns: columns,
+                  rows: rows,
+                ),
+              );
+            }
+          : null,
       database: db,
       registry: registry,
       dataDirectory: data.path,
@@ -454,14 +484,26 @@ void main() {
   });
 
   group('a checkout on an SSH box', () {
-    test('is missed, and says why in words: agents are not started there '
-        'yet', () async {
+    test('fires there, on the box\'s host, when the server reaches it '
+        '(slice 5d)', () async {
+      nightly(repositoryId: 'r2');
+      await startDaemon(reachesBoxes: true);
+      final run = runs('auto-r2').single;
+      expect(run.state, AutomationRunState.running, reason: run.reason);
+      expect(launcher.started, isEmpty);
+      final launch = onBox.single;
+      expect(launch.sshHostId, 'h1');
+      expect(launch.workingDirectory, '/src/r2');
+      expect(launch.arguments, contains('Fix what broke.'));
+    });
+
+    test('is missed, in words, on a box the server does not reach', () async {
       nightly(repositoryId: 'r2');
       await startDaemon();
       final run = runs('auto-r2').single;
       expect(run.state, AutomationRunState.missed);
       expect(run.reason, contains('the build box'));
-      expect(run.reason, contains('does not start agents there yet'));
+      expect(run.reason, contains('does not reach'));
       expect(run.reason, isNot(contains('app')));
       expect(launcher.started, isEmpty);
     });
@@ -556,13 +598,26 @@ void main() {
       expect(launcher.handles.single.writes, isEmpty);
     });
 
-    test('an SSH checkout is refused in words, nothing started', () async {
+    test('an SSH checkout the server reaches is resumed on its box '
+        '(slice 5d)', () async {
+      armResume(repositoryId: 'r2');
+      await startDaemon(reachesBoxes: true);
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.done, reason: ended.reason);
+      final launch = onBox.single;
+      expect(launch.sshHostId, 'h1');
+      expect(launch.arguments, containsAllInOrder(['--resume', 'conv-1']));
+      expect(launcher.started, isEmpty);
+    });
+
+    test('an SSH checkout the server does not reach is refused in words, '
+        'nothing started', () async {
       armResume(repositoryId: 'r2');
       await startDaemon();
       final ended = resume();
       expect(ended.state, ScheduledResumeState.failed);
       expect(ended.reason, contains('the build box'));
-      expect(ended.reason, contains('does not start agents there yet'));
+      expect(ended.reason, contains('does not reach'));
       expect(launcher.started, isEmpty);
     });
 

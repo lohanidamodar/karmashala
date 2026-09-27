@@ -302,13 +302,11 @@ class ServerSessionLauncher {
     log?.call(
       'Started ${started.session.id}: agent=$agentId '
       'conversation=${resumeId ?? spec.forkConversationId ?? 'new'} '
-      'surface=${spec.surface.name} worktree=${spec.worktree}'
-      '${started.clientRuns ? ' (run by the client)' : ''}',
+      'surface=${spec.surface.name} worktree=${spec.worktree}',
     );
     return SessionStarted(
       session: started.session,
       launch: started.launch,
-      clientRuns: started.clientRuns,
       external: started.external,
       workingDirectoryNotice: words.isEmpty ? null : words,
       credentialNotice: started.credentialNotice,

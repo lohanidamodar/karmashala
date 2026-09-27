@@ -672,7 +672,7 @@ things outside this app.
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
 | `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/features/projects/live_wsl_path_existence_test.dart`; the pane suites moved to the server in slice 5a — `server/test/live/wsl_terminals_live_test.dart`, `wsl_hook_spool_live_test.dart` (run from `server/` with `dart test --tags=live-wsl <file>`, one file at a time) | Windows + a WSL distro (`archlinux` for the server's); `curl` in it for the `/mcp` measurement | there is no WSL |
-| `live-ssh` | `test/features/ssh/live_ssh_test.dart` (deploy, card, relay); the transport half is `packages/karmashala_ssh/test/live_ssh_test.dart`, and the server's own SSH `server/test/live/ssh_live_test.dart` (tag `live`) | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22); the session-host deploy case, the install-panel cases (they read, install, and Stop/Start only a host that holds no sessions — nothing uninstalls) and the relay-on-a-box case also need `KARMASHALA_HOST_BINARIES`, the directory holding `karmashala_host-<version>-linux-*` (the relay case wants a bundle new enough to carry `relay`, and says so when it is not; it uses port 18787 and removes what it made) | those variables are unset |
+| `live-ssh` | Since slice 5d the app dials no SSH: the box suite is `server/test/live/ssh_box_live_test.dart` (tag `live`: deploy, a terminal on the box, the relay), the server's pool `server/test/live/ssh_live_test.dart` (tag `live`), and the transport half `packages/karmashala_ssh/test/live_ssh_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22); the session-host deploy case, the install-panel cases (they read, install, and Stop/Start only a host that holds no sessions — nothing uninstalls) and the relay-on-a-box case also need `KARMASHALA_HOST_BINARIES`, the directory holding `karmashala_host-<version>-linux-*` (the relay case wants a bundle new enough to carry `relay`, and says so when it is not; it uses port 18787 and removes what it made) | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target. The
 recipe, run 2026-09-16 and green on all 21 cases:
@@ -704,7 +704,7 @@ WSLENV=KARMASHALA_SSH_HOST:KARMASHALA_SSH_PORT:KARMASHALA_SSH_USER:KARMASHALA_SS
 KARMASHALA_SSH_HOST=127.0.0.1 KARMASHALA_SSH_PORT=2222 KARMASHALA_SSH_USER=<you> \
 KARMASHALA_SSH_KEY='C:\kw\live-ssh\id_ed25519' \
 KARMASHALA_HOST_BINARIES='C:\kw\live-ssh\binaries' \
-  <dart.exe> … test test/features/ssh/live_ssh_test.dart
+  <dart.exe> … test test/live/ssh_box_live_test.dart   # from server/
 ```
 
 No path-translation flags: the two path values are already spelled for Windows.

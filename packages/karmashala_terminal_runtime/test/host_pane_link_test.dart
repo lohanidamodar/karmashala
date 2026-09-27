@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
-import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 /// A channel with a host behind it, driven by the test. It parses what the app
 /// sends with the real codec, so a message the app builds wrongly fails here

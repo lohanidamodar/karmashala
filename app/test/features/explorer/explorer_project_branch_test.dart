@@ -18,7 +18,7 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 

@@ -1,44 +1,20 @@
-/// Driving the relay on a box: set it up, look at it, stop it, take it away —
-/// and keep what remote access serves through in line with what was found.
+/// Driving the relay on a box — set it up, look at it, stop it, take it away
+/// — through the server, which does it over its own connection (slice 5d);
+/// and keeping what remote access serves through in line with what was found.
 library;
 
 import 'dart:async';
 
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SshBoxAnswer, SshRelayAction;
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../ssh/application/host_session_providers.dart';
-import '../../ssh/application/ssh_providers.dart';
+import '../../../core/util/failure_words.dart';
+import '../../ssh/data/ssh_client.dart';
 import 'remote_access_controller.dart';
 import 'ssh_relays.dart';
-
-/// Builds the relay setup for one box. Deploys the session host bundle first
-/// when the box has none: `karmashala_host relay` is that bundle's command, so
-/// one artifact on the machine serves both.
-typedef SshRelaySetupFactory =
-    Future<SshRelaySetup> Function(SshHost host, int port);
-
-final sshRelaySetupFactoryProvider = Provider<SshRelaySetupFactory>(
-  (ref) => (host, port) async {
-    final access = ref.read(hostSessionAccessRegistryProvider).forHost(host);
-    final deployment = await access.deployment();
-    final remotePath = deployment.remotePath;
-    // A path is enough: the relay runs from the bundle whether or not `serve`
-    // came up, so only a deploy that put nothing there stops it.
-    if (remotePath == null) {
-      throw HostDeployFailure(hostName: host.name, deployment: deployment);
-    }
-    return SshRelaySetup(
-      host: host,
-      target: SshHostDeployTarget(
-        ref.read(sshConnectionPoolProvider).forHostId(host.id),
-      ),
-      remotePath: remotePath,
-      port: port,
-    );
-  },
-);
 
 /// What is known about one box's relay since this launch. A reading, with its
 /// time — nothing here is re-checked on its own (§19).
@@ -77,21 +53,22 @@ class SshRelayController extends Notifier<Map<String, SshRelayView>> {
   }) => _run(
     host,
     port,
-    (setup) => setup.start(ruleAddedByHand: ruleAddedByHand),
+    SshRelayAction.start,
+    ruleAddedByHand: ruleAddedByHand,
   );
 
   /// Looks, and changes nothing on the box.
   Future<SshRelayReading?> check(SshHost host, {required int port}) =>
-      _run(host, port, (setup) => setup.check());
+      _run(host, port, SshRelayAction.check);
 
   /// Stops it there and stops serving through it. The box stays in the list.
   Future<SshRelayReading?> stop(SshHost host, {required int port}) =>
-      _run(host, port, (setup) => setup.stop());
+      _run(host, port, SshRelayAction.stop);
 
   /// Stops it, deletes its token, pid and log on the box, and forgets it here.
   /// The host bundle stays: the session host runs from it.
   Future<SshRelayReading?> remove(SshHost host, {required int port}) async {
-    final reading = await _run(host, port, (setup) => setup.remove());
+    final reading = await _run(host, port, SshRelayAction.remove);
     // Forgotten only once the box said it is gone: forgetting a relay that is
     // still running would leave a listener on somebody's server with no row
     // here to stop it from.
@@ -112,36 +89,41 @@ class SshRelayController extends Notifier<Map<String, SshRelayView>> {
   Future<SshRelayReading?> _run(
     SshHost host,
     int port,
-    Future<SshRelayReading> Function(SshRelaySetup setup) action,
-  ) async {
+    SshRelayAction action, {
+    bool ruleAddedByHand = false,
+  }) async {
     _set(host.id, SshRelayView(reading: state[host.id]?.reading, busy: true));
+    final SshBoxAnswer<SshRelayReading> answer;
     try {
-      final setup = await ref.read(sshRelaySetupFactoryProvider)(host, port);
-      final reading = await action(setup);
-      _record(host, port, reading);
-      _set(host.id, SshRelayView(reading: reading));
-      return reading;
-    } on HostDeployFailure catch (failure) {
-      // Dropped, or Install-then-retry would be handed the same reading back.
-      ref.read(hostSessionAccessRegistryProvider).forgetReading(host.id);
-      _set(
-        host.id,
-        SshRelayView(
-          reading: state[host.id]?.reading,
-          deployment: failure.deployment,
-        ),
-      );
-      return null;
+      answer = await ref
+          .read(sshClientProvider)
+          .relay(host.id, action, port: port, ruleAddedByHand: ruleAddedByHand);
     } on Object catch (error) {
       _set(
         host.id,
         SshRelayView(
           reading: state[host.id]?.reading,
-          failure: describeSshFailure(error),
+          failure: describeFailure(error),
         ),
       );
       return null;
     }
+    final reading = answer.value;
+    if (reading == null) {
+      // The host bundle could not be put on the box: its sentence, remedy
+      // and Install button, rather than a failure string.
+      _set(
+        host.id,
+        SshRelayView(
+          reading: state[host.id]?.reading,
+          deployment: answer.deployment,
+        ),
+      );
+      return null;
+    }
+    _record(host, port, reading);
+    _set(host.id, SshRelayView(reading: reading));
+    return reading;
   }
 
   /// Brings the stored entry in line with a reading. Served through only while

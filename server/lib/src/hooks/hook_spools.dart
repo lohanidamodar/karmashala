@@ -7,7 +7,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart' show CliStore;
 import 'package:karmashala_agent_reporting/hooks.dart';
 
-import '../protocol/messages.dart' show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
 
 /// Set to `off` and a server drains no WSL hook spool — a test's server, whose
 /// temporary HOME is not where the owner's distributions write theirs.

@@ -9,8 +9,10 @@ import 'package:karmashala/src/features/remote/application/remote_access_control
 import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefusalCode, DataRefused, SshBoxAnswer;
+import 'package:karmashala_host_protocol/host_access.dart';
 import '../../support/memory_server_config.dart';
 
 import '../../support/fake_data_server.dart';
@@ -38,30 +40,18 @@ class _Access extends RemoteAccessController {
   Future<void> sync() async => syncs++;
 }
 
-/// A box that answers each action with the reading the test scripted.
-class _Setup implements SshRelaySetup {
+/// What the server answers each `ssh.relaySetup` action with (slice 5d:
+/// the server drives the relay on the box), as the test scripted it.
+class _Setup {
   _Setup(this.answers);
 
   final Map<String, SshRelayReading> answers;
   final asked = <String>[];
 
-  Future<SshRelayReading> _answer(String action) async {
+  SshRelayReading answer(String action) {
     asked.add(action);
     return answers[action]!;
   }
-
-  @override
-  Future<SshRelayReading> start({bool ruleAddedByHand = false}) =>
-      _answer('start');
-  @override
-  Future<SshRelayReading> check() => _answer('check');
-  @override
-  Future<SshRelayReading> stop() => _answer('stop');
-  @override
-  Future<SshRelayReading> remove() => _answer('remove');
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 SshRelayReading _reading(SshRelayStatus status, {bool withUrl = true}) =>
@@ -92,13 +82,13 @@ void main() {
         remoteAccessControllerProvider.overrideWith(
           (ref) => access = _Access(ref),
         ),
-        sshRelaySetupFactoryProvider.overrideWithValue((host, port) async {
-          ports?.add(port);
-          if (factoryError != null) throw factoryError;
-          return setup!;
-        }),
       ],
     );
+    server.sshWork.onRelay = (request) {
+      ports?.add(request.port);
+      if (factoryError != null) throw factoryError;
+      return SshBoxAnswer.of(setup!.answer(request.action.name));
+    };
     addTearDown(container.dispose);
     // Built once so `access` exists before anything reads its count.
     container.read(remoteAccessControllerProvider);
@@ -383,7 +373,8 @@ void main() {
       'a machine that cannot be reached is a failure in words, not a crash',
       () async {
         final container = await containerWith(
-          factoryError: StateError(
+          factoryError: const DataRefused(
+            DataRefusalCode.failed,
             'The Karmashala host could not be put on do-box',
           ),
         );

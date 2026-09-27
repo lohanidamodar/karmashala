@@ -7,7 +7,7 @@ import '../application/ssh_prompt_controller.dart';
 import 'host_key_dialog.dart';
 import 'ssh_secret_dialog.dart';
 
-/// Mounts the SSH layer's ability to ask the user anything. Prompts are shown
+/// Shows the server's SSH questions (a host key, a password, a passphrase)
 /// one at a time: answering the wrong fingerprint is the failure to prevent.
 class SshPromptHost extends ConsumerStatefulWidget {
   const SshPromptHost({required this.child, super.key});
@@ -19,8 +19,6 @@ class SshPromptHost extends ConsumerStatefulWidget {
 }
 
 class _SshPromptHostState extends ConsumerState<SshPromptHost> {
-  /// Held rather than re-read: `ref` is not usable from `dispose`, and skipping
-  /// the detach leaves waiting connections hanging on a queue nobody answers.
   late final SshPromptController _prompts;
   bool _showing = false;
 
@@ -31,14 +29,7 @@ class _SshPromptHostState extends ConsumerState<SshPromptHost> {
   void initState() {
     super.initState();
     _prompts = ref.read(sshPromptControllerProvider.notifier);
-    _prompts.attach();
     WidgetsBinding.instance.addPostFrameCallback((_) => _drain());
-  }
-
-  @override
-  void dispose() {
-    _prompts.detach();
-    super.dispose();
   }
 
   @override
@@ -63,28 +54,10 @@ class _SshPromptHostState extends ConsumerState<SshPromptHost> {
         if (!mounted) break;
         final queue = ref.read(sshPromptControllerProvider);
         if (queue.isEmpty) break;
-        await _present(queue.first);
+        await _presentServer(queue.first);
       }
     } finally {
       _showing = false;
-    }
-  }
-
-  Future<void> _present(SshPromptRequest request) async {
-    switch (request) {
-      case HostKeyPromptRequest r:
-        final trusted = await HostKeyTrustDialog.show(context, r.presentation);
-        _prompts.answerHostKey(r, trusted: trusted);
-      case SshSecretPromptRequest r:
-        final secret = await SshSecretDialog.show(
-          context,
-          hostName: r.host.name,
-          address: r.host.address,
-          kind: r.kind,
-        );
-        _prompts.answerSecret(r, secret);
-      case ServerSshPrompt r:
-        await _presentServer(r);
     }
   }
 
@@ -108,9 +81,7 @@ class _SshPromptHostState extends ConsumerState<SshPromptHost> {
           context,
           hostName: opened.hostName,
           address: opened.address,
-          kind: opened.kind == SshPromptKind.password
-              ? SshSecretKind.password
-              : SshSecretKind.passphrase,
+          passphrase: opened.kind == SshPromptKind.passphrase,
         );
         if (!identical(_shownServer, request)) return;
         _shownServer = null;

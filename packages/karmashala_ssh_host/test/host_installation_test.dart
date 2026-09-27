@@ -150,7 +150,7 @@ void main() {
       final reading = await installer().check();
 
       expect(reading.state, HostInstallState.outdated);
-      expect(reading.label, 'older than this app (0.0.9 → 0.1.0), running');
+      expect(reading.label, 'older than the server\'s (0.0.9 → 0.1.0), running');
       expect(reading.reason, contains('Update'));
     });
 
@@ -168,7 +168,7 @@ void main() {
       expect(reading.hostIsNewer, isTrue);
       expect(
         reading.label,
-        'newer than this app (0.2.0; this app carries 0.1.0), running',
+        'newer than the server\'s (0.2.0; the server carries 0.1.0), running',
       );
       expect(reading.reason, isNot(contains('Update')));
       expect(reading.reason, contains('0.1.0'));

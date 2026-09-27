@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,12 +10,11 @@ import 'package:karmashala/src/features/environments/application/system_health_s
 import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
 import 'package:karmashala/src/features/ssh/application/companion_route_store.dart';
-import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_entry.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
 import 'package:karmashala_remote/pairing.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
@@ -60,10 +57,6 @@ void main() {
           data,
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
-          // Opening the dialog must not reach for a machine.
-          sshCompanionSetupProvider.overrideWith(
-            (ref, host) => Completer<Never>().future,
-          ),
           systemHealthProvider.overrideWith(
             () => FixedSystemHealthController(
               SystemHealthReport(

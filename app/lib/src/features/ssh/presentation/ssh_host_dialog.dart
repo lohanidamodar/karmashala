@@ -12,8 +12,8 @@ import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../settings/presentation/path_field_row.dart';
 import 'package:agent_cli/process.dart';
-import '../application/ssh_connection_providers.dart';
-import 'package:karmashala_ssh/connection.dart';
+import '../data/ssh_client.dart';
+import 'package:karmashala_environments/ssh.dart';
 import '../application/ssh_hosts_controller.dart';
 import 'host_key_changed_alert.dart';
 import '../../settings/presentation/settings_notice.dart';
@@ -203,9 +203,12 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final environments = keyHostingEnvironments(
-      ref.watch(environmentsControllerProvider),
-    );
+    // Where the key file may be named: an environment of the server's own
+    // machine, where it is read (never a box, never this app).
+    final environments = [
+      for (final environment in ref.watch(environmentsControllerProvider))
+        if (environment.kind != EnvironmentKind.ssh) environment,
+    ];
 
     return AlertDialog(
       title: DesktopDialogTitle(

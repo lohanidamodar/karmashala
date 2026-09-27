@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 
 /// The public-key file whose fingerprint should match [keyType]. An algorithm
 /// we do not recognise gets no invented filename: a wrong instruction is worse.

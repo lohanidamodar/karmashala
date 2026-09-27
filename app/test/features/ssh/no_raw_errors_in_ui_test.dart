@@ -12,6 +12,7 @@ void main() {
   final surfaces = [
     Directory('lib/src/features/ssh/presentation'),
     Directory('lib/src/features/ssh/application'),
+    Directory('lib/src/features/ssh/data'),
     Directory('lib/src/features/remote/presentation'),
   ];
   final files = [
@@ -47,7 +48,7 @@ void main() {
       found,
       isEmpty,
       reason:
-          'word it with describeSshFailure, or carry a typed failure '
+          'word it with describeFailure, or carry a typed failure '
           '(HostDeployFailure) to a HostDeployFailureNotice',
     );
   });

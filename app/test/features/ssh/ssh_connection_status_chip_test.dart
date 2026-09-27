@@ -1,4 +1,4 @@
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_connection_status_chip.dart';
 import 'package:flutter_test/flutter_test.dart';
 

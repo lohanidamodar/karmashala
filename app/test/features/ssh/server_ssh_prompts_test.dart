@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/ssh/application/ssh_connection_providers.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_client.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_prompt_controller.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_connection_status_chip.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_prompt_host.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 
 import '../../support/fake_data_server.dart';
 
@@ -47,13 +47,13 @@ void main() {
     container.read(sshPromptControllerProvider);
   });
 
-  List<SshPromptRequest> queue() => container.read(sshPromptControllerProvider);
+  List<ServerSshPrompt> queue() => container.read(sshPromptControllerProvider);
 
   test('a question the server opens is queued, and the answer goes back '
       'to it', () async {
     server.sshWork.tell([opened]);
     await pumpEventQueue();
-    final request = queue().single as ServerSshPrompt;
+    final request = queue().single;
     expect(request.opened.address, 'dev@build-box:22');
 
     await container
@@ -70,7 +70,7 @@ void main() {
   test('one another window answered is closed here', () async {
     server.sshWork.tell([opened]);
     await pumpEventQueue();
-    final request = queue().single as ServerSshPrompt;
+    final request = queue().single;
 
     server.sshWork.tell([const SshPromptClosed('p1')]);
     await pumpEventQueue();

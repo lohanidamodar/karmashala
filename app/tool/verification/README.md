@@ -103,8 +103,8 @@ reached for `resume_conflict_probe.dart`, applied to a file it did not look at.
 
 The SSH latency measurements that sat at the bottom of
 `test/features/ssh/live_ssh_test.dart` moved in the same loop, to
-`tool/benchmark/ssh_latency_bench.dart` — a benchmark, not a test, so it lives
-beside `paint_bench.dart` rather than here.
+`tool/benchmark/ssh_latency_bench.dart` — a benchmark, not a test — and in
+slice 5d, with the app dialling no SSH, to `packages/karmashala_ssh/tool/`.
 
 ## `resume_conflict_probe.dart` is a diagnostic, not a test
 

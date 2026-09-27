@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SshDeployAction;
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
@@ -9,17 +11,16 @@ import 'package:karmashala/src/features/environments/application/system_health.d
 import 'package:karmashala/src/features/environments/application/system_health_service.dart';
 import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/system_health_fakes.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
-import 'fake_host_box.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
 
@@ -31,16 +32,16 @@ class _Access extends RemoteAccessController {
 }
 
 /// The host line is drawn where the machine is: its card in Settings ›
-/// Environments, and its row in System health. One panel, two places.
+/// Environments, and its row in System health. One panel, two places, every
+/// reading the server's (slice 5d).
 void main() {
   late TestMachine db;
-  late FakeHostBox box;
+  late FakeDataServer server;
   late Override data;
 
   setUp(() async {
     db = TestMachine();
-    box = FakeHostBox();
-    final server = FakeDataServer();
+    server = FakeDataServer();
     server.environmentRows
       ..upsert(windowsEnv())
       ..upsert(sshEnvFixture(name: boxHost.name));
@@ -54,9 +55,6 @@ void main() {
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
       remoteAccessControllerProvider.overrideWith(_Access.new),
-      hostInstallerFactoryProvider.overrideWithValue(
-        (host) => installerOver(box),
-      ),
       sshTerminalOpenerProvider.overrideWithValue((host, {typed}) => true),
       systemHealthProvider.overrideWith(
         () => FixedSystemHealthController(
@@ -95,7 +93,7 @@ void main() {
     // button was.
     await tester.pump();
     await tester.tap(inPanel(label));
-    await settleHostBox(tester);
+    await tester.pumpAndSettle();
   }
 
   Future<void> tall(WidgetTester tester) async {
@@ -116,8 +114,17 @@ void main() {
       find.text('Karmashala host: not checked since this launch'),
       findsOneWidget,
     );
-    expect(box.commands, isEmpty, reason: 'drawing the card asks nothing');
+    expect(
+      server.sshWork.deploys,
+      isEmpty,
+      reason: 'drawing the card asks nothing',
+    );
 
+    server.sshWork.onDeploy = (request) => server.sshWork.boxReading(
+      request.action == SshDeployAction.check
+          ? HostInstallState.notInstalled
+          : HostInstallState.installed,
+    );
     await pressInPanel(tester, 'Check');
     expect(find.text('Karmashala host: not installed'), findsOneWidget);
     await pressInPanel(tester, 'Install');
@@ -137,8 +144,14 @@ void main() {
     await tester.pump();
 
     expect(find.byType(HostInstallPanel), findsOneWidget);
-    expect(box.commands, isEmpty, reason: 'opening the panel asks nothing');
+    expect(
+      server.sshWork.deploys,
+      isEmpty,
+      reason: 'opening the panel asks nothing',
+    );
 
+    server.sshWork.onDeploy = (_) =>
+        server.sshWork.boxReading(HostInstallState.notInstalled);
     await pressInPanel(tester, 'Check');
     expect(find.text('Karmashala host: not installed'), findsOneWidget);
     expect(inPanel('Install'), findsOneWidget);
@@ -147,9 +160,6 @@ void main() {
   testWidgets('the System health row is the compact one: what moves things on, '
       'and where the rest is', (tester) async {
     await tall(tester);
-    box
-      ..installed.add(kBoxThisBundle)
-      ..runningServe = boxExecutable(kBoxThisBundle);
     await tester.pumpWidget(scope(const EnvironmentHealthDialog()));
     await tester.pump();
 
@@ -168,13 +178,24 @@ void main() {
 
   testWidgets('the System health row survives the window matrix with a step '
       'that needs sudo', (tester) async {
-    box.tools = 'missing=tar\npm=apt-get\nuid=1000\n';
+    server.sshWork.onDeploy = (_) => server.sshWork.boxReading(
+      HostInstallState.notInstalled,
+      deployment: HostDeployment(
+        status: HostDeploymentStatus.cannotInstall,
+        observedAt: testTime,
+        reason: 'do-box has no `tar`. Nothing was uploaded.',
+        privileged: const PrivilegedCommand(
+          command: 'sudo apt-get install -y tar',
+          does: 'Installs tar on do-box.',
+          why: 'It needs root.',
+        ),
+      ),
+    );
     await expectSurvivesWindowMatrix(
       tester,
       build: () => scope(const EnvironmentHealthDialog()),
       warmUp: (tester) async {
         await pressInPanel(tester, 'Check');
-        await pressInPanel(tester, 'Install');
         expect(find.textContaining('on do-box\'s card'), findsOneWidget);
         expect(find.text('Open a terminal on do-box'), findsNothing);
       },

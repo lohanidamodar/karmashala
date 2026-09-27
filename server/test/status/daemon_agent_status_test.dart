@@ -8,7 +8,11 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_host/src/domain/screen_facts.dart';
+import 'package:karmashala_host/src/domain/screen_session.dart';
+import 'package:karmashala_host/src/domain/screen_tail.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
+import 'package:xterm2/core.dart' show Terminal;
 import 'package:karmashala_host/src/status/daemon_prompt_answers.dart';
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
@@ -139,6 +143,26 @@ void main() {
   }
 
   group('the status', () {
+    test('an agent on an SSH box is read off the server\'s copy of its '
+        'screen (slice 5d), and is held here', () async {
+      final screen = _BoxScreenOf('karmashala_s1')
+        ..feed(fixture('claude-code-permission-modal'));
+      final onBox = DaemonAgentStatus(
+        registry: registry,
+        database: database,
+        publish: (id, body) => published.add((id, body)),
+        interval: const Duration(hours: 1),
+        remoteScreens: () => [screen],
+      );
+      addTearDown(onBox.close);
+      expect(registry.find('karmashala_s1'), isNull);
+      onBox.tick();
+      final kept = last('s1')!;
+      expect(kept.report.hasOpenPrompt, isTrue);
+      expect(onBox.holds('s1'), isTrue);
+      expect(onBox.runningSessionOf('s1'), isNull);
+    });
+
     test(
       'from the screen: a real permission modal is an open prompt',
       () async {
@@ -596,4 +620,32 @@ void main() {
       expect(utf8.decode(agent.writes.single), '\r');
     });
   });
+}
+
+/// A box session's screen as the server keeps it, fed a captured agent's
+/// bytes: only what status reading needs.
+class _BoxScreenOf implements ScreenSession {
+  _BoxScreenOf(this.id);
+
+  @override
+  final String id;
+  final _terminal = Terminal(maxLines: 2000)..resize(120, 30);
+
+  void feed(List<int> bytes) =>
+      _terminal.write(utf8.decode(bytes, allowMalformed: true));
+
+  @override
+  DateTime get startedAt => DateTime.utc(2026, 9, 25, 12);
+
+  @override
+  SessionLifecycle get lifecycle => const SessionRunning();
+
+  @override
+  Future<SessionLifecycle> get ended => Completer<SessionLifecycle>().future;
+
+  @override
+  ScreenFacts? get facts => null;
+
+  @override
+  List<String> tailText(int lines) => screenTailOf(_terminal, lines: lines);
 }

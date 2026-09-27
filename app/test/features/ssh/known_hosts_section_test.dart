@@ -1,4 +1,4 @@
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala/src/features/ssh/presentation/known_hosts_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

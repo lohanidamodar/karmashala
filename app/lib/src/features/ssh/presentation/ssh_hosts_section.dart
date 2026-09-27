@@ -11,7 +11,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import '../../files/application/files_tab_actions.dart';
 import '../application/ssh_hosts_controller.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'ssh_connection_status_chip.dart';
 import 'host_install_panel.dart';
 import 'host_sessions_dialog.dart';

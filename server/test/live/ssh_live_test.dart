@@ -9,7 +9,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_host/src/agents/server_agent_work.dart';
-import 'package:karmashala_host/src/ssh/server_ssh.dart';
+import 'package:karmashala_host/src/ssh/ssh_domain.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -46,7 +46,7 @@ void main() {
   final now = DateTime.now().toUtc();
   late AppDatabase db;
   late DataService data;
-  late ServerSsh ssh;
+  late ServerSshDomain ssh;
   late List<DataChange> told;
   late DataSession window;
 
@@ -67,7 +67,12 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     data = DataService(db)..ensureEnvironment(localHostEnvironment(now));
-    ssh = ServerSsh(data: data, database: db)..attach();
+    ssh = ServerSshDomain(
+      data: data,
+      database: db,
+      // Where host bundles are looked for: nothing here deploys.
+      dataDirectory: Directory.systemTemp.path,
+    )..attach();
     told = [];
     // A desktop window: it is told the question and answers it.
     window = data.open((batch) {

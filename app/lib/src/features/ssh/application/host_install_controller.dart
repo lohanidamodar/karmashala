@@ -1,44 +1,31 @@
-/// The session host on one SSH machine, looked at and acted on **on purpose**:
-/// the explicit half of what a pane, a relay and a pairing do implicitly.
+/// The Karmashala host on one SSH box, looked at and acted on **on purpose**
+/// — by the server (slice 5d), which deploys it with its own connection and
+/// bundles. This only asks and shows what came back.
 library;
 
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SshDeployAction;
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/util/failure_words.dart';
 import '../../remote/application/ssh_relay_controller.dart';
 import '../../remote/application/ssh_relays.dart';
-import 'host_session_providers.dart';
-import 'ssh_providers.dart';
-
-/// Builds the installer for one box, over the app's pooled connection and the
-/// bundles this build carries. A seam, so a test drives a fake machine.
-typedef HostInstallerFactory = HostInstaller Function(SshHost host);
-
-final hostInstallerFactoryProvider = Provider<HostInstallerFactory>(
-  (ref) =>
-      (host) => HostInstaller(
-        host: host,
-        deployer: HostDeployer(
-          target: SshHostDeployTarget(
-            ref.read(sshConnectionPoolProvider).forHostId(host.id),
-          ),
-          binaries: ref.read(hostBinarySourceProvider),
-        ),
-      ),
-);
+import '../data/ssh_client.dart';
 
 /// What a row is doing, in the words its spinner shows.
 enum HostInstallAction {
-  check('Asking the machine…'),
-  install('Installing the session host…'),
-  reinstall('Installing the session host again…'),
-  start('Starting the session host…'),
-  stop('Stopping the session host…'),
-  remove('Removing the session host…');
+  check('Asking the machine…', SshDeployAction.check),
+  install('Installing the session host…', SshDeployAction.install),
+  reinstall('Installing the session host again…', SshDeployAction.reinstall),
+  start('Starting the session host…', SshDeployAction.start),
+  stop('Stopping the session host…', SshDeployAction.stop),
+  remove('Removing the session host…', SshDeployAction.remove);
 
-  const HostInstallAction(this.progress);
+  const HostInstallAction(this.progress, this.wire);
   final String progress;
+  final SshDeployAction wire;
 }
 
 /// What is known about one machine's host since this launch: a reading with
@@ -60,32 +47,25 @@ class HostInstallController extends Notifier<Map<String, HostInstallView>> {
   Map<String, HostInstallView> build() => const {};
 
   Future<HostInstallReading?> check(SshHost host) =>
-      _run(host, HostInstallAction.check, (it) => it.check());
+      _run(host, HostInstallAction.check);
 
   /// Install and Update: the one deploy.
   Future<HostInstallReading?> install(SshHost host) =>
-      _run(host, HostInstallAction.install, (it) => it.install());
+      _run(host, HostInstallAction.install);
 
-  Future<HostInstallReading?> reinstall(SshHost host) => _run(
-    host,
-    HostInstallAction.reinstall,
-    (it) => it.install(reinstall: true),
-  );
+  Future<HostInstallReading?> reinstall(SshHost host) =>
+      _run(host, HostInstallAction.reinstall);
 
   Future<HostInstallReading?> start(SshHost host) =>
-      _run(host, HostInstallAction.start, (it) => it.start());
+      _run(host, HostInstallAction.start);
 
   Future<HostInstallReading?> stop(SshHost host) =>
-      _run(host, HostInstallAction.stop, (it) => it.stop());
+      _run(host, HostInstallAction.stop);
 
   /// Stops host and relay there and deletes what they wrote; the relay's row
   /// here goes with it, since its address no longer exists.
   Future<HostInstallReading?> remove(SshHost host) async {
-    final reading = await _run(
-      host,
-      HostInstallAction.remove,
-      (it) => it.remove(),
-    );
+    final reading = await _run(host, HostInstallAction.remove);
     if (reading?.state == HostInstallState.notInstalled &&
         ref.read(sshRelaysProvider.notifier).entryFor(host.id) != null) {
       ref.read(sshRelayControllerProvider.notifier).forget(host.id);
@@ -96,31 +76,24 @@ class HostInstallController extends Notifier<Map<String, HostInstallView>> {
   Future<HostInstallReading?> _run(
     SshHost host,
     HostInstallAction action,
-    Future<HostInstallReading> Function(HostInstaller installer) act,
   ) async {
     final before = state[host.id]?.reading;
     _set(host.id, HostInstallView(reading: before, busy: action));
     try {
-      final reading = await act(ref.read(hostInstallerFactoryProvider)(host));
+      final reading = await ref
+          .read(sshClientProvider)
+          .deploy(host.id, action.wire);
       if (!ref.mounted) return reading;
-      if (action != HostInstallAction.check) _forgetSharedReadings(host);
       _set(host.id, HostInstallView(reading: reading));
       return reading;
     } on Object catch (error) {
       if (!ref.mounted) return null;
       _set(
         host.id,
-        HostInstallView(reading: before, failure: describeSshFailure(error)),
+        HostInstallView(reading: before, failure: describeFailure(error)),
       );
       return null;
     }
-  }
-
-  /// A pane, a relay and a pairing share one memoised deploy reading per
-  /// connection; after the machine was changed on purpose it is stale.
-  void _forgetSharedReadings(SshHost host) {
-    ref.read(hostSessionAccessRegistryProvider).forgetReading(host.id);
-    ref.invalidate(sshCompanionSetupProvider(host));
   }
 
   void _set(String hostId, HostInstallView view) =>

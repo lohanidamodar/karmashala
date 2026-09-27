@@ -1,7 +1,6 @@
 import 'dart:io';
 
-import 'host_version.dart';
-import 'protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'pty/pty_exec.dart';
 import 'pty/pty_probe.dart';
 import 'relay/relay_command.dart';

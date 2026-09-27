@@ -1,7 +1,5 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../features/ssh/application/ssh_providers.dart';
-import 'package:karmashala_ssh/runner.dart';
 import 'package:agent_cli/process.dart';
 
 /// The command runner for the **Windows host**, for host tools such as
@@ -15,10 +13,9 @@ final pathTranslatorProvider = Provider<PathTranslator>(
   (ref) => const PathTranslator(),
 );
 
-/// Provides the [CommandRunnerFactory] mapping an environment to a runner.
-/// The SSH pool is read lazily inside it, so composing opens no socket.
+/// Provides the [CommandRunnerFactory] mapping an environment to a runner:
+/// this machine and its WSL distributions. An SSH box is the server's alone
+/// (slice 5d) — this factory refuses it in words, and the app dials nothing.
 final commandRunnerFactoryProvider = Provider<CommandRunnerFactory>(
-  (ref) => SshCommandRunnerFactory(
-    sshConnections: () => ref.read(sshConnectionPoolProvider),
-  ),
+  (ref) => const CommandRunnerFactory(),
 );

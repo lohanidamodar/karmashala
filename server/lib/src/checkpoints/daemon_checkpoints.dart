@@ -18,7 +18,7 @@ import 'package:karmashala_store/database.dart';
 
 import '../data/data_service.dart';
 import '../domain/uuid.dart';
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'checkpoint_targets.dart';
 import 'checkpoint_turn_hints.dart';
 import 'session_checkpoint_recorder.dart';

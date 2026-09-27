@@ -1,121 +1,5 @@
 part of 'host_deployer.dart';
 
-/// Where one machine's session host stands, as a person would say it.
-enum HostInstallState {
-  /// Nothing of ours is on the machine, and this build has a bundle for it.
-  notInstalled,
-
-  /// This build's host — or, when this build carries none, some host — is
-  /// installed. Running or stopped is a second fact.
-  installed,
-
-  /// A host from another app version is what is installed or running.
-  outdated,
-
-  /// Nothing is installed and nothing can be: no bundle for the machine, or a
-  /// machine the host does not run on.
-  cannotInstall,
-
-  /// The machine could not be asked. A missing reading, not a negative one.
-  unknown,
-}
-
-/// One reading of one machine's session host, with the time it was taken.
-/// Taken when somebody asks and after each action — never on a timer (§19).
-@immutable
-class HostInstallReading {
-  const HostInstallReading({
-    required this.state,
-    required this.observedAt,
-    required this.reason,
-    this.platform,
-    this.installedVersion,
-    this.offeredVersion,
-    this.running = false,
-    this.sessionsHeld,
-    this.remotePath,
-    this.deployment,
-    this.availableTargets = const [],
-  });
-
-  final HostInstallState state;
-  final DateTime observedAt;
-
-  /// One sentence: what was found, or what the last action did.
-  final String reason;
-
-  final HostPlatform? platform;
-
-  /// The version in effect on the machine: the running one, else this build's
-  /// when it is there, else the newest installed. From the filename.
-  final String? installedVersion;
-
-  /// The version this build would install, or null when it carries no bundle
-  /// for the machine.
-  final String? offeredVersion;
-
-  final bool running;
-
-  /// How many sessions the running host holds; null when it is not running or
-  /// would not say. Stop and Remove end them.
-  final int? sessionsHeld;
-
-  /// The executable in effect, which Start runs.
-  final String? remotePath;
-
-  /// The deploy this reading followed, when one ran and did not end ready —
-  /// what `explainHostDeployment` turns into a sentence and a remedy.
-  final HostDeployment? deployment;
-
-  final List<String> availableTargets;
-
-  bool get canInstall => offeredVersion != null;
-
-  /// Whether what is on the machine is a *later* build than this app carries —
-  /// a downgraded app, or a second desktop ahead of this one. Installing this
-  /// app's is then not an update, and is not called one.
-  bool get hostIsNewer =>
-      state == HostInstallState.outdated &&
-      installedVersion != null &&
-      offeredVersion != null &&
-      DirectoryHostBinaries.compareFilenameVersions(
-            installedVersion,
-            offeredVersion,
-          ) >
-          0;
-
-  /// `installed 1.25.0 (running)` — what follows "Karmashala host:".
-  String get label => switch (state) {
-    HostInstallState.notInstalled => 'not installed',
-    HostInstallState.installed =>
-      'installed ${installedVersion ?? 'unversioned'} '
-          '(${running ? 'running' : 'stopped'})',
-    HostInstallState.outdated when hostIsNewer =>
-      'newer than this app ($installedVersion; this app carries '
-          '$offeredVersion), ${running ? 'running' : 'stopped'}',
-    HostInstallState.outdated =>
-      'older than this app (${installedVersion ?? 'unversioned'} → '
-          '${offeredVersion ?? 'unknown'}), ${running ? 'running' : 'stopped'}',
-    HostInstallState.cannotInstall => 'can\'t install: $reason',
-    HostInstallState.unknown => 'unknown: $reason',
-  };
-
-  HostInstallReading _after(String said, {HostDeployment? deployment}) =>
-      HostInstallReading(
-        state: state,
-        observedAt: observedAt,
-        reason: said,
-        platform: platform,
-        installedVersion: installedVersion,
-        offeredVersion: offeredVersion,
-        running: running,
-        sessionsHeld: sessionsHeld,
-        remotePath: remotePath,
-        deployment: deployment,
-        availableTargets: availableTargets,
-      );
-}
-
 /// The explicit verbs on one machine's session host: look, install, start,
 /// stop, remove. Installing **is** [HostDeployer.deploy] — the same arch pick,
 /// size check and unpack a pane's implicit deploy runs — so there is one
@@ -143,7 +27,7 @@ class HostInstaller {
   Future<HostInstallReading> install({bool reinstall = false}) async {
     final deployment = await deployer.deploy(reinstall: reinstall);
     final after = (await _look()).reading;
-    return after._after(
+    return after.after(
       deployment.reason,
       deployment: deployment.isReady ? null : deployment,
     );
@@ -157,12 +41,12 @@ class HostInstaller {
     if (home == null || path == null) {
       return reading.state == HostInstallState.unknown
           ? reading
-          : reading._after(
+          : reading.after(
               'There is no session host on ${host.name} to start.',
             );
     }
     if (reading.running) {
-      return reading._after(
+      return reading.after(
         'The session host on ${host.name} is already running.',
       );
     }
@@ -170,13 +54,13 @@ class HostInstaller {
     final greeting = started.ok ? await deployer._sayHello(path) : null;
     final after = (await _look()).reading;
     if (greeting == null) {
-      return after._after(
+      return after.after(
         'The session host on ${host.name} would not start'
         '${started.output.isEmpty || started.ok ? '' : ': ${started.output}'}. '
         'Its log is $home/$kRemoteHomeSubdirectory/host.log on the machine.',
       );
     }
-    return after._after(
+    return after.after(
       'Started the session host on ${host.name}. It does not come back by '
       'itself after the machine restarts; Start, or the next pane there, '
       'brings it back.',
@@ -190,14 +74,14 @@ class HostInstaller {
     if (home == null || !found.reading.running) {
       return found.reading.state == HostInstallState.unknown
           ? found.reading
-          : found.reading._after(
+          : found.reading.after(
               'No session host was running on ${host.name}.',
             );
     }
     final held = found.reading.sessionsHeld;
     final stopped = await deployer._stopServe(home);
     final after = (await _look()).reading;
-    return after._after(
+    return after.after(
       stopped
           ? 'Stopped the session host on ${host.name}.'
                 '${held != null && held > 0 ? ' The $held session(s) it held have ended.' : ''}'
@@ -220,13 +104,13 @@ class HostInstaller {
       remotePath: found.reading.remotePath ?? '',
     ).remove();
     if (relay.status != SshRelayStatus.stopped) {
-      return found.reading._after(
+      return found.reading.after(
         '${relay.reason} The session host was left as it was.',
       );
     }
     final said = await deployer._stopServeSaid(home);
     if (said.contains('karmashala-still-running')) {
-      return (await _look()).reading._after(
+      return (await _look()).reading.after(
         'The relay on ${host.name} was removed, but the session host would '
         'not stop, so its files were left in place.',
       );
@@ -242,13 +126,13 @@ class HostInstaller {
     );
     final after = (await _look()).reading;
     if (!removed.stdout.contains('karmashala-removed')) {
-      return after._after(
+      return after.after(
         'The session host on ${host.name} is stopped, but its files in '
         '$directory/bin could not be deleted'
         '${removed.output.isEmpty ? '' : ' (${removed.output})'}.',
       );
     }
-    return after._after(
+    return after.after(
       'Removed the session host from ${host.name}: its bundles, log and lock, '
       'and the relay\'s token, pid and log. Left in place: '
       '$directory/sessions (recorded output) and the store of phones paired '
@@ -409,7 +293,7 @@ class HostInstaller {
 
   static bool _isNewer(String? installed, String offered) =>
       installed != null &&
-      DirectoryHostBinaries.compareFilenameVersions(installed, offered) > 0;
+      compareHostVersions(installed, offered) > 0;
 
   /// `1.25.0` out of `…/karmashala_host-1.25.0-linux-x64.d/bin/karmashala_host`.
   static String? _versionOf(String? path) {
@@ -443,6 +327,6 @@ class _Installed {
   static int newestFirst(_Installed a, _Installed b) {
     final byShape = (b.isBundle ? 1 : 0) - (a.isBundle ? 1 : 0);
     if (byShape != 0) return byShape;
-    return DirectoryHostBinaries.compareFilenameVersions(b.version, a.version);
+    return compareHostVersions(b.version, a.version);
   }
 }

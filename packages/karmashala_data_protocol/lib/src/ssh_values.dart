@@ -1,4 +1,5 @@
 import 'package:karmashala_environments/karmashala_environments.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 /// What the server asks a person for on a connection it is making.
 enum SshPromptKind {
@@ -108,4 +109,48 @@ SshConnectionState sshConnectionStateFromJson(Map<String, Object?> json) {
     attempt: json['attempt'] as int? ?? 0,
     nextRetryIn: retry is int ? Duration(milliseconds: retry) : null,
   );
+}
+
+/// What `ssh.deploy` does to a box's host (slice 5d): look, install (or
+/// update), install again over what is there, start, stop, or remove.
+enum SshDeployAction { check, install, reinstall, start, stop, remove }
+
+/// What `ssh.relaySetup` does to the relay on a box: look, start (set up,
+/// update or restart), stop, or remove.
+enum SshRelayAction { check, start, stop, remove }
+
+/// The server's answer about a box (slice 5d): the reading asked for, or —
+/// when the Karmashala host could not be put on the box, so nothing could be
+/// asked — the deploy that did not end ready, which a client explains with
+/// `explainHostDeployment` and offers its button for.
+final class SshBoxAnswer<T> {
+  const SshBoxAnswer.of(T this.value) : deployment = null;
+
+  const SshBoxAnswer.notDeployed(HostDeployment this.deployment)
+    : value = null;
+
+  final T? value;
+  final HostDeployment? deployment;
+
+  Map<String, Object?> toJson(Map<String, Object?> Function(T value) write) =>
+      {
+        if (value case final value?) 'value': write(value),
+        if (deployment case final deployment?)
+          'deployment': deployment.toJson(),
+      };
+
+  static SshBoxAnswer<T> fromJson<T>(
+    Map<String, Object?> json,
+    T Function(Map<String, Object?> json) read,
+  ) {
+    final value = json['value'];
+    if (value is Map) return SshBoxAnswer.of(read(value.cast()));
+    final deployment = json['deployment'];
+    if (deployment is Map) {
+      return SshBoxAnswer.notDeployed(
+        HostDeployment.fromJson(deployment.cast()),
+      );
+    }
+    throw const FormatException('neither a reading nor a deployment');
+  }
 }

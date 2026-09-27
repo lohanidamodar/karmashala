@@ -209,7 +209,6 @@ final class SessionStarted {
   const SessionStarted({
     required this.session,
     this.launch,
-    this.clientRuns = false,
     this.external,
     this.adopted = false,
     this.workingDirectoryNotice,
@@ -223,10 +222,6 @@ final class SessionStarted {
   /// The agent launch the terminal runs, without its volatile half (no MCP
   /// flags, no withheld names): what a pane stores to name its session.
   final AgentPaneLaunch? launch;
-
-  /// Whether the client must run [launch] itself — an SSH checkout, whose
-  /// panes are the client's until slice 5d. Then [launch] carries it whole.
-  final bool clientRuns;
 
   /// For the external-terminal surface: what the client opens a window on.
   final ExternalTerminalCommand? external;
@@ -245,14 +240,14 @@ final class SessionStarted {
 
   String get sessionId => session.id;
 
-  /// The terminal session a pane attaches to.
+  /// The terminal session a pane attaches to — on an SSH box too: the
+  /// server relays a box session started under its own id (slice 5d).
   String get hostSessionId =>
       'karmashala_${session.id}'.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
 
   Map<String, Object?> toJson() => {
     'session': session.toJson(),
     if (launch != null) 'launch': agentLaunchToWire(launch!),
-    'clientRuns': clientRuns,
     if (external != null) 'external': external!.toJson(),
     'adopted': adopted,
     'workingDirectoryNotice': ?workingDirectoryNotice,
@@ -267,7 +262,6 @@ final class SessionStarted {
     launch: json['launch'] == null
         ? null
         : agentLaunchFromWire((json['launch']! as Map).cast<String, Object?>()),
-    clientRuns: json['clientRuns'] == true,
     external: json['external'] == null
         ? null
         : ExternalTerminalCommand.fromJson(

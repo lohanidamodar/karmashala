@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../application/ssh_prompt_controller.dart';
 
 /// Asks for a password or a passphrase, for one connection. There is no
 /// "remember this": what is typed reaches `dartssh2` and nothing else.
@@ -10,7 +9,7 @@ class SshSecretDialog extends StatefulWidget {
   const SshSecretDialog({
     required this.hostName,
     required this.address,
-    required this.kind,
+    required this.passphrase,
     super.key,
   });
 
@@ -18,19 +17,19 @@ class SshSecretDialog extends StatefulWidget {
   /// carries both, for a host it may be testing before it is saved.
   final String hostName;
   final String address;
-  final SshSecretKind kind;
+  final bool passphrase;
 
   /// Returns the secret, or `null` if the user cancelled.
   static Future<String?> show(
     BuildContext context, {
     required String hostName,
     required String address,
-    required SshSecretKind kind,
+    required bool passphrase,
   }) => showDialog<String>(
     context: context,
     barrierDismissible: false,
     builder: (_) =>
-        SshSecretDialog(hostName: hostName, address: address, kind: kind),
+        SshSecretDialog(hostName: hostName, address: address, passphrase: passphrase),
   );
 
   @override
@@ -56,7 +55,7 @@ class _SshSecretDialogState extends State<SshSecretDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isPassphrase = widget.kind == SshSecretKind.passphrase;
+    final isPassphrase = widget.passphrase;
 
     return AlertDialog(
       icon: Icon(AppIcons.linkSimple, color: theme.colorScheme.tertiary),

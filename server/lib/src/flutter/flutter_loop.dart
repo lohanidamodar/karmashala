@@ -454,7 +454,7 @@ class ServerFlutterLoop {
     final environment = ready.environment!;
     final HostedRun hostedRun;
     try {
-      hostedRun = hosted.start(
+      hostedRun = await hosted.start(
         variables: await _androidVariables(environment),
         argv: argv,
         directory: project,

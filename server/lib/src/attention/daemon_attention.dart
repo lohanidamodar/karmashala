@@ -19,7 +19,7 @@ import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../data/data_service.dart';
-import '../protocol/messages.dart' show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
 import '../status/daemon_agent_status.dart';
 import 'server_attention.dart';
 import 'server_session_status.dart';
@@ -57,7 +57,7 @@ class DaemonAttention {
       rows: _StoreRows(database, data),
       hookReports: hookReports,
       clock: clock,
-      isRunningOnHost: (id) => agentStatus.runningSessionOf(id) != null,
+      isRunningOnHost: (id) => agentStatus.holds(id),
       transcriptPathFor: (id) => status.transcriptPathForOpenId(id),
     );
     status = ServerSessionStatus(
@@ -72,7 +72,7 @@ class DaemonAttention {
       resolveTranscripts: transcripts,
       visibleSessionIds: () => attention.lookingAt,
       heldByHost: (session) =>
-          agentStatus.runningSessionOf(session.openId) != null,
+          agentStatus.holds(session.openId),
       hostStatusFor: (session) => agentStatus.statusOf(session.openId),
       interval: statusInterval,
       log: log,
@@ -231,7 +231,7 @@ class DaemonAttention {
 
   /// Whether the server runs row [sessionId]'s agent itself.
   bool runs(String sessionId) =>
-      _agentStatus.runningSessionOf(sessionId) != null;
+      _agentStatus.holds(sessionId);
 }
 
 /// The watch set's rows, read from the server's store.

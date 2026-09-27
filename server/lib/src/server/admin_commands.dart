@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:karmashala_remote/remote.dart' show Capability;
 
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../serve/client_command.dart';
-import '../serve/host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 
 /// `karmashala_host devices`: every phone paired with the running server.
 Future<int> runDevices(

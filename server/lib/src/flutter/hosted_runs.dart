@@ -5,9 +5,11 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import '../domain/host_session.dart';
+import '../domain/screen_session.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
 import '../pty/pty.dart';
+import '../ssh/ssh_domain.dart' show RemoteSession, RemoteSessionRefused, RemoteSessions;
 
 /// Whether a hosted run's process is still going. `unknown` is a run whose
 /// session the registry no longer holds — never read as "finished".
@@ -25,7 +27,9 @@ class HostedRunRefused implements Exception {
 
 /// Commands the server runs as sessions of its own (slice 3d) — a Flutter run
 /// or gate, a project's build — so any client can attach a pane and the run
-/// outlives every client. The record stays after the end, until pruned.
+/// outlives every client. The record stays after the end, until pruned. On
+/// an SSH box (slice 5d) the run is a session of the box's Karmashala host,
+/// under the same id; the server keeps a copy of its screen ([remote]).
 class HostedRuns {
   HostedRuns({
     required this.registry,
@@ -34,12 +38,16 @@ class HostedRuns {
     DateTime Function()? clock,
     bool? windows,
     this.keep = 50,
+    this.remote,
   }) : _tell = tell,
        _newId = newId ?? newUuid,
        _now = clock ?? _utcNow,
        _windows = windows ?? Platform.isWindows;
 
   final SessionRegistry registry;
+
+  /// Sessions on SSH boxes; null runs nothing there.
+  final RemoteSessions? remote;
   final void Function(List<DataChange> changes) _tell;
   final String Function() _newId;
   final DateTime Function() _now;
@@ -60,11 +68,10 @@ class HostedRuns {
   String? refusalFor(
     ExecutionEnvironment environment,
   ) => switch (environment.kind) {
-    EnvironmentKind.ssh =>
-      '${environment.name} is an SSH machine, and the Karmashala server '
-          'does not host Flutter runs or builds on a box yet. Run it from a '
-          'terminal on that machine, or in a checkout on the server\'s own '
-          'machine.',
+    EnvironmentKind.ssh when !(remote?.reaches(environment) ?? false) =>
+      '${environment.name} is an SSH machine this Karmashala server does '
+          'not reach.',
+    EnvironmentKind.ssh => null,
     EnvironmentKind.wsl when !_windows =>
       '${environment.name} is a WSL distribution, and this server is not '
           'on Windows, so it cannot reach it.',
@@ -76,10 +83,11 @@ class HostedRuns {
     _ => null,
   };
 
-  /// Starts [argv] in [directory] as a hosted session and records it. Throws
-  /// [HostedRunRefused] for an environment the server does not run in, or a
-  /// process that could not be started.
-  HostedRun start({
+  /// Starts [argv] in [directory] as a hosted session — here, or on the SSH
+  /// box [environment] names — and records it. Throws [HostedRunRefused] for
+  /// an environment the server does not run in, or a process that could not
+  /// be started.
+  Future<HostedRun> start({
     required List<String> argv,
     required EnvironmentPath directory,
     required ExecutionEnvironment environment,
@@ -87,11 +95,30 @@ class HostedRuns {
     required HostedRunFamily family,
     void Function(HostedRun run)? onEnded,
     Map<String, String> variables = const {},
-  }) {
+  }) async {
     final refused = refusalFor(environment);
     if (refused != null) throw HostedRunRefused(refused);
     final runId = _newId();
     final sessionId = hostedRunSessionId(hostedRunPaneId(runId));
+    if (environment.kind == EnvironmentKind.ssh) {
+      final RemoteSession session;
+      try {
+        session = (await remote!.open(
+          environment,
+          sessionId: sessionId,
+          argv: argv,
+          workingDirectory: directory.path,
+          variables: variables,
+          columns: 120,
+          rows: 40,
+        )).session;
+      } on RemoteSessionRefused catch (error) {
+        throw HostedRunRefused(
+          '"${argv.join(' ')}" could not be started: ${error.message}',
+        );
+      }
+      return _record(runId, title, family, session, onEnded);
+    }
     final PtySpawnRequest request;
     if (environment.kind == EnvironmentKind.wsl) {
       final invocation = buildWslInvocation(
@@ -127,6 +154,16 @@ class HostedRuns {
         '"${argv.join(' ')}" could not be started: $error',
       );
     }
+    return _record(runId, title, family, session, onEnded);
+  }
+
+  HostedRun _record(
+    String runId,
+    String title,
+    HostedRunFamily family,
+    ScreenSession session,
+    void Function(HostedRun run)? onEnded,
+  ) {
     final run = HostedRun(
       runId: runId,
       title: title,
@@ -136,7 +173,7 @@ class HostedRuns {
     _runs[runId] = run;
     _tell([HostedRunChanged(run)]);
     unawaited(
-      session.drained.then((end) {
+      (session is HostSession ? session.drained : session.ended).then((end) {
         final current = _runs[runId];
         if (current == null) return;
         final ended = HostedRun(
@@ -157,10 +194,13 @@ class HostedRuns {
     return run;
   }
 
-  /// The session [runId] runs in, while the registry still holds it.
-  HostSession? sessionOf(String runId) => _runs.containsKey(runId)
-      ? registry.find(hostedRunSessionId(hostedRunPaneId(runId)))
-      : null;
+  /// The session [runId] runs in, while the registry still holds it — or
+  /// the server's copy of it on a box.
+  ScreenSession? sessionOf(String runId) {
+    if (!_runs.containsKey(runId)) return null;
+    final id = hostedRunSessionId(hostedRunPaneId(runId));
+    return registry.find(id) ?? remote?.byId(id);
+  }
 
   HostedRunLiveness livenessOf(String runId) {
     final session = sessionOf(runId);
@@ -177,8 +217,13 @@ class HostedRuns {
   /// Fires on each chunk [runId] writes from now on; ends with the output.
   Stream<void> outputOf(String runId) {
     final session = sessionOf(runId);
-    if (session == null) return const Stream<void>.empty();
-    return session.readFrom(session.backlog.totalBytes).map((_) {});
+    return switch (session) {
+      null => const Stream<void>.empty(),
+      final HostSession here =>
+        here.readFrom(here.backlog.totalBytes).map((_) {}),
+      final RemoteSession box => box.output,
+      _ => const Stream<void>.empty(),
+    };
   }
 
   /// Ends [runId]'s process — stopped, not detached — and keeps its record,
@@ -188,8 +233,16 @@ class HostedRuns {
     if (run == null) return null;
     final session = sessionOf(runId);
     if (session != null && !session.lifecycle.hasEnded) {
-      session.markCloseRequested();
-      await session.terminate();
+      if (session is HostSession) {
+        session.markCloseRequested();
+        await session.terminate();
+      } else {
+        try {
+          await remote?.close(session.id);
+        } on RemoteSessionRefused {
+          // The box went; its session is the box's to end.
+        }
+      }
     }
     return _runs[runId];
   }

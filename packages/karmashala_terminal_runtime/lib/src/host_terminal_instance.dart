@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -14,10 +14,11 @@ import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'cast_recorder.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
-import 'package:karmashala_host/protocol.dart' show ProtocolErrorCode;
+import 'package:karmashala_host_protocol/protocol.dart' show ProtocolErrorCode;
 import 'host_pane_link.dart';
 import 'local_host_access.dart';
 import 'pane_terminal.dart';
+import 'prompt_typer.dart';
 import 'pty_output_coalescer.dart';
 import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
@@ -63,6 +64,7 @@ class HostTerminalInstance
         ParkableTerminalInstance,
         AdoptableTerminalInstance,
         RecordableTerminalInstance,
+        PromptTypingTerminalInstance,
         HostedTerminalInstance {
   HostTerminalInstance({
     required this.id,
@@ -274,8 +276,16 @@ class HostTerminalInstance
     _greetingLines = nonBlankLineCount(terminal);
   }
 
+  /// Through `textInput`, so it takes the road a keystroke takes — a
+  /// command left at a box's prompt (a `sudo` step) and never submitted.
+  late final PromptTyper _typer = PromptTyper(send: terminal.textInput);
+
+  @override
+  void typeAtPrompt(String text) => _typer.type(text);
+
   void _onDataBytes(List<int> bytes) {
     if (_disposed) return;
+    _typer.onOutput();
     final uint8 = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
     _recorder?.addOutput(uint8);
     if (_tier == IngestTier.cold) {
@@ -708,6 +718,7 @@ class HostTerminalInstance
     _disposed = true;
     _recorder?.sourceEnded();
     _recorder = null;
+    _typer.dispose();
     _liveness.value = PaneLiveness.exited;
     _liveness.dispose();
     _cwd.dispose();

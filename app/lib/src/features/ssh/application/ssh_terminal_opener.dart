@@ -1,4 +1,4 @@
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:riverpod/riverpod.dart';
 

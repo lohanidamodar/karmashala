@@ -260,7 +260,7 @@ class ServerProjectBuilds {
     final argv = [...ready.argv, ...extraArguments];
     final HostedRun hostedRun;
     try {
-      hostedRun = hosted.start(
+      hostedRun = await hosted.start(
         argv: argv,
         directory: project,
         environment: ready.environment!,

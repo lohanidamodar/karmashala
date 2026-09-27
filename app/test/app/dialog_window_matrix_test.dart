@@ -4,8 +4,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/general_pages.dart';
-import 'package:karmashala/src/features/ssh/application/ssh_prompt_controller.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_key_changed_alert.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_key_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_secret_dialog.dart';
@@ -87,7 +86,7 @@ void main() {
           SshSecretDialog(
             hostName: host().name,
             address: host().address,
-            kind: SshSecretKind.passphrase,
+            passphrase: true,
           ),
         ),
         because: 'a password prompt over a connection that is already waiting',

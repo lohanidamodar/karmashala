@@ -11,7 +11,7 @@ enum TerminalShell {
   /// there is on Windows, because the answer is whatever the machine has.
   posix,
 
-  /// An interactive shell or tmux session on a remote SSH host.
+  /// An interactive shell on an SSH box, run by the Karmashala host there.
   ssh,
 }
 

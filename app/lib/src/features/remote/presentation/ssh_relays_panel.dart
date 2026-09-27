@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show kDefaultBoxRelayPort;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -382,7 +384,7 @@ class UseSshHostAsRelayDialog extends ConsumerStatefulWidget {
 
 class _UseSshHostAsRelayDialogState
     extends ConsumerState<UseSshHostAsRelayDialog> {
-  final _port = TextEditingController(text: '$kDefaultSshRelayPort');
+  final _port = TextEditingController(text: '$kDefaultBoxRelayPort');
   String? _hostId;
   String? _portError;
 

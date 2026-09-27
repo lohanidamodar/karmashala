@@ -7,8 +7,8 @@ import 'package:karmashala_terminal_core/profiles.dart';
 
 /// The shells a terminal can open in: the server machine's own (its POSIX
 /// shells, or PowerShell, Command Prompt and each WSL distribution on a
-/// Windows server — slice 5a), then each SSH host, whose panes this app
-/// still opens itself until slice 5d.
+/// Windows server — slice 5a), then each SSH host, whose terminals the
+/// server opens on the box (slice 5d).
 final terminalProfilesProvider = Provider<List<TerminalProfile>>((ref) {
   final server = ref.watch(terminalServerProfilesProvider);
   final environments = ref.watch(environmentsControllerProvider);

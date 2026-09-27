@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../domain/session_lifecycle.dart';
-import '../domain/session_registry.dart';
-import '../protocol/frame.dart';
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../pty/process_alive.dart';
-import 'host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 
 /// The hand-operated half of the host: what somebody sitting on the machine
 /// needs when the app is not there. `attach` is a byte proxy for the app;

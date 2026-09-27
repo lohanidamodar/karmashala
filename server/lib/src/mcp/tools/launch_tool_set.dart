@@ -1,6 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' hide Clock;
-import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -90,20 +89,6 @@ class LaunchToolSet extends ServerToolSet {
     } else {
       repo = repos.firstOrNull ?? _runLocationOf(projectId);
     }
-    final environment = _context.data.environments
-        .where((e) => e.id == repo.path.environmentId)
-        .firstOrNull;
-    // An SSH box's agents are run by a window until slice 5d: with none
-    // open, nothing could run this one.
-    if (environment?.kind == EnvironmentKind.ssh &&
-        _context.data.intentTarget == null) {
-      throw StateError(
-        'That checkout is on ${environment!.name}, an SSH machine, whose '
-        'agents a Karmashala window runs — and $kNoWindowOpen. Open '
-        'Karmashala, then ask again.',
-      );
-    }
-
     final installs = launches.installationsIn(repo.path.environmentId);
     if (installs.isEmpty) {
       throw StateError('No agent is installed in ${repo.path.environmentId}.');

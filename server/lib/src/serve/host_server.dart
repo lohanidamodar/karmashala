@@ -10,20 +10,19 @@ import '../companion/companion_handler.dart';
 import '../data/data_service.dart';
 import '../data/data_streams.dart';
 import '../domain/host_session.dart';
-import '../domain/session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../domain/session_registry.dart';
-import '../host_version.dart';
-import '../protocol/frame.dart';
-import '../protocol/messages.dart';
-import '../protocol/wire.dart';
 import '../pty/pty.dart';
 import '../server/server_admin.dart';
+import '../ssh/ssh_domain.dart'
+    show BoxRelay, BoxRelayClient, BoxRelayPeer;
 import '../status/daemon_prompt_answers.dart';
 import '../transport/transport.dart';
 import 'lifecycle_feed.dart';
 
 /// Serves the protocol to whoever connects, over whatever carried them. It
-/// knows nothing about SSH, and must not (see transport.dart).
+/// knows nothing about SSH transport (see transport.dart); a session on an
+/// SSH box is relayed through [boxes] (slice 5d), frame by frame, by ref.
 class HostServer {
   HostServer({
     required this.registry,
@@ -59,6 +58,10 @@ class HostServer {
   /// Answers every client's data requests; null refuses them (no store).
   DataService? data;
 
+  /// The SSH boxes this server reaches (slice 5d): a client attaching to a
+  /// session there is relayed through them. Null reaches none.
+  BoxRelay? boxes;
+
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
   final String? build;
@@ -92,7 +95,7 @@ class HostServer {
 }
 
 /// One connected client: its id, its session refs, its subscriptions.
-class _ClientSession {
+class _ClientSession implements BoxRelayPeer {
   _ClientSession(this._server, this._connection);
 
   final HostServer _server;
@@ -104,6 +107,45 @@ class _ClientSession {
   final _byRef = <int, HostSession>{};
   final _subscriptions = <int, StreamSubscription<OutputChunk>>{};
   final _exitWatches = <int, StreamSubscription<void>>{};
+
+  /// This client's attachments to SSH box sessions (slice 5d), relayed by
+  /// the ssh domain; made on the first one.
+  BoxRelayClient? _relay;
+  BoxRelayClient get _boxes => _relay ??= _server.boxes!.clientFor(this);
+
+  /// Whether [ref] is relayed from a box.
+  bool _relays(int ref) => _relay?.holds(ref) ?? false;
+
+  /// Whether [sessionId] is a box's rather than this server's own.
+  bool _onBox(String sessionId) =>
+      _server.registry.find(sessionId) == null &&
+      (_server.boxes?.relays(sessionId) ?? false);
+
+  @override
+  String get clientId => _clientId;
+
+  @override
+  bool get hungUp => _hungUp;
+
+  @override
+  int nextRef() => ++_refs;
+
+  @override
+  DateTime now() => _server.now();
+
+  @override
+  void send(HostMessage message) => _send(message);
+
+  @override
+  void pace(StreamSubscription<Object?> subscription) =>
+      _paceOutput(subscription);
+
+  @override
+  void hangUp() {
+    if (_hungUp) return;
+    _hungUp = true;
+    unawaited(_connection.close());
+  }
   StreamSubscription<HostMessage>? _lifecycleWatch;
   DataSession? _data;
   DataStreamSession? _streams;
@@ -144,6 +186,10 @@ class _ClientSession {
     }
     _subscriptions.clear();
     _exitWatches.clear();
+    // Only a client with box attachments waits on them: every other hangs
+    // up exactly as before.
+    final relay = _relay;
+    if (relay != null) await relay.dispose();
     _data?.close();
     _streams?.closeAll();
     await _lifecycleWatch?.cancel();
@@ -155,7 +201,7 @@ class _ClientSession {
   /// Held back while a flush is in flight: dart:io refuses `add` then with the
   /// same StateError a closed sink throws, and dropping the frame lost exits.
   final _heldWhileFlushing = <Uint8List>[];
-  final _pausedForFlush = <StreamSubscription<OutputChunk>>{};
+  final _pausedForFlush = <StreamSubscription<Object?>>{};
   var _flushing = false;
   var _sentSinceFlush = 0;
 
@@ -176,7 +222,7 @@ class _ClientSession {
 
   /// Counted, not timed: a slow link stalls its own pumps rather than growing
   /// an unbounded queue in this process.
-  void _paceOutput(StreamSubscription<OutputChunk> subscription) {
+  void _paceOutput(StreamSubscription<Object?> subscription) {
     if (++_sentSinceFlush < 8 || _hungUp) return;
     subscription.pause();
     _pausedForFlush.add(subscription);
@@ -290,6 +336,8 @@ class _ClientSession {
         _onClaim(message);
       case ReleaseMessage():
         _onRelease(message);
+      case DetachMessage(:final sessionRef):
+        await _onDetach(sessionRef);
       case CloseMessage():
         await _onClose(message);
       case PairMessage():
@@ -532,6 +580,19 @@ class _ClientSession {
   }
 
   void _onOpen(OpenMessage message) {
+    if (parseBoxSessionRef(message.sessionId) != null) {
+      // A box's session is started by the server (`terminals.open`), which
+      // builds its launch for the box; a raw open would name nothing there.
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.badRequest,
+          'a session on an SSH box is opened through the server '
+          '(terminals.open), not by id',
+        ),
+      );
+      return;
+    }
     try {
       _server.registry.open(
         message.sessionId,
@@ -577,6 +638,10 @@ class _ClientSession {
   void _onAttach(AttachMessage message) {
     final HostSession session;
     try {
+      if (_onBox(message.sessionId)) {
+        _boxes.attach(message);
+        return;
+      }
       session = _server.registry.require(message.sessionId);
     } on UnknownSession catch (e) {
       _send(
@@ -662,6 +727,7 @@ class _ClientSession {
   }
 
   void _onInput(InputMessage message) {
+    if (_relays(message.sessionRef)) return _boxes.input(message);
     final session = _byRef[message.sessionRef];
     if (session == null) return _sendUnknownRef(message.sessionRef);
     final refusal = session.write(_clientId, message.bytes, _server.now());
@@ -671,6 +737,7 @@ class _ClientSession {
   }
 
   void _onResize(ResizeMessage message) {
+    if (_relays(message.sessionRef)) return _boxes.resize(message);
     final session = _byRef[message.sessionRef];
     if (session == null) return _sendUnknownRef(message.sessionRef);
     final refusal = session.resize(
@@ -685,9 +752,10 @@ class _ClientSession {
   }
 
   void _onClaim(ClaimMessage message) {
-    final session = _byRef[message.sessionRef];
-    if (session == null) return _sendUnknownRef(message.sessionRef);
-    final refusal = session.token.claim(_clientId, _server.now());
+    if (_relays(message.sessionRef)) return _boxes.claim(message);
+    final token = _byRef[message.sessionRef]?.token;
+    if (token == null) return _sendUnknownRef(message.sessionRef);
+    final refusal = token.claim(_clientId, _server.now());
     if (refusal != null) {
       _send(
         ErrorMessage(
@@ -709,20 +777,31 @@ class _ClientSession {
   }
 
   void _onRelease(ReleaseMessage message) {
-    final session = _byRef[message.sessionRef];
-    if (session == null) return _sendUnknownRef(message.sessionRef);
-    session.token.release(_clientId);
+    if (_relays(message.sessionRef)) return _boxes.release(message);
+    final token = _byRef[message.sessionRef]?.token;
+    if (token == null) return _sendUnknownRef(message.sessionRef);
+    token.release(_clientId);
     _send(
       ClaimedMessage(
         requestId: message.requestId,
         sessionRef: message.sessionRef,
         holdsWriteToken: false,
-        writeHolder: session.token.holder?.clientId,
+        writeHolder: token.holder?.clientId,
       ),
     );
   }
 
+  /// Stops one attachment's stream and frees its ref (slice 5d); the session
+  /// goes on.
+  Future<void> _onDetach(int ref) async {
+    if (_relays(ref)) return _boxes.detach(ref);
+    if (_byRef.remove(ref) == null) return;
+    await _subscriptions.remove(ref)?.cancel();
+    await _exitWatches.remove(ref)?.cancel();
+  }
+
   Future<void> _onClose(CloseMessage message) async {
+    if (_onBox(message.sessionId)) return _boxes.close(message);
     final SessionLifecycle end;
     try {
       end = await _server.registry.close(

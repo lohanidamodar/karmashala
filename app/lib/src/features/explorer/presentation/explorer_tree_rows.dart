@@ -9,7 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../environments/application/environment_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../../ssh/application/ssh_providers.dart';
+import '../../ssh/data/ssh_hosts_data.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../application/environment_terminals_providers.dart';

@@ -5,8 +5,12 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../ssh/application/host_sessions.dart';
-import '../../ssh/application/ssh_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show paneIdOfTerminalSession;
+
+import '../../../core/util/failure_words.dart';
+import '../../ssh/data/ssh_client.dart';
+import '../../ssh/data/ssh_hosts_data.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'environment_terminals.dart';
 
@@ -137,7 +141,7 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
       busy: true,
     );
     try {
-      final found = await ref.read(hostSessionsServiceProvider).list(host);
+      final found = await ref.read(sshClientProvider).hostSessions(host.id);
       // A dial outlives the node that started it: collapsing Terminals, or the
       // Explorer rebuilding, disposes this provider while the host is still
       // being asked. Riverpod throws on `ref` after that, and the answer is
@@ -150,7 +154,7 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
               id: session.id,
               label: session.argv.join(' '),
               running: !session.lifecycle.hasEnded,
-              paneId: paneIdOfHostSession(session.id, host.id),
+              paneId: paneIdOfTerminalSession(session.id),
               hostSessionId: session.id,
             ),
         ],
@@ -163,7 +167,7 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
       state = EnvironmentTerminals(
         terminals: const [],
         readAt: ref.read(clockProvider).nowUtc(),
-        problem: e is HostSessionsUnavailable ? e.message : '$e',
+        problem: describeFailure(e),
       );
     }
   }
@@ -174,7 +178,7 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
     if (hostId == null) return;
     final host = ref.read(sshHostsDataProvider).getById(hostId);
     if (host == null) return;
-    await ref.read(hostSessionsServiceProvider).end(host, hostSessionId);
+    await ref.read(sshClientProvider).endHostSession(host.id, hostSessionId);
     if (!ref.mounted) return;
     await refresh();
   }

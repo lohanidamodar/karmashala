@@ -3,9 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
-import '../protocol/frame.dart';
-import '../protocol/messages.dart';
-import '../protocol/wire.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../transport/socket_transport.dart';
 import '../transport/transport.dart';
 

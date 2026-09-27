@@ -81,6 +81,7 @@ class DaemonAutomations implements ChecksWork {
     void Function(InboxItem item)? raise,
     void Function(UsageLimitNotice notice)? noticeUsageLimit,
     AgentTerminalOpener? openAgent,
+    bool Function(ExecutionEnvironment environment)? reachesBox,
   }) : _db = database,
        _tell = tell,
        _log = log ?? _ignore {
@@ -91,7 +92,12 @@ class DaemonAutomations implements ChecksWork {
     final projectChecks = ProjectCheckDao(database);
     final sessions = SessionDao(database);
     final rows = CheckoutRows(database);
-    facts = DaemonCheckoutFacts(rows, windows: windows, remote: remote);
+    facts = DaemonCheckoutFacts(
+      rows,
+      windows: windows,
+      remote: remote,
+      reachesBox: reachesBox,
+    );
     _sessions = sessions;
     _automations = automations;
 
@@ -133,7 +139,8 @@ class DaemonAutomations implements ChecksWork {
           checkpoints ??
           DaemonBaseCheckpoint(
             CheckpointService(
-              runnerFactory: const CommandRunnerFactory(),
+              // A box's checkout is checkpointed over its own connection.
+              runnerFactory: remote ?? const CommandRunnerFactory(),
               environmentOf: rows.environment,
               records: StoreCheckpointRecords(
                 CheckpointDao(database),

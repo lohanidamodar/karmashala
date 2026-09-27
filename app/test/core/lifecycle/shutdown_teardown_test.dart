@@ -7,8 +7,6 @@ import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala/src/features/ssh/application/ssh_providers.dart';
-import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
@@ -157,30 +155,6 @@ void main() {
       expect(engine.activeSessionIds, isEmpty);
     });
 
-    test('the SSH pool is closed, and awaited', () async {
-      final gate = Completer<void>();
-      final pool = _RecordingPool(
-        hosts: SshHostsData(client),
-        knownHosts: KnownHostsData(client),
-        gate: gate.future,
-      );
-      final container = ProviderContainer(
-        overrides: [data, sshConnectionPoolProvider.overrideWithValue(pool)],
-      );
-      container.read(sshConnectionPoolProvider);
-      final lifecycle = AppLifecycle(container);
-
-      var finished = false;
-      final shutdown = lifecycle.shutdown().whenComplete(() => finished = true);
-      await pumpEventQueue();
-
-      expect(finished, isFalse, reason: 'the sockets are still open');
-
-      gate.complete();
-      await shutdown;
-
-      expect(pool.closed, isTrue);
-    });
   });
 }
 
@@ -232,20 +206,3 @@ class _RecordingSession implements AgentSession {
 
 /// A pool whose close can be held open, so a test can see whether the shutdown
 /// waits for it or merely starts it.
-class _RecordingPool extends SshConnectionPool {
-  _RecordingPool({
-    required super.hosts,
-    required super.knownHosts,
-    required this.gate,
-  });
-
-  final Future<void> gate;
-  bool closed = false;
-
-  @override
-  Future<void> closeAll() async {
-    await gate;
-    closed = true;
-    await super.closeAll();
-  }
-}

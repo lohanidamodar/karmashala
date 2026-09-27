@@ -47,8 +47,8 @@ typedef ResumeDecision = ({
 /// `ScheduledResumeRunner`, ported: the gate again, the account's usage
 /// again, then either the message typed into the session the server runs, or
 /// the conversation resumed as a session the server owns. Works with no
-/// client anywhere. A checkout off this machine (an SSH box) is refused in
-/// words: agents are not started there yet (slice 5d).
+/// client anywhere — on this machine, or on an SSH box the server reaches
+/// (slice 5d); anywhere else is refused in words.
 class ServerResumeRunner implements ScheduledResumeFiring {
   ServerResumeRunner({
     required this.resumes,
@@ -164,13 +164,13 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     }
     final repository = facts.repository(session.repositoryId);
     final directory = session.worktree ?? repository?.path;
-    if (repository != null && !facts.isHostLocal(directory)) {
+    if (repository != null && !facts.startsAgentsIn(directory)) {
       _finish(
         resume,
         ScheduledResumeState.failed,
-        'This session is on ${facts.describeEnvironment(directory!)}; '
-        'Karmashala does not start agents there yet, so nothing was resumed '
-        'or sent. Resume it there by hand.',
+        'This session is on ${facts.describeEnvironment(directory!)}, which '
+        'this Karmashala server does not reach, so nothing was resumed or '
+        'sent.',
       );
       return;
     }

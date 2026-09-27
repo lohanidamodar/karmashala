@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/util/failure_words.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,8 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -17,7 +18,7 @@ import '../../remote/application/remote_access_controller.dart';
 import '../../remote/application/remote_access_settings.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../application/companion_route_store.dart';
-import '../application/host_session_providers.dart';
+import '../data/ssh_client.dart';
 import '../application/ssh_terminal_opener.dart';
 import 'copyable_command.dart';
 import 'host_deploy_failure_notice.dart';
@@ -92,10 +93,6 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
   }) async {
     final serial = ++_serial;
     _expiry?.cancel();
-    // A provider that failed keeps its failure; asking again means a new one.
-    if (_failure != null || _notDeployed != null) {
-      ref.invalidate(sshCompanionSetupProvider(widget.host));
-    }
     setState(() {
       _busy = true;
       _failure = null;
@@ -106,44 +103,54 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
       _window = null;
     });
     try {
-      final setup = await ref.read(
-        sshCompanionSetupProvider(widget.host).future,
-      );
-      final endpoint = probe || _endpoint == null
-          ? await setup.prepare(
-              // Reopened after the terminal step: the rule is presumed added,
-              // so a port still shut is not answered with the same command.
-              ruleAddedByHand:
-                  ruleAddedByHand ||
-                  ref
-                      .read(sudoTerminalsOpenedProvider.notifier)
-                      .openedForPort(widget.host.id, setup.port),
-            )
-          : _endpoint!;
+      // Asked of the server, which reaches the box (slice 5d).
+      final ssh = ref.read(sshClientProvider);
+      CompanionEndpoint? endpoint = _endpoint;
+      if (probe || endpoint == null) {
+        final prepared = await ssh.companionEndpoint(
+          widget.host.id,
+          // Reopened after the terminal step: the rule is presumed added,
+          // so a port still shut is not answered with the same command.
+          ruleAddedByHand:
+              ruleAddedByHand ||
+              ref
+                  .read(sudoTerminalsOpenedProvider.notifier)
+                  .openedForPort(widget.host.id, kHostCompanionPort),
+        );
+        if (prepared.value == null) {
+          if (mounted && serial == _serial) {
+            setState(() => _notDeployed = prepared.deployment);
+          }
+          return;
+        }
+        endpoint = prepared.value!;
+      }
       final route = routeFor(
         chosen: ref.read(companionRouteStoreProvider).read(widget.host.id),
         reachable: endpoint.reachable,
       );
       // Everything the phone is granted. A desktop that offered less than the
       // person chose would be deciding something nobody asked it to.
-      final window = await setup.openWindow(
+      final opened = await ssh.pairPhone(
+        widget.host.id,
         capabilities: CapabilitySet.all.bits,
         relay: route == HostRoute.relay ? '$_hostedRelay' : '',
       );
       if (!mounted || serial != _serial) return;
+      final window = opened.value;
+      if (window == null) {
+        setState(() => _notDeployed = opened.deployment);
+        return;
+      }
       setState(() {
         _endpoint = endpoint;
         _route = route;
         _window = window;
       });
       _armExpiry(window);
-    } on HostDeployFailure catch (failure) {
-      if (mounted && serial == _serial) {
-        setState(() => _notDeployed = failure.deployment);
-      }
     } on Object catch (error) {
       if (mounted && serial == _serial) {
-        setState(() => _failure = describeSshFailure(error));
+        setState(() => _failure = describeFailure(error));
       }
     } finally {
       if (mounted && serial == _serial) setState(() => _busy = false);

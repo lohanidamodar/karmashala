@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:karmashala_host/host_paths.dart';
-import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'host_pane_link.dart';
 
 /// The session host on *this* machine, over its own socket — the same interface
@@ -212,17 +212,6 @@ class LocalHostSessionAccess implements HostSessionAccess {
       rethrow;
     }
   }
-
-  /// Always false, and it is an observation rather than a stub: nothing on this
-  /// machine's pane path has ever gone through tmux, so there is no session
-  /// here that could be taken away from one.
-  @override
-  Future<bool?> hasTmuxSession(String name) async => false;
-
-  /// Null, and never asked: a local host pane is handed a `PtyLaunch` built
-  /// from the terminal profile, so it never falls back to a default shell.
-  @override
-  Future<String?> loginShell() async => null;
 
   Future<Socket> _connect() => Socket.connect(
     InternetAddress(_paths.socketPath, type: InternetAddressType.unix),

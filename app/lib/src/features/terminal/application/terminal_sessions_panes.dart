@@ -105,7 +105,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     String? adoptPaneId,
   }) {
     // A host session is named after the pane that opened it, so reattaching to
-    // one means opening a pane under that same id — see `sshTmuxSessionName`.
+    // one means opening a pane under that same id — see `terminalSessionId`.
     final paneId = adoptPaneId ?? _newId();
     _adopt(
       paneId,

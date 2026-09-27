@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';

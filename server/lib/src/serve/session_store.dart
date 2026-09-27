@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../domain/output_backlog.dart';
-import '../domain/session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../domain/session_recorder.dart';
 import '../pty/pty.dart';
 

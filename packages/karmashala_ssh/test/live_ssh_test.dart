@@ -30,7 +30,7 @@ import 'support.dart';
 /// concerned.
 ///
 /// The latency measurements that used to live at the bottom of this file are
-/// now `tool/benchmark/ssh_latency_bench.dart`. They asserted only that the
+/// now `tool/ssh_latency_bench.dart`. They asserted only that the
 /// numbers they printed were greater than zero, which is not a test; they take
 /// the same environment variables and run on demand.
 String? _env(String name) {

@@ -3,7 +3,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart' show CliStore;
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_host/src/hooks/hook_spools.dart';
-import 'package:karmashala_host/src/protocol/messages.dart' show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
 import 'package:test/test.dart';
 
 /// Slice 5a: the WSL agents' hook spools are drained by the server itself —

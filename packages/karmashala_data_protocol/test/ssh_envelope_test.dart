@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:test/test.dart';
 
 /// SSH reached by the server (slice 3a): the test, the disconnect and a
@@ -42,6 +43,14 @@ void main() {
       const SshAnswerPrompt('p1', trust: true),
       const SshAnswerPrompt('p2', secret: 'hunter2'),
       const SshAnswerPrompt('p3'),
+      // The host on a box, driven by the server (slice 5d).
+      for (final action in SshDeployAction.values) SshDeploy('h1', action),
+      const SshHostSessions('h1'),
+      const SshEndHostSession('h1', 'karmashala_local_p1'),
+      for (final action in SshRelayAction.values)
+        SshBoxRelay('h1', action, port: 9000, ruleAddedByHand: true),
+      const SshCompanionEndpoint('h1', ruleAddedByHand: true),
+      const SshPairPhone('h1', capabilities: 7, relay: 'wss://relay/x'),
     ];
     for (final request in requests) {
       final read = DataEnvelope.readRequest(
@@ -140,5 +149,39 @@ void main() {
     expect(password.kind, SshPromptKind.password);
     expect(password.presentation, isNull);
     expect((back.changes[3] as SshPromptClosed).promptId, 'p1');
+  });
+
+  test('a box\'s answers cross whole: a reading, or the deploy that did not '
+      'end ready (slice 5d)', () {
+    final notDeployed = SshBoxAnswer<SshRelayReading>.notDeployed(
+      HostDeployment(
+        status: HostDeploymentStatus.noBinary,
+        observedAt: t0,
+        reason: 'no bundle for linux-arm64',
+      ),
+    );
+    const request = SshBoxRelay('h1', SshRelayAction.start);
+    final back = request.resultFromJson(
+      jsonDecode(jsonEncode(request.resultToJson(notDeployed))),
+    );
+    expect(back.value, isNull);
+    expect(back.deployment!.status, HostDeploymentStatus.noBinary);
+
+    const pair = SshPairPhone('h1', capabilities: 7);
+    final window = SshBoxAnswer.of(
+      PairingWindow(
+        status: PairingRequestStatus.open,
+        observedAt: t0,
+        reason: 'Type this.',
+        code: 'K7QM',
+      ),
+    );
+    final opened = pair.resultFromJson(
+      jsonDecode(jsonEncode(pair.resultToJson(window))),
+    );
+    expect(opened.value!.code, 'K7QM');
+
+    const sessions = SshHostSessions('h1');
+    expect(sessions.resultFromJson(sessions.resultToJson(const [])), isEmpty);
   });
 }

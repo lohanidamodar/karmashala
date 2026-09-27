@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:karmashala_core/logging.dart';
 
 import 'host_deploy_target.dart';
-import 'privileged_command.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 /// How a machine's companion port ended up, separated — like the store probe's
 /// verdicts — by **who can fix it**.

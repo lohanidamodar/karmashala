@@ -5,8 +5,8 @@ import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'ssh_providers.dart';
+import 'package:karmashala_environments/ssh.dart';
+import '../data/ssh_hosts_data.dart';
 
 /// The saved remote hosts and the environments they own — the server's,
 /// followed as they change. Adding a host is what *creates* an SSH
@@ -51,11 +51,10 @@ class SshHostsController extends Notifier<List<SshHost>> {
     return save(record);
   }
 
-  /// Saves [host] with its environment row at the server, dropping any open
-  /// connection: a pooled session under the old settings would keep answering.
+  /// Saves [host] with its environment row at the server (which drops its
+  /// connection made with the old settings).
   /// Throws [DataRefused] for a host out of shape, in words to show.
   Future<SshHost> save(SshHost host) async {
-    await ref.read(sshConnectionPoolProvider).evict(host.id);
     final saved = await ref.read(sshHostsDataProvider).put(host);
     state = ref.read(sshHostsDataProvider).getAll();
     return saved;
@@ -67,7 +66,7 @@ class SshHostsController extends Notifier<List<SshHost>> {
       .read(workspaceDataProvider)
       .write(ProjectsUsingEnvironment(sshEnvironmentId(hostId)));
 
-  /// Removes a host, its environment and any open connection. The trusted host
+  /// Removes a host and its environment (the server drops its connection). The trusted host
   /// key is kept: dropping it would make a later re-add a silent re-trust.
   ///
   /// Throws [SshHostInUse], and changes nothing, while projects still use it
@@ -75,7 +74,6 @@ class SshHostsController extends Notifier<List<SshHost>> {
   Future<void> remove(String hostId) async {
     final holding = await projectsHolding(hostId);
     if (holding.isNotEmpty) throw SshHostInUse(holding);
-    await ref.read(sshConnectionPoolProvider).evict(hostId);
     await ref.read(sshHostsDataProvider).delete(hostId);
     state = ref.read(sshHostsDataProvider).getAll();
   }

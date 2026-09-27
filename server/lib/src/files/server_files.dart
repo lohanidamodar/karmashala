@@ -5,8 +5,6 @@ import 'dart:typed_data';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_files/karmashala_files.dart';
-import 'package:karmashala_ssh/connection.dart' show SshConnectionPool;
-import 'package:karmashala_ssh/files.dart' show RemoteFileBrowser;
 
 import '../data/data_service.dart';
 import '../data/files_work.dart';
@@ -26,7 +24,8 @@ import 'file_watches.dart';
 class ServerFiles implements FilesWork {
   ServerFiles({
     required this.data,
-    this.pool,
+    this.remoteSpace,
+    this.defaultDirectoryOf,
     bool? windowsHost,
     FileWatches? watches,
     RepoFileIndex? index,
@@ -49,8 +48,12 @@ class ServerFiles implements FilesWork {
 
   final DataService data;
 
-  /// The server's SSH connections (3a); null reaches no SSH host.
-  final SshConnectionPool? pool;
+  /// An SSH environment's files, from the server's ssh domain (its own
+  /// SFTP, 3a); null reaches no SSH host.
+  final FileSpace? Function(ExecutionEnvironment environment)? remoteSpace;
+
+  /// The folder a saved SSH host names to start in.
+  final String? Function(String hostId)? defaultDirectoryOf;
 
   /// Whether WSL's share is there to read a distribution through.
   final bool _windowsHost;
@@ -218,7 +221,7 @@ class ServerFiles implements FilesWork {
     final environment = _environment(environmentId);
     final hostId = environment?.sshHostId;
     if (environment?.kind == EnvironmentKind.ssh && hostId != null) {
-      final configured = pool?.hosts.getById(hostId)?.defaultDirectory?.path;
+      final configured = defaultDirectoryOf?.call(hostId);
       if (configured != null && configured.trim().isNotEmpty) {
         return EnvironmentPath(environmentId: environmentId, path: configured);
       }
@@ -293,21 +296,7 @@ class ServerFiles implements FilesWork {
           label: label,
         );
       case EnvironmentKind.ssh:
-        final hostId = environment.sshHostId;
-        final pool = this.pool;
-        if (hostId == null || pool == null) return null;
-        try {
-          return SftpFileSpace(
-            label: label,
-            files: RemoteFileBrowser(
-              connection: pool.forHostId(hostId),
-              environmentId: environment.id,
-            ),
-          );
-        } on ArgumentError {
-          // The host was deleted while something still named it.
-          return null;
-        }
+        return remoteSpace?.call(environment);
     }
   }
 

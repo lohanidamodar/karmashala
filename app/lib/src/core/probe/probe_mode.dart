@@ -52,7 +52,7 @@ class ProbeMode {
     'the global launcher hotkey',
     'remote access, the local relay and phone pairing',
     'the fixed control port',
-    'the session host on SSH machines (panes use tmux)',
+    'the Karmashala host on SSH machines (its server refuses them)',
   ];
 }
 

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,20 +6,17 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
-import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
-import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
-import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
-import 'package:karmashala_ui/primitives.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
-import 'fake_host_box.dart';
-import '../../support/test_machine.dart';
 
 class _Access extends RemoteAccessController {
   _Access(super.ref);
@@ -30,39 +25,41 @@ class _Access extends RemoteAccessController {
   Future<void> sync() async {}
 }
 
+final _arm = HostPlatform(
+  operatingSystem: 'linux',
+  architecture: 'arm64',
+  libc: HostLibc.glibc,
+  observedAt: testTime,
+);
+
+/// The host on a box, as its card shows it (slice 5d): every reading is the
+/// server's — asked with `ssh.deploy` and shown as it came back; the app
+/// neither dials the box nor decides anything about it. The deploy's own
+/// logic is `karmashala_ssh_host`'s and the server's tests'.
 void main() {
   late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
-  late FakeHostBox box;
   late List<({String host, String? typed})> terminals;
 
   setUp(() async {
     db = TestMachine();
     server = FakeDataServer(clock: () => testTime);
     data = await server.connect();
-    box = FakeHostBox();
     terminals = [];
   });
 
-  ProviderContainer containerFor({
-    FakeBundles? bundles,
-    bool realTerminals = false,
-  }) {
+  ProviderContainer containerFor() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(data),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),
-        hostInstallerFactoryProvider.overrideWithValue(
-          (host) => installerOver(box, bundles: bundles),
-        ),
-        if (!realTerminals)
-          sshTerminalOpenerProvider.overrideWithValue((host, {typed}) {
-            terminals.add((host: host.name, typed: typed));
-            return true;
-          }),
+        sshTerminalOpenerProvider.overrideWithValue((host, {typed}) {
+          terminals.add((host: host.name, typed: typed));
+          return true;
+        }),
       ],
     );
     addTearDown(container.dispose);
@@ -84,141 +81,109 @@ void main() {
         ),
       );
 
-  Future<void> settle(WidgetTester tester) => settleHostBox(tester);
-
   Future<ProviderContainer> pump(
     WidgetTester tester, {
-    FakeBundles? bundles,
     bool debugRun = false,
-    bool realTerminals = false,
   }) async {
     tester.view.physicalSize = const Size(1000, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final container = containerFor(
-      bundles: bundles,
-      realTerminals: realTerminals,
-    );
+    final container = containerFor();
     await tester.pumpWidget(panel(container, debugRun: debugRun));
     return container;
   }
 
   Future<void> press(WidgetTester tester, String label) async {
     await tester.tap(find.text(label));
-    await settle(tester);
+    await tester.pumpAndSettle();
   }
+
+  /// What the server answers to each action from now on.
+  void answer(HostInstallReading Function(SshDeploy request) reading) =>
+      server.sshWork.onDeploy = reading;
 
   testWidgets('nothing is claimed before somebody asks, and nothing is asked '
       'on its own', (tester) async {
     await pump(tester);
-    await settle(tester);
+    await tester.pumpAndSettle();
 
     expect(
       find.text('Karmashala host: not checked since this launch'),
       findsOneWidget,
     );
-    expect(
-      box.commands,
-      isEmpty,
-      reason: 'a reading is asked for, never polled',
-    );
+    expect(server.sshWork.deploys, isEmpty);
   });
 
-  testWidgets('not installed → Install → installed and running, under the '
-      'home and with no sudo', (tester) async {
+  testWidgets('Check asks the server; Install is the server\'s deploy', (
+    tester,
+  ) async {
+    answer(
+      (request) => request.action == SshDeployAction.check
+          ? server.sshWork.boxReading(HostInstallState.notInstalled)
+          : server.sshWork.boxReading(HostInstallState.installed),
+    );
     await pump(tester);
 
     await press(tester, 'Check');
     expect(find.text('Karmashala host: not installed'), findsOneWidget);
-    expect(find.textContaining('no root needed'), findsOneWidget);
-    expect(find.textContaining('Checked 3m ago'), findsOneWidget);
-    expect(box.uploads, isEmpty);
+    expect(server.sshWork.deploys.single.action, SshDeployAction.check);
 
     await press(tester, 'Install');
-
     expect(
       find.text('Karmashala host: installed 1.25.0 (running)'),
       findsOneWidget,
     );
-    expect(
-      box.uploads.single,
-      '$kBoxBin/karmashala_host-1.25.0-linux-x64.tar.gz',
-    );
-    expect(
-      box.commands.any(
-        (c) =>
-            c.contains("setsid nohup '${boxExecutable(kBoxThisBundle)}' serve"),
-      ),
-      isTrue,
-    );
-    expect(box.commands.any((c) => c.contains('sudo')), isFalse);
+    expect(server.sshWork.deploys.last.action, SshDeployAction.install);
+    expect(server.sshWork.deploys.last.hostId, 'h1');
     expect(find.text('Reinstall'), findsOneWidget);
     expect(find.text('Stop'), findsOneWidget);
     expect(find.text('Uninstall'), findsOneWidget);
     expect(find.text('Install'), findsNothing);
   });
 
-  testWidgets('while the machine is being asked the row says what for, and '
-      'its buttons wait', (tester) async {
-    await pump(tester);
-    box.gate = Completer<void>();
-
-    await tester.tap(find.text('Check'));
-    await tester.pump();
-
-    expect(find.byType(InlineSpinner), findsOneWidget);
-    expect(find.text('Asking the machine…'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Check'))
-          .onPressed,
-      isNull,
+  testWidgets('an older host reads "older than the server\'s" and offers '
+      'Update', (tester) async {
+    answer(
+      (request) => request.action == SshDeployAction.check
+          ? server.sshWork.boxReading(
+              HostInstallState.outdated,
+              installedVersion: '1.24.0',
+            )
+          : server.sshWork.boxReading(HostInstallState.installed),
     );
-
-    box.gate!.complete();
-    box.gate = null;
-    await settle(tester);
-    expect(find.byType(InlineSpinner), findsNothing);
-  });
-
-  testWidgets('an older host reads "older than this app" and offers Update', (
-    tester,
-  ) async {
-    box
-      ..installed.add(kBoxOlderBundle)
-      ..runningServe = boxExecutable(kBoxOlderBundle);
     await pump(tester);
 
     await press(tester, 'Check');
     expect(
       find.text(
-        'Karmashala host: older than this app (1.24.0 → 1.25.0), running',
+        'Karmashala host: older than the server\'s (1.24.0 → 1.25.0), running',
       ),
       findsOneWidget,
     );
 
     await press(tester, 'Update');
+    expect(server.sshWork.deploys.last.action, SshDeployAction.install);
     expect(
       find.text('Karmashala host: installed 1.25.0 (running)'),
       findsOneWidget,
     );
-    expect(box.runningServe, boxExecutable(kBoxThisBundle));
   });
 
-  testWidgets('a host newer than this app is said to be newer, and going back '
-      'is not called Update', (tester) async {
-    const newer = 'karmashala_host-1.26.0-linux-x64.d';
-    box
-      ..installed.add(newer)
-      ..runningServe = boxExecutable(newer);
+  testWidgets('a newer host is said to be newer, and going back is not '
+      'called Update', (tester) async {
+    answer(
+      (_) => server.sshWork.boxReading(
+        HostInstallState.outdated,
+        installedVersion: '1.26.0',
+      ),
+    );
     await pump(tester);
 
     await press(tester, 'Check');
-
     expect(
       find.text(
-        'Karmashala host: newer than this app (1.26.0; this app carries '
-        '1.25.0), running',
+        'Karmashala host: newer than the server\'s (1.26.0; the server '
+        'carries 1.25.0), running',
       ),
       findsOneWidget,
     );
@@ -228,10 +193,19 @@ void main() {
 
   testWidgets('Stop asks first when the host holds work, and Start brings it '
       'back', (tester) async {
-    box
-      ..installed.add(kBoxThisBundle)
-      ..runningServe = boxExecutable(kBoxThisBundle)
-      ..heldSessions = 2;
+    answer(
+      (request) => switch (request.action) {
+        SshDeployAction.stop => server.sshWork.boxReading(
+          HostInstallState.installed,
+          running: false,
+          reason: 'Stopped. The 2 session(s) it held have ended.',
+        ),
+        _ => server.sshWork.boxReading(
+          HostInstallState.installed,
+          sessionsHeld: request.action == SshDeployAction.check ? 2 : null,
+        ),
+      },
+    );
     await pump(tester);
     await press(tester, 'Check');
 
@@ -240,32 +214,30 @@ void main() {
       find.textContaining('The 2 sessions it holds end with it'),
       findsOneWidget,
     );
-    expect(box.runningServe, isNotNull, reason: 'nothing before the answer');
+    expect(
+      server.sshWork.deploys.map((d) => d.action),
+      [SshDeployAction.check],
+      reason: 'nothing before the answer',
+    );
 
     await tester.tap(find.widgetWithText(FilledButton, 'Stop'));
-    await settle(tester);
+    await tester.pumpAndSettle();
     expect(
       find.text('Karmashala host: installed 1.25.0 (stopped)'),
       findsOneWidget,
     );
-    expect(
-      find.textContaining('2 session(s) it held have ended'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('have ended'), findsOneWidget);
 
     await press(tester, 'Start');
+    expect(server.sshWork.deploys.last.action, SshDeployAction.start);
     expect(
       find.text('Karmashala host: installed 1.25.0 (running)'),
       findsOneWidget,
     );
-    expect(find.textContaining('does not come back by itself'), findsOneWidget);
   });
 
-  testWidgets('Uninstall says what goes and what stays, then does it — and the '
-      'relay row here goes with it', (tester) async {
-    box
-      ..installed.add(kBoxThisBundle)
-      ..runningServe = boxExecutable(kBoxThisBundle);
+  testWidgets('Uninstall says what goes and what stays, then asks the server '
+      '— and the relay row here goes with it', (tester) async {
     server.writeAsAnotherClient([
       const PreferenceChanged(
         kSshRelaysMetadataKey,
@@ -280,75 +252,92 @@ void main() {
     await press(tester, 'Uninstall');
     expect(find.textContaining('~/.karmashala/bin is deleted'), findsOneWidget);
     expect(
-      find.textContaining('Left in place: ~/.karmashala/sessions'),
-      findsOneWidget,
-    );
-    expect(
-      box.commands.where((c) => c.contains('karmashala-removed')),
-      isEmpty,
+      server.sshWork.deploys.map((d) => d.action),
+      isNot(contains(SshDeployAction.remove)),
     );
 
     await tester.tap(find.widgetWithText(FilledButton, 'Uninstall'));
-    await settle(tester);
+    await tester.pumpAndSettle();
 
     expect(find.text('Karmashala host: not installed'), findsOneWidget);
-    expect(find.textContaining('Left in place'), findsOneWidget);
-    expect(box.runningServe, isNull);
-    expect(
-      box.commands.singleWhere((c) => c.contains('karmashala-removed')),
-      contains("rm -rf '$kBoxBin'/karmashala_host-*"),
-    );
+    expect(server.sshWork.deploys.last.action, SshDeployAction.remove);
     expect(container.read(sshRelaysProvider), isEmpty);
   });
 
-  testWidgets('a build with no bundle for the machine says what the machine '
-      'is, what the build carries, and the remedy', (tester) async {
-    box.uname = 'Linux\naarch64\nldd (GNU libc) 2.36\n';
+  testWidgets('a server with no bundle for the box says so, with its remedy '
+      'and Retry', (tester) async {
+    answer(
+      (_) => server.sshWork.boxReading(
+        HostInstallState.cannotInstall,
+        offeredVersion: null,
+        deployment: HostDeployment(
+          status: HostDeploymentStatus.noBinary,
+          observedAt: testTime,
+          reason:
+              '203.0.113.9 is linux-arm64, and the Karmashala server has no '
+              'host bundle for it (it looked in /srv/bundles; it has '
+              'linux-x64).',
+          platform: _arm,
+          availableTargets: const ['linux-x64'],
+        ),
+      ),
+    );
     await pump(tester);
 
     await press(tester, 'Check');
 
     expect(find.text('Karmashala host: can\'t install'), findsOneWidget);
-    expect(find.textContaining('linux/arm64 (glibc)'), findsOneWidget);
-    expect(find.textContaining('it carries linux-x64 only'), findsOneWidget);
-    expect(
-      find.textContaining('ships the linux-arm64 host bundle'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('it looked in /srv/bundles'), findsOneWidget);
+    expect(find.textContaining('linux-arm64 host bundle'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.textContaining('dart build cli'), findsNothing);
     expect(find.textContaining('Bad state'), findsNothing);
   });
 
-  testWidgets('the 2026-09-17 app — no bundles at all — on a debug run gets '
-      'the build command', (tester) async {
-    await pump(tester, bundles: FakeBundles(const []), debugRun: true);
-
+  testWidgets('on a debug run the remedy carries the build command', (
+    tester,
+  ) async {
+    answer(
+      (_) => server.sshWork.boxReading(
+        HostInstallState.cannotInstall,
+        deployment: HostDeployment(
+          status: HostDeploymentStatus.noBinary,
+          observedAt: testTime,
+          reason: 'No bundle.',
+          platform: _arm,
+        ),
+      ),
+    );
+    await pump(tester, debugRun: true);
     await press(tester, 'Check');
-
-    expect(find.textContaining('it carries none at all'), findsOneWidget);
     expect(find.textContaining('dart build cli'), findsOneWidget);
-    expect(find.textContaining('--target-arch=x64'), findsOneWidget);
+    expect(find.textContaining('--target-arch=arm64'), findsOneWidget);
   });
 
   group('a step that needs sudo', () {
     const command = 'sudo apt-get install -y tar';
 
-    Future<ProviderContainer> missingTar(
-      WidgetTester tester, {
-      bool realTerminals = false,
-    }) async {
-      box.tools = 'missing=tar\npm=apt-get\nuid=1000\n';
-      final container = await pump(tester, realTerminals: realTerminals);
-      await press(tester, 'Check');
-      await press(tester, 'Install');
-      return container;
-    }
+    HostInstallReading missingTar(SshDeploy _) => server.sshWork.boxReading(
+      HostInstallState.notInstalled,
+      deployment: HostDeployment(
+        status: HostDeploymentStatus.cannotInstall,
+        observedAt: testTime,
+        reason: '203.0.113.9 has no `tar`. Nothing was uploaded.',
+        privileged: const PrivilegedCommand(
+          command: command,
+          does: 'Installs tar on 203.0.113.9 from its own package manager.',
+          why:
+              'Installing a system package changes the whole machine and '
+              'needs root, so it is yours to run, in a terminal there.',
+        ),
+      ),
+    );
 
-    testWidgets('shows the command, what it does and why — and never runs it', (
-      tester,
-    ) async {
-      await missingTar(tester);
+    testWidgets('shows the command, what it does and why — and the app runs '
+        'nothing', (tester) async {
+      answer(missingTar);
+      await pump(tester);
+      await press(tester, 'Check');
 
       expect(find.text(command), findsOneWidget);
       expect(find.textContaining('Installs tar on'), findsOneWidget);
@@ -357,70 +346,68 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Open a terminal on do-box'), findsOneWidget);
-      expect(box.uploads, isEmpty);
-      expect(box.commands.any((c) => c.contains('apt-get install')), isFalse);
     });
 
     testWidgets('"Open a terminal" types the command there and does not press '
         'Enter', (tester) async {
-      await missingTar(tester);
+      answer(missingTar);
+      await pump(tester);
+      await press(tester, 'Check');
 
       await press(tester, 'Open a terminal on do-box');
 
       expect(terminals, [(host: 'do-box', typed: command)]);
-      expect(
-        terminals.single.typed,
-        isNot(anyOf(contains('\n'), contains('\r'))),
-      );
       expect(find.textContaining('not run: press Enter there'), findsOneWidget);
     });
 
-    testWidgets('the real opener opens an SSH tab on that host with the text '
-        'handed to the pane, unsubmitted', (tester) async {
-      final container = await missingTar(tester, realTerminals: true);
+    testWidgets('"Check again" installs through the server', (tester) async {
+      answer(missingTar);
+      await pump(tester);
+      await press(tester, 'Check');
+      answer((_) => server.sshWork.boxReading(HostInstallState.installed));
 
-      await press(tester, 'Open a terminal on do-box');
+      await press(tester, 'Check again');
 
-      final state = container.read(terminalSessionsControllerProvider);
-      final paneId = state.activeTab!.focusedPaneId;
-      final pane =
-          container
-                  .read(terminalSessionsControllerProvider.notifier)
-                  .instanceFor(paneId)!
-              as FakeTerminalInstance;
-      expect(pane.profileId, 'ssh:h1');
-      expect(pane.typedAtPrompt, [command]);
-      expect(pane.typedAtPrompt.single.endsWith('\n'), isFalse);
-      expect(pane.typedAtPrompt.single.endsWith('\r'), isFalse);
+      expect(server.sshWork.deploys.last.action, SshDeployAction.install);
+      expect(
+        find.text('Karmashala host: installed 1.25.0 (running)'),
+        findsOneWidget,
+      );
+      expect(find.text(command), findsNothing);
     });
+  });
 
-    testWidgets(
-      '"Check again" re-reads the machine, and a fixed one installs',
-      (tester) async {
-        await missingTar(tester);
-        box.tools = 'uid=1000\n';
-
-        await press(tester, 'Check again');
-
-        expect(
-          find.text('Karmashala host: installed 1.25.0 (running)'),
-          findsOneWidget,
-        );
-        expect(find.text(command), findsNothing);
-      },
-    );
+  testWidgets('a refusal from the server is shown in its words', (
+    tester,
+  ) async {
+    answer((_) => throw const DataRefused.notFound('no SSH host is saved as h1'));
+    await pump(tester);
+    await press(tester, 'Check');
+    expect(find.textContaining('no SSH host is saved as h1'), findsOneWidget);
   });
 
   testWidgets('survives the window matrix at its wordiest', (tester) async {
-    box.tools = 'missing=tar\npm=apt-get\nuid=1000\n';
+    answer(
+      (_) => server.sshWork.boxReading(
+        HostInstallState.notInstalled,
+        deployment: HostDeployment(
+          status: HostDeploymentStatus.cannotInstall,
+          observedAt: testTime,
+          reason: 'no tar',
+          privileged: const PrivilegedCommand(
+            command: 'sudo apt-get install -y tar',
+            does: 'Installs tar.',
+            why: 'It needs root.',
+          ),
+        ),
+      ),
+    );
     await expectSurvivesWindowMatrix(
       tester,
       build: () => panel(containerFor()),
       warmUp: (tester) async {
         await tester.tap(find.text('Check'));
-        await settle(tester);
-        await tester.tap(find.text('Install'));
-        await settle(tester);
+        await tester.pumpAndSettle();
       },
       because: 'a sentence, a remedy, a command and five buttons in one card',
     );

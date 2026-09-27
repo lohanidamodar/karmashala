@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../serve/client_command.dart';
-import '../serve/host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 import 'terminal_qr.dart';
 
 /// What `pair` grants when `--capabilities` is not given: everything, as the

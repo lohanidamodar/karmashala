@@ -1,0 +1,29 @@
+name: karmashala_host_protocol
+description: >-
+  The Karmashala host's wire protocol and what reaching a host means, with
+  nothing of the server's behind it: the frames, messages and wire codecs, a
+  session's lifecycle and summary, where a host keeps its socket, the byte
+  channel a link runs over, a host's deployment reading, and the readings the
+  server takes off an SSH box (its installed host, relay, companion port and
+  pairing window) as values a client is told. Split from the server in slice
+  5d so `karmashala_ssh_host` (which deploys the host on a box) and the
+  server (which now depends on it) share it without a cycle. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # Where a unix socket can actually be bound (`host_paths.dart`).
+  karmashala_local_ipc:
+    path: ../local_ipc
+  meta: ^1.16.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

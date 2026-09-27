@@ -8,5 +8,4 @@ library;
 export 'src/host_terminal_instance.dart';
 export 'src/pane_terminal.dart';
 export 'src/prompt_typer.dart';
-export 'src/ssh_terminal_instance.dart';
 export 'src/terminal_instance.dart';

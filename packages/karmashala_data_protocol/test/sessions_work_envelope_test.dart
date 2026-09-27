@@ -115,7 +115,6 @@ void main() {
     final started = SessionStarted(
       session: session,
       launch: launch,
-      clientRuns: true,
       external: const ExternalTerminalCommand(
         executable: '/bin/claude',
         arguments: ['--resume', 'c'],

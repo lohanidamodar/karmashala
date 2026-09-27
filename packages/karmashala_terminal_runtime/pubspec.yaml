@@ -1,7 +1,8 @@
 name: karmashala_terminal_runtime
 description: >-
-  What a terminal does: the running instances (a pane on the server's
-  terminal, attached by id, and an SSH channel), the
+  What a terminal does: the running instance (a pane on a terminal the
+  server runs — on its machine or, relayed, on an SSH box — attached by
+  id), the
   coalescer that feeds bytes to a frame, the scrollback codec, spool and park,
   the grid readings and command blocks taken back off the screen, the cast
   recorder and its frame renderer, the Warp and Ghostty theme readers and the
@@ -40,17 +41,11 @@ dependencies:
   # Logging, and `InstalledApplication` — what a system terminal is found as.
   karmashala_core:
     path: ../karmashala_core
-  # A pane on a deployed session host: the wire protocol and where the host
-  # keeps its files.
-  karmashala_host:
-    path: ../../server
-  # The SSH connection an ssh pane runs in, and the host access a host pane
-  # links through.
-  karmashala_ssh:
-    path: ../karmashala_ssh
-  # Reaching a deployed server's sessions (`HostSessionAccess`).
-  karmashala_ssh_host:
-    path: ../karmashala_ssh_host
+  # A pane on the server's terminal: the wire protocol, where the host keeps
+  # its socket, and the channel and reading a link runs over. No SSH: since
+  # slice 5d a box's sessions are relayed by the server.
+  karmashala_host_protocol:
+    path: ../karmashala_host_protocol
   # The preset table's `AppDatabase`, and the row conversions both DAOs use.
   karmashala_store:
     path: ../karmashala_store
@@ -62,8 +57,6 @@ dependencies:
   # A launch names a command and an agent: the process and agent descriptors.
   agent_cli:
     path: ../agent_cli
-  # The SSH session and channel an ssh pane is a shell on.
-  dartssh2: ^4.1.0
   path: ^1.9.1
   # Warp themes are YAML.
   yaml: ^3.1.4
@@ -71,4 +64,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # A real host, served in-process, for the link and access tests.
+  karmashala_host:
+    path: ../../server
   lints: ^6.1.0

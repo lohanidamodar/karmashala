@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../protocol/frame.dart';
-import '../protocol/messages.dart';
-import '../protocol/wire.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../transport/socket_transport.dart';
 import '../transport/transport.dart';
 

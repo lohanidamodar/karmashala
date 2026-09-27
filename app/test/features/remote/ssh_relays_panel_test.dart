@@ -1,22 +1,19 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
 import 'package:karmashala/src/features/remote/presentation/ssh_relays_panel.dart';
-import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SshBoxAnswer, SshBoxRelay, SshDeployAction, SshRelayAction;
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
-import '../ssh/fake_host_box.dart';
 
 const _token = '0123456789abcdef0123456789abcdef';
 final _url = Uri.parse('ws://203.0.113.9:8787/k/$_token');
@@ -28,7 +25,9 @@ class _Access extends RemoteAccessController {
   Future<void> sync() async {}
 }
 
-class _Setup implements SshRelaySetup {
+/// What the server answers each `ssh.relaySetup` with (slice 5d: the
+/// server drives the relay on the box), as the test scripted it.
+class _Setup {
   _Setup(this.answers);
 
   final Map<String, SshRelayReading> answers;
@@ -37,29 +36,25 @@ class _Setup implements SshRelaySetup {
   /// Whether each `start` was a check after the firewall command was run.
   final byHand = <bool>[];
 
-  Future<SshRelayReading> _answer(String action) async {
+  SshRelayReading _answer(String action) {
     asked.add(action);
     return answers[action]!;
   }
 
-  @override
-  Future<SshRelayReading> start({bool ruleAddedByHand = false}) {
-    byHand.add(ruleAddedByHand);
+  SshRelayReading answer(SshBoxRelay request) {
+    if (request.action != SshRelayAction.start) {
+      return _answer(request.action.name);
+    }
+    byHand.add(request.ruleAddedByHand);
     // A second answer, when a test gives one, is what checking again finds.
     final again = answers['start again'];
-    return _answer(ruleAddedByHand && again != null ? 'start again' : 'start');
+    return _answer(
+      request.ruleAddedByHand && again != null ? 'start again' : 'start',
+    );
   }
-
-  @override
-  Future<SshRelayReading> check() => _answer('check');
-  @override
-  Future<SshRelayReading> stop() => _answer('stop');
-  @override
-  Future<SshRelayReading> remove() => _answer('remove');
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+typedef _Relay = SshBoxAnswer<SshRelayReading> Function(SshBoxRelay request);
 
 SshRelayReading _reading(
   SshRelayStatus status, {
@@ -111,8 +106,7 @@ void main() {
     WidgetTester tester, {
     _Setup? setup,
     List<int>? ports,
-    SshRelaySetupFactory? factory,
-    FakeHostBox? box,
+    _Relay? factory,
   }) async {
     tester.view.physicalSize = const Size(1000, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -123,23 +117,22 @@ void main() {
         data,
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),
-        sshRelaySetupFactoryProvider.overrideWithValue(
-          factory ??
-              (host, port) async {
-                ports?.add(port);
-                return setup ?? (throw StateError('no box in this test'));
-              },
-        ),
         sshTerminalOpenerProvider.overrideWithValue((host, {typed}) {
           terminals.add((host: host.name, typed: typed));
           return true;
         }),
-        if (box != null)
-          hostInstallerFactoryProvider.overrideWithValue(
-            (host) => installerOver(box),
-          ),
       ],
     );
+    server.sshWork.onRelay =
+        factory ??
+        (request) {
+          ports?.add(request.port);
+          return SshBoxAnswer.of(
+            (setup ?? (throw StateError('no box in this test'))).answer(
+              request,
+            ),
+          );
+        };
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -271,10 +264,7 @@ void main() {
       addHost();
       await pump(
         tester,
-        factory: (host, port) async => throw HostDeployFailure(
-          hostName: host.name,
-          deployment: noBundle(),
-        ),
+        factory: (_) => SshBoxAnswer.notDeployed(noBundle()),
       );
       await tester.tap(useButton());
       await tester.pumpAndSettle();
@@ -283,38 +273,32 @@ void main() {
 
       expect(find.textContaining('Bad state'), findsNothing);
       expect(find.textContaining('could not be put on'), findsNothing);
-      // What the box is, what this build carries, and what to do about it.
-      expect(find.textContaining('linux/x64 (glibc)'), findsOneWidget);
-      expect(find.textContaining('it carries none at all'), findsOneWidget);
-      expect(
-        find.textContaining('ships the linux-x64 host bundle'),
-        findsOneWidget,
-      );
+      // The server's words for it, and what to do about it.
+      expect(find.textContaining('No host binary for linux-x64'), findsOneWidget);
+      expect(find.textContaining('linux-x64 host bundle'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
     });
 
     testWidgets('its button installs, and the relay is then set up without '
         'being asked twice', (tester) async {
       addHost();
-      final box = FakeHostBox();
       final setup = _Setup({'start': _reading(SshRelayStatus.running)});
-      var deployed = false;
       await pump(
         tester,
-        box: box,
-        factory: (host, port) async {
-          if (!deployed && box.installed.isEmpty) {
-            throw HostDeployFailure(
-              hostName: host.name,
-              deployment: HostDeployment(
+        factory: (request) {
+          final installed = server.sshWork.deploys.any(
+            (d) => d.action == SshDeployAction.install,
+          );
+          if (!installed) {
+            return SshBoxAnswer.notDeployed(
+              HostDeployment(
                 status: HostDeploymentStatus.cannotInstall,
                 observedAt: testTime.subtract(const Duration(minutes: 1)),
                 reason: 'Could not write the bundle on do-box.',
               ),
             );
           }
-          deployed = true;
-          return setup;
+          return SshBoxAnswer.of(setup.answer(request));
         },
       );
       await tester.tap(useButton());
@@ -325,9 +309,10 @@ void main() {
       expect(find.textContaining('no root is needed'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Install'));
-      await settleHostBox(tester);
+      await tester.runAsync(pumpEventQueue);
+      await tester.pumpAndSettle();
 
-      expect(box.uploads, hasLength(1));
+      expect(server.sshWork.deploys.last.action, SshDeployAction.install);
       expect(setup.asked, ['start']);
       expect(find.textContaining('answered on port 8787'), findsWidgets);
     });
@@ -501,40 +486,5 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Forget'));
     await tester.pumpAndSettle();
     expect(container.read(sshRelaysProvider), isEmpty);
-  });
-
-  testWidgets('while the machine is being asked the row says so, and its '
-      'buttons wait', (tester) async {
-    addHost();
-    addRelay();
-    final data = await server.override();
-    final never = Completer<SshRelayReading>();
-    final container = ProviderContainer(
-      overrides: [
-        data,
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-        remoteAccessControllerProvider.overrideWith(_Access.new),
-        sshRelaySetupFactoryProvider.overrideWithValue(
-          (host, port) => never.future.then((_) => throw StateError('unused')),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: Scaffold(body: SshRelaysPanel())),
-      ),
-    );
-    await tester.tap(find.widgetWithText(TextButton, 'Check'));
-    await tester.pump();
-
-    expect(find.text('Asking the machine…'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Remove'))
-          .onPressed,
-      isNull,
-    );
   });
 }

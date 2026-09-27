@@ -4,7 +4,7 @@ import 'package:karmashala_remote/remote.dart';
 
 import '../agents/server_agents.dart';
 import '../companion/daemon_companion.dart';
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'server_admin.dart';
 import 'server_config.dart';
 import 'server_config_service.dart';

@@ -61,11 +61,7 @@ final restoredPaneFactoryProvider = Provider<RestoredPaneFactory>(
         AgentPaneLaunch? agentLaunch,
         Terminal? adoptTerminal,
       }) {
-        if (profile.sshHostId != null ||
-            agentLaunch?.sshHostId != null ||
-            ref.read(localHostSessionAccessProvider) == null) {
-          return null;
-        }
+        if (ref.read(localHostSessionAccessProvider) == null) return null;
         return _serverPane(
           ref,
           id: id,
@@ -80,10 +76,10 @@ final restoredPaneFactoryProvider = Provider<RestoredPaneFactory>(
       },
 );
 
-/// The production factory: an SSH pane on this app's own connection (until
-/// slice 5d), and **every other pane a terminal the server runs** — asked
-/// for with `terminals.open`, then attached to by id. No in-app PTY, and no
-/// fallback to one.
+/// The production factory: **every pane is a terminal the server runs** —
+/// asked for with `terminals.open` (or, for an agent, `sessions.resume`),
+/// then attached to by id; on an SSH box the server starts it on the box's
+/// host and relays it (slice 5d). No in-app PTY, no SSH here, no fallback.
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
   (ref) =>
       ({
@@ -95,38 +91,6 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
         AgentPaneLaunch? agentLaunch,
         Terminal? adoptTerminal,
       }) {
-        final sshHostId = profile.sshHostId ?? agentLaunch?.sshHostId;
-        if (sshHostId != null) {
-          final host = ref.read(sshHostsDataProvider).getById(sshHostId);
-          if (host != null) {
-            final pool = ref.read(sshConnectionPoolProvider);
-            return SshTerminalInstance(
-              id: id,
-              title: agentLaunch?.title ?? 'SSH: ${host.name}',
-              profileId: profile.id,
-              host: host,
-              connection: pool.forHostId(host.id),
-              // Deployed or verified once per host per connection and shared
-              // by every pane on it; null only when SSH is unreachable.
-              hostAccess: ref.read(hostSessionAccessLookupProvider)(host),
-              workingDirectory:
-                  workingDirectory ?? agentLaunch?.workingDirectory,
-              agentLaunch: agentLaunch,
-              adoptTerminal: adoptTerminal,
-              restoredScrollback: restoredScrollback,
-            );
-          }
-          return ErrorTerminalInstance(
-            id: id,
-            title: agentLaunch?.title ?? 'SSH terminal',
-            profileId: profile.id,
-            message: 'The saved SSH host "$sshHostId" no longer exists.',
-            workingDirectory: workingDirectory ?? agentLaunch?.workingDirectory,
-            agentLaunch: agentLaunch,
-            restoredScrollback: restoredScrollback,
-            adoptTerminal: adoptTerminal,
-          );
-        }
         return _serverPane(
           ref,
           id: id,
@@ -173,9 +137,14 @@ TerminalInstance _serverPane(
       adoptTerminal: adoptTerminal,
     );
   }
-  final sessionId = terminalSessionId(
-    paneId: id,
-    agentSessionId: agentLaunch?.sessionId,
+  // A box's terminal is named at the server `ssh:<hostId>/<id>` (slice 5d):
+  // the same id a restored pane attaches to, whether or not the server
+  // restarted since.
+  final boxHostId = profile.sshHostId ?? agentLaunch?.sshHostId;
+  String named(String id) =>
+      boxHostId == null ? id : boxSessionRef(boxHostId, id);
+  final sessionId = named(
+    terminalSessionId(paneId: id, agentSessionId: agentLaunch?.sessionId),
   );
   final terminals = ref.read(terminalsClientProvider);
   final offered = ref.read(terminalServerProfilesProvider);
@@ -206,7 +175,7 @@ TerminalInstance _serverPane(
                 .read(sessionsClientProvider)
                 .resume(rowId, columns: columns, rows: rows);
             return (
-              sessionId: started.hostSessionId,
+              sessionId: named(started.hostSessionId),
               adopted: started.adopted,
               shellIntegration: false,
             );
@@ -242,9 +211,12 @@ TerminalInstance _serverPane(
   );
 }
 
-/// The environment a shell profile opens into, when it names one: a WSL
-/// profile's distribution. The server's own machine otherwise (null).
+/// The environment a shell profile opens into, when it names one: an SSH
+/// host's, or a WSL profile's distribution. The server's own machine
+/// otherwise (null).
 String? _environmentIdOf(Ref ref, TerminalProfile profile) {
+  final hostId = profile.sshHostId;
+  if (hostId != null) return sshEnvironmentId(hostId);
   final distro = profile.wslDistribution;
   if (distro == null || distro.isEmpty) return null;
   for (final environment in ref.read(environmentsControllerProvider)) {

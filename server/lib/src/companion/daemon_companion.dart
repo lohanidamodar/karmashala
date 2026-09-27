@@ -33,7 +33,7 @@ import '../automations/session_mcp_access.dart';
 import '../data/data_service.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import '../status/daemon_prompt_answers.dart';
 import 'companion_handler.dart';
 import 'daemon_session_control.dart';

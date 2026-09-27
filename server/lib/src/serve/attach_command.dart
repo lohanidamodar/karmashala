@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 
 /// A byte proxy between stdio and the host's socket, deliberately nothing more:
 /// because it parses nothing, a protocol change needs no change here.

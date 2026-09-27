@@ -6,7 +6,7 @@ import 'package:karmashala_notifications/evidence.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
 
-import '../domain/session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'daemon_agent_status.dart';
 
 /// How a wait's bound is served; a test bounds a wait by an event it emits.

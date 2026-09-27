@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_environments/ssh.dart' show SshAuthMethod, SshHost;
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/session.dart';
@@ -150,6 +151,18 @@ SessionEvent event({
   seq: 0,
   type: type,
   payload: payload,
+  createdAt: testTime,
+);
+
+/// A saved SSH host whose box the server reaches (slice 5d: the app only
+/// asks the server about it).
+final boxHost = SshHost(
+  id: 'h1',
+  name: 'do-box',
+  host: '203.0.113.9',
+  port: 22,
+  username: 'dlohani',
+  authMethod: SshAuthMethod.password,
   createdAt: testTime,
 );
 

@@ -5,7 +5,7 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_store/database.dart';
 
-import '../protocol/messages.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 import 'daemon_agent_status.dart';
 import 'package:karmashala_session_engine/store.dart';
 

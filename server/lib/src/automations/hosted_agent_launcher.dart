@@ -142,7 +142,6 @@ class HostedStart {
   const HostedStart({
     required this.session,
     this.launch,
-    this.clientRuns = false,
     this.external,
     this.credentialNotice,
   });
@@ -153,9 +152,6 @@ class HostedStart {
   /// pane stores to name its session. Null only for the external surface.
   final AgentPaneLaunch? launch;
 
-  /// The client must run [launch] itself (an SSH checkout, until slice 5d).
-  final bool clientRuns;
-
   /// The command a client opens a terminal window on (the external surface).
   final ExternalTerminalCommand? external;
 
@@ -164,8 +160,9 @@ class HostedStart {
 }
 
 /// Opens an agent's terminal: [launch] as a PTY under its session's own id
-/// (`karmashala_<sessionId>`), at [columns]×[rows]. `ServerTerminals` in
-/// `serve`, so the agent is one of the server's terminals like any pane.
+/// (`karmashala_<sessionId>`), at [columns]×[rows] — on this machine, or on
+/// the SSH box its launch names (slice 5d). `ServerTerminals` in `serve`, so
+/// the agent is one of the server's terminals like any pane.
 typedef AgentTerminalOpener =
     Future<void> Function(AgentPaneLaunch launch, int columns, int rows);
 
@@ -501,21 +498,17 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         credentialNotice: notice,
       );
     }
-    if (kind == EnvironmentKind.ssh) {
-      // An SSH box's panes are the client's until slice 5d: it runs this.
-      settleWorktree?.call(null);
-      onLaunched?.call(id, agentId, directory.path);
-      return HostedStart(
-        session: session,
-        launch: agentLaunch,
-        clientRuns: true,
-        credentialNotice: notice,
-      );
-    }
     try {
       final open = openAgent;
       if (open != null) {
+        // On an SSH box too (slice 5d): the server starts it on the box's
+        // host, and its exit is the box's fact.
         await open(agentLaunch, launch.columns, launch.rows);
+      } else if (kind == EnvironmentKind.ssh) {
+        throw StateError(
+          '${environment?.name ?? 'That SSH machine'} is reached only through '
+          'the server\'s terminals, and none were given to this launcher',
+        );
       } else {
         registry.open(
           hostSessionIdOf(id),

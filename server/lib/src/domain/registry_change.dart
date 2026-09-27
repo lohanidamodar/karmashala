@@ -1,5 +1,5 @@
 import 'host_session.dart';
-import 'session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 /// What the registry did to its set of sessions. An exit is not one of these:
 /// it is observed on [HostSession.ended], which a closed session also reaches.

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 import '../support/memory_server_config.dart';
 
@@ -6,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SshBoxAnswer;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/apps.dart';
 import 'package:karmashala/src/core/apps/installed_applications_providers.dart';
@@ -26,24 +27,20 @@ import 'package:karmashala/src/features/settings/presentation/choose_application
 import 'package:karmashala/src/features/settings/presentation/external_app_section.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
-import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
-import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
-import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import '../support/fake_command_runner.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
-import '../features/ssh/fake_host_box.dart';
 import '../support/window_matrix.dart';
 import '../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
@@ -164,7 +161,21 @@ void main() {
     );
     server.sshHostRows.upsert(host);
     server.environmentRows.upsert(sshEnvFixture(name: host.name));
-    final box = FakeHostBox()..tools = 'missing=tar\npm=apt-get\nuid=1000\n';
+    server.sshWork.onDeploy = (_) => server.sshWork.boxReading(
+      HostInstallState.notInstalled,
+      deployment: HostDeployment(
+        status: HostDeploymentStatus.cannotInstall,
+        observedAt: testTime,
+        reason:
+            '${host.host} has no `tar`, which the session host needs to be '
+            'unpacked. Nothing was uploaded.',
+        privileged: const PrivilegedCommand(
+          command: 'sudo apt-get install -y tar',
+          does: 'Installs tar from the machine\'s own package manager.',
+          why: 'Installing a system package needs root.',
+        ),
+      ),
+    );
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
@@ -173,9 +184,6 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         discoveredTerminalThemesProvider.overrideWithValue(const []),
-        hostInstallerFactoryProvider.overrideWithValue(
-          (host) => installerOver(box, host: host),
-        ),
       ],
     );
     addTearDown(container.dispose);
@@ -191,12 +199,10 @@ void main() {
         const SettingsScreen(initialSection: SettingsSectionId.environments),
       ),
       warmUp: (tester) async {
-        for (final label in ['Check', 'Install']) {
-          await tester.ensureVisible(inPanel(label));
-          await tester.pump();
-          await tester.tap(inPanel(label));
-          await settleHostBox(tester);
-        }
+        await tester.ensureVisible(inPanel('Check'));
+        await tester.pump();
+        await tester.tap(inPanel('Check'));
+        await tester.pumpAndSettle();
         expect(find.text('sudo apt-get install -y tar'), findsOneWidget);
         expect(find.text('Open a terminal on ${host.name}'), findsOneWidget);
       },
@@ -318,36 +324,15 @@ void main() {
     );
 
     Future<void> open(WidgetTester tester) async {
+      _InvitingSetup(host).serveOn(server);
       await tester.tap(find.text('Open'));
     }
-
-    testWidgets('while it asks the host for a code', (tester) async {
-      final container = ProviderContainer(
-        overrides: [
-          ...noProcessOverrides(),
-          sshCompanionSetupProvider.overrideWith(
-            (ref, host) => Completer<Never>().future,
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      await expectSurvivesWindowMatrix(
-        tester,
-        build: () => opener(container),
-        warmUp: open,
-        matrix: settingsMatrix,
-        because: 'the busy line is a sentence beside a spinner',
-      );
-    });
 
     testWidgets('with an address and a code to copy', (tester) async {
       final container = ProviderContainer(
         overrides: [
           ...noProcessOverrides(),
           data,
-          sshCompanionSetupProvider.overrideWith(
-            (ref, host) async => _InvitingSetup(host),
-          ),
         ],
       );
       addTearDown(container.dispose);
@@ -369,9 +354,6 @@ void main() {
         overrides: [
           ...noProcessOverrides(),
           data,
-          sshCompanionSetupProvider.overrideWith(
-            (ref, host) async => _InvitingSetup(host),
-          ),
         ],
       );
       addTearDown(container.dispose);
@@ -381,6 +363,8 @@ void main() {
         warmUp: (tester) async {
           await open(tester);
           await tester.pump();
+          await tester.pump();
+          await tester.runAsync(pumpEventQueue);
           await tester.pump();
           // The direct route: the address row, the code row and the QR at once,
           // which is the tallest this dialog gets.
@@ -437,11 +421,9 @@ void main() {
     testWidgets('HostSessionsDialog with enough sessions to scroll', (
       tester,
     ) async {
+      server.sshWork.hostSessions['h1'] = _listing(12);
       final container = ProviderContainer(
-        overrides: [
-          ...noProcessOverrides(),
-          hostSessionsServiceProvider.overrideWithValue(_ListingSessions(12)),
-        ],
+        overrides: [...noProcessOverrides(), data],
       );
       addTearDown(container.dispose);
       await expectSurvivesWindowMatrix(
@@ -529,11 +511,9 @@ void main() {
           clockProvider.overrideWithValue(FixedClock(testTime)),
           discoveredTerminalThemesProvider.overrideWithValue(const []),
           remoteAccessControllerProvider.overrideWith(_PairingAccess.new),
-          sshRelaySetupFactoryProvider.overrideWithValue(
-            (host, port) async => box,
-          ),
         ],
       );
+      server.sshWork.onRelay = (_) => SshBoxAnswer.of(box.start());
       addTearDown(container.dispose);
       return container;
     }
@@ -733,18 +713,19 @@ const _firewallStep = PrivilegedCommand(
 
 /// A companion setup that answers at once with a long address and an open
 /// window, so the dialog's loaded state can be measured without a host.
-class _InvitingSetup implements SshCompanionSetup {
+class _InvitingSetup {
   _InvitingSetup(this.host);
 
-  @override
   final SshHost host;
 
-  @override
-  int get port => 7422;
+  /// What the server answers the dialog's two questions with.
+  void serveOn(FakeDataServer server) {
+    server.sshWork.onEndpoint = (_) => SshBoxAnswer.of(prepare());
+    server.sshWork.onPair = (_) => SshBoxAnswer.of(openWindow());
+  }
 
   /// Shut, with the `sudo` step for a terminal: the most this dialog holds.
-  @override
-  Future<CompanionEndpoint> prepare({bool ruleAddedByHand = false}) async =>
+  CompanionEndpoint prepare() =>
       CompanionEndpoint(
         address: host.host,
         port: 7422,
@@ -758,31 +739,23 @@ class _InvitingSetup implements SshCompanionSetup {
         privileged: _firewallStep,
       );
 
-  @override
-  Future<PairingWindow> openWindow({
-    required int capabilities,
-    String relay = '',
-  }) async => PairingWindow(
+  PairingWindow openWindow() => PairingWindow(
     status: PairingRequestStatus.open,
     observedAt: testTime,
     reason: 'Open.',
     code: PairingCode.encode(List<int>.generate(20, (i) => i * 7)),
     expiresAt: testTime.add(const Duration(minutes: 10)),
   );
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// A relay that runs on the box and cannot be reached from here: the verdict
 /// with the most words in it, and the only one with a command.
-class _RelayBox implements SshRelaySetup {
+class _RelayBox {
   _RelayBox(this.url);
 
   final Uri url;
 
-  @override
-  Future<SshRelayReading> start({bool ruleAddedByHand = false}) async =>
+  SshRelayReading start() =>
       SshRelayReading(
         status: SshRelayStatus.unreachable,
         observedAt: testTime,
@@ -797,9 +770,6 @@ class _RelayBox implements SshRelaySetup {
         port: 8787,
         url: url,
       );
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Answers `beginPairing` with a real code, and opens nothing.
@@ -838,30 +808,20 @@ class _PairingAccess extends RemoteAccessController {
 
 /// A host holding [count] running sessions: every other one a bare shell that
 /// can be reattached, the rest agent sessions that cannot.
-class _ListingSessions implements HostSessionsService {
-  _ListingSessions(this.count);
-
-  final int count;
-
-  @override
-  Future<List<SessionSummary>> list(SshHost host) async => [
-    for (var i = 0; i < count; i++)
-      SessionSummary(
-        id: i.isEven ? 'karmashala_${host.id}_pane-$i' : 'agent-$i',
-        argv: ['/bin/zsh', '-l', '--session', '$i'],
-        workingDirectory: '/home/dlohani/src/project-$i',
-        pid: 1000 + i,
-        columns: 120,
-        rows: 40,
-        startedAt: testTime,
-        observedAt: testTime,
-        totalBytes: 4096 * i,
-        firstAvailableOffset: 0,
-        lifecycle: const SessionRunning(),
-        writeHolder: null,
-      ),
-  ];
-
-  @override
-  Future<void> end(SshHost host, String sessionId) async {}
-}
+List<SessionSummary> _listing(int count) => [
+  for (var i = 0; i < count; i++)
+    SessionSummary(
+      id: i.isEven ? 'karmashala_local_pane-$i' : 'agent-$i',
+      argv: ['/bin/zsh', '-l', '--session', '$i'],
+      workingDirectory: '/home/dlohani/src/project-$i',
+      pid: 1000 + i,
+      columns: 120,
+      rows: 40,
+      startedAt: testTime,
+      observedAt: testTime,
+      totalBytes: 4096 * i,
+      firstAvailableOffset: 0,
+      lifecycle: const SessionRunning(),
+      writeHolder: null,
+    ),
+];

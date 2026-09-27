@@ -27,35 +27,43 @@ void main() {
   );
 
   group('no bundle for the machine', () {
-    test(
-      'says what the machine is, what this build carries, and the remedy',
-      () {
-        final said = explainHostDeployment(
-          reading(
-            HostDeploymentStatus.noBinary,
-            platform: arm,
-            targets: ['linux-x64'],
-          ),
-          hostName: 'do-box',
-        );
-
-        // The `uname` reading: os, arch and libc.
-        expect(said.sentence, contains('do-box'));
-        expect(said.sentence, contains('linux/arm64 (glibc)'));
-        expect(said.sentence, contains('it carries linux-x64 only'));
-        expect(said.remedy, contains('ships the linux-arm64 host bundle'));
-        expect(said.action, HostDeployAction.retry);
-        expect(said.command, isNull, reason: 'a release cannot build anything');
-      },
-    );
-
-    test('a build that carries nothing says so — the 2026-09-17 macOS app', () {
+    test('says the deployer\'s own words, and where the server wants the '
+        'bundle put (slice 5d)', () {
       final said = explainHostDeployment(
-        reading(HostDeploymentStatus.noBinary, platform: arm),
+        reading(
+          HostDeploymentStatus.noBinary,
+          platform: arm,
+          targets: ['linux-x64'],
+        ),
         hostName: 'do-box',
       );
 
-      expect(said.sentence, contains('it carries none at all'));
+      expect(said.sentence, 'Something the machine said.');
+      expect(said.remedy, contains('linux-arm64 host bundle'));
+      expect(said.remedy, contains('where the Karmashala server looks'));
+      expect(said.action, HostDeployAction.retry);
+      expect(said.command, isNull, reason: 'a release cannot build anything');
+    });
+
+    test('the deployer says what the machine is, where the server looked and '
+        'what it has', () async {
+      final target = FakeTarget(uname: 'Linux\naarch64\nldd (GNU libc) 2.36\n');
+
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.reason, contains('linux-arm64'));
+      expect(deployment.reason, contains('the fake bundle folder'));
+      expect(deployment.reason, contains('it has linux-x64'));
+    });
+
+    test('a musl box is refused in words, with no tmux to fall back on', () {
+      final said = explainHostDeployment(
+        reading(HostDeploymentStatus.unsupportedPlatform, platform: arm),
+        hostName: 'do-box',
+      );
+      expect(said.remedy, contains('glibc Linux and macOS only'));
+      expect(said.remedy, isNot(contains('tmux')));
+      expect(said.action, HostDeployAction.none);
     });
 
     test(
@@ -72,8 +80,8 @@ void main() {
         expect(said.command, contains('--target-arch=arm64'));
         // `compile exe` refuses a target with a build hook (§22).
         expect(said.command, isNot(contains('compile exe')));
-        // Where `DirectoryHostBinaries.standard` looks second, under a name its
-        // pattern accepts.
+        // Where the server looks on a debug run, under a name its pattern
+        // accepts.
         expect(
           said.command,
           contains('server/build/karmashala_host-0.0.0-linux-arm64.tar.gz'),
@@ -119,10 +127,7 @@ void main() {
         deployment: reading(HostDeploymentStatus.noBinary, platform: arm),
       );
 
-      expect(
-        '$failure',
-        startsWith('This build of Karmashala carries no session host'),
-      );
+      expect('$failure', startsWith('Something the machine said.'));
       expect('$failure', isNot(contains('Bad state')));
       expect('$failure', isNot(contains('HostDeployFailure')));
     },

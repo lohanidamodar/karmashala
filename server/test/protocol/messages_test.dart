@@ -17,7 +17,7 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 8, 14, 0, 30);
 
   test('the protocol version is pinned; changing it is a deliberate act', () {
-    expect(kProtocolVersion, 29);
+    expect(kProtocolVersion, 30);
   });
 
   test('protocol 28 retired the forwarded agent tools: 0x1d–0x1f are no '
@@ -38,9 +38,10 @@ void main() {
     expect(MessageType.dataStreamOpen.code, 0x3b);
     expect(MessageType.dataStreamItems.code, 0x3c);
     expect(MessageType.dataStreamClose.code, 0x3d);
-    // 0x3e and 0x3f stay reserved.
+    // 0x3e and 0x3f stay reserved (slice 5e); 0x40 is 5d's detach.
     expect(MessageType.fromCode(0x3e), isNull);
     expect(MessageType.fromCode(0x3f), isNull);
+    expect(MessageType.detach.code, 0x40);
     expect(MessageType.stopCheck.code, 0xf0);
     expect(MessageType.stopCheckAnswer.code, 0xf1);
   });

@@ -1,10 +1,10 @@
 import 'package:agent_cli/process.dart';
+import '../../../core/util/failure_words.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/data/agents_data.dart';
-import 'package:karmashala_ssh/connection.dart';
 
 /// What the last agent scan of one environment did.
 class EnvironmentScan {
@@ -46,7 +46,7 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
     } on DataRefused catch (refusal) {
       _set(environment.id, EnvironmentScan(error: refusal.message));
     } on Object catch (e) {
-      _set(environment.id, EnvironmentScan(error: describeSshFailure(e)));
+      _set(environment.id, EnvironmentScan(error: describeFailure(e)));
     }
   }
 

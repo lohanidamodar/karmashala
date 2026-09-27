@@ -6,6 +6,7 @@ library;
 
 export 'src/channel_limiter.dart';
 export 'src/environment_key_reader.dart';
+export 'src/ssh_asker.dart';
 export 'src/resilient_ssh_socket.dart';
 export 'src/ssh_connection.dart';
 export 'src/ssh_connection_pool.dart';

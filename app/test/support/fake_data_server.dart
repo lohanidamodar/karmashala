@@ -65,6 +65,8 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
+import 'package:karmashala_host_protocol/protocol.dart' show SessionSummary;
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/launch.dart';

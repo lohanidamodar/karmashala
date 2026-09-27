@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/util/failure_words.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,7 +7,6 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
-import 'package:karmashala_ssh/connection.dart';
 import '../application/pairing_in_progress.dart';
 import '../application/remote_access_controller.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -114,7 +114,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
       if (mounted && serial == _beginSerial && _paired == null) {
         setState(
           () =>
-              _error = 'Pairing could not start: ${describeSshFailure(error)}',
+              _error = 'Pairing could not start: ${describeFailure(error)}',
         );
       }
     }

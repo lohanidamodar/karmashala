@@ -94,7 +94,6 @@ class ClientIntents extends Notifier<void> {
       SessionStarted(
         session: row,
         launch: shown,
-        clientRuns: shown.sshHostId != null,
       ),
     );
   }

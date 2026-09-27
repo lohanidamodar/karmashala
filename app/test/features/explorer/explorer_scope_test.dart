@@ -26,7 +26,6 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -35,7 +34,7 @@ import 'package:karmashala/src/features/workspaces/application/workspaces_contro
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -161,10 +160,6 @@ void main() {
         ),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
-        ),
-        // Opening the pairing dialog must not reach for a machine.
-        sshCompanionSetupProvider.overrideWith(
-          (ref, host) => Completer<Never>().future,
         ),
       ],
     );

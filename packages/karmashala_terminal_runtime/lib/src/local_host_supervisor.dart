@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
 
 import 'local_host_access.dart';
 

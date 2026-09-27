@@ -8,8 +8,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_host/src/hooks/hook_spools.dart';
-import 'package:karmashala_host/src/protocol/messages.dart'
-    show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 

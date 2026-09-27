@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:test/test.dart';
 import 'package:karmashala_ssh_host/host.dart';
-import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 /// A machine that answers scripted commands and speaks the protocol back over
 /// a fake exec channel. The real SSH path (SshHostDeployTarget) is *not*
@@ -192,6 +192,9 @@ class FakeChannel implements RemoteChannel {
 }
 
 class FakeBinaries implements HostBinarySource {
+  @override
+  String describeSearch() => 'the fake bundle folder';
+
   FakeBinaries({
     this.targets = const {'linux-x64': 1024},
     this.isBundleArchive = false,
@@ -295,7 +298,7 @@ void main() {
       expect(deployment.status, HostDeploymentStatus.unsupportedPlatform);
       expect(deployment.reason, contains('musl'));
       expect(deployment.reason, contains('glibc-linked ELF'));
-      expect(deployment.fallsBackToTmux, isTrue);
+      expect(deployment.isReady, isFalse);
       expect(target.uploads, isEmpty);
     });
 
@@ -403,7 +406,7 @@ void main() {
 
         expect(deployment.status, HostDeploymentStatus.unknown);
         expect(deployment.reason, contains(r'echo "$HOME"'));
-        expect(deployment.fallsBackToTmux, isTrue);
+        expect(deployment.isReady, isFalse);
         expect(target.uploads, isEmpty);
       },
     );
@@ -602,7 +605,7 @@ void main() {
 
         expect(deployment.status, HostDeploymentStatus.cannotInstall);
         expect(deployment.reason, contains('read-only home'));
-        expect(deployment.fallsBackToTmux, isTrue);
+        expect(deployment.isReady, isFalse);
       },
     );
 
@@ -852,7 +855,7 @@ void main() {
 
       expect(deployment.status, HostDeploymentStatus.cannotStart);
       expect(deployment.reason, contains('never answered `hello`'));
-      expect(deployment.fallsBackToTmux, isTrue);
+      expect(deployment.isReady, isFalse);
     }, timeout: const Timeout(Duration(seconds: 60)));
 
     test('a serve that will not start quotes what the machine said', () async {
@@ -886,7 +889,7 @@ void main() {
         expect(deployment.protocolVersion, 7);
         expect(deployment.reason, contains('speaks protocol 7'));
         expect(deployment.reason, contains('stale `serve`'));
-        expect(deployment.fallsBackToTmux, isTrue);
+        expect(deployment.isReady, isFalse);
       },
     );
 

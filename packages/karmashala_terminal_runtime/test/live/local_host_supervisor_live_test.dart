@@ -4,7 +4,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_host/host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 
 /// A **real** `karmashala_host serve`, built from this tree, started by the

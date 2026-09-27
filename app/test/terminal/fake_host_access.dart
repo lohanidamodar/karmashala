@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:karmashala_ssh_host/host.dart';
-import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_host_protocol/host_access.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 /// A machine whose session host answers, with the reading the test chooses.
 /// Nothing here dials anything: the pane only ever asks for a reading and a
@@ -24,13 +24,6 @@ class PaneAccess implements HostSessionAccess {
   /// The grid each session was started at, as the server's `terminals.open`
   /// started it; an attach reports it (80×24 when unknown).
   final grids = <String, (int, int)>{};
-
-  /// What tmux on that machine is holding, and whether it will say. Unknown is
-  /// a third answer, not a silent "no" — a pane treats it as a session it must
-  /// not walk away from.
-  final tmuxSessions = <String>{};
-  var tmuxUnknown = false;
-  var tmuxAsks = 0;
 
   /// What the host answers an attach with instead of looking the session up.
   ProtocolErrorCode? attachRefusal;
@@ -61,23 +54,6 @@ class PaneAccess implements HostSessionAccess {
     final failure = deploymentError;
     if (failure != null) throw failure;
     return _deployment;
-  }
-
-  /// What this machine answers when asked for its login shell. Null is a real
-  /// answer — the machine that would not say.
-  String? shell = '/usr/bin/zsh';
-  var shellAsks = 0;
-
-  @override
-  Future<String?> loginShell() async {
-    shellAsks++;
-    return shell;
-  }
-
-  @override
-  Future<bool?> hasTmuxSession(String name) async {
-    tmuxAsks++;
-    return tmuxUnknown ? null : tmuxSessions.contains(name);
   }
 
   @override

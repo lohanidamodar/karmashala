@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import '../pty/pty.dart';
 import 'output_backlog.dart';
-import 'session_lifecycle.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
 /// One session's bytes beyond this process's memory. Written from the same
 /// place as the ring and bounded to the same size, which is what lets a

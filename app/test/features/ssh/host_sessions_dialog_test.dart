@@ -3,19 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
-import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
-import 'package:karmashala_host/protocol.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
-import 'fake_host_box.dart';
-import '../../support/test_machine.dart';
 
 class _Access extends RemoteAccessController {
   _Access(super.ref);
@@ -24,78 +20,85 @@ class _Access extends RemoteAccessController {
   Future<void> sync() async {}
 }
 
-/// Sessions on a machine whose host is there only once [box] has one.
-class _Sessions implements HostSessionsService {
-  _Sessions(this.box, this.whenAbsent);
-
-  final FakeHostBox box;
-  final HostDeployment whenAbsent;
-  var asks = 0;
-
-  @override
-  Future<List<SessionSummary>> list(SshHost host) async {
-    asks++;
-    if (box.installed.isEmpty) {
-      throw HostSessionsUnavailable(
-        'No session host on ${host.address}: ${whenAbsent.reason}',
-        deployment: whenAbsent,
-      );
-    }
-    return const [];
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
+/// What a box's host holds, asked of the server (`ssh.hostSessions`, slice
+/// 5d): listed, an agent's session named for its session, a shell's offered
+/// to reattach, one ended through the server, and a server that cannot reach
+/// the box said in its words.
 void main() {
   late TestMachine db;
-  setUp(() => db = TestMachine());
+  late FakeDataServer server;
 
-  HostDeployment cannotInstall() => HostDeployment(
-    status: HostDeploymentStatus.cannotInstall,
-    observedAt: testTime.subtract(const Duration(minutes: 1)),
-    reason: 'Could not write the bundle on do-box.',
+  setUp(() {
+    db = TestMachine();
+    server = FakeDataServer(clock: () => testTime);
+  });
+
+  SessionSummary summary(String id, {bool ended = false}) => SessionSummary(
+    id: id,
+    argv: const ['/bin/bash', '-l'],
+    workingDirectory: '/home/dev',
+    pid: 7,
+    columns: 80,
+    rows: 24,
+    startedAt: testTime,
+    observedAt: testTime,
+    totalBytes: 12,
+    firstAvailableOffset: 0,
+    lifecycle: ended ? SessionExited(0, testTime) : const SessionRunning(),
+    writeHolder: null,
   );
 
-  Widget dialog(FakeHostBox box, _Sessions sessions) => ProviderScope(
+  Future<Widget> dialog() async => ProviderScope(
     overrides: [
-      ...fakeTerminalOverrides(machine: db),
+      ...fakeTerminalOverrides(
+        machine: db,
+        data: await server.override(),
+      ),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       remoteAccessControllerProvider.overrideWith(_Access.new),
-      hostSessionsServiceProvider.overrideWithValue(sessions),
-      hostInstallerFactoryProvider.overrideWithValue(
-        (host) => installerOver(box),
-      ),
     ],
     child: MaterialApp(home: HostSessionsDialog(host: boxHost)),
   );
 
-  testWidgets('a machine with no host says why, what to do, and offers the '
-      'button — then lists', (tester) async {
-    final box = FakeHostBox();
-    final sessions = _Sessions(box, cannotInstall());
-    await tester.pumpWidget(dialog(box, sessions));
-    await settleHostBox(tester);
+  testWidgets('the box\'s sessions are listed, and one is ended through the '
+      'server', (tester) async {
+    server.sshWork.hostSessions['h1'] = [
+      summary('karmashala_local_p1'),
+      summary('karmashala_local_p2', ended: true),
+    ];
+    await tester.pumpWidget(await dialog());
+    await tester.pumpAndSettle();
 
-    expect(find.textContaining('Could not write the bundle'), findsOneWidget);
-    expect(find.textContaining('no root is needed'), findsOneWidget);
+    expect(find.textContaining('/bin/bash -l'), findsNWidgets(2));
+    await tester.tap(find.text('End').first);
+    await tester.pumpAndSettle();
+    await tester.runAsync(pumpEventQueue);
+    await tester.pumpAndSettle();
+    expect(server.sshWork.endedHostSessions.single, (
+      'h1',
+      'karmashala_local_p1',
+    ));
+  });
+
+  testWidgets('a box the server cannot reach is said in its words, never a '
+      'dump', (tester) async {
+    server.sshWork.hostSessionsRefusal =
+        'do-box runs musl libc. The host bundles are glibc-linked ELF.';
+    await tester.pumpWidget(await dialog());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('runs musl libc'), findsOneWidget);
     expect(find.textContaining('Bad state'), findsNothing);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Install'));
-    await settleHostBox(tester);
-
-    expect(box.uploads, hasLength(1));
-    expect(sessions.asks, 2, reason: 'installed, so it asked again');
-    expect(find.text('This host is holding nothing.'), findsOneWidget);
   });
 
   testWidgets('the failure survives the window matrix', (tester) async {
-    final box = FakeHostBox();
+    server.sshWork.hostSessionsRefusal =
+        'The Karmashala host on do-box would not answer.';
+    final built = await dialog();
     await expectSurvivesWindowMatrix(
       tester,
-      build: () => dialog(box, _Sessions(box, cannotInstall())),
-      because: 'a sentence, a remedy and a button where a list would be',
+      build: () => built,
+      because: 'a sentence where a list would be',
     );
   });
 }

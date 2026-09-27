@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/process.dart'
-    show CommandRunnerFactory, EnvironmentKind, localHostEnvironment;
+    show
+        CommandRunnerFactory,
+        EnvironmentKind,
+        ExecutionEnvironment,
+        localHostEnvironment;
 import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_environments/store.dart'
     show ExecutionEnvironmentDao;
@@ -98,7 +102,7 @@ import '../mcp/tools/review_thread_tool_set.dart';
 import '../mcp/tools/snippet_tool_set.dart';
 import '../mcp/tools/session_tool_set.dart';
 import '../automations/checks_tool_set.dart';
-import '../protocol/messages.dart' show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
@@ -111,13 +115,12 @@ import '../server/server_data_directory.dart';
 import '../checkpoints/checkpoint_tool_set.dart';
 import '../checkpoints/daemon_checkpoints.dart';
 import '../sessions/daemon_session_sync.dart';
-import '../ssh/server_ssh.dart';
+import '../ssh/ssh_domain.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
 import '../transport/socket_transport.dart';
 import 'package:karmashala_local_ipc/socket_location.dart';
-import 'host_build.dart';
-import 'host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 import 'host_server.dart';
 import 'lifecycle_feed.dart';
 import 'session_status_recording.dart';
@@ -305,11 +308,16 @@ Future<int> runServe(
   // What each hosted agent is doing, from the hooks and screens this host
   // holds, and the answers to what they ask.
   late final HostServer server;
+  // Filled in below: a row whose agent runs on an SSH box is run here too
+  // (slice 5d), through the server's link to the box.
+  RemoteSessions? boxSessions;
   final status = DaemonAgentStatus(
     registry: registry,
     database: database,
     publish: (sessionId, body) =>
         server.lifecycle.publishAgentStatus(sessionId, body),
+    // An agent on an SSH box is read off the server's copy of its screen.
+    remoteScreens: () => boxSessions?.sessions ?? const [],
   );
   // Every client's notes, todos, preferences, workspace and sessions: the
   // desktop app reads and writes them here, a phone's new project is written
@@ -317,8 +325,12 @@ Future<int> runServe(
   // lifecycle status of a session it runs is its own to record.
   final data = DataService(
     database,
-    runsSession: (sessionId) =>
-        registry.find(hostSessionIdOf(sessionId)) != null,
+    runsSession: (sessionId) {
+      final id = hostSessionIdOf(sessionId);
+      if (registry.find(id) != null) return true;
+      final onBox = boxSessions?.byId(id);
+      return onBox != null && !onBox.lifecycle.hasEnded;
+    },
   )..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
   final prompts = DaemonPromptAnswers(
     status: status,
@@ -326,12 +338,27 @@ Future<int> runServe(
     onDecision: (decision) => data.announce([DecisionRecorded(decision)]),
   );
   // SSH, reached by the server itself (slice 3a): its pool over the saved
-  // hosts, keys read on this machine, and prompts put to the desktop clients.
-  final ssh = ServerSsh(data: data, database: database)..attach();
+  // hosts, keys read on this machine, and prompts put to the desktop
+  // clients — and the Karmashala host on each SSH box (slice 5d): deployed,
+  // linked, its sessions started and relayed from here.
+  final ssh = ServerSshDomain(
+    data: data,
+    database: database,
+    dataDirectory: dataDirectory,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+    // A probe's server (the app started with KARMASHALA_PROBE=1) keeps off
+    // every box's host: the owner's sessions are there (PROJECT.md §23).
+    probe: (environment ?? Platform.environment)['KARMASHALA_PROBE'] == '1',
+  )..attach();
+  boxSessions = ssh.remote;
   // A machine's files for every client (slice 3c): the file pane, the
   // editor's reads and saves, Quick Open's index and the watches, over the
   // same SSH pool.
-  final files = ServerFiles(data: data, pool: ssh.pool)..attach();
+  final files = ServerFiles(
+    data: data,
+    remoteSpace: ssh.fileSpaceFor,
+    defaultDirectoryOf: ssh.defaultDirectoryOf,
+  )..attach();
   // The variables every terminal this server starts is given (slice 5a):
   // in its own data folder, write-only to every client.
   final envVault = ServerEnvVault(
@@ -352,6 +379,7 @@ Future<int> runServe(
     tell: data.announce,
     overlay: envVault.overlay,
     hostEnvironment: hostEnvironment,
+    remote: ssh.remote,
   );
   data.terminalWork = terminals;
   final agentWork = ServerAgentWork(
@@ -427,6 +455,8 @@ Future<int> runServe(
     record: data.recordWorktreeSetup,
     environmentOf: reach.environmentOf,
     runners: ssh.runners,
+    // A box's setup command runs as a session of the box's host (slice 5d).
+    remote: ssh.remote,
   );
   // The browser, Flutter runs and builds (slice 3d): a Chrome on this
   // machine, and commands run as sessions this server hosts, any client
@@ -464,6 +494,8 @@ Future<int> runServe(
     hostEnvironment: hostEnvironment,
     runners: ssh.runners,
     log: (message) => errSink.writeln('karmashala_host: $message'),
+    // Runs and builds on an SSH box are sessions of its host (slice 5d).
+    remote: ssh.remote,
   );
   data
     ..flutterWork = flutter
@@ -522,7 +554,10 @@ Future<int> runServe(
     ptyLibrary: pty.library,
     companion: companion,
     build: hostBuildOf(Platform.resolvedExecutable),
-  )..prompts = prompts;
+  )
+    ..prompts = prompts
+    // A client attached to a box's session is relayed its frames (5d).
+    ..boxes = ssh.relay;
   server.lifecycle.statusSnapshot = status.snapshot;
   // Every turn's before and after checkpoints, taken here (slice 2b): off the
   // status of a session this server runs, and off the hooks of any other
@@ -544,6 +579,8 @@ Future<int> runServe(
     clock: () => DateTime.now().toUtc(),
     onWritten: (sessionId) => data.announceSessions([sessionId]),
   )..start();
+  // A box's sessions start and exit as its host says (slice 5d).
+  ssh.onBoxLifecycle = recording.applyRemote;
   final companionServing = await _startCompanion(
     companion,
     server.lifecycle,
@@ -561,6 +598,14 @@ Future<int> runServe(
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   terminals.onPanesChanged = sessionSync.panesChanged;
+  // A hook an agent on an SSH box fired, relayed by the box's host: its
+  // status and what it needs of a person, as this machine's own.
+  ssh.onBoxHook = (hook) {
+    status.hook(hook);
+    attention.hook(hook);
+    sessionSync.hook(hook);
+    server.lifecycle.relayHook(hook);
+  };
   sessionSync.start();
   // Git, worktrees, their cleanup and GitHub for every client (slice 3b); a
   // turn ending tells them where to read again.
@@ -653,7 +698,7 @@ Future<int> runServe(
   // — is one of its own terminals, under the session's own id, so
   // `terminal_list` and the windows see it (slice 5b).
   Future<void> openAgent(AgentPaneLaunch launch, int columns, int rows) async {
-    terminals.open(
+    await terminals.openAnywhere(
       TerminalOpen(
         paneId: 'session-${launch.sessionId}',
         agentLaunch: launch,
@@ -693,6 +738,8 @@ Future<int> runServe(
     raise: attention.attention.raise,
     noticeUsageLimit: (notice) => data.announce([UsageLimitNoticed(notice)]),
     openAgent: openAgent,
+    // Automations and resumes fire on an SSH box it reaches (slice 5d).
+    reachesBox: ssh.remote.reaches,
   );
   // Event rules and usage limits follow every status the server keeps,
   // app or no app.
@@ -730,7 +777,10 @@ Future<int> runServe(
     links: SessionRepositoryDao(database),
     hostEnvironment: hostEnvironment,
   );
-  final checkoutFacts = DaemonCheckoutFacts(checkoutRows);
+  final checkoutFacts = DaemonCheckoutFacts(
+    checkoutRows,
+    reachesBox: ssh.remote.reaches,
+  );
   final presence = ConversationPresenceReader(
     locator: CliStoreLocator(
       runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
@@ -889,6 +939,27 @@ Future<int> runServe(
       }
       if (stopping.isCompleted) return;
       await agentWork.start(log: sink.writeln);
+    }),
+  );
+
+  // The sessions an SSH box kept while this server was down: a copy of each
+  // is kept again, so their status, exits and panes are read as before
+  // (slice 5d). Only boxes a row still claims to run on are dialled.
+  unawaited(
+    Future<void>.delayed(agentScanDelay).then((_) async {
+      final hostIds = <String>{};
+      for (final row in sessionRows.getClaimingLive()) {
+        final path = row.worktree ?? checkoutRows.repository(row.repositoryId)?.path;
+        final hostId = path == null
+            ? null
+            : checkoutRows.environment(path.environmentId)?.sshHostId;
+        if (hostId != null) hostIds.add(hostId);
+      }
+      for (final hostId in hostIds) {
+        if (stopping.isCompleted) return;
+        final kept = await ssh.adoptRunning(hostId);
+        if (kept > 0) sink.writeln('ssh: kept $kept session(s) on $hostId');
+      }
     }),
   );
 
@@ -1122,6 +1193,7 @@ Future<DaemonAutomations?> _startAutomations({
   void Function(InboxItem item)? raise,
   void Function(UsageLimitNotice notice)? noticeUsageLimit,
   AgentTerminalOpener? openAgent,
+  bool Function(ExecutionEnvironment environment)? reachesBox,
 }) async {
   if (database == null || recording == null) return null;
   final automations = DaemonAutomations(
@@ -1143,6 +1215,7 @@ Future<DaemonAutomations?> _startAutomations({
     raise: raise,
     noticeUsageLimit: noticeUsageLimit,
     openAgent: openAgent,
+    reachesBox: reachesBox,
     onDecision: (decision) => data.applyAsServer(
       DecisionAppend(
         DecisionRecord(

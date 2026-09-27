@@ -41,10 +41,18 @@ class FakeTerminalsWork {
           throw DataRefused(DataRefusalCode.failed, refusal);
         }
         opened.add(open);
-        final sessionId = terminalSessionId(
+        final own = terminalSessionId(
           paneId: open.paneId,
           agentSessionId: open.agentLaunch?.sessionId,
         );
+        // A box's terminal is named `ssh:<hostId>/<id>` at the server (5d).
+        final environment = open.environmentId;
+        final boxHost =
+            open.agentLaunch?.sshHostId ??
+            (environment != null && environment.startsWith('ssh:')
+                ? environment.substring('ssh:'.length)
+                : null);
+        final sessionId = boxHost == null ? own : 'ssh:$boxHost/$own';
         final existing = records[sessionId];
         final adopted = existing != null && existing.isLive;
         final record =

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:karmashala_remote/remote.dart' show scrubRelayLog;
 import 'package:path/path.dart' as p;
 
-import '../serve/host_paths.dart';
+import 'package:karmashala_host_protocol/host_paths.dart';
 import '../serve/serve_command.dart' show dataDirectoryOf;
 import 'server_config.dart';
 import 'server_data_directory.dart';

@@ -14,6 +14,7 @@ import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/src/sessions/launch/handoff_packet_files.dart';
 import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
+import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
@@ -72,6 +73,7 @@ void main() {
   Map<String, String> hostEnvironment = const {};
   bool usableLogin = false;
   Set<String> vault = const {};
+  AgentTerminalOpener? openAgent;
 
   ServerSessionLauncher build() {
     final rows = CheckoutRows(database);
@@ -91,6 +93,7 @@ void main() {
         Directory('${temp.path}${Platform.pathSeparator}handoff'),
       ),
       links: SessionRepositoryDao(database),
+      openAgent: openAgent,
     );
     return ServerSessionLauncher(
       launcher: launcher,
@@ -148,6 +151,7 @@ void main() {
     );
     pty = _DyingLauncher();
     registry = SessionRegistry(launcher: pty);
+    openAgent = null;
     launches = build();
   });
 
@@ -449,22 +453,33 @@ void main() {
     expect(pty.started, isEmpty);
   });
 
-  test(
-    'an SSH checkout is run by the client: the launch, nothing spawned',
-    () async {
-      final started = await launches.start(
-        const SessionStartSpec(
-          repositoryId: 'r9',
-          installationId: 'a9',
-          title: 't',
-        ),
-      );
-      expect(started.clientRuns, isTrue);
-      expect(started.launch?.sshHostId, 'h1');
-      expect(started.launch?.sessionId, 'new-1');
-      expect(pty.started, isEmpty);
-    },
-  );
+  test('an SSH checkout starts on its box, through the server\'s own '
+      'terminals (slice 5d): nothing is handed to a client', () async {
+    final onBox = <AgentPaneLaunch>[];
+    openAgent = (launch, columns, rows) async => onBox.add(launch);
+    launches = build();
+    final started = await launches.start(
+      const SessionStartSpec(repositoryId: 'r9', installationId: 'a9', title: 't'),
+    );
+    expect(started.launch?.sshHostId, 'h1');
+    expect(started.launch?.sessionId, 'new-1');
+    expect(started.hostSessionId, 'karmashala_new-1');
+    expect(onBox.single.sshHostId, 'h1');
+    expect(onBox.single.sessionId, 'new-1');
+    expect(pty.started, isEmpty);
+  });
+
+  test('with no terminals to open it through, an SSH checkout is refused '
+      'in words and its row does not claim to run', () async {
+    await expectLater(
+      launches.start(
+        const SessionStartSpec(repositoryId: 'r9', installationId: 'a9', title: 't'),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(row('new-1').status, isNot(SessionStatus.running));
+    expect(pty.started, isEmpty);
+  });
 
   test('a packet travels as a file to an agent that takes one', () async {
     await launches.start(

@@ -11,14 +11,16 @@ import 'package:karmashala_git/repositories.dart';
 import 'daemon_agents.dart';
 
 /// What the server knows about a checkout, from its store. It starts agents
-/// in this machine's own environment (and WSL's, on Windows); on an SSH box
-/// it runs commands over its own connection and starts no agent yet.
+/// in this machine's own environment (and WSL's, on Windows), and on an SSH
+/// box it reaches (slice 5d: through the box's Karmashala host); commands on
+/// a box run over its own connection.
 class DaemonCheckoutFacts implements CheckoutFacts {
   DaemonCheckoutFacts(
     this.rows, {
     this.agents = const DaemonAgents(),
     bool? windows,
     this.remote,
+    this.reachesBox,
   }) : _windows = windows ?? Platform.isWindows;
 
   final CheckoutRows rows;
@@ -27,6 +29,21 @@ class DaemonCheckoutFacts implements CheckoutFacts {
 
   /// The server's runners for an SSH box (`ServerSsh`); null reaches none.
   final CommandRunnerFactory? remote;
+
+  /// Whether the server starts sessions on the box an SSH environment names
+  /// (the ssh domain's `RemoteSessions.reaches`); null starts none there.
+  final bool Function(ExecutionEnvironment environment)? reachesBox;
+
+  /// Whether an agent can be started for [path]: here, or on a box the server
+  /// reaches.
+  bool startsAgentsIn(EnvironmentPath? path) {
+    if (isHostLocal(path)) return true;
+    if (path == null) return false;
+    final environment = rows.environment(path.environmentId);
+    return environment != null &&
+        environment.kind == EnvironmentKind.ssh &&
+        (reachesBox?.call(environment) ?? false);
+  }
 
   @override
   Repository? repository(String id) => rows.repository(id);
@@ -100,16 +117,17 @@ class DaemonCheckoutFacts implements CheckoutFacts {
         reason: 'Unknown environment: ${path.environmentId}',
       );
     }
-    if (isHostLocal(path)) {
+    if (startsAgentsIn(path)) {
       return (reach: UnattendedReach.reachable, reason: '');
     }
     return (
       reach: UnattendedReach.unreachable,
       reason: environment.kind == EnvironmentKind.ssh
-          ? '${environment.name} is an SSH machine, and the Karmashala server '
-                'does not start agents there yet'
-          : 'The Karmashala server runs agents only on its own machine, and '
-                '${environment.name} is not reachable from it',
+          ? '${environment.name} is an SSH machine this Karmashala server '
+                'does not reach'
+          : 'The Karmashala server runs agents only on its own machine and '
+                'the SSH machines it reaches, and ${environment.name} is '
+                'neither',
     );
   }
 }

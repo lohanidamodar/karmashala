@@ -1,11 +1,11 @@
 name: karmashala_ssh_host
 description: >-
-  Running the Karmashala server on a machine reached over SSH: which binary a
-  platform needs, deploying and greeting it, the companion port and relay
-  set up on the box, pairing a phone there, and reaching the sessions it owns.
-  Split from `karmashala_ssh` (slice 3a) because it speaks the server's wire
-  protocol — so the server itself can depend on `karmashala_ssh` for its own
-  SSH work without depending on the package that deploys it. Pure Dart.
+  Running the Karmashala host on a machine reached over SSH, as the server
+  does: which bundle a platform needs, deploying and greeting it, installing
+  and removing it, the companion port and relay set up on the box, and
+  pairing a phone there. Speaks the host's wire protocol through
+  `karmashala_host_protocol`, so the server depends on it (slice 5d) without
+  a cycle. Pure Dart.
 version: 0.1.0
 publish_to: none
 
@@ -25,10 +25,15 @@ dependencies:
   # Logging.
   karmashala_core:
     path: ../karmashala_core
-  # The server's wire protocol, so the deployer's greeting and the binary it
-  # installs cannot drift from what that binary answers.
-  karmashala_host:
-    path: ../../server
+  # The host's wire protocol (so the deployer's greeting and the binary it
+  # installs cannot drift from what that binary answers) and the readings this
+  # package answers with. Not the server itself: the server depends on this
+  # package (slice 5d), so it cannot depend back.
+  karmashala_host_protocol:
+    path: ../karmashala_host_protocol
+  # `kHostCompanionPort`, the port a phone dials a box's host on.
+  karmashala_remote:
+    path: ../karmashala_remote
   meta: ^1.16.0
   # The relay's contract: its default port, the `/k/<token>` prefix and the
   # health route this package builds its URLs from.

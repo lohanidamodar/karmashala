@@ -3,8 +3,8 @@ part of 'session_launcher.dart';
 /// **Starting a session is the server's** (slice 5b): this client names what
 /// to start ([SessionStartSpec]) and shows what the server started — a tab
 /// attached to the terminal it runs the agent in, a terminal window of this
-/// machine for the external surface, or (an SSH checkout, until slice 5d) a
-/// pane this client runs itself. Every decision — the row, the directory,
+/// machine for the external surface — on an SSH box too, where the server
+/// starts it on the box's host (slice 5d). Every decision — the row, the directory,
 /// the mode, the command line, the guards — is made there.
 extension SessionStartVerbs on SessionLauncher {
   /// Ends the agent [sessionId] is running and starts it again on the same
@@ -157,8 +157,7 @@ extension SessionStartVerbs on SessionLauncher {
     );
     _log.info(
       'Showing ${session.id} in pane ${opened.paneId}: '
-      '${started.adopted ? 'already running at the server' : 'started by the server'}'
-      '${started.clientRuns ? ', run by this client (SSH)' : ''}',
+      '${started.adopted ? 'already running at the server' : 'started by the server'}',
     );
     final notice = started.credentialNotice;
     if (notice != null) {

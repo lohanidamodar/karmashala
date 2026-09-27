@@ -1,7 +1,7 @@
 import 'package:agent_cli/process.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_environments/ssh.dart';
 
 import '../application/ssh_hosts_controller.dart';
 import 'pair_phone_dialog.dart';

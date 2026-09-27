@@ -14,6 +14,7 @@ import '../data/runs_work.dart';
 import '../domain/session_registry.dart';
 import '../devices/server_device_claims.dart' show FlutterDeviceClaims;
 import '../domain/uuid.dart';
+import '../ssh/ssh_domain.dart' show RemoteSessions;
 import 'attached_apps.dart';
 import 'flutter_logs_source.dart';
 import 'flutter_loop.dart';
@@ -46,6 +47,7 @@ class ServerFlutterWork implements FlutterWork {
     DateTime Function()? clock,
     String Function()? newId,
     void Function(String message)? log,
+    RemoteSessions? remote,
   }) {
     final now = clock ?? () => DateTime.now().toUtc();
     final ids = newId ?? newUuid;
@@ -57,6 +59,7 @@ class ServerFlutterWork implements FlutterWork {
       newId: ids,
       clock: now,
       windows: windows,
+      remote: remote,
     );
     sdk = ServerFlutterSdk(database: database, runners: runners, clock: now);
     apps = ServerAttachedApps(

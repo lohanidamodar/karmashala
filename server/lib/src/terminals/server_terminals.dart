@@ -6,12 +6,15 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_launch/karmashala_launch.dart';
 
 import '../data/terminal_work.dart';
+import 'package:karmashala_host_protocol/protocol.dart';
+
 import '../domain/host_session.dart';
-import '../domain/session_lifecycle.dart';
+import '../domain/screen_session.dart';
 import '../domain/session_registry.dart';
 import '../pty/pty.dart';
 import '../sessions/pane_facts.dart';
 import '../sessions/pane_source.dart';
+import '../ssh/ssh_domain.dart' show RemoteSessionRefused, RemoteSessions;
 
 /// **Every local and WSL terminal, run by the server** (slice 5a). A client
 /// names a profile or an agent launch; the launch is built here, with this
@@ -21,7 +24,10 @@ import '../sessions/pane_source.dart';
 /// and any client attaches to it by id. What each screen says about itself
 /// is read off the server's copy of it and told as [TerminalChanged] — and,
 /// as [PaneFacts], read by adoption, attribution and worktree cleanup (slice
-/// 5c: no client reports its panes any more).
+/// 5c: no client reports its panes any more). **An SSH box's terminal**
+/// (slice 5d) is opened on the box's Karmashala host through [remote]: the
+/// box user's login shell, or the agent's own command, under the same pane id
+/// — its record says `ssh:<hostId>/<id>`, which a client attaches to here.
 class ServerTerminals implements TerminalWork, PaneSource {
   ServerTerminals({
     required this.registry,
@@ -33,6 +39,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
     bool? windows,
     DateTime Function()? clock,
     this.settle = const Duration(milliseconds: 250),
+    this.remote,
   }) : _environments = environments,
        _tell = tell,
        _overlay = overlay ?? (() => const {}),
@@ -42,6 +49,9 @@ class ServerTerminals implements TerminalWork, PaneSource {
        _now = clock ?? _utcNow;
 
   final SessionRegistry registry;
+
+  /// Sessions on SSH boxes (the ssh domain's); null opens none there.
+  final RemoteSessions? remote;
   final List<ExecutionEnvironment> Function() _environments;
   final void Function(List<DataChange> changes) _tell;
   final Map<String, String> Function() _overlay;
@@ -80,13 +90,13 @@ class ServerTerminals implements TerminalWork, PaneSource {
   List<String>? tailOf(String paneId, int lines) {
     for (final record in _records.values) {
       if (record.paneId != paneId) continue;
-      return registry.find(record.sessionId)?.tailText(lines);
+      return _sessionOf(record.sessionId)?.tailText(lines);
     }
     return null;
   }
 
   PaneFacts _factsOf(TerminalRecord record) {
-    final session = registry.find(record.sessionId);
+    final session = _sessionOf(record.sessionId);
     final facts = session?.facts;
     final count = facts?.commandCount ?? 0;
     return PaneFacts(
@@ -103,6 +113,15 @@ class ServerTerminals implements TerminalWork, PaneSource {
 
   static DateTime _utcNow() => DateTime.now().toUtc();
 
+  /// The session a record names: one of the registry's, or — `ssh:<host>/<id>`
+  /// — the server's copy of one on a box.
+  ScreenSession? _sessionOf(String sessionId) {
+    final box = parseBoxSessionRef(sessionId);
+    return box == null
+        ? registry.find(sessionId)
+        : remote?.byId(box.sessionId);
+  }
+
   List<TerminalRecord> get records => List.unmodifiable(_records.values);
 
   @override
@@ -114,7 +133,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
   Future<Object?> handle(TerminalWorkRequest<Object?> request) async =>
       switch (request) {
         TerminalsProfiles() => profiles(),
-        final TerminalOpen open => this.open(open),
+        final TerminalOpen open => await openAnywhere(open),
         TerminalsList() => records,
         TerminalClose(:final sessionId) => await close(sessionId),
         TerminalRename(:final sessionId, :final title) => rename(
@@ -128,8 +147,8 @@ class ServerTerminals implements TerminalWork, PaneSource {
     final login = _loginShell();
     return terminalProfilesFor(
       [
-        // SSH panes are a client's until slice 5d; a WSL distribution only
-        // exists to a Windows server.
+        // A box's shell is its own login shell (slice 5d); a WSL
+        // distribution only exists to a Windows server.
         for (final environment in _environments())
           if (environment.kind == EnvironmentKind.wsl && _windows) environment,
       ],
@@ -139,8 +158,104 @@ class ServerTerminals implements TerminalWork, PaneSource {
     );
   }
 
-  /// Starts [request]'s terminal, or answers the one already running under
-  /// its pane's id. Throws [DataRefused].
+  /// [request]'s terminal wherever its environment is: on this machine
+  /// ([open]) or on an SSH box through the box's host. Throws [DataRefused].
+  Future<TerminalOpened> openAnywhere(TerminalOpen request) async {
+    final box = _boxOf(request);
+    return box == null ? open(request) : _openOnBox(request, box);
+  }
+
+  /// The SSH environment [request] opens in, or null for this machine's.
+  ExecutionEnvironment? _boxOf(TerminalOpen request) {
+    final hostId = request.agentLaunch?.sshHostId;
+    final environments = _environments();
+    if (hostId != null) {
+      return environments
+              .where(
+                (e) => e.kind == EnvironmentKind.ssh && e.sshHostId == hostId,
+              )
+              .firstOrNull ??
+          (throw DataRefused.notFound('no SSH machine is saved as $hostId'));
+    }
+    final id = request.environmentId;
+    if (id == null) return null;
+    final environment = environments.where((e) => e.id == id).firstOrNull;
+    return environment?.kind == EnvironmentKind.ssh ? environment : null;
+  }
+
+  Future<TerminalOpened> _openOnBox(
+    TerminalOpen request,
+    ExecutionEnvironment box,
+  ) async {
+    final remote = this.remote;
+    if (remote == null || !remote.reaches(box)) {
+      throw DataRefused.notFound(
+        '${box.name} is an SSH machine this server does not reach.',
+      );
+    }
+    final agent = request.agentLaunch;
+    final ownId = terminalSessionId(
+      paneId: request.paneId,
+      agentSessionId: agent?.sessionId,
+    );
+    final ref = boxSessionRef(box.sshHostId!, ownId);
+    final running = remote.byId(ownId);
+    if (running == null || running.lifecycle.hasEnded) {
+      if (request.columns <= 0 || request.rows <= 0) {
+        throw const DataRefused.invalid('terminals.open: an empty grid');
+      }
+    }
+    final title = agent?.title ?? agent?.agentId ?? box.name;
+    final ({ScreenSession session, bool adopted}) opened;
+    try {
+      final started = await remote.open(
+        box,
+        sessionId: ownId,
+        argv: agent == null
+            ? null
+            : [agent.executable, ...agent.commandArguments],
+        workingDirectory: agent?.workingDirectory ?? request.workingDirectory,
+        variables: agent == null
+            ? const {}
+            : {
+                kSessionIdEnvironmentVariable: agent.sessionId ?? '',
+                ...agent.environment,
+              },
+        removedVariables: agent?.removedEnvironment ?? const {},
+        columns: request.columns,
+        rows: request.rows,
+      );
+      opened = (session: started.session, adopted: started.adopted);
+    } on RemoteSessionRefused catch (error) {
+      throw DataRefused(DataRefusalCode.failed, error.message);
+    }
+    final directory = agent?.workingDirectory ?? request.workingDirectory;
+    if (directory != null) _launchDirectory[ref] = directory;
+    if (agent != null) _agentTerminals.add(ref);
+    final record =
+        (opened.adopted ? _records[ref] : null) ??
+        _track(
+          opened.session,
+          sessionId: ref,
+          paneId: request.paneId,
+          profileId: agent?.profileId ?? request.profileId ?? '',
+          environmentId: box.id,
+          title: title,
+          shellIntegration: false,
+          tell: true,
+        );
+    return TerminalOpened(
+      sessionId: ref,
+      paneId: request.paneId,
+      title: record.title,
+      profileId: record.profileId,
+      shellIntegration: false,
+      adopted: opened.adopted,
+    );
+  }
+
+  /// Starts [request]'s terminal on this machine, or answers the one already
+  /// running under its pane's id. Throws [DataRefused].
   TerminalOpened open(TerminalOpen request) {
     final agent = request.agentLaunch;
     final sessionId = terminalSessionId(
@@ -244,8 +359,19 @@ class ServerTerminals implements TerminalWork, PaneSource {
 
   /// Ends [sessionId] for good and forgets it.
   Future<DataAck> close(String sessionId) async {
+    final box = parseBoxSessionRef(sessionId);
     try {
-      await registry.close(sessionId);
+      if (box != null) {
+        final remote = this.remote;
+        if (remote == null) throw UnknownSession(sessionId);
+        try {
+          await remote.close(box.sessionId);
+        } on RemoteSessionRefused {
+          throw UnknownSession(sessionId);
+        }
+      } else {
+        await registry.close(sessionId);
+      }
     } on UnknownSession {
       if (_records.remove(sessionId) == null) {
         throw DataRefused.notFound('no terminal $sessionId on this server');
@@ -282,7 +408,8 @@ class ServerTerminals implements TerminalWork, PaneSource {
   }
 
   TerminalRecord _track(
-    HostSession session, {
+    ScreenSession session, {
+    String? sessionId,
     required String paneId,
     required String profileId,
     required String? environmentId,
@@ -290,9 +417,9 @@ class ServerTerminals implements TerminalWork, PaneSource {
     required bool shellIntegration,
     required bool tell,
   }) {
-    final sessionId = session.id;
+    final named = sessionId ?? session.id;
     final record = TerminalRecord(
-      sessionId: sessionId,
+      sessionId: named,
       paneId: paneId,
       profileId: profileId,
       environmentId: environmentId,
@@ -300,21 +427,21 @@ class ServerTerminals implements TerminalWork, PaneSource {
       title: title,
       startedAt: session.startedAt.toUtc(),
     );
-    _records[sessionId] = record;
+    _records[named] = record;
     final facts = session.facts;
     if (facts != null) {
       facts.onChanged = () {
-        if (!_records.containsKey(sessionId)) return;
-        _dirty.add(sessionId);
+        if (!_records.containsKey(named)) return;
+        _dirty.add(named);
         _flush ??= Timer(settle, _flushNow);
       };
     }
     unawaited(
       session.ended.then((end) {
-        if (registry.find(sessionId) != session) return;
-        final current = _records[sessionId];
+        if (_sessionOf(named) != session) return;
+        final current = _records[named];
         if (current == null) return;
-        _records[sessionId] = current.copyWith(
+        _records[named] = current.copyWith(
           endedAt: (end.endedAt ?? _now()).toUtc(),
           exitCode: end.exitCode,
           endReason: switch (end) {
@@ -322,7 +449,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
             _ => null,
           },
         );
-        _dirty.add(sessionId);
+        _dirty.add(named);
         _flushNow();
         _prune();
       }),
@@ -340,7 +467,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
   /// [sessionId]'s record as its screen and a rename now say.
   void _refresh(String sessionId) {
     final current = _records[sessionId];
-    final session = registry.find(sessionId);
+    final session = _sessionOf(sessionId);
     if (current == null) return;
     final facts = session?.facts;
     _records[sessionId] = TerminalRecord(
@@ -382,7 +509,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
   void _prune() {
     final gone = [
       for (final sessionId in _records.keys)
-        if (registry.find(sessionId) == null) sessionId,
+        if (_sessionOf(sessionId) == null) sessionId,
     ];
     if (gone.isEmpty) return;
     for (final sessionId in gone) {
@@ -394,12 +521,6 @@ class ServerTerminals implements TerminalWork, PaneSource {
   }
 
   ExecutionEnvironment? _environmentFor(TerminalOpen request) {
-    final agent = request.agentLaunch;
-    if (agent?.sshHostId != null) {
-      throw const DataRefused.notFound(
-        'An SSH pane is still opened by the Karmashala app itself.',
-      );
-    }
     final id = request.environmentId;
     if (id == null) return null;
     final environment = _environments().where((e) => e.id == id).firstOrNull;
@@ -408,9 +529,10 @@ class ServerTerminals implements TerminalWork, PaneSource {
     }
     switch (environment.kind) {
       case EnvironmentKind.ssh:
+        // Opened on the box (`openAnywhere`); never a PTY here.
         throw DataRefused.notFound(
-          '${environment.name} is an SSH machine; its panes are still opened '
-          'by the Karmashala app itself.',
+          '${environment.name} is an SSH machine: its terminals open on the '
+          'box, through the server\'s link to it.',
         );
       case EnvironmentKind.wsl when !_windows:
         throw DataRefused.notFound(

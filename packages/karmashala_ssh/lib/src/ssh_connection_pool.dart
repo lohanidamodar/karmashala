@@ -1,6 +1,7 @@
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/process.dart';
+import 'ssh_asker.dart';
 import 'ssh_connection.dart';
 import 'ssh_host.dart';
 import 'ssh_host_key.dart';
@@ -12,10 +13,7 @@ class SshConnectionPool {
   SshConnectionPool({
     required this.hosts,
     required this.knownHosts,
-    this.onUnknownHostKey,
-    this.hostKeyDecisionFor,
-    this.passwordPrompt,
-    this.passphrasePrompt,
+    this.asker,
     this.keyReader = readLocalPrivateKey,
     this.onConnection,
     this.clock = const SystemClock(),
@@ -25,17 +23,10 @@ class SshConnectionPool {
   final SshHostStore hosts;
   final KnownHostStore knownHosts;
 
-  /// Asked when a host presents an unrecognised key. Absent means unknown hosts
-  /// are refused rather than trusted (see [SshHostKeyVerifier]).
-  final HostKeyTrustDecision? onUnknownHostKey;
-
-  /// [onUnknownHostKey] for one host, where the question must name which —
-  /// the server's prompt tells every client the host it is about. Wins over
-  /// [onUnknownHostKey] when given.
-  final HostKeyTrustDecision Function(SshHost host)? hostKeyDecisionFor;
-
-  final SshSecretPrompt? passwordPrompt;
-  final SshSecretPrompt? passphrasePrompt;
+  /// Who is asked what a connection cannot decide alone (the prompts
+  /// contract). Absent: an unknown host key is refused rather than trusted,
+  /// and a host that wants a password or passphrase gets none.
+  final SshAsker? asker;
 
   /// How a private key file is read. The default opens it on Windows; the app
   /// supplies one that also understands a key inside a WSL distribution.
@@ -85,10 +76,10 @@ class SshConnectionPool {
       host: host.host,
       port: host.port,
       clock: clock,
-      onUnknownHostKey: hostKeyDecisionFor?.call(host) ?? onUnknownHostKey,
+      onUnknownHostKey: asker?.hostKeyDecisionFor(host),
     ),
-    passwordPrompt: passwordPrompt,
-    passphrasePrompt: passphrasePrompt,
+    passwordPrompt: asker?.password,
+    passphrasePrompt: asker?.passphrase,
     keyReader: keyReader,
   );
 

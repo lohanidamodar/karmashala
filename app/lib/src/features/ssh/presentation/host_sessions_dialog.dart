@@ -1,10 +1,12 @@
 import 'dart:io';
+import '../../../core/util/failure_words.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show paneIdOfTerminalSession;
 import 'package:karmashala_host/protocol.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh_host/host.dart';
+import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -15,14 +17,14 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../terminal/application/local_host_providers.dart';
-import '../application/host_sessions.dart';
-import 'host_deploy_failure_notice.dart';
+import '../data/ssh_client.dart';
 
 /// **What a machine is still running, and the two things you can do about it.**
 ///
 /// The session host outlives this app on purpose, so a machine can be holding
 /// work opened by a Karmashala that has since been closed — and until this
 /// existed there was no way to see it, reattach to it, or end it from here.
+/// A box's are asked of the server, which reaches it (slice 5d).
 class HostSessionsDialog extends ConsumerStatefulWidget {
   const HostSessionsDialog({required SshHost this.host, super.key});
 
@@ -54,10 +56,6 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
 
   List<SessionSummary>? _sessions;
   String? _error;
-
-  /// Why there is no host to ask, when that is the failure — shown with its
-  /// remedy and an Install button instead of [_error]'s sentence alone.
-  HostDeployment? _notDeployed;
   var _busy = true;
 
   @override
@@ -72,12 +70,11 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
       final host = widget.host;
       final found = host == null
           ? await _local().listSessions()
-          : await ref.read(hostSessionsServiceProvider).list(host);
+          : await ref.read(sshClientProvider).hostSessions(host.id);
       if (mounted) {
         setState(() {
           _sessions = found;
           _error = null;
-          _notDeployed = null;
           _busy = false;
         });
       }
@@ -85,12 +82,10 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
       if (mounted) {
         setState(() {
           _error = switch (e) {
-            HostSessionsUnavailable(:final message) => message,
             SocketException() when widget.host == null =>
               'No session host is running on this computer.',
-            _ => describeSshFailure(e),
+            _ => describeFailure(e),
           };
-          _notDeployed = e is HostSessionsUnavailable ? e.deployment : null;
           _busy = false;
         });
       }
@@ -104,10 +99,10 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
       if (host == null) {
         await _local().endSession(session.id);
       } else {
-        await ref.read(hostSessionsServiceProvider).end(host, session.id);
+        await ref.read(sshClientProvider).endHostSession(host.id, session.id);
       }
     } on Object catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(describeSshFailure(e))));
+      messenger.showSnackBar(SnackBar(content: Text(describeFailure(e))));
     }
     await _refresh();
   }
@@ -115,9 +110,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
   LocalHostSessionAccess _local() {
     final access = ref.read(localHostSessionAccessProvider);
     if (access == null) {
-      throw const HostSessionsUnavailable(
-        'This app does not use a session host here.',
-      );
+      throw const _NoLocalHost();
     }
     return access;
   }
@@ -126,7 +119,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
   /// carries `local_` or a host id instead, and matches no session.
   String? _agentTitleOf(String hostSessionId) {
     const prefix = 'karmashala_';
-    final shell = 'karmashala_${widget.host?.id ?? 'local'}_';
+    const shell = 'karmashala_local_';
     if (!hostSessionId.startsWith(prefix) || hostSessionId.startsWith(shell)) {
       return null;
     }
@@ -166,15 +159,6 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
           (true, _, null) => const Padding(
             padding: EdgeInsets.all(Insets.lg),
             child: Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
-          ),
-          (false, _, _) when _notDeployed != null => Padding(
-            padding: const EdgeInsets.all(Insets.md),
-            child: HostDeployFailureNotice(
-              host: widget.host!,
-              deployment: _notDeployed!,
-              closeDialogFirst: true,
-              onInstalled: _refresh,
-            ),
           ),
           (_, final String message, _) => Padding(
             padding: const EdgeInsets.all(Insets.md),
@@ -247,9 +231,7 @@ class _SessionRow extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final running = !session.lifecycle.hasEnded;
-    final paneId = hostId == null
-        ? null
-        : paneIdOfHostSession(session.id, hostId!);
+    final paneId = hostId == null ? null : paneIdOfTerminalSession(session.id);
     final agentTitle = agentTitleOf(session.id);
     final isAgent = agentTitle != null || hostId != null;
 
@@ -324,4 +306,13 @@ class _SessionRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// No session host on this computer to ask — drawn as it is, so its
+/// `toString` is the sentence.
+class _NoLocalHost implements Exception {
+  const _NoLocalHost();
+
+  @override
+  String toString() => 'This app does not use a session host here.';
 }
