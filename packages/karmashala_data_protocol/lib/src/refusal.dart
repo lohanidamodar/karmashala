@@ -12,6 +12,10 @@ enum DataRefusalCode {
   /// No server answered: it is not running, or the link to it is down.
   unavailable,
 
+  /// It expected something to be as it last saw it, and it is not: a save
+  /// over a file changed on disk since it was read (`files.write`).
+  conflict,
+
   /// The server tried and failed.
   failed;
 

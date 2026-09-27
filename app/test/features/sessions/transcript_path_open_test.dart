@@ -1,6 +1,6 @@
-import 'dart:io';
-
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_files/values.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
@@ -32,8 +32,14 @@ void main() {
   late TestMachine db;
   late FakeCommandRunner host;
   late List<String> probed;
-  late FileSystemEntityType answer;
+  late FileStat onDisk;
   late FakeDataServer server;
+
+  FileStat stat({bool directory = false}) => FileStat(
+    isDirectory: directory,
+    size: 1,
+    stamp: FileStamp(length: 1, modified: testTime),
+  );
 
   /// Seeds one session in [environment], running in [workingDirectory].
   void seed({
@@ -68,7 +74,15 @@ void main() {
     server = FakeDataServer()..runsOn(db);
     host = FakeCommandRunner();
     probed = [];
-    answer = FileSystemEntityType.file;
+    onDisk = stat();
+    // The one disk touch the feature is allowed, asked of the server where
+    // the session's files are. Counted, so "nothing is statted while
+    // rendering" is a number rather than a claim.
+    server.filesWork.answer = (request) {
+      if (request is! FilesStatOf) return FakeFilesWork.unhandled;
+      probed.add(request.path.path);
+      return onDisk;
+    };
   });
 
   /// Pumps the conversation over one agent message.
@@ -101,13 +115,11 @@ void main() {
               ),
             ]),
           ),
-          selectedRepoWindowsRootProvider.overrideWithValue(root),
-          // The one disk touch the feature is allowed. Counted, so "nothing is
-          // statted while rendering" is a number rather than a claim.
-          hostPathProbeProvider.overrideWithValue((path) {
-            probed.add(path);
-            return answer;
-          }),
+          fileTreeRootProvider.overrideWithValue(
+            root == null
+                ? null
+                : EnvironmentPath(environmentId: 'windows', path: root),
+          ),
           revealInFileManagerProvider.overrideWithValue(
             RevealInFileManager(
               host: host,
@@ -188,7 +200,10 @@ void main() {
     expect(
       container.read(fileRevealTargetProvider),
       const FileRevealTarget(
-        hostPath: r'C:\src\demo\app\lib\main.dart',
+        path: EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\src\demo\app\lib\main.dart',
+        ),
         isDirectory: false,
       ),
     );
@@ -202,7 +217,7 @@ void main() {
     tester,
   ) async {
     seed();
-    answer = FileSystemEntityType.directory;
+    onDisk = stat(directory: true);
     await pump(tester, 'Look under lib/src/features/ for it.');
 
     await clickPath(tester);
@@ -245,7 +260,7 @@ void main() {
 
   testWidgets('a path that is not on disk says so', (tester) async {
     seed();
-    answer = FileSystemEntityType.notFound;
+    onDisk = const FileStat.absent();
     await pump(tester, 'See lib/gone.dart.');
 
     await clickPath(tester);
@@ -276,8 +291,9 @@ void main() {
 
     await clickPath(tester);
 
-    // No host spelling exists, so nothing is statted and nothing is opened.
-    expect(probed, isEmpty);
+    // The server looks on the box itself (slice 3c); it is there, but no
+    // file manager here can show it, so nothing is opened.
+    expect(probed, ['/home/me/src/app/lib/main.dart']);
     expect(host.requests, isEmpty);
     expect(
       find.textContaining('is on build-box, not on this machine'),

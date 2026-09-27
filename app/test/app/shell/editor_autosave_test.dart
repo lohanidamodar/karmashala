@@ -24,11 +24,14 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/test_machine.dart';
+import '../../support/memory_documents.dart';
 
 const _path = r'C:\repo\lib\counter.dart';
 const _initial = 'void main() {}\n';
 
 class _Store extends DocumentStore {
+  _Store() : super(noServerFiles());
+
   final disk = <String, String>{_path: _initial};
   final written = <String, DateTime>{};
   var writes = 0;

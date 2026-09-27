@@ -42,8 +42,12 @@ abstract interface class RemoteDocumentFiles {
   /// rather than replacing it with a file.
   Future<bool> isSymlink(EnvironmentPath path);
 
-  /// The first [length] bytes of [path], or all of it.
-  Future<Uint8List> readBytes(EnvironmentPath path, {int? length});
+  /// [length] bytes of [path] from [offset], or to its end.
+  Future<Uint8List> readBytes(
+    EnvironmentPath path, {
+    int offset = 0,
+    int? length,
+  });
 
   /// Creates [path] holding [bytes]; refuses when something is already there.
   Future<void> writeNewFile(EnvironmentPath path, Uint8List bytes);

@@ -10,11 +10,14 @@ import 'package:karmashala_ui/theme.dart';
 
 import '../terminal/fake_instance.dart';
 import '../../support/test_machine.dart';
+import '../../support/memory_documents.dart';
 
 const _path = r'C:\repo\build\bundle.js';
 
 /// Hands back a file too large to edit, so the tab opens in the viewer.
 class _HugeStore extends DocumentStore {
+  _HugeStore() : super(noServerFiles());
+
   static final _text = List.generate(60000, (i) => 'var x$i = $i;').join('\n');
 
   @override

@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/editor/application/editor_language.dart'
 import 'package:karmashala/src/features/editor/application/open_documents.dart';
 import 'package:karmashala/src/features/editor/data/document_store.dart';
 import 'package:karmashala/src/features/editor/domain/source_document.dart';
+import '../../support/memory_documents.dart';
 
 const _path = r'C:\src\app\lib\main.dart';
 const _other = r'C:\src\app\lib\other.dart';
@@ -13,7 +14,7 @@ const _other = r'C:\src\app\lib\other.dart';
 /// A disk described rather than used: the store's own suite covers the real
 /// one, and these cases are about what the buffers do with its answers.
 class _FakeStore extends DocumentStore {
-  _FakeStore(this.disk);
+  _FakeStore(this.disk) : super(noServerFiles());
 
   final Map<String, String> disk;
   final Map<String, DateTime> written = {};

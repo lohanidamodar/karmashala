@@ -2,43 +2,49 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
-import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 import 'package:path/path.dart' as p;
 
-/// Making a file or folder from the Files side panel.
+import '../../support/fake_data_server.dart';
+import '../../support/temp_directory.dart';
+import 'explorer_fixture.dart';
+
+/// The Files side panel over the server (slice 3c): it lists what the server
+/// lists, makes what the server makes, and lists again when the server's
+/// watch says a folder changed — nothing here reads a disk.
 void main() {
   late Directory tmp;
+  late FakeDataServer server;
+  late Override data;
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('ks-file-create'));
-  tearDown(() => tmp.deleteSync(recursive: true));
-
-  group('the service', () {
-    const service = FileListingService();
-
-    test('makes a folder and an empty file where it was asked', () async {
-      final folder = await service.createDirectory(tmp.path, 'lib');
-      final file = await service.createFile(folder, 'main.dart');
-      expect(Directory(folder).existsSync(), isTrue);
-      expect(File(file).readAsStringSync(), isEmpty);
-      expect(p.dirname(file), folder);
-    });
-
-    test('refuses a name that is already there, file or folder', () async {
-      File(p.join(tmp.path, 'a.txt')).writeAsStringSync('keep me');
-      await expectLater(
-        service.createFile(tmp.path, 'a.txt'),
-        throwsA(isA<FileSystemException>()),
-      );
-      await expectLater(
-        service.createDirectory(tmp.path, 'a.txt'),
-        throwsA(isA<FileSystemException>()),
-      );
-      expect(File(p.join(tmp.path, 'a.txt')).readAsStringSync(), 'keep me');
-    });
+  setUp(() async {
+    tmp = Directory.systemTemp.createTempSync('ks-file-create');
+    server = FakeDataServer();
+    data = await server.override();
   });
+  tearDown(() => removeTempDirectory(tmp));
+
+  Future<ProviderContainer> pump(WidgetTester tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        data,
+        fileTreeRootProvider.overrideWithValue(at(tmp.path)),
+        activeEditorPathProvider.overrideWithValue(null),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: FileExplorerView())),
+      ),
+    );
+    await settle(tester);
+    return container;
+  }
 
   test('a folder offers to make things in it; a file does not', () {
     List<String?> values(bool isDirectory) => [
@@ -52,60 +58,62 @@ void main() {
     expect(values(false), isNot(contains('new-file')));
   });
 
-  testWidgets('the header makes a folder at the root and selects it', (
-    tester,
-  ) async {
-    final container = ProviderContainer(
-      overrides: [
-        selectedRepoWindowsRootProvider.overrideWithValue(tmp.path),
-        activeEditorHostPathProvider.overrideWithValue(null),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: Scaffold(body: FileExplorerView())),
-      ),
-    );
+  testWidgets('the header makes a folder at the root through the server and '
+      'selects it', (tester) async {
+    final container = await pump(tester);
 
     await tester.tap(find.byTooltip('New folder'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'docs');
     await tester.tap(find.text('Create'));
-    // The create is real file I/O, which fake time does not advance: pump so
-    // the dialog's answer reaches it, then wait on the disk in real time.
     for (var i = 0; i < 50; i++) {
-      await tester.pump();
+      await settle(tester);
       if (container.read(fileRevealTargetProvider) != null) break;
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
     }
 
     expect(Directory(p.join(tmp.path, 'docs')).existsSync(), isTrue);
+    expect(server.filesWork.kinds, contains('files.mkdir'));
     expect(
-      container.read(fileRevealTargetProvider)?.hostPath,
-      p.join(tmp.path, 'docs'),
+      container.read(fileRevealTargetProvider)?.path,
+      at(p.join(tmp.path, 'docs')),
     );
+  });
+
+  testWidgets('a folder the server says changed is listed again', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Empty'), findsOneWidget);
+    expect(server.filesWork.watched, contains(at(tmp.path)));
+
+    // An agent wrote a file; the server's watch tells this link.
+    File(p.join(tmp.path, 'agent.txt')).writeAsStringSync('x');
+    await tester.runAsync(() => server.filesWork.changed(at(tmp.path)));
+    await settle(tester);
+
+    expect(find.text('agent.txt'), findsOneWidget);
   });
 
   testWidgets('a name with a separator is refused in the dialog', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          selectedRepoWindowsRootProvider.overrideWithValue(tmp.path),
-          activeEditorHostPathProvider.overrideWithValue(null),
-        ],
-        child: const MaterialApp(home: Scaffold(body: FileExplorerView())),
-      ),
-    );
+    await pump(tester);
     await tester.tap(find.byTooltip('New file'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '../escape.txt');
     await tester.pump();
     expect(find.textContaining('path separator'), findsOneWidget);
   });
+}
+
+/// Lets the fake server's real file I/O land: pumps, then waits a moment in
+/// real time, a few times.
+Future<void> settle(WidgetTester tester) async {
+  for (var i = 0; i < 5; i++) {
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+  }
+  await tester.pump();
 }

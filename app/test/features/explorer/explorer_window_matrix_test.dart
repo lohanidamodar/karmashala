@@ -7,16 +7,14 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
-import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
-import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
+import 'package:karmashala_files/values.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -36,6 +34,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import '../../support/window_matrix.dart';
+import '../file_explorer/explorer_fixture.dart';
 import '../terminal/fake_instance.dart';
 
 const _long =
@@ -297,27 +296,20 @@ void main() {
     await expectSurvivesWindowMatrix(
       tester,
       build: () => ProviderScope(
-        overrides: [
-          selectedRepoWindowsRootProvider.overrideWithValue(root),
-          directoryListingProvider.overrideWith(
-            (ref, dir) async => [
-              for (var i = 0; i < 8; i++)
-                DirEntry(
-                  name: 'a-file-with-a-name-far-too-long-for-the-panel-$i.dart',
-                  isDirectory: i < 3,
-                  windowsPath: '$dir\\entry-$i',
-                ),
-            ],
-          ),
-          revealInFileManagerProvider.overrideWithValue(
-            RevealInFileManager(
-              host: FakeCommandRunner(),
-              translator: const PathTranslator(),
-              environmentFor: (_) => null,
-              fileManagerOverride: HostFileManager.windowsExplorer,
-            ),
-          ),
-        ],
+        // Every folder lists the same eight long names, so an opened one
+        // draws them a level in.
+        overrides: explorerOverrides(
+          root,
+          const {},
+          list: (dir) => [
+            for (var i = 0; i < 8; i++)
+              FileEntry(
+                name: 'a-file-with-a-name-far-too-long-for-the-panel-$i.dart',
+                path: dir.copyWith(path: '${dir.path}\\entry-$i'),
+                kind: i < 3 ? FileEntryKind.directory : FileEntryKind.file,
+              ),
+          ],
+        ),
         child: _column(240, const FileExplorerView()),
       ),
       warmUp: (tester) async {

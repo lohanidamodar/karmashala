@@ -1,3 +1,4 @@
+import 'package:karmashala_files/values.dart' show FileStamp;
 import 'package:karmashala_git/cleanup.dart' show WorktreeCleanupLog;
 import 'package:karmashala_git/git.dart'
     show
@@ -55,6 +56,7 @@ part 'changes/ssh_changes.dart';
 part 'changes/git_changes.dart';
 part 'changes/flutter_changes.dart';
 part 'changes/browser_changes.dart';
+part 'changes/files_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -589,7 +591,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _sshChangeFromJson(name, json) ??
     _gitChangeFromJson(name, json) ??
     _flutterChangeFromJson(name, json) ??
-    _browserChangeFromJson(name, json);
+    _browserChangeFromJson(name, json) ??
+    _filesChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

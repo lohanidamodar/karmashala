@@ -1,43 +1,24 @@
-import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
-import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
-import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 
 import '../../support/fake_command_runner.dart';
-import '../../support/fixtures.dart';
+import '../../support/fake_data_server.dart';
+import 'explorer_fixture.dart';
 
 /// Right-clicking a row in the Files side panel.
 ///
-/// "in sidebar files panel right click menu to open any file or folder in
-/// system file explorer". The reveal is the app's existing
-/// [RevealInFileManager]; these tests pin that the menu reaches it, that the
-/// entry is withheld where it could not work, and that a failure is said out
-/// loud rather than swallowed.
+/// The server names the file's place on this machine (slice 3c); these tests
+/// pin that the menu reaches the file manager with it, that the entry is
+/// withheld where it could not work, and that a failure is said out loud
+/// rather than swallowed.
 void main() {
   const root = r'C:\src\app';
-  const folder = DirEntry(
-    name: 'lib',
-    isDirectory: true,
-    windowsPath: r'C:\src\app\lib',
-  );
-  const file = DirEntry(
-    name: 'pubspec.yaml',
-    isDirectory: false,
-    windowsPath: r'C:\src\app\pubspec.yaml',
-  );
-
-  final windows = ExecutionEnvironment(
-    id: localHostEnvironmentId,
-    kind: EnvironmentKind.windowsNative,
-    name: 'Windows',
-    createdAt: testTime,
-  );
 
   late FakeCommandRunner host;
   late List<String> copied;
@@ -45,8 +26,6 @@ void main() {
   setUp(() {
     host = FakeCommandRunner();
     copied = [];
-    // The clipboard is a platform channel; record what would have been put on
-    // it instead of reaching one.
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
           if (call.method == 'Clipboard.setData') {
@@ -61,32 +40,23 @@ void main() {
         .setMockMethodCallHandler(SystemChannels.platform, null);
   });
 
-  /// Pumps the panel over a fixed two-row listing.
-  ///
-  /// [environments] is what the reveal helper is allowed to resolve; an empty
-  /// list is a host that cannot place the path at all, which is the case the
-  /// menu entry has to withhold itself for.
-  Future<void> pump(
-    WidgetTester tester, {
-    List<ExecutionEnvironment> environments = const [],
-  }) async {
+  /// Pumps the panel over a fixed two-row listing. With [onThisMachine]
+  /// false the server runs elsewhere, so nothing it holds has a path here.
+  Future<void> pump(WidgetTester tester, {bool onThisMachine = true}) async {
+    final server = FakeDataServer();
+    final client = await tester.runAsync(
+      () => server.connect(serverOnThisMachine: onThisMachine),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          selectedRepoWindowsRootProvider.overrideWithValue(root),
-          activeEditorHostPathProvider.overrideWithValue(null),
-          directoryListingProvider.overrideWith(
-            (ref, dir) async => dir == root ? const [folder, file] : const [],
-          ),
-          revealInFileManagerProvider.overrideWithValue(
-            RevealInFileManager(
-              host: host,
-              translator: const PathTranslator(),
-              environmentFor: (id) =>
-                  environments.where((e) => e.id == id).firstOrNull,
-              fileManagerOverride: HostFileManager.windowsExplorer,
-            ),
-          ),
+          dataClientProvider.overrideWithValue(client!),
+          ...explorerOverrides(root, {
+            root: [
+              dirEntry(r'C:\src\app\lib'),
+              fileEntry(r'C:\src\app\pubspec.yaml'),
+            ],
+          }, host: host),
         ],
         child: const MaterialApp(
           home: Scaffold(body: SizedBox(width: 320, child: FileExplorerView())),
@@ -107,44 +77,51 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a folder row offers reveal and copy path', (tester) async {
-    await pump(tester, environments: [windows]);
+  /// Taps a menu entry whose action asks the server first.
+  Future<void> choose(WidgetTester tester, String label) async {
+    await tester.tap(find.text(label));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    await tester.pumpAndSettle();
+  }
 
-    await rightClick(tester, 'lib');
-
-    expect(find.text('Open in File Explorer'), findsOneWidget);
-    expect(find.text('Copy path'), findsOneWidget);
-  });
-
-  testWidgets('a file row offers reveal and copy path', (tester) async {
-    await pump(tester, environments: [windows]);
-
-    await rightClick(tester, 'pubspec.yaml');
-
-    // Named for what it does: a file is shown *inside* its folder.
-    expect(find.text('Reveal in File Explorer'), findsOneWidget);
-    expect(find.text('Copy path'), findsOneWidget);
-  });
-
-  testWidgets('revealing a folder opens it through the shared action', (
+  testWidgets('a folder and a file row offer reveal and copy path', (
     tester,
   ) async {
-    await pump(tester, environments: [windows]);
+    await pump(tester);
+
+    await rightClick(tester, 'lib');
+    expect(find.text('Open in File Explorer'), findsOneWidget);
+    expect(find.text('Copy path'), findsOneWidget);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+
+    await rightClick(tester, 'pubspec.yaml');
+    // Named for what it does: a file is shown *inside* its folder.
+    expect(find.text('Reveal in File Explorer'), findsOneWidget);
+  });
+
+  testWidgets('revealing a folder opens it, at the place the server named', (
+    tester,
+  ) async {
+    await pump(tester);
     await rightClick(tester, 'lib');
 
-    await tester.tap(find.text('Open in File Explorer'));
-    await tester.pumpAndSettle();
+    await choose(tester, 'Open in File Explorer');
 
     expect(host.requests.single.executable, 'explorer.exe');
     expect(host.requests.single.arguments, [r'C:\src\app\lib']);
   });
 
   testWidgets('revealing a file selects it inside its folder', (tester) async {
-    await pump(tester, environments: [windows]);
+    await pump(tester);
     await rightClick(tester, 'pubspec.yaml');
 
-    await tester.tap(find.text('Reveal in File Explorer'));
-    await tester.pumpAndSettle();
+    await choose(tester, 'Reveal in File Explorer');
 
     expect(host.requests.single.arguments, [
       r'/select,C:\src\app\pubspec.yaml',
@@ -154,13 +131,11 @@ void main() {
   testWidgets('a file opens with its default app, as a double-click would', (
     tester,
   ) async {
-    await pump(tester, environments: [windows]);
+    await pump(tester);
     await rightClick(tester, 'pubspec.yaml');
 
-    await tester.tap(find.text('Open with default app'));
-    await tester.pumpAndSettle();
+    await choose(tester, 'Open with default app');
 
-    // No `/select`: Explorer handed a file opens it with its association.
     expect(host.requests.single.executable, 'explorer.exe');
     expect(host.requests.single.arguments, [r'C:\src\app\pubspec.yaml']);
   });
@@ -168,13 +143,12 @@ void main() {
   test('a program is offered as Run, not as opening it', () {
     expect(runsAsProgram('Setup.EXE'), isTrue);
     expect(runsAsProgram('build.bat'), isTrue);
-    // Double-clicked, these open in an editor; "Run" would be a lie.
     expect(runsAsProgram('script.ps1'), isFalse);
     expect(runsAsProgram('notes.md'), isFalse);
   });
 
   testWidgets('copy path puts the row on the clipboard', (tester) async {
-    await pump(tester, environments: [windows]);
+    await pump(tester);
     await rightClick(tester, 'pubspec.yaml');
 
     await tester.tap(find.text('Copy path'));
@@ -184,11 +158,10 @@ void main() {
     expect(find.text('Path copied to clipboard'), findsOneWidget);
   });
 
-  testWidgets('the entry is withheld where reveal cannot work', (tester) async {
-    // No environment resolves, so the helper has no host spelling for the row.
-    // An entry that always fails is worse than no entry — but the menu itself
-    // still opens, because copying a path is still possible.
-    await pump(tester);
+  testWidgets('reveal is withheld where this machine has no path', (
+    tester,
+  ) async {
+    await pump(tester, onThisMachine: false);
 
     await rightClick(tester, 'lib');
 
@@ -198,13 +171,11 @@ void main() {
     expect(host.requests, isEmpty);
   });
 
-  /// The half a right-click cannot do. This pane had the gesture and nothing
-  /// else, so every file in the tree was reachable from the keyboard and none
-  /// of their actions were — the regression the whole rule exists to prevent.
+  /// The half a right-click cannot do: every file must be reachable from the
+  /// keyboard with its actions.
   testWidgets('Shift+F10 and the Menu key open the same menu', (tester) async {
-    await pump(tester, environments: [windows]);
+    await pump(tester);
 
-    // The row's own InkWell is the focus stop a Tab lands on.
     Focus.of(tester.element(find.text('lib'))).requestFocus();
     await tester.pumpAndSettle();
 
@@ -224,15 +195,11 @@ void main() {
   });
 
   testWidgets('a reveal that fails anyway says so', (tester) async {
-    // The path resolves, so the entry is offered — and then the file manager
-    // will not start. Reveal reports that as an outcome, not a throw, so a
-    // `catch` would never fire and the click would otherwise be silent.
     host.throwError = CommandException('not found');
-    await pump(tester, environments: [windows]);
+    await pump(tester);
     await rightClick(tester, 'lib');
 
-    await tester.tap(find.text('Open in File Explorer'));
-    await tester.pumpAndSettle();
+    await choose(tester, 'Open in File Explorer');
 
     expect(find.textContaining('not found'), findsOneWidget);
   });

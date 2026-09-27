@@ -1,6 +1,5 @@
 import '../../workspaces/data/workspace_data.dart';
 import 'dart:convert';
-import 'dart:io' show FileSystemEntityType;
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
@@ -20,6 +19,8 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../file_explorer/application/file_explorer_providers.dart';
+import '../../files/data/files_client.dart';
+import 'package:karmashala_files/values.dart' show FileStat;
 import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -224,35 +225,29 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       path: resolved,
     );
 
-    // No host spelling: an SSH session's files are on the other machine, and
-    // `RevealInFileManager` is the one place that words that.
-    final revealer = ref.read(revealInFileManagerProvider);
-    final hostPath = ref.read(editorActionsProvider).windowsPathFor(path);
-    if (hostPath == null) {
-      _say(
-        (await revealer.reveal(path)).error ??
-            'There is no path on this '
-                'machine for $resolved.',
-      );
+    // The server looks, wherever the session's files are: this machine, WSL
+    // or an SSH host.
+    final FileStat stat;
+    try {
+      stat = await ref.read(filesClientProvider).stat(path);
+    } on FilesException catch (error) {
+      _say(error.message);
       return;
     }
-
-    final type = ref.read(hostPathProbeProvider)(hostPath);
-    if (type == FileSystemEntityType.notFound) {
+    if (!mounted) return;
+    if (!stat.exists) {
       _say('$resolved is not on disk.');
       return;
     }
-    final isDirectory = type == FileSystemEntityType.directory;
+    final isDirectory = stat.isDirectory;
 
     // Inside the checkout the panel is rooted at: show it there, where the
     // reader already is.
-    final root = ref.read(selectedRepoWindowsRootProvider);
-    if (root != null && isUnderFileTreeRoot(root, hostPath)) {
+    final root = ref.read(fileTreeRootProvider);
+    if (root != null && isUnderFileTreeRoot(root, path)) {
       ref
           .read(fileRevealTargetProvider.notifier)
-          .reveal(
-            FileRevealTarget(hostPath: hostPath, isDirectory: isDirectory),
-          );
+          .reveal(FileRevealTarget(path: path, isDirectory: isDirectory));
       if (ref.read(sidePanelProvider) != SidePanelSurface.files) {
         ref.read(sidePanelProvider.notifier).select(SidePanelSurface.files);
       }
@@ -261,6 +256,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
     // Outside it there is no row to select, so the host's own file manager is
     // all that is left. `canReveal` starts no process, so asking first is free.
+    final revealer = ref.read(revealInFileManagerProvider);
     if (!revealer.canReveal(path)) {
       _say(
         (await revealer.reveal(path)).error ??

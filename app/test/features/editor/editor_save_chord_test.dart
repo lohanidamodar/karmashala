@@ -11,10 +11,13 @@ import 'package:karmashala_ui/theme.dart';
 
 import '../terminal/fake_instance.dart';
 import '../../support/test_machine.dart';
+import '../../support/memory_documents.dart';
 
 const _path = '/repo/lib/main.dart';
 
 class _MemoryStore extends DocumentStore {
+  _MemoryStore() : super(noServerFiles());
+
   final disk = <String, String>{_path: 'void main() {}\n'};
   var writes = 0;
 

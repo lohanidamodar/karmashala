@@ -127,6 +127,10 @@ dependencies:
   # `karmashala_ssh_host`, which the app keeps.
   karmashala_ssh:
     path: ../packages/karmashala_ssh
+  # A machine's files: this disk, WSL's share and SFTP, the save, the copy and
+  # Quick Open's walk (slice 3c).
+  karmashala_files:
+    path: ../packages/karmashala_files
   karmashala_store:
     path: ../packages/karmashala_store
   path: ^1.9.1

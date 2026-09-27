@@ -511,14 +511,14 @@ class ProjectRowActions {
       final picked = await pickOneDirectory(
         context: context,
         what: 'a folder of ${project.name} to open',
-        startNear: actions.windowsRootPath(project),
+        startNear: project.root.path,
         confirmButtonText: 'Open in editor',
       );
       if (picked == null) return;
       subPath = picked;
     }
     try {
-      await actions.openProject(project.id, windowsSubPath: subPath);
+      await actions.openProject(project.id, subPath: subPath);
       _say('Opening in editor…');
     } catch (e) {
       _say(e is StateError ? e.message : '$e');

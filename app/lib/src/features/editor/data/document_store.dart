@@ -1,15 +1,17 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:karmashala_files/values.dart' show WriteExpectation;
+
+import '../../files/data/files_client.dart';
 import '../application/editor_language.dart';
 import '../domain/document_id.dart';
-import '../domain/document_source.dart';
 import '../domain/source_document.dart';
-import 'local_document_source.dart';
 
-export '../domain/document_source.dart'
-    show DocumentStaleException, DocumentUnreachableException, WriteExpectation;
+export 'package:karmashala_files/values.dart' show WriteExpectation;
+
+export '../../files/data/files_client.dart'
+    show FilesStaleException, FilesUnreachableException;
 
 /// How much of a file decides whether it is binary, and whether it is CRLF.
 const int _sniffBytes = 8 * 1024;
@@ -24,46 +26,27 @@ const List<int> _utf16LeBom = [0xff, 0xfe];
 const List<int> _utf16BeBom = [0xfe, 0xff];
 
 /// Reads and writes one document — decoding, the size and binary refusals, the
-/// BOM and CRLF round trip — over whichever [DocumentSource] its environment
-/// has. Keyed by document id (`document_id.dart`), so every environment gets
-/// the same rules. Injectable so a test needs no real disk.
+/// BOM and CRLF round trip — through the server, wherever its environment is
+/// (slice 3c): the bytes are the server's to read and write, the text is this
+/// editor's. Keyed by document id (`document_id.dart`), so every environment
+/// gets the same rules.
 class DocumentStore {
-  const DocumentStore({this.sources});
+  const DocumentStore(this.files);
 
-  /// Null: this machine and WSL only, which need nothing but `dart:io`.
-  final DocumentSourceResolver? sources;
+  final FilesClient files;
 
-  static final LocalDocumentSources _local = LocalDocumentSources();
-
-  /// The source [documentId] is read through, or null when this build cannot
-  /// reach its environment.
-  DocumentSource? sourceOf(String documentId) =>
-      (sources ?? _local).sourceFor(documentPathOf(documentId).environmentId);
-
-  /// What the environment of [documentId] can do; null when it has no source.
-  DocumentSourceCapabilities? capabilitiesOf(String documentId) =>
-      sourceOf(documentId)?.capabilities;
-
-  /// Never throws but for [DocumentUnreachableException]: what went wrong is a
+  /// Never throws but for [FilesUnreachableException]: what went wrong is a
   /// [DocumentRefusal] on the document, because a blank pane explains nothing.
   /// An environment that did not answer is not a fact about the file, so it is
   /// thrown for the caller to keep whatever buffer it has.
   Future<SourceDocument> load(String documentId) async {
     final at = documentPathOf(documentId);
     final name = documentNameOf(documentId);
-    final source = sourceOf(documentId);
-    if (source == null) {
-      return _refused(
-        documentId,
-        DocumentRefusal.unreadable,
-        'Karmashala cannot open files on "${at.environmentId}".',
-      );
-    }
     // Kept on a refusal too, so the disk check can tell "still binary" from
     // "rewritten as text" without reading it again.
     FileStamp? seen;
     try {
-      final stat = await source.stat(at.path);
+      final stat = await files.stat(at);
       if (!stat.exists) {
         return _refused(
           documentId,
@@ -78,7 +61,7 @@ class DocumentStore {
           '$name is a folder, not a file.',
         );
       }
-      seen = stat.version;
+      seen = stat.stamp;
       if (stat.size > kDocumentSizeLimit) {
         return _refused(
           documentId,
@@ -90,7 +73,7 @@ class DocumentStore {
       }
       // The head alone answers "is this text?", so a 64 MB binary never
       // reaches memory.
-      final head = await source.read(at.path, length: _sniffBytes);
+      final head = await files.read(at, length: _sniffBytes);
       if (_startsWith(head, _utf16LeBom) || _startsWith(head, _utf16BeBom)) {
         return _refused(
           documentId,
@@ -112,7 +95,7 @@ class DocumentStore {
       }
       // A head shorter than asked for is the whole file: over SSH that is a
       // round trip saved on nearly every source file.
-      var bytes = head.length < _sniffBytes ? head : await source.read(at.path);
+      var bytes = head.length < _sniffBytes ? head : await files.read(at);
       if (bom) bytes = Uint8List.sublistView(bytes, _utf8Bom.length);
       final String decoded;
       try {
@@ -144,18 +127,13 @@ class DocumentStore {
             ? DocumentMode.view
             : DocumentMode.edit,
       );
-    } on DocumentSourceException catch (error) {
+    } on FilesUnreachableException {
+      rethrow;
+    } on FilesException catch (error) {
       return _refused(
         documentId,
         DocumentRefusal.unreadable,
         '$name could not be read: ${error.message}',
-        seen,
-      );
-    } on FileSystemException catch (error) {
-      return _refused(
-        documentId,
-        DocumentRefusal.unreadable,
-        '$name could not be read: ${_reason(error)}',
         seen,
       );
     }
@@ -170,21 +148,14 @@ class DocumentStore {
   }
 
   /// What the file looks like now, or null when there is nothing there.
-  /// Throws [DocumentUnreachableException] when its environment did not answer.
-  Future<FileStamp?> stamp(String documentId) async {
-    final source = sourceOf(documentId);
-    if (source == null) {
-      throw DocumentSourceException(
-        'Karmashala cannot reach "${documentPathOf(documentId).environmentId}".',
-      );
-    }
-    return (await source.stat(documentPathOf(documentId).path)).version;
-  }
+  /// Throws [FilesUnreachableException] when its environment did not answer.
+  Future<FileStamp?> stamp(String documentId) async =>
+      (await files.stat(documentPathOf(documentId))).stamp;
 
   /// Writes [text] if [expect] accepts what is on disk now. Answers the stamp
   /// read back off disk, the one a later save compares to. Throws
-  /// [DocumentStaleException] when refused, [DocumentUnreachableException] when
-  /// the environment dropped, and [DocumentWriteException] with a readable
+  /// [FilesStaleException] when refused, [FilesUnreachableException] when the
+  /// environment dropped, and [DocumentWriteException] with a readable
   /// message for anything else.
   Future<FileStamp> write(
     String documentId,
@@ -192,29 +163,19 @@ class DocumentStore {
     WriteExpectation expect = const WriteExpectation.any(),
   }) async {
     final name = documentNameOf(documentId);
-    final source = sourceOf(documentId);
-    if (source == null) {
-      throw DocumentWriteException(
-        '$name could not be saved: Karmashala cannot reach '
-        '"${documentPathOf(documentId).environmentId}".',
-      );
-    }
-    if (source.capabilities.readOnly) {
-      throw DocumentWriteException('$name is read-only here.');
-    }
     try {
-      return await source.write(
-        documentPathOf(documentId).path,
+      return await files.write(
+        documentPathOf(documentId),
         utf8.encode(text),
         expect: expect,
       );
-    } on DocumentSourceException catch (error) {
+    } on FilesStaleException {
+      rethrow;
+    } on FilesUnreachableException {
+      rethrow;
+    } on FilesException catch (error) {
       throw DocumentWriteException(
         '$name could not be saved: ${error.message}',
-      );
-    } on FileSystemException catch (error) {
-      throw DocumentWriteException(
-        '$name could not be saved: ${_reason(error)}',
       );
     }
   }
@@ -232,9 +193,6 @@ class DocumentStore {
     refusal: refusal,
     error: error,
   );
-
-  String _reason(FileSystemException error) =>
-      error.osError?.message ?? error.message;
 
   String _describeSize(int bytes) {
     if (bytes >= 1024 * 1024) {

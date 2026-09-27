@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:agent_cli/process.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -102,11 +104,10 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   /// longer somewhere to read providers from.
   late final RepoFileIndex _index;
 
-  /// The root of the walk currently being waited on, or `null`. Also what
-  /// [dispose] cancels.
-  String? _walking;
+  /// The root whose files are being asked for, or `null`.
+  EnvironmentPath? _walking;
 
-  StreamSubscription<String>? _indexChanges;
+  StreamSubscription<EnvironmentPath>? _indexChanges;
 
   /// Read the first time a verb is typed, then kept for the palette's life.
   CommandCatalog? _catalog;
@@ -182,8 +183,6 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   void dispose() {
     _hits.close();
     _indexChanges?.cancel();
-    final walking = _walking;
-    if (walking != null) _index.cancel(walking);
     _controller.dispose();
     _scroll.dispose();
     super.dispose();
@@ -504,17 +503,14 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     });
   }
 
-  /// Starts the repository walk the first time the user types, and again when
-  /// what is cached is stale. Never awaited: the cached list is already up.
+  /// Asks the server for the repository's files the first time the user
+  /// types, and again when what is cached is stale. Never awaited: the cached
+  /// list is already up.
   void _ensureFileIndex() {
     final root = ref.read(quickOpenFileRootProvider);
-    final walking = _walking;
-    // The selected repository changed under an open palette. The walk in
+    // The selected repository changed under an open palette: the answer in
     // flight is for a tree nobody is searching any more.
-    if (walking != null && walking != root) {
-      _index.cancel(walking);
-      _walking = null;
-    }
+    if (_walking != null && _walking != root) _walking = null;
     if (root == null || _index.isFresh(root) || _walking == root) return;
     _walking = root;
     _index.index(root).then((_) {
@@ -526,7 +522,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   /// Something under the indexed repository moved, or a walk landed. Re-rank
   /// against whatever is cached now, and start the re-walk if one is due.
-  void _onIndexChanged(String root) {
+  void _onIndexChanged(EnvironmentPath root) {
     if (!mounted || root != ref.read(quickOpenFileRootProvider)) return;
     if (!_query.isEmpty) _ensureFileIndex();
     setState(_rebuildItems);

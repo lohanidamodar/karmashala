@@ -6,8 +6,9 @@ library;
 
 import 'package:agent_cli/process.dart';
 import 'package:flutter/foundation.dart';
+import 'package:karmashala_files/values.dart';
 
-import '../domain/file_space.dart';
+import '../data/files_client.dart';
 
 /// What one panel is showing.
 @immutable
@@ -56,13 +57,16 @@ class FilePanelState {
   );
 }
 
-/// Drives one panel. Every verb leaves the panel showing what is actually
-/// there: an operation is followed by a fresh listing, so a rename that the
-/// filesystem refused cannot leave a row renamed on screen.
+/// Drives one panel, on one machine the server reaches. Every verb leaves the
+/// panel showing what is actually there: an operation is followed by a fresh
+/// listing, so a rename that the filesystem refused cannot leave a row
+/// renamed on screen.
 class FilePanelController extends ValueNotifier<FilePanelState> {
-  FilePanelController(this.space) : super(const FilePanelState());
+  FilePanelController(this.files, this.environmentId)
+    : super(const FilePanelState());
 
-  final FileSpace space;
+  final FilesClient files;
+  final String environmentId;
 
   /// Only the newest listing may land: two quick double-clicks used to race,
   /// and the slower directory won.
@@ -73,9 +77,9 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
     final serial = ++_serial;
     value = value.copyWith(busy: true, clearError: true);
     try {
-      final target = directory ?? await space.home();
-      final resolved = await space.resolve(target);
-      final entries = await space.list(resolved);
+      final target = directory ?? await files.home(environmentId);
+      final resolved = (await files.resolve(target)).path;
+      final entries = await files.list(resolved);
       if (serial != _serial) return;
       value = FilePanelState(directory: resolved, entries: entries);
     } on Object catch (error) {
@@ -92,7 +96,7 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
   Future<void> goUp() async {
     final directory = value.directory;
     if (directory == null) return;
-    final parent = space.parentOf(directory);
+    final parent = parentOf(directory);
     if (parent == null) return;
     await open(parent);
   }
@@ -119,20 +123,20 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
   void dismissError() => value = value.copyWith(clearError: true);
 
   Future<void> createFolder(String name) =>
-      _operate((directory) => space.createDirectory(directory, name));
+      _operate((directory) => files.createDirectory(directory, name));
 
   Future<void> createFile(String name) =>
-      _operate((directory) => space.createFile(directory, name));
+      _operate((directory) => files.createFile(directory, name));
 
   Future<void> rename(FileEntry entry, String name) =>
-      _operate((_) => space.rename(entry.path, name));
+      _operate((_) => files.rename(entry.path, name));
 
   /// Deletes [entries]. A folder with anything in it needs [recursive], which
   /// is the caller's to ask for — and to have confirmed.
   Future<void> delete(List<FileEntry> entries, {bool recursive = false}) =>
       _operate((_) async {
         for (final entry in entries) {
-          await space.delete(entry.path, recursive: recursive);
+          await files.delete(entry.path, recursive: recursive);
         }
         return null;
       });
@@ -161,10 +165,10 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
     );
   }
 
-  /// The sentence a panel shows. A [FileSpaceException] already carries one;
+  /// The sentence a panel shows. A [FilesException] already carries one;
   /// anything else is named rather than dressed up as something it is not.
   static String _sentence(Object error) => switch (error) {
-    FileSpaceException(:final message) => message,
+    FilesException(:final message) => message,
     ArgumentError(:final message) => '$message',
     _ => error.toString(),
   };

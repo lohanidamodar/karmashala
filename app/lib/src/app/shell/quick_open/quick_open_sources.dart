@@ -895,7 +895,7 @@ class QuickOpenSources {
       return;
     }
     panel.select(SidePanelSurface.files);
-    ref.read(editorTabActionsProvider).open(file.hostPath);
+    ref.read(editorTabActionsProvider).openAt(file.path);
   }
 
   // --- branches, pull requests and issues ----------------------------------

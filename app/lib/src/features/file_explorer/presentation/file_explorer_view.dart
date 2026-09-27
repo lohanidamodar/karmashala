@@ -1,22 +1,21 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/panes.dart';
-import '../../../app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
+import '../../files/application/server_file_opening.dart';
+import '../../files/data/files_client.dart';
 import '../../files/presentation/file_name_dialog.dart';
 import '../../terminal/application/dropped_paths.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_files/values.dart';
 import '../application/file_explorer_providers.dart';
 import '../application/file_tree_rows.dart';
-import '../data/file_listing_service.dart';
 
 /// How far in a row at [depth] starts. One expression for the rows and the
 /// placeholders alike, because the two drifting apart reads as a ragged tree.
@@ -31,14 +30,15 @@ const double _rowPadY = 3;
 @visibleForTesting
 int debugFileRowBuilds = 0;
 
-/// A lazy file/folder tree for the selected repository, listed on the Windows
-/// host. Every row right-clicks to reveal or copy; nothing starts a process.
+/// A lazy file/folder tree for the selected repository, listed by the server
+/// wherever the repository is. Every row right-clicks to reveal or copy.
+/// Nothing here reads a disk.
 class FileExplorerView extends ConsumerWidget {
   const FileExplorerView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final root = ref.watch(selectedRepoWindowsRootProvider);
+    final root = ref.watch(fileTreeRootProvider);
     // The header stays in the empty state: this surface draws its own, so a bare
     // placeholder left the panel with no title and no way out but the rail glyph.
     return Column(
@@ -92,7 +92,7 @@ class FileExplorerView extends ConsumerWidget {
 class FileTreeList extends ConsumerStatefulWidget {
   const FileTreeList({required this.root, super.key});
 
-  final String root;
+  final EnvironmentPath root;
 
   @override
   ConsumerState<FileTreeList> createState() => _FileTreeListState();
@@ -114,9 +114,9 @@ class _FileTreeListState extends ConsumerState<FileTreeList> {
     // The tree follows the file being edited — only while it is on screen,
     // which is what this state's lifetime is, and only for a file under its
     // own folder: one elsewhere is not a statement about this tree.
-    ref.listenManual<String?>(activeEditorHostPathProvider, (_, path) {
+    ref.listenManual<EnvironmentPath?>(activeEditorPathProvider, (_, path) {
       if (path == null || !isUnderFileTreeRoot(widget.root, path)) return;
-      final target = FileRevealTarget(hostPath: path, isDirectory: false);
+      final target = FileRevealTarget(path: path, isDirectory: false);
       // After the build: the first call comes from initState itself, where a
       // provider may not be written.
       Future.microtask(() {
@@ -141,11 +141,10 @@ class _FileTreeListState extends ConsumerState<FileTreeList> {
       return;
     }
     if (target == _scrolledTo) return;
-    final wanted = fileTreeKey(target.hostPath);
+    final wanted = fileTreeKey(target.path);
     final index = rows.items.indexWhere(
       (item) =>
-          item is FileTreeEntryItem &&
-          fileTreeKey(item.entry.windowsPath) == wanted,
+          item is FileTreeEntryItem && fileTreeKey(item.entry.path) == wanted,
     );
     if (index < 0) return;
     _scrolledTo = target;
@@ -193,7 +192,7 @@ class _FileTreeListState extends ConsumerState<FileTreeList> {
       itemCount: rows.items.length,
       itemBuilder: (context, index) => switch (rows.items[index]) {
         final FileTreeEntryItem item => FileEntryRow(
-          key: ValueKey(item.entry.windowsPath),
+          key: ValueKey(item.entry.path),
           entry: item.entry,
           depth: item.depth,
           targetKey: _targetRow,
@@ -252,18 +251,13 @@ class FileEntryRow extends ConsumerWidget {
     super.key,
   });
 
-  final DirEntry entry;
+  final FileEntry entry;
   final int depth;
 
   /// Worn while this row is the reveal target, so the list can scroll to it.
   final GlobalKey targetKey;
 
-  /// The row's path as the rest of the app spells one — `DirEntry.windowsPath`
-  /// with its owning environment put back, which is what reveal needs.
-  EnvironmentPath get _path => EnvironmentPath(
-    environmentId: localHostEnvironmentId,
-    path: entry.windowsPath,
-  );
+  EnvironmentPath get _path => entry.path;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -275,7 +269,7 @@ class FileEntryRow extends ConsumerWidget {
       fileRevealTargetProvider.select(
         (target) => fileRevealRoleFor(
           target,
-          entry.windowsPath,
+          entry.path,
           isDirectory: entry.isDirectory,
         ),
       ),
@@ -284,7 +278,7 @@ class FileEntryRow extends ConsumerWidget {
         isDir &&
         ref.watch(
           fileTreeExpansionProvider.select(
-            (open) => open.contains(fileTreeKey(entry.windowsPath)),
+            (open) => open.contains(fileTreeKey(entry.path)),
           ),
         );
     final selected = role == FileRevealRole.target;
@@ -296,11 +290,18 @@ class FileEntryRow extends ConsumerWidget {
       expanded: expanded,
       selected: selected,
       onTap: isDir
-          ? () => ref
-                .read(fileTreeExpansionProvider.notifier)
-                .toggle(entry.windowsPath)
+          ? () => ref.read(fileTreeExpansionProvider.notifier).toggle(_path)
           : actions.open,
     );
+    // A file this machine spells the same way the server does — the server
+    // runs here and the file is on its own disk — can be dropped on a pane
+    // as that path. Anywhere else there is nothing of it here to paste.
+    final files = ref.read(filesClientProvider);
+    final dragged =
+        files.canOpenHere(_path) && !_path.environmentId.startsWith('wsl:')
+        ? _path.path
+        : null;
+    final opening = ref.read(serverFileOpeningProvider);
     // [RowContextMenu] rather than a bare right-click: with the gesture alone a
     // keyboard could reach every file and none of their actions. No `⋮` here.
     return Semantics(
@@ -311,18 +312,21 @@ class FileEntryRow extends ConsumerWidget {
         itemBuilder: () => fileEntryMenuItems(
           isDirectory: isDir,
           name: entry.name,
-          // `canReveal` starts no process, so asking while building is free.
-          canReveal: ref.read(revealInFileManagerProvider).canReveal(_path),
+          // Neither starts a process, so asking while building is free.
+          canReveal: opening.canReveal(_path),
+          canOpen: opening.canOpen,
         ),
         onSelected: actions.onMenu,
         // Dropped on a session's pane, it pastes the path — what dragging the
         // same file in from the OS does.
-        builder: (context) => Draggable<HostPathDrag>(
-          data: HostPathDrag([entry.windowsPath]),
-          dragAnchorStrategy: pointerDragAnchorStrategy,
-          feedback: _DragFeedback(name: entry.name, isDirectory: isDir),
-          child: row,
-        ),
+        builder: (context) => dragged == null
+            ? row
+            : Draggable<HostPathDrag>(
+                data: HostPathDrag([dragged]),
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                feedback: _DragFeedback(name: entry.name, isDirectory: isDir),
+                child: row,
+              ),
       ),
     );
   }
@@ -432,10 +436,13 @@ class FileRowTile extends StatelessWidget {
   }
 }
 
-/// A file row's right-click items. Reveal only where the host can reach it.
+/// A file row's right-click items. Reveal only where this machine has the
+/// file; open with the default app wherever a file can be brought here
+/// ([canOpen], which is [canReveal] unless said).
 List<PopupMenuEntry<String>> fileEntryMenuItems({
   required bool isDirectory,
   required bool canReveal,
+  bool? canOpen,
   String name = '',
 }) => [
   if (isDirectory) ...[
@@ -457,7 +464,7 @@ List<PopupMenuEntry<String>> fileEntryMenuItems({
       label: 'Open in editor',
       icon: AppIcons.fileCode,
     ),
-  if (!isDirectory && canReveal)
+  if (!isDirectory && (canOpen ?? canReveal))
     DesktopMenuItem(
       value: 'default-app',
       label: runsAsProgram(name) ? 'Run' : 'Open with default app',
@@ -488,7 +495,7 @@ class _FileEntryActions {
 
   final WidgetRef ref;
   final BuildContext context;
-  final DirEntry entry;
+  final FileEntry entry;
   final EnvironmentPath path;
 
   void _say(String message) {
@@ -500,12 +507,21 @@ class _FileEntryActions {
 
   /// Opens the file in a workbench tab. The external editor is still one
   /// right-click away, for the files this one refuses.
-  void open() => ref.read(editorTabActionsProvider).open(entry.windowsPath);
+  void open() => ref.read(editorTabActionsProvider).openAt(path);
 
   Future<void> _openExternally() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(editorActionsProvider).openPath(entry.windowsPath);
+      final local = await ref.read(filesClientProvider).localPathOf(path);
+      if (local == null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('${path.path} is not on this machine.'),
+          ),
+        );
+        return;
+      }
+      await ref.read(editorActionsProvider).openPath(local);
       messenger.showSnackBar(
         const SnackBar(content: Text('Opening in editor…')),
       );
@@ -519,30 +535,31 @@ class _FileEntryActions {
   /// Failure is a [RevealOutcome], not a throw, so a `catch` would never fire.
   Future<void> _reveal() async {
     final outcome = await ref
-        .read(revealInFileManagerProvider)
+        .read(serverFileOpeningProvider)
         .reveal(path, select: !entry.isDirectory);
     if (!outcome.ok) _say(outcome.error!);
   }
 
-  /// As a double-click in the OS would: its app, or run it if it is one.
+  /// As a double-click in the OS would: its app, or run it if it is one. A
+  /// file this machine has no path to is brought here first.
   Future<void> _openWithDefaultApp() async {
     final outcome = await ref
-        .read(revealInFileManagerProvider)
+        .read(serverFileOpeningProvider)
         .openWithDefaultApp(path);
     if (!outcome.ok) _say(outcome.error!);
   }
 
   Future<void> _copyPath() async {
-    await Clipboard.setData(ClipboardData(text: entry.windowsPath));
+    await Clipboard.setData(ClipboardData(text: path.path));
     _say('Path copied to clipboard');
   }
 
   void onMenu(String action) {
     switch (action) {
       case 'new-file':
-        createInFileTree(context, ref, entry.windowsPath, folder: false);
+        createInFileTree(context, ref, path, folder: false);
       case 'new-folder':
-        createInFileTree(context, ref, entry.windowsPath, folder: true);
+        createInFileTree(context, ref, path, folder: true);
       case 'open':
         open();
       case 'external':
@@ -564,7 +581,7 @@ class _FileEntryActions {
 Future<void> createInFileTree(
   BuildContext context,
   WidgetRef ref,
-  String parentDir, {
+  EnvironmentPath parentDir, {
   required bool folder,
 }) async {
   final name = await FileNameDialog.ask(
@@ -573,30 +590,27 @@ Future<void> createInFileTree(
     action: 'Create',
   );
   if (name == null) return;
-  final service = ref.read(fileListingServiceProvider);
-  final String created;
+  final files = ref.read(filesClientProvider);
+  final EnvironmentPath created;
   try {
     created = folder
-        ? await service.createDirectory(parentDir, name)
-        : await service.createFile(parentDir, name);
-  } on FileSystemException catch (error) {
+        ? await files.createDirectory(parentDir, name)
+        : await files.createFile(parentDir, name);
+  } on FilesException catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not create "$name": '
-            '${error.osError?.message ?? error.message}',
-          ),
-        ),
+        SnackBar(content: Text('Could not create "$name": ${error.message}')),
       );
     }
     return;
   }
-  ref.read(fileListingRefreshProvider.notifier).refresh();
+  // The listing hears of it from the server's watch; asking again as well
+  // costs one listing and shows it at once.
+  ref.invalidate(directoryListingProvider(parentDir));
   ref
       .read(fileRevealTargetProvider.notifier)
-      .reveal(FileRevealTarget(hostPath: created, isDirectory: folder));
-  if (!folder) ref.read(editorTabActionsProvider).open(created);
+      .reveal(FileRevealTarget(path: created, isDirectory: folder));
+  if (!folder) ref.read(editorTabActionsProvider).openAt(created);
 }
 
 /// Whether opening [name] runs it rather than showing it — worded "Run" so

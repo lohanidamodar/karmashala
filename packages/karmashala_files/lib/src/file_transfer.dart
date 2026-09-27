@@ -1,12 +1,14 @@
-/// Moving a file from one machine to another. The three shapes a copy can
-/// take are here and nowhere else, so a panel only ever says "copy this there".
+/// Moving a file from one machine to another, at the server. The three shapes
+/// a copy can take are here and nowhere else, so a client only ever says
+/// "copy this there" (`files.copy`).
 library;
 
 import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 
-import '../domain/file_space.dart';
+import 'file_space.dart';
+import 'file_values.dart' show nameRefusal;
 
 /// How far a transfer has got. [total] is null while the size is unknown — a
 /// host does not always say, and a made-up total is worse than none.

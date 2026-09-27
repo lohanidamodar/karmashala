@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:karmashala_automations/karmashala_automations.dart';
+import 'package:karmashala_core/util.dart' show DirectoryChangeWatcher;
+import 'package:karmashala_files/karmashala_files.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -76,6 +79,7 @@ part 'fake_agent_work.dart';
 part 'fake_ssh_work.dart';
 part 'fake_git_work.dart';
 part 'fake_runs_work.dart';
+part 'fake_files_work.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -234,6 +238,9 @@ class FakeDataServer {
 
   /// The server's Flutter apps, hosted runs and browser — scripted.
   late final runs = FakeRunsWork._(this);
+  /// A machine's files — listings, reads and saves, copies, Quick Open's
+  /// index, watches — over real file spaces a test points at temp folders.
+  final filesWork = FakeFilesWork._();
 
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
@@ -283,8 +290,13 @@ class FakeDataServer {
   /// how long its writes wait for a server that is down.
   Future<DataClient> connect({
     Duration wait = const Duration(seconds: 20),
+    bool serverOnThisMachine = true,
   }) async {
-    final client = await DataClient.connect(dial, waitForServer: wait);
+    final client = await DataClient.connect(
+      dial,
+      waitForServer: wait,
+      serverOnThisMachine: serverOnThisMachine,
+    );
     _byClient[client] = this;
     addTearDown(client.close);
     return client;
@@ -348,6 +360,9 @@ class FakeDataServer {
         // Nothing kept: told as it is.
         case GitChange():
           // Nothing kept: it says what to read again.
+          break;
+        case FilesChange():
+          // A watch's news is one link's: [FakeFilesWork.changed] tells it.
           break;
       }
     }
@@ -601,7 +616,8 @@ class FakeDataServer {
       FlutterWorkRequest() ||
       BrowserWorkRequest() ||
       SshWorkRequest() => throw StateError('answered above'),
-      GitWorkRequest() => throw StateError('answered in FakeDataLink.send'),
+      GitWorkRequest() ||
+      FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));
@@ -1131,7 +1147,18 @@ class FakeDataLink implements DataEndpoint {
       final value = await _server.gitWork._handle(git);
       return DataReply(value as R, _server.revision, const []);
     }
+    if (request case final FilesWorkRequest<Object?> files) {
+      // Answered when done; a watch this link placed is told to it alone.
+      final value = await _server.filesWork._handle(files, this);
+      return DataReply(value as R, _server.revision, const []);
+    }
     return _server._handle(this, request);
+  }
+
+  /// A change for this link alone — a path it watches moved.
+  void tell(List<DataChange> changes) {
+    if (_done.isCompleted || _changes.isClosed) return;
+    _changes.add(DataChanges(_server.revision, List.unmodifiable(changes)));
   }
 
   @override
@@ -1146,6 +1173,7 @@ class FakeDataLink implements DataEndpoint {
 
   void _drop() {
     _server._links.remove(this);
+    _server.filesWork._closed(this);
     if (!_done.isCompleted) _done.complete();
   }
 

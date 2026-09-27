@@ -5,7 +5,10 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/editor/data/document_store.dart';
 import 'package:karmashala/src/features/editor/domain/source_document.dart';
+import 'package:karmashala/src/features/files/data/files_client.dart';
 import 'package:path/path.dart' as p;
+
+import '../../support/fake_data_server.dart';
 
 const _binaryMessage =
     'The file is not displayed in the editor because it is either binary or '
@@ -23,11 +26,16 @@ void _sizedFile(String path, int size) {
 
 void main() {
   late Directory dir;
-  const store = DocumentStore();
+  late DocumentStore store;
 
   String at(String name) => p.join(dir.path, name);
 
-  setUp(() => dir = Directory.systemTemp.createTempSync('karmashala_editor_'));
+  // The bytes are the server's to read and write (slice 3c): the fake one's
+  // are this machine's disk, the rules above them the editor's.
+  setUp(() async {
+    dir = Directory.systemTemp.createTempSync('karmashala_editor_');
+    store = DocumentStore(FilesClient(await FakeDataServer().connect()));
+  });
   tearDown(() => dir.deleteSync(recursive: true));
 
   group('reading a file', () {

@@ -1,3 +1,4 @@
+import 'package:agent_cli/process.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,12 +19,18 @@ import 'package:karmashala_ui/theme.dart';
 
 import '../terminal/fake_instance.dart';
 import '../../support/test_machine.dart';
+import '../../support/memory_documents.dart';
 
 const _root = '/repo';
 const _path = '/repo/lib/main.dart';
+const _rootPath = EnvironmentPath(
+  environmentId: localHostEnvironmentId,
+  path: _root,
+);
 
 class _MemoryStore extends DocumentStore {
-  _MemoryStore(this.text, {this.mode = DocumentMode.edit});
+  _MemoryStore(this.text, {this.mode = DocumentMode.edit})
+    : super(noServerFiles());
 
   final String text;
   final DocumentMode mode;
@@ -85,7 +92,7 @@ void main() {
       });
       expect(
         byValue(
-          editorFileMenuItems(relativeRoot: _root),
+          editorFileMenuItems(relativeRoot: _rootPath),
         )[EditorMenuValues.revealInFiles],
         isTrue,
       );
@@ -129,9 +136,14 @@ void main() {
     });
 
     test('a relative path keeps the separators of its root', () {
-      expect(relativeHostPath('/repo', '/repo/lib/a.dart'), 'lib/a.dart');
+      EnvironmentPath at(String path) =>
+          EnvironmentPath(environmentId: 'wsl:Ubuntu', path: path);
       expect(
-        relativeHostPath(r'C:\repo', r'C:\repo\lib\a.dart'),
+        relativeFilePath(at('/repo'), at('/repo/lib/a.dart')),
+        'lib/a.dart',
+      );
+      expect(
+        relativeFilePath(at(r'C:\repo'), at(r'C:\repo\lib\a.dart')),
         r'lib\a.dart',
       );
     });
@@ -163,7 +175,7 @@ void main() {
           documentStoreProvider.overrideWithValue(
             _MemoryStore('void main() {}\nfinal a = 1;\n', mode: mode),
           ),
-          selectedRepoWindowsRootProvider.overrideWithValue(_root),
+          fileTreeRootProvider.overrideWithValue(_rootPath),
           focusedSessionIdProvider.overrideWithValue(null),
         ],
       );
@@ -233,7 +245,7 @@ void main() {
       await rightClick(tester);
       await pick(tester, 'Reveal in Files panel');
 
-      expect(container.read(fileRevealTargetProvider)?.hostPath, _path);
+      expect(container.read(fileRevealTargetProvider)?.path.path, _path);
       expect(container.read(sidePanelProvider), SidePanelSurface.files);
       await teardown(tester);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));

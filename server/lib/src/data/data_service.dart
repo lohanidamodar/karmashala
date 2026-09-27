@@ -18,6 +18,7 @@ import 'automations_handler.dart';
 import 'conversations_handler.dart';
 import 'evidence_handler.dart';
 import 'filing_lookup.dart';
+import 'files_work.dart';
 import 'git_work.dart';
 import 'hosts_handler.dart';
 import 'notes_handler.dart';
@@ -103,6 +104,11 @@ class DataService {
 
   /// The live streams a client can open (`DataStreamEnvelope`), by source.
   final streamSources = <String, DataStreamSource>{};
+
+  /// The server's files (a machine's listings, reads and writes, Quick
+  /// Open's index, watches), set by `serve`; without it that work is refused
+  /// `unavailable`.
+  FilesWork? filesWork;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -340,7 +346,8 @@ class DataService {
         SshWorkRequest() ||
         GitWorkRequest() ||
         FlutterWorkRequest() ||
-        BrowserWorkRequest() => throw DataRefused.invalid(
+        BrowserWorkRequest() ||
+        FilesWorkRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
         final AutomationsRequest r => _automations.handle(r, changes),
@@ -468,7 +475,7 @@ class DataService {
 }
 
 /// One client's link to the [DataService].
-class DataSession {
+class DataSession implements FileWatchLink {
   DataSession._(this._service, this._deliver);
 
   final DataService _service;
@@ -490,7 +497,8 @@ class DataSession {
       request is SshWorkRequest ||
       request is GitWorkRequest ||
       request is FlutterWorkRequest ||
-      request is BrowserWorkRequest;
+      request is BrowserWorkRequest ||
+      request is FilesWorkRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
@@ -549,6 +557,13 @@ class DataSession {
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }
+    if (request case final FilesWorkRequest<Object?> asked) {
+      final work =
+          _service.filesWork ??
+          (throw const DataRefused.unavailable('this server reads no files'));
+      final result = await work.handle(asked, this);
+      return DataReply(result as R, _service._revision);
+    }
     return handle(request);
   }
 
@@ -586,7 +601,18 @@ class DataSession {
     }
   }
 
-  void close() => _service._links.remove(this);
+  void close() {
+    _service._links.remove(this);
+    _service.filesWork?.linkClosed(this);
+  }
+
+  /// A change for this link alone — a path it watches moved — at the
+  /// revision it already has: nothing of it is a row a copy keeps.
+  @override
+  void tell(List<DataChange> changes) {
+    if (changes.isEmpty || !_service._links.contains(this)) return;
+    _deliver(DataChanges(_service._revision, List.unmodifiable(changes)));
+  }
 
   DataAck _subscribe() {
     _subscribed = true;

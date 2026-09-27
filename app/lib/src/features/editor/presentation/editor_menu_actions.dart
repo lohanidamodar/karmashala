@@ -1,4 +1,5 @@
 import '../../workspaces/data/workspace_data.dart';
+import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,7 +35,7 @@ abstract final class EditorMenuValues {
 /// [onThisMachine] is false for a file on an SSH host: no local editor or
 /// file manager can open it.
 List<PopupMenuEntry<String>> editorFileMenuItems({
-  required String? relativeRoot,
+  required EnvironmentPath? relativeRoot,
   bool onThisMachine = true,
 }) => [
   DesktopMenuItem(
@@ -99,16 +100,16 @@ List<PopupMenuEntry<String>> editorSelectionMenuItems({
   ],
 ];
 
-/// The Files panel's root when [hostPath] is under it, else null.
-String? filesPanelRootFor(WidgetRef ref, String hostPath) {
-  final root = ref.read(selectedRepoWindowsRootProvider);
-  return root != null && isUnderFileTreeRoot(root, hostPath) ? root : null;
+/// The Files panel's root when [path] is under it, else null.
+EnvironmentPath? filesPanelRootFor(WidgetRef ref, EnvironmentPath path) {
+  final root = ref.read(fileTreeRootProvider);
+  return root != null && isUnderFileTreeRoot(root, path) ? root : null;
 }
 
-/// [hostPath] relative to [root], in the separators [root] is written with.
-String relativeHostPath(String root, String hostPath) {
-  final context = root.contains(r'\') ? p.windows : p.posix;
-  return context.relative(hostPath, from: root);
+/// [path] relative to [root], in the separators [root] is written with.
+String relativeFilePath(EnvironmentPath root, EnvironmentPath path) {
+  final context = root.path.contains(r'\') ? p.windows : p.posix;
+  return context.relative(path.path, from: root.path);
 }
 
 void _say(BuildContext context, String message) => ScaffoldMessenger.maybeOf(
@@ -124,26 +125,25 @@ Future<void> copyToClipboard(
   if (context.mounted) _say(context, '$what copied to clipboard');
 }
 
-/// Selects [hostPath] in the Files panel and brings the panel up.
-void revealInFilesPanel(WidgetRef ref, String hostPath) {
+/// Selects [path] in the Files panel and brings the panel up.
+void revealInFilesPanel(WidgetRef ref, EnvironmentPath path) {
   ref
       .read(fileRevealTargetProvider.notifier)
-      .reveal(FileRevealTarget(hostPath: hostPath, isDirectory: false));
+      .reveal(FileRevealTarget(path: path, isDirectory: false));
   if (ref.read(sidePanelProvider) != SidePanelSurface.files) {
     ref.read(sidePanelProvider.notifier).select(SidePanelSurface.files);
   }
 }
 
 /// Keeps [text] as a note through the same dialog a terminal capture uses,
-/// filed under the Files panel's repository when [hostPath] is inside it.
+/// filed under the Files panel's repository when [path] is inside it.
 Future<void> captureSelectionAsNote(
   BuildContext context,
   WidgetRef ref, {
   required String text,
-  String? hostPath,
+  EnvironmentPath? path,
 }) async {
-  final underRoot =
-      hostPath != null && filesPanelRootFor(ref, hostPath) != null;
+  final underRoot = path != null && filesPanelRootFor(ref, path) != null;
   final repositoryId = underRoot
       ? ref.read(selectedRepositoryIdProvider)
       : null;

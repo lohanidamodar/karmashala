@@ -6,11 +6,13 @@ import 'package:karmashala/src/features/editor/application/editor_auto_save.dart
 import 'package:karmashala/src/features/editor/application/open_documents.dart';
 import 'package:karmashala/src/features/editor/data/document_store.dart';
 import 'package:karmashala/src/features/editor/domain/source_document.dart';
-import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/features/editor/domain/document_id.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
 
 import '../terminal/fake_instance.dart';
+import '../../support/fake_data_server.dart';
+import '../../support/memory_documents.dart';
 import '../../support/test_machine.dart';
 
 const _path = r'C:\repo\lib\main.dart';
@@ -18,9 +20,9 @@ const _path = r'C:\repo\lib\main.dart';
 /// A disk another process can write behind the editor's back: every write
 /// moves the clock, so a stamp tells one version from the next.
 class _Disk extends DocumentStore {
-  _Disk(this.files);
+  _Disk(this.contents) : super(noServerFiles());
 
-  final Map<String, String> files;
+  final Map<String, String> contents;
   final Map<String, DateTime> _modified = {};
   var _clock = 0;
   var stats = 0;
@@ -37,9 +39,9 @@ class _Disk extends DocumentStore {
 
   void external(String hostPath, String? text) {
     if (text == null) {
-      files.remove(hostPath);
+      contents.remove(hostPath);
     } else {
-      files[hostPath] = text;
+      contents[hostPath] = text;
     }
     _modified[hostPath] = DateTime.utc(2026, 9, 22, 12, 0, ++_clock);
   }
@@ -48,7 +50,7 @@ class _Disk extends DocumentStore {
   Future<SourceDocument> load(String hostPath) async {
     loads++;
     if (loadGate != null) await loadGate!.future;
-    final text = files[hostPath];
+    final text = contents[hostPath];
     if (text == null) {
       return SourceDocument(
         hostPath: hostPath,
@@ -81,7 +83,7 @@ class _Disk extends DocumentStore {
   }
 
   FileStamp? _stampOf(String hostPath) {
-    final text = files[hostPath];
+    final text = contents[hostPath];
     if (text == null) return null;
     return FileStamp(length: text.length, modified: _modified[hostPath]);
   }
@@ -178,7 +180,7 @@ void main() {
       final outcome = await documents.save(_path);
 
       expect(outcome.result, SaveResult.stale);
-      expect(disk.files[_path], 'theirs\n');
+      expect(disk.contents[_path], 'theirs\n');
     });
 
     test('after Keep mine, a save overwrites without asking', () async {
@@ -193,7 +195,7 @@ void main() {
       final outcome = await documents.save(_path);
 
       expect(outcome.result, SaveResult.saved);
-      expect(disk.files[_path], 'mine\n');
+      expect(disk.contents[_path], 'mine\n');
       expect(doc().isDirty, isFalse);
     });
 
@@ -220,13 +222,13 @@ void main() {
     });
 
     test('is back in sync when the file returns to what was read', () async {
-      final original = disk.files[_path]!;
+      final original = disk.contents[_path]!;
       final stamp = doc().stamp!;
       disk.external(_path, 'theirs\n');
       await documents.checkOnDisk(_path);
       // Put back byte for byte, time and all — a `git checkout` that restored
       // the mtime.
-      disk.files[_path] = original;
+      disk.contents[_path] = original;
       disk._modified[_path] = stamp.modified!;
 
       await documents.checkOnDisk(_path);
@@ -254,7 +256,7 @@ void main() {
       final outcome = await documents.save(_path);
 
       expect(outcome.result, SaveResult.saved);
-      expect(disk.files[_path], 'one\ntwo\n');
+      expect(disk.contents[_path], 'one\ntwo\n');
       expect(doc().disk, DiskState.current);
     });
 
@@ -262,7 +264,7 @@ void main() {
       disk.external(_path, null);
 
       expect((await documents.save(_path)).result, SaveResult.stale);
-      expect(disk.files.containsKey(_path), isFalse);
+      expect(disk.contents.containsKey(_path), isFalse);
     });
 
     test('that reappears is re-read into a clean buffer', () async {
@@ -294,7 +296,7 @@ void main() {
     disk.statGate = Completer<void>();
     final first = documents.checkOnDisk(_path);
     final second = documents.checkOnDisk(_path);
-    final third = documents.checkAllOnDisk();
+    final third = documents.checkOnDisk(_path);
     disk.statGate!.complete();
     await Future.wait([first, second, third]);
 
@@ -362,20 +364,33 @@ void main() {
     expect(container.read(openDocumentProvider(_path)), isNull);
   });
 
-  test('coming back to the window checks every open buffer', () async {
-    const other = r'C:\repo\lib\other.dart';
-    disk.files[other] = 'other\n';
-    await documents.open(other);
-    disk.external(_path, 'changed while away\n');
-    disk.external(other, 'this too\n');
-
-    final focus = container.read(windowFocusedProvider.notifier);
-    focus.set(false);
-    focus.set(true);
+  test("an open file is watched by the server, and its news is checked at "
+      "once; a closed one's is not asked for", () async {
+    final server = FakeDataServer();
+    final watched = ProviderContainer(
+      overrides: [
+        documentStoreProvider.overrideWithValue(disk),
+        await server.override(),
+      ],
+    );
+    addTearDown(watched.dispose);
+    final open = watched.read(openDocumentsProvider.notifier);
+    await open.open(_path);
     await pumpEventQueue();
+    final at = documentPathOf(_path);
+    expect(server.filesWork.watched, {at});
 
-    expect(doc().text, 'changed while away\n');
-    expect(container.read(openDocumentProvider(other))?.text, 'this too\n');
+    disk.external(_path, 'changed by an agent\n');
+    await server.filesWork.changed(at, stamp: disk._stampOf(_path));
+    await pumpEventQueue();
+    expect(
+      watched.read(openDocumentProvider(_path))?.text,
+      'changed by an agent\n',
+    );
+
+    open.close(_path);
+    await pumpEventQueue();
+    expect(server.filesWork.watched, isEmpty);
   });
 
   testWidgets('autosave never writes over a change or a deletion', (
@@ -406,17 +421,17 @@ void main() {
     documents.edit(_path, 'mine, more\n');
     await tester.pump(const Duration(seconds: 5));
     expect(disk.writes, isEmpty);
-    expect(disk.files[_path], 'theirs\n');
+    expect(disk.contents[_path], 'theirs\n');
 
     // Keep mine is the answer: from there autosave may write.
     documents.keepMine(_path);
     expect((await autosave.saveNow(_path))?.result, SaveResult.saved);
-    expect(disk.files[_path], 'mine, more\n');
+    expect(disk.contents[_path], 'mine, more\n');
 
     disk.external(_path, null);
     await documents.checkOnDisk(_path);
     documents.edit(_path, 'after delete\n');
     await tester.pump(const Duration(seconds: 5));
-    expect(disk.files.containsKey(_path), isFalse);
+    expect(disk.contents.containsKey(_path), isFalse);
   });
 }

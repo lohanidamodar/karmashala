@@ -18,6 +18,7 @@ import '../automations/daemon_automations.dart';
 import '../automations/session_mcp_access.dart';
 import '../companion/daemon_companion.dart';
 import '../domain/session_registry.dart';
+import '../files/server_files.dart';
 import '../git/server_git.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
@@ -283,6 +284,10 @@ Future<int> runServe(
   // SSH, reached by the server itself (slice 3a): its pool over the saved
   // hosts, keys read on this machine, and prompts put to the desktop clients.
   final ssh = ServerSsh(data: data, database: database)..attach();
+  // A machine's files for every client (slice 3c): the file pane, the
+  // editor's reads and saves, Quick Open's index and the watches, over the
+  // same SSH pool.
+  final files = ServerFiles(data: data, pool: ssh.pool)..attach();
   // Usage, accounts, detection and the CLI import: the work done for the
   // agents on this machine, whichever client asks, and on its own.
   final hostEnvironment = environment ?? Platform.environment;
@@ -668,6 +673,7 @@ Future<int> runServe(
   await companion.close();
   agentWork.stop();
   await git.stop();
+  await files.close();
   await ssh.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.

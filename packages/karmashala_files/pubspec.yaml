@@ -1,0 +1,33 @@
+name: karmashala_files
+description: >-
+  One machine's files behind the verbs a file pane, an editor and Quick Open
+  need: this machine's disk, a WSL distribution over its share and an SSH
+  host over SFTP, with the save that refuses a version it has not seen, the
+  copy between two machines and the bounded walk of a checkout. The server
+  runs it (slice 3c); clients carry its values. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `EnvironmentPath`, the one way a path names its machine.
+  agent_cli:
+    path: ../agent_cli
+  # SFTP: `RemoteFileBrowser` and the document verbs a save is built from.
+  karmashala_ssh:
+    path: ../karmashala_ssh
+  # `DirectoryChangeWatcher`: a checkout on this machine tells the index it
+  # moved.
+  karmashala_core:
+    path: ../karmashala_core
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
@@ -9,10 +8,9 @@ import 'package:karmashala_ui/tokens.dart';
 
 import 'package:agent_cli/process.dart';
 
-import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../../editor/domain/document_id.dart';
-import '../../environments/application/environment_providers.dart';
+import '../../files/data/files_client.dart' show pathContextOf;
 import '../application/changes_providers.dart';
 import '../application/diff_tab_actions.dart';
 import '../application/parsed_diff.dart';
@@ -26,24 +24,14 @@ class DiffTabView extends ConsumerWidget {
 
   final DiffTarget target;
 
-  /// The file itself as a document id: its host path where the checkout has
-  /// one, else its POSIX path on the SSH host it is on, which the editor opens
-  /// over SFTP. Null when neither applies.
+  /// The file itself as a document id: where it is in its checkout's own
+  /// environment, which the server reads wherever that is.
   String? _hostFile(WidgetRef ref) {
-    final root = ref
-        .read(editorActionsProvider)
-        .windowsPathFor(target.checkout);
-    if (root != null) return p.normalize(p.join(root, target.path));
-    final environment = ref
-        .read(environmentsDataProvider)
-        .getById(target.checkout.environmentId);
-    if (environment?.kind != EnvironmentKind.ssh) return null;
+    final context = pathContextOf(target.checkout.path);
     return documentIdOf(
       EnvironmentPath(
         environmentId: target.checkout.environmentId,
-        path: p.posix.normalize(
-          p.posix.join(target.checkout.path, target.path),
-        ),
+        path: context.normalize(context.join(target.checkout.path, target.path)),
       ),
     );
   }

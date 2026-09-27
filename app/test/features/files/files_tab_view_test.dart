@@ -1,7 +1,7 @@
 /// The browser as the user meets it: two machines side by side, a folder made
-/// from the toolbar, and a file copied across — against two real directories,
-/// because a file manager that is right about a fake filesystem is worth
-/// nothing.
+/// from the toolbar, and a file copied across — against two real directories
+/// the fake server reads and copies between (slice 3c), because a file
+/// manager that is right about a fake filesystem is worth nothing.
 library;
 
 import 'dart:io';
@@ -11,14 +11,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/editor/application/editor_tab_actions.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/files/application/file_space_providers.dart';
-import 'package:karmashala/src/features/files/domain/file_space.dart';
-import 'package:karmashala/src/features/files/data/local_file_space.dart';
-import 'package:karmashala/src/features/files/presentation/file_panel_view.dart';
 import 'package:karmashala/src/features/files/presentation/files_tab_view.dart';
+import 'package:karmashala_files/karmashala_files.dart' show LocalFileSpace;
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
 import '../../support/temp_directory.dart';
 
 /// Lets the panel's real file work finish and the frames it causes be drawn.
@@ -46,79 +46,11 @@ class _OpenedFiles extends EditorTabActions {
   }
 }
 
-/// A host reached only over a wire: one file, and no host path for it.
-class _RemoteSpace extends FileSpace {
-  @override
-  String get environmentId => 'ssh:box';
-
-  @override
-  String get label => 'box';
-
-  @override
-  p.Context get pathContext => p.posix;
-
-  EnvironmentPath _at(String path) =>
-      EnvironmentPath(environmentId: environmentId, path: path);
-
-  @override
-  Future<EnvironmentPath> home() async => _at('/home/me');
-
-  @override
-  Future<EnvironmentPath> resolve(EnvironmentPath path) async => path;
-
-  @override
-  Future<List<FileEntry>> list(EnvironmentPath directory) async => [
-    FileEntry(
-      name: 'main.dart',
-      path: _at('/home/me/main.dart'),
-      kind: FileEntryKind.file,
-      sizeBytes: 15,
-    ),
-  ];
-
-  @override
-  String? hostPathOf(EnvironmentPath path) => null;
-
-  @override
-  Future<void> close() async {}
-
-  @override
-  Future<EnvironmentPath> createDirectory(
-    EnvironmentPath parent,
-    String name,
-  ) => throw UnimplementedError();
-
-  @override
-  Future<EnvironmentPath> createFile(EnvironmentPath parent, String name) =>
-      throw UnimplementedError();
-
-  @override
-  Future<EnvironmentPath> rename(EnvironmentPath target, String name) =>
-      throw UnimplementedError();
-
-  @override
-  Future<void> delete(EnvironmentPath target, {bool recursive = false}) =>
-      throw UnimplementedError();
-
-  @override
-  Future<void> copyToLocal(
-    EnvironmentPath source,
-    String destination, {
-    void Function(int bytes)? onProgress,
-  }) => throw UnimplementedError();
-
-  @override
-  Future<void> copyFromLocal(
-    String source,
-    EnvironmentPath destination, {
-    void Function(int bytes)? onProgress,
-  }) => throw UnimplementedError();
-}
-
 void main() {
   late Directory left;
   late Directory right;
   late ProviderContainer container;
+  late FakeDataServer server;
 
   ExecutionEnvironment environment(String id, String name) =>
       ExecutionEnvironment(
@@ -128,25 +60,19 @@ void main() {
         createdAt: DateTime.utc(2026, 9, 20),
       );
 
-  setUp(() {
+  setUp(() async {
     left = Directory.systemTemp.createTempSync('ks-tab-left-');
     right = Directory.systemTemp.createTempSync('ks-tab-right-');
+    server = FakeDataServer();
+    server.filesWork.spaces['left'] = LocalFileSpace(environmentId: 'left');
+    server.filesWork.spaces['right'] = LocalFileSpace(environmentId: 'right');
     container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(await server.connect()),
         browsableEnvironmentsProvider.overrideWithValue([
           environment('left', 'Left machine'),
           environment('right', 'Right machine'),
         ]),
-        fileSpaceProvider.overrideWith(
-          (ref, id) => LocalFileSpace(
-            environmentId: id,
-            label: id == 'left' ? 'Left machine' : 'Right machine',
-            homeAt: () async => EnvironmentPath(
-              environmentId: id,
-              path: id == 'left' ? left.path : right.path,
-            ),
-          ),
-        ),
       ],
     );
   });
@@ -292,23 +218,19 @@ void main() {
   testWidgets('a file on an SSH host opens in the editor, named by its host '
       'and its own path', (tester) async {
     late _OpenedFiles opened;
+    final box = Directory.systemTemp.createTempSync('ks-tab-box-');
+    addTearDown(() => removeTempDirectory(box));
+    Directory(p.join(box.path, 'home', 'me')).createSync(recursive: true);
+    File(p.join(box.path, 'home', 'me', 'main.dart')).writeAsStringSync('x');
+    server.filesWork.posixAt('ssh:box', box.path);
     container.dispose();
     container = ProviderContainer(
       overrides: [
+        dataClientProvider.overrideWithValue(await server.connect()),
         browsableEnvironmentsProvider.overrideWithValue([
           environment('ssh:box', 'box'),
           environment('right', 'Right machine'),
         ]),
-        fileSpaceProvider.overrideWith(
-          (ref, id) => id == 'ssh:box'
-              ? _RemoteSpace()
-              : LocalFileSpace(
-                  environmentId: id,
-                  label: 'Right machine',
-                  homeAt: () async =>
-                      EnvironmentPath(environmentId: id, path: right.path),
-                ),
-        ),
         editorTabActionsProvider.overrideWith(
           (ref) => opened = _OpenedFiles(ref),
         ),
@@ -342,22 +264,15 @@ void main() {
     expect(opened.ids, ['ssh:box␟/home/me/main.dart']);
   });
 
-  testWidgets('a machine this build cannot browse leaves the panel saying so '
-      'rather than empty', (tester) async {
-    container.dispose();
-    container = ProviderContainer(
-      overrides: [
-        browsableEnvironmentsProvider.overrideWithValue([
-          environment('left', 'Left machine'),
-          environment('right', 'Right machine'),
-        ]),
-        fileSpaceProvider.overrideWith((ref, id) => null),
-      ],
-    );
+  testWidgets('a machine the server cannot reach says so in its panel '
+      'rather than showing it empty', (tester) async {
+    server.filesWork.spaces.remove('right');
 
     await pumpBrowser(tester);
 
-    // No panel, no crash: the spinner stands where a listing would be.
-    expect(find.byType(FilePanelView), findsNothing);
+    expect(
+      find.textContaining('cannot reach files in "right"'),
+      findsOneWidget,
+    );
   });
 }

@@ -1,4 +1,8 @@
+import 'package:karmashala_files/values.dart' show FileStamp;
+
 import 'document_id.dart';
+
+export 'package:karmashala_files/values.dart' show FileStamp;
 
 /// Over this a file opens read-only ([DocumentMode.view]): the editable field
 /// lays the whole buffer out as one paragraph — tool/benchmark/code_field_bench.dart.
@@ -37,38 +41,6 @@ enum DiskState {
 
   /// The file is gone. The buffer keeps its text; a save puts the file back.
   deleted,
-}
-
-/// What a file looked like when it was read — what a save checks before it
-/// overwrites. Null [modified] means the filesystem did not say.
-class FileStamp {
-  const FileStamp({required this.length, required this.modified});
-
-  final int length;
-  final DateTime? modified;
-
-  /// Whether [other] is the same file we read. A missing modification time is
-  /// not evidence of a change, so length decides alone (§19).
-  bool matches(FileStamp? other) {
-    if (other == null) return false;
-    if (other.length != length) return false;
-    final mine = modified;
-    final theirs = other.modified;
-    if (mine == null || theirs == null) return true;
-    return mine == theirs;
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is FileStamp &&
-      other.length == length &&
-      other.modified == modified;
-
-  @override
-  int get hashCode => Object.hash(length, modified);
-
-  @override
-  String toString() => 'FileStamp($length, $modified)';
 }
 
 /// One open file: the bytes as they were read, the bytes as they are now, and

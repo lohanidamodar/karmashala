@@ -7,11 +7,15 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:agent_cli/descriptors.dart' show AgentRegistry;
-import 'package:agent_cli/process.dart' show EnvironmentKind;
+import 'package:agent_cli/process.dart'
+    show EnvironmentKind, EnvironmentPath, localHostEnvironmentId;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_files/values.dart' show WriteExpectation;
 import 'package:karmashala_host/data.dart' show HostDataLink;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/lifecycle_client.dart'
@@ -421,6 +425,71 @@ void main() {
       expect((await client.send(const PreferencesGet())).value, {
         'settings.v1': '{"a":1}',
       });
+    });
+  });
+
+  group('files (slice 3c)', () {
+    test('a client reads a file bigger than a frame in chunks, a stale save '
+        'is refused as a conflict, and only the watching link hears of a '
+        'change', () async {
+      final server = await InProcessServer.start(root, serveArgs());
+      addTearDown(server.stop);
+      final watcher = (await HostDataLink.connect(server.paths.socketPath))!;
+      final other = (await HostDataLink.connect(server.paths.socketPath))!;
+      addTearDown(watcher.close);
+      addTearDown(other.close);
+      await watcher.send(const DataSubscribe());
+      await other.send(const DataSubscribe());
+      final toOther = <DataChange>[];
+      other.changes.listen((batch) => toOther.addAll(batch.changes));
+
+      final folder = Directory(p.join(root.path, 'files'))..createSync();
+      final big = File(p.join(folder.path, 'big.bin'))
+        ..writeAsBytesSync(List.filled(20 * 1024 * 1024, 7));
+      EnvironmentPath at(String path) =>
+          EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
+
+      final first = (await watcher.send(FilesRead(at(big.path)))).value;
+      expect(first.bytes.length, kFileChunkBytes);
+      expect(first.fileSize, 20 * 1024 * 1024);
+      final last = (await watcher.send(
+        FilesRead(at(big.path), offset: 20 * 1024 * 1024 - 5),
+      )).value;
+      expect(last.bytes, [7, 7, 7, 7, 7]);
+
+      final note = File(p.join(folder.path, 'a.txt'))..writeAsStringSync('one');
+      final seen = (await watcher.send(FilesStatOf(at(note.path)))).value;
+      note.writeAsStringSync('someone else');
+      await expectLater(
+        watcher.send(
+          FilesWrite(
+            at(note.path),
+            Uint8List.fromList(utf8.encode('mine')),
+            expect: WriteExpectation.version(seen.stamp!),
+          ),
+        ),
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.code,
+            'code',
+            DataRefusalCode.conflict,
+          ),
+        ),
+      );
+      expect(note.readAsStringSync(), 'someone else');
+
+      await watcher.send(FilesWatch([at(folder.path)]));
+      final heard = watcher.changes
+          .expand((batch) => batch.changes)
+          .firstWhere((change) => change is FileChanged)
+          .then((change) => change as FileChanged);
+      await other.send(FilesTouch(at(folder.path), 'new.txt'));
+      expect(
+        (await heard.timeout(const Duration(seconds: 10))).at,
+        at(folder.path),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(toOther.whereType<FileChanged>(), isEmpty);
     });
   });
 

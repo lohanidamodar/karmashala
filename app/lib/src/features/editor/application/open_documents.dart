@@ -2,13 +2,15 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../notifications/application/notification_providers.dart';
+import '../../../core/data/data_client.dart' show DataLinkState;
+import '../../../core/data/data_providers.dart';
+import '../../files/data/files_client.dart';
 import '../data/document_store.dart';
+import '../domain/document_id.dart';
 import '../domain/source_document.dart';
-import 'document_sources.dart';
 
 final documentStoreProvider = Provider<DocumentStore>(
-  (ref) => DocumentStore(sources: ref.watch(documentSourcesProvider)),
+  (ref) => DocumentStore(ref.watch(filesClientProvider)),
 );
 
 enum SaveResult { saved, unchanged, stale, failed }
@@ -38,13 +40,40 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
   /// call our own save somebody else's change.
   final Set<String> _writing = <String>{};
 
+  /// The server's watch on each open file (slice 3c): a change on disk —
+  /// an agent's edit, another editor's save — is told, not polled for.
+  final Map<String, FileWatch> _watches = {};
+
   @override
   Map<String, SourceDocument> build() {
-    ref.listen(windowFocusedProvider, (previous, focused) {
-      // A genuine return to the app — the first `true` at startup is not one.
-      if (focused && previous == false) unawaited(checkAllOnDisk());
+    // Back from a lost link to the server: whatever changed while nobody
+    // could be told is looked at once, and a buffer held as unreachable
+    // learns it is not.
+    ref.listen(dataConnectionProvider, (previous, next) {
+      final was = previous?.value?.state;
+      if (next.value?.state != DataLinkState.connected) return;
+      if (was == null || was == DataLinkState.connected) return;
+      for (final path in state.keys) {
+        unawaited(checkOnDisk(path));
+      }
+    });
+    ref.onDispose(() {
+      for (final watch in _watches.values) {
+        watch.cancel();
+      }
+      _watches.clear();
     });
     return const {};
+  }
+
+  void _watch(String hostPath) {
+    if (_watches.containsKey(hostPath)) return;
+    _watches[hostPath] = ref
+        .read(filesClientProvider)
+        .watch(
+          documentPathOf(hostPath),
+          (_) => unawaited(checkOnDisk(hostPath)),
+        );
   }
 
   /// The files a tab still wants. A read or a write started before a close
@@ -58,6 +87,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
   /// restored tab and an explicit open both call it.
   Future<void> open(String hostPath) async {
     _wanted.add(hostPath);
+    _watch(hostPath);
     if (state.containsKey(hostPath) || !_reading.add(hostPath)) return;
     try {
       final document = await ref.read(documentStoreProvider).load(hostPath);
@@ -76,7 +106,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
           text: '',
           savedText: '',
           refusal: DocumentRefusal.unreadable,
-          error: error is DocumentUnreachableException
+          error: error is FilesUnreachableException
               ? error.message
               : 'Could not read this file: $error',
         ),
@@ -118,7 +148,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
       final FileStamp? onDisk;
       try {
         onDisk = await store.stamp(hostPath);
-      } on DocumentUnreachableException catch (error) {
+      } on FilesUnreachableException catch (error) {
         _noteUnreachable(hostPath, error.message);
         return SaveOutcome(SaveResult.failed, _heldMessage(document, error));
       }
@@ -157,7 +187,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     _writing.add(hostPath);
     try {
       stamp = await store.write(hostPath, document.diskText, expect: expect);
-    } on DocumentStaleException catch (error) {
+    } on FilesStaleException catch (error) {
       _noteStale(hostPath, error.current);
       return SaveOutcome(
         SaveResult.stale,
@@ -165,7 +195,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
             ? '${document.name} is no longer on disk.'
             : '${document.name} changed on disk since it was opened.',
       );
-    } on DocumentUnreachableException catch (error) {
+    } on FilesUnreachableException catch (error) {
       _noteUnreachable(hostPath, error.message);
       return SaveOutcome(SaveResult.failed, _heldMessage(document, error));
     } on DocumentWriteException catch (error) {
@@ -188,7 +218,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     final SourceDocument document;
     try {
       document = await ref.read(documentStoreProvider).load(hostPath);
-    } on DocumentUnreachableException catch (error) {
+    } on FilesUnreachableException catch (error) {
       // Discarding the buffer for bytes nobody could read would lose both.
       _noteUnreachable(hostPath, error.message);
       return;
@@ -207,7 +237,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
 
   String _heldMessage(
     SourceDocument document, [
-    DocumentUnreachableException? error,
+    FilesUnreachableException? error,
   ]) =>
       '${error?.message ?? document.unreachable ?? 'The connection was lost'}. '
       '${document.name} was not saved; your edits are kept until it '
@@ -220,11 +250,6 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     if (document == null || document.disk != DiskState.changed) return;
     _put(hostPath, document.keepingMine());
   }
-
-  /// Checks every open buffer against the disk — the window came back, and
-  /// anything could have happened while it was away.
-  Future<void> checkAllOnDisk() =>
-      Future.wait([for (final path in state.keys) checkOnDisk(path)]);
 
   /// Stats [hostPath] and brings the buffer in line with what it finds: a clean
   /// buffer is re-read, a dirty one is marked [DiskState.changed] and keeps
@@ -239,7 +264,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
       final FileStamp? onDisk;
       try {
         onDisk = await ref.read(documentStoreProvider).stamp(hostPath);
-      } on DocumentUnreachableException catch (error) {
+      } on FilesUnreachableException catch (error) {
         if (ref.mounted) _noteUnreachable(hostPath, error.message);
         return;
       } on Object {
@@ -298,7 +323,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     final SourceDocument loaded;
     try {
       loaded = await ref.read(documentStoreProvider).load(hostPath);
-    } on DocumentUnreachableException catch (error) {
+    } on FilesUnreachableException catch (error) {
       if (ref.mounted) _noteUnreachable(hostPath, error.message);
       return;
     } on Object {
@@ -328,6 +353,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
   /// Drops the buffer. Unsaved text is gone — the caller asks first.
   void close(String hostPath) {
     _wanted.remove(hostPath);
+    _watches.remove(hostPath)?.cancel();
     if (!state.containsKey(hostPath)) return;
     state = {...state}..remove(hostPath);
   }

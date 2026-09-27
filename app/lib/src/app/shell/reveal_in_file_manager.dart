@@ -116,6 +116,21 @@ class RevealInFileManager {
             : 'There is no path on this machine for ${path.path}.',
       );
     }
+    return revealHostPath(hostPath, select: select);
+  }
+
+  /// Opens the host's file manager on [hostPath], already spelled for this
+  /// machine — what the server answered for one of its files (slice 3c).
+  Future<RevealOutcome> revealHostPath(
+    String hostPath, {
+    bool select = false,
+  }) async {
+    final manager = fileManager;
+    if (manager == null) {
+      return const RevealOutcome.failed(
+        'This platform has no file manager Karmashala can open.',
+      );
+    }
     try {
       // The exit code is deliberately ignored: `explorer.exe` returns 1 even
       // when it opens the window.

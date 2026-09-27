@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -12,8 +11,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
-import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -26,8 +23,8 @@ import 'package:karmashala/src/features/sessions/application/delivery_providers.
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 
+import '../../features/file_explorer/explorer_fixture.dart';
 import '../../features/terminal/fake_instance.dart';
-import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
@@ -145,20 +142,7 @@ void main() {
   testWidgets('Files — was 36px of padding with no ground', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          selectedRepoWindowsRootProvider.overrideWithValue(r'C:\src\app'),
-          revealInFileManagerProvider.overrideWithValue(
-            RevealInFileManager(
-              host: FakeCommandRunner(),
-              translator: const PathTranslator(),
-              environmentFor: (id) => null,
-              fileManagerOverride: HostFileManager.windowsExplorer,
-            ),
-          ),
-          directoryListingProvider.overrideWith(
-            (ref, dir) async => const <DirEntry>[],
-          ),
-        ],
+        overrides: explorerOverrides(r'C:\src\app', const {}),
         child: host(const FileExplorerView()),
       ),
     );
@@ -455,18 +439,7 @@ void main() {
         overrides: [
           githubPullRequestsProvider.overrideWith((ref) async => const []),
           githubIssuesProvider.overrideWith((ref) async => const []),
-          selectedRepoWindowsRootProvider.overrideWithValue(r'C:\src\app'),
-          revealInFileManagerProvider.overrideWithValue(
-            RevealInFileManager(
-              host: FakeCommandRunner(),
-              translator: const PathTranslator(),
-              environmentFor: (id) => null,
-              fileManagerOverride: HostFileManager.windowsExplorer,
-            ),
-          ),
-          directoryListingProvider.overrideWith(
-            (ref, dir) async => const <DirEntry>[],
-          ),
+          ...explorerOverrides(r'C:\src\app', const {}),
           repositoryChangesProvider.overrideWith(
             (ref) async => const <FileChange>[],
           ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../domain/file_space.dart';
+import 'package:karmashala_files/values.dart';
 
 /// Asks for a file or folder name — new, or a rename. The name is checked here
 /// too, so a path separator is a message under the field rather than a failed

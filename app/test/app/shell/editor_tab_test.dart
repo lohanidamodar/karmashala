@@ -30,6 +30,7 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import '../../support/test_machine.dart';
+import '../../support/memory_documents.dart';
 
 /// **A file opens in a tab of this app, and closing one cannot lose an edit.**
 ///
@@ -50,7 +51,7 @@ const _initial = 'void main() {\n  print(1);\n}\n';
 const _huge = r'C:\repo\build\bundle.js';
 
 class _FakeStore extends DocumentStore {
-  _FakeStore(this.disk);
+  _FakeStore(this.disk) : super(noServerFiles());
 
   final Map<String, String> disk;
   final Map<String, DateTime> written = {};
@@ -457,42 +458,6 @@ void main() {
     expect(editorTabsIn(container), hasLength(1));
     final field = tester.widget<AppCodeEditor>(find.byType(AppCodeEditor));
     expect(field.controller.text, 'after the restart\n');
-  });
-
-  testWidgets('a WSL tab stored by its share path comes back, and opening the '
-      'same file again reuses it', (tester) async {
-    const legacy = r'\\wsl.localhost\Ubuntu\home\me\app\main.dart';
-    store.disk[legacy] = 'from wsl\n';
-    final first = fakeTerminalContainer(
-      machine: db,
-      layoutStore: layoutStoreOf(db),
-    );
-    final terminals = first.read(terminalSessionsControllerProvider.notifier);
-    terminals.openTab(TerminalProfile.powerShell);
-    terminals.openEditorTab(legacy);
-    terminals.persistLayout();
-    first.dispose();
-
-    final container = await launch(tester);
-    await settle(tester);
-    expect(editorTabsIn(container), hasLength(1));
-    expect(
-      tester.widget<AppCodeEditor>(find.byType(AppCodeEditor)).controller.text,
-      'from wsl\n',
-    );
-
-    refOf(tester)
-        .read(editorTabActionsProvider)
-        .openAt(
-          const EnvironmentPath(
-            environmentId: 'wsl:Ubuntu',
-            path: '/home/me/app/main.dart',
-          ),
-        );
-    await settle(tester);
-
-    expect(editorTabsIn(container), hasLength(1));
-    expect(container.read(openDocumentsProvider).keys, [legacy]);
   });
 
   testWidgets('a file too big to edit opens read-only, and says so', (

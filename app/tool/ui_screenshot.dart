@@ -46,6 +46,7 @@ import '../test/features/terminal/fake_instance.dart';
 import '../test/support/fake_command_runner.dart';
 import '../test/support/fake_data_server.dart';
 import '../test/support/fixtures.dart';
+import '../test/support/memory_documents.dart';
 import '../test/support/test_machine.dart';
 
 const _outDir = 'build/ui-screenshots';
@@ -219,7 +220,7 @@ final _bigSource = List.generate(
 
 /// Serves [_sampleSource] so the scene never touches a real file.
 class _SampleStore extends DocumentStore {
-  const _SampleStore();
+  _SampleStore() : super(noServerFiles());
 
   @override
   Future<SourceDocument> load(String hostPath) async {
@@ -298,7 +299,7 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         await server.override(),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
-        documentStoreProvider.overrideWithValue(const _SampleStore()),
+        documentStoreProvider.overrideWithValue(_SampleStore()),
         repositoryChangesProvider.overrideWith((ref) async => _changedFiles),
         repositoryFileDiffStatsProvider.overrideWith(
           (ref) async => _changeStats,

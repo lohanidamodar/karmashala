@@ -1,6 +1,7 @@
-/// One panel of the browser, against a real directory: where it lands, what
-/// an operation leaves on screen, and that a failure is a sentence beside a
-/// listing that still says what is actually there.
+/// One panel of the browser, against a real directory the fake server reads
+/// (slice 3c): where it lands, what an operation leaves on screen, and that a
+/// failure is a sentence beside a listing that still says what is actually
+/// there.
 library;
 
 import 'dart:io';
@@ -8,9 +9,11 @@ import 'dart:io';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/files/application/file_panel_controller.dart';
-import 'package:karmashala/src/features/files/data/local_file_space.dart';
+import 'package:karmashala/src/features/files/data/files_client.dart';
+import 'package:karmashala_files/karmashala_files.dart' show LocalFileSpace;
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_data_server.dart';
 import '../../support/temp_directory.dart';
 
 void main() {
@@ -24,7 +27,11 @@ void main() {
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('ks-panel-');
-    panel = FilePanelController(LocalFileSpace(environmentId: 'here'));
+    final server = FakeDataServer();
+    server.filesWork.spaces['here'] = LocalFileSpace(environmentId: 'here');
+    final files = FilesClient(await server.connect());
+    addTearDown(files.dispose);
+    panel = FilePanelController(files, 'here');
     await panel.open(at(''));
   });
 

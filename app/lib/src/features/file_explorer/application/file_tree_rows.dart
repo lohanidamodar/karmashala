@@ -1,7 +1,8 @@
+import 'package:agent_cli/process.dart';
 import 'package:flutter/foundation.dart' show immutable, listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_files/values.dart';
 
-import '../data/file_listing_service.dart';
 import 'file_explorer_providers.dart';
 
 /// Folders open in the Files panel, by [fileTreeKey]. Held here rather than in
@@ -18,9 +19,9 @@ class FileTreeExpansion extends Notifier<Set<String>> {
     return target == null ? const {} : _towards(target);
   }
 
-  bool isOpen(String path) => state.contains(fileTreeKey(path));
+  bool isOpen(EnvironmentPath path) => state.contains(fileTreeKey(path));
 
-  void toggle(String path) {
+  void toggle(EnvironmentPath path) {
     final key = fileTreeKey(path);
     state = state.contains(key) ? ({...state}..remove(key)) : {...state, key};
   }
@@ -33,10 +34,11 @@ class FileTreeExpansion extends Notifier<Set<String>> {
 
   /// Every ancestor of [target], and the target itself when it is a folder.
   static Set<String> _towards(FileRevealTarget target) {
-    final key = fileTreeKey(target.hostPath);
+    final key = fileTreeKey(target.path);
+    final start = key.indexOf('␟') + 1;
     final keys = <String>{};
-    for (var i = key.indexOf('/'); i >= 0; i = key.indexOf('/', i + 1)) {
-      if (i > 0) keys.add(key.substring(0, i));
+    for (var i = key.indexOf('/', start); i >= 0; i = key.indexOf('/', i + 1)) {
+      if (i > start) keys.add(key.substring(0, i));
     }
     if (target.isDirectory) keys.add(key);
     return keys;
@@ -57,18 +59,18 @@ sealed class FileTreeItem {
 final class FileTreeEntryItem extends FileTreeItem {
   const FileTreeEntryItem(this.entry, super.depth);
 
-  final DirEntry entry;
+  final FileEntry entry;
 
   @override
   bool operator ==(Object other) =>
       other is FileTreeEntryItem &&
       other.depth == depth &&
-      other.entry.windowsPath == entry.windowsPath &&
+      other.entry.path == entry.path &&
       other.entry.name == entry.name &&
       other.entry.isDirectory == entry.isDirectory;
 
   @override
-  int get hashCode => Object.hash(depth, entry.windowsPath, entry.isDirectory);
+  int get hashCode => Object.hash(depth, entry.path, entry.isDirectory);
 }
 
 enum FileTreeNotice { loading, unreadable, empty }
@@ -77,7 +79,7 @@ enum FileTreeNotice { loading, unreadable, empty }
 final class FileTreeNoticeItem extends FileTreeItem {
   const FileTreeNoticeItem(this.folder, this.notice, super.depth);
 
-  final String folder;
+  final EnvironmentPath folder;
   final FileTreeNotice notice;
 
   @override
@@ -108,37 +110,35 @@ class FileTreeRows {
 }
 
 /// The tree under [root], flattened: only folders that are open are listed.
-final fileTreeRowsProvider = Provider.autoDispose.family<FileTreeRows, String>((
-  ref,
-  root,
-) {
-  final open = ref.watch(fileTreeExpansionProvider);
-  final items = <FileTreeItem>[];
-  void walk(String dir, int depth) {
-    final listing = ref.watch(directoryListingProvider(dir));
-    // A refresh keeps drawing the listing it had, the way `AsyncValue.when`
-    // does; an error is said even over an older listing.
-    if (listing is AsyncError) {
-      items.add(FileTreeNoticeItem(dir, FileTreeNotice.unreadable, depth));
-      return;
-    }
-    if (!listing.hasValue) {
-      items.add(FileTreeNoticeItem(dir, FileTreeNotice.loading, depth));
-      return;
-    }
-    final entries = listing.requireValue;
-    if (entries.isEmpty) {
-      items.add(FileTreeNoticeItem(dir, FileTreeNotice.empty, depth));
-      return;
-    }
-    for (final entry in entries) {
-      items.add(FileTreeEntryItem(entry, depth));
-      if (entry.isDirectory && open.contains(fileTreeKey(entry.windowsPath))) {
-        walk(entry.windowsPath, depth + 1);
+final fileTreeRowsProvider = Provider.autoDispose
+    .family<FileTreeRows, EnvironmentPath>((ref, root) {
+      final open = ref.watch(fileTreeExpansionProvider);
+      final items = <FileTreeItem>[];
+      void walk(EnvironmentPath dir, int depth) {
+        final listing = ref.watch(directoryListingProvider(dir));
+        // A refresh keeps drawing the listing it had, the way `AsyncValue.when`
+        // does; an error is said even over an older listing.
+        if (listing is AsyncError) {
+          items.add(FileTreeNoticeItem(dir, FileTreeNotice.unreadable, depth));
+          return;
+        }
+        if (!listing.hasValue) {
+          items.add(FileTreeNoticeItem(dir, FileTreeNotice.loading, depth));
+          return;
+        }
+        final entries = listing.requireValue;
+        if (entries.isEmpty) {
+          items.add(FileTreeNoticeItem(dir, FileTreeNotice.empty, depth));
+          return;
+        }
+        for (final entry in entries) {
+          items.add(FileTreeEntryItem(entry, depth));
+          if (entry.isDirectory && open.contains(fileTreeKey(entry.path))) {
+            walk(entry.path, depth + 1);
+          }
+        }
       }
-    }
-  }
 
-  walk(root, 0);
-  return FileTreeRows(items);
-});
+      walk(root, 0);
+      return FileTreeRows(items);
+    });

@@ -3,7 +3,6 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../../core/probe/probe_mode.dart';
-import '../../editor/application/editor_hook_checks.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_outcome_writer.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -167,19 +166,6 @@ AgentStatusReport applyAgentHookCallback(
     );
   } on Object catch (error) {
     logger?.warning('Recording an agent working directory failed: $error');
-  }
-  // A tool that wrote a file open in the editor: check it now, not at the
-  // next poll. Only stats; the buffer decides what a change means.
-  try {
-    checkEditorFilesFromHook(
-      container,
-      agentId: report.agentId,
-      event: event,
-      body: body,
-      agentSessionId: report.sessionId,
-    );
-  } on Object catch (error) {
-    logger?.warning('Re-checking editor files from a hook failed: $error');
   }
   // The status pipeline's *primary* input: a hook is authoritative and already
   // in memory, so folding it in here beats a poll five seconds later.

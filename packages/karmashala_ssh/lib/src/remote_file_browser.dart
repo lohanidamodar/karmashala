@@ -241,13 +241,17 @@ class RemoteFileBrowser implements RemoteDocumentFiles {
       await kindOf(path) == RemoteEntryKind.symlink;
 
   @override
-  Future<Uint8List> readBytes(EnvironmentPath path, {int? length}) async {
+  Future<Uint8List> readBytes(
+    EnvironmentPath path, {
+    int offset = 0,
+    int? length,
+  }) async {
     _requireOwnEnvironment(path);
     final sftp = await _client();
     return _call('read ${path.path}', () async {
       final file = await sftp.open(path.path);
       try {
-        return await file.readBytes(length: length);
+        return await file.readBytes(length: length, offset: offset);
       } finally {
         await file.close();
       }

@@ -8,11 +8,12 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import 'package:karmashala_files/values.dart';
+
 import '../../editor/application/editor_tab_actions.dart';
 import '../application/file_panel_controller.dart';
 import '../application/file_space_providers.dart';
-import '../application/file_transfer.dart';
-import '../domain/file_space.dart';
+import '../data/files_client.dart';
 import 'file_panel_view.dart';
 
 /// The file browser, as a tab: two machines side by side, the same panel drawn
@@ -38,9 +39,9 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
   /// Which side a copy takes from. The other side is where it lands.
   bool _leftFocused = true;
 
-  /// One transfer at a time, with what it is doing: two at once would race for
-  /// the same destination listing.
-  FileTransferProgress? _moving;
+  /// One transfer at a time, with the file it is on: two at once would race
+  /// for the same destination listing. The server does the copy.
+  String? _moving;
   String? _transferError;
 
   ({
@@ -101,11 +102,11 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
                         segments: [
                           ButtonSegment(
                             value: true,
-                            label: Text(_left.space?.label ?? 'Left'),
+                            label: Text(_left.label ?? 'Left'),
                           ),
                           ButtonSegment(
                             value: false,
-                            label: Text(_right.space?.label ?? 'Right'),
+                            label: Text(_right.label ?? 'Right'),
                           ),
                         ],
                         selected: {_leftFocused},
@@ -139,11 +140,10 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
     required bool focused,
   }) {
     final controller = side.controller;
-    final space = side.space;
-    if (controller == null || space == null) {
+    if (controller == null) {
       return const Center(child: InlineSpinner(size: InlineSpinnerSize.large));
     }
-    final otherSpace = other.space;
+    final otherLabel = other.controller == null ? null : other.label;
     return FilePanelView(
       controller: controller,
       machines: machines,
@@ -151,30 +151,27 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
       onMachine: (id) => setState(() => side.environmentId = id),
       focused: focused,
       onFocus: () => setState(() => _leftFocused = identical(side, _left)),
-      copyLabel: otherSpace == null ? null : 'Copy to ${otherSpace.label}',
-      onCopy: otherSpace == null
+      copyLabel: otherLabel == null ? null : 'Copy to $otherLabel',
+      onCopy: otherLabel == null
           ? null
-          : (entries) => _copy(from: side, to: other, entries: entries),
-      // Every machine the browser reaches, the editor reaches too: an SSH file
-      // is read and saved over SFTP, keyed by where it is rather than by a
-      // host path it does not have.
+          : (entries) => _copy(to: other, entries: entries),
+      // Every machine the browser reaches, the editor reaches too: the server
+      // reads and saves the file where it is, keyed by that place.
       onOpenFile: (entry) =>
           ref.read(editorTabActionsProvider).openAt(entry.path),
     );
   }
 
-  /// Copies [entries] from one side to the other, one at a time, then lists
-  /// the destination again. A folder is refused rather than half-copied: this
-  /// moves files, and a tree is a different promise.
+  /// Copies [entries] to the other side, one at a time — the server moves
+  /// the bytes between the two machines — then lists the destination again.
+  /// A folder is refused rather than half-copied: this moves files, and a
+  /// tree is a different promise.
   Future<void> _copy({
-    required _Side from,
     required _Side to,
     required List<FileEntry> entries,
   }) async {
-    final source = from.space;
-    final destination = to.space;
     final into = to.controller?.value.directory;
-    if (source == null || destination == null || into == null) return;
+    if (into == null) return;
     if (_moving != null) return;
     final folders = entries.where((e) => e.isDirectory).toList();
     final files = entries.where((e) => !e.isDirectory).toList();
@@ -183,28 +180,17 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
           ? null
           : 'Folders are not copied between machines yet: '
                 '${folders.map((f) => f.name).join(', ')}.';
-      _moving = files.isEmpty
-          ? null
-          : FileTransferProgress(name: files.first.name, bytes: 0);
+      _moving = files.isEmpty ? null : files.first.name;
     });
+    final client = ref.read(filesClientProvider);
     for (final entry in files) {
+      if (mounted) setState(() => _moving = entry.name);
       try {
-        await const FileTransfer().copy(
-          from: source,
-          source: entry.path,
-          to: destination,
-          destination: into,
-          totalBytes: entry.sizeBytes,
-          onProgress: (progress) {
-            if (mounted) setState(() => _moving = progress);
-          },
-        );
+        await client.copy(entry.path, into);
       } on Object catch (error) {
         if (!mounted) return;
         setState(() {
-          _transferError = error is FileSpaceException
-              ? error.message
-              : '$error';
+          _transferError = error is FilesException ? error.message : '$error';
         });
         break;
       }
@@ -215,8 +201,8 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
   }
 }
 
-/// One side's machine, its space and its panel — kept together so switching
-/// machines is one assignment and the controller that goes with it.
+/// One side's machine and its panel — kept together so switching machines is
+/// one assignment and the controller that goes with it.
 class _Side {
   _Side(this.environmentId, this.startPath);
 
@@ -226,31 +212,34 @@ class _Side {
   /// that the panel is wherever the user has walked to.
   String? startPath;
 
-  FileSpace? space;
+  /// What the machine is called, from the environments list.
+  String? label;
   FilePanelController? controller;
 
   /// Builds the controller for the machine this side names, when it changed.
-  /// Called from `build`, which is where the provider can be watched — it does
-  /// nothing at all unless the space is a different object.
+  /// Called from `build`; it does nothing unless the machine changed.
   void point(WidgetRef ref, List<({String id, String label})> machines) {
     if (environmentId.isEmpty && machines.isNotEmpty) {
       environmentId = machines.first.id;
     }
-    final next = ref.watch(fileSpaceProvider(environmentId));
-    if (identical(next, space)) return;
-    space = next;
+    final machine = machines.where((m) => m.id == environmentId).firstOrNull;
+    label = machine?.label;
+    if (controller?.environmentId == environmentId) return;
     controller?.dispose();
-    if (next == null) {
+    if (machine == null) {
       controller = null;
       return;
     }
-    final panel = controller = FilePanelController(next);
+    final panel = controller = FilePanelController(
+      ref.read(filesClientProvider),
+      environmentId,
+    );
     final start = startPath;
     startPath = null;
     panel.open(
       start == null || start.isEmpty
           ? null
-          : EnvironmentPath(environmentId: next.environmentId, path: start),
+          : EnvironmentPath(environmentId: environmentId, path: start),
     );
   }
 
@@ -269,7 +258,8 @@ class _TransferStrip extends StatelessWidget {
     required this.onDismiss,
   });
 
-  final FileTransferProgress? progress;
+  /// The file being copied.
+  final String? progress;
   final String? error;
   final VoidCallback onDismiss;
 
@@ -291,7 +281,6 @@ class _TransferStrip extends StatelessWidget {
         ),
       );
     }
-    final moving = progress!;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.sm,
@@ -299,15 +288,11 @@ class _TransferStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(
-            width: 120,
-            child: LinearProgressIndicator(value: moving.fraction),
-          ),
+          const SizedBox(width: 120, child: LinearProgressIndicator()),
           const SizedBox(width: Insets.sm),
           Expanded(
             child: Text(
-              'Copying ${moving.name} — ${describeFileSize(moving.bytes)}'
-              '${moving.total == null ? '' : ' of ${describeFileSize(moving.total)}'}',
+              'Copying $progress…',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall,

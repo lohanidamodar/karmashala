@@ -132,6 +132,11 @@ dependencies:
   # Pure Dart.
   karmashala_ssh:
     path: ../packages/karmashala_ssh
+  # The values a machine's files are told in — an entry, a stat, a stamp,
+  # what a save expects, Quick Open's answer. The server reads the files
+  # (slice 3c); this app only carries the values.
+  karmashala_files:
+    path: ../packages/karmashala_files
   # Deploying the server on an SSH box, its relay and a phone's pairing there
   # — the app keeps these, with its own SSH pool, until a later slice.
   karmashala_ssh_host:

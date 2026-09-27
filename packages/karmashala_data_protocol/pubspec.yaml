@@ -30,6 +30,10 @@ dependencies:
     path: ../karmashala_environments
   karmashala_git:
     path: ../karmashala_git
+  # A file entry, a stat, a stamp and what a save expects: the values the
+  # files requests carry (slice 3c).
+  karmashala_files:
+    path: ../karmashala_files
   karmashala_projects:
     path: ../karmashala_projects
   # Command snippets and saved terminal presets.

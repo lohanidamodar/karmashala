@@ -144,7 +144,11 @@ class FakeRemoteFiles implements RemoteDocumentFiles {
   }
 
   @override
-  Future<Uint8List> readBytes(EnvironmentPath path, {int? length}) async {
+  Future<Uint8List> readBytes(
+    EnvironmentPath path, {
+    int offset = 0,
+    int? length,
+  }) async {
     log.add('read ${path.path}');
     _online('read ${path.path}');
     final node = _resolve(path.path);
@@ -152,9 +156,11 @@ class FakeRemoteFiles implements RemoteDocumentFiles {
       throw RemoteBrowseException('Cannot read ${path.path} on box');
     }
     final bytes = node.bytes;
-    return length == null || length >= bytes.length
-        ? Uint8List.fromList(bytes)
-        : Uint8List.fromList(bytes.sublist(0, length));
+    final start = offset.clamp(0, bytes.length);
+    final end = length == null
+        ? bytes.length
+        : (start + length).clamp(start, bytes.length);
+    return Uint8List.fromList(bytes.sublist(start, end));
   }
 
   @override

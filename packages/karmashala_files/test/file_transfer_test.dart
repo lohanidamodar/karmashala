@@ -5,16 +5,15 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide FileStat;
+import 'dart:typed_data';
 
 import 'package:agent_cli/process.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/files/application/file_transfer.dart';
-import 'package:karmashala/src/features/files/data/local_file_space.dart';
-import 'package:karmashala/src/features/files/domain/file_space.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_files/karmashala_files.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/temp_directory.dart';
+import 'support/temp_directory.dart';
 
 /// A machine whose files this process cannot open — what an SFTP host is to a
 /// transfer, without a host.
@@ -43,7 +42,36 @@ class FakeRemoteSpace extends FileSpace {
   Future<EnvironmentPath> resolve(EnvironmentPath path) async => path;
 
   @override
-  Future<List<FileEntry>> list(EnvironmentPath directory) async => [
+  Future<FileStat> stat(EnvironmentPath path) async {
+    final bytes = files[path.path];
+    return bytes == null
+        ? const FileStat.absent()
+        : FileStat(
+            isDirectory: false,
+            size: bytes.length,
+            stamp: FileStamp(length: bytes.length, modified: null),
+          );
+  }
+
+  @override
+  Future<Uint8List> read(
+    EnvironmentPath path, {
+    int offset = 0,
+    int? length,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<FileStamp> write(
+    EnvironmentPath path,
+    Uint8List bytes, {
+    required WriteExpectation expect,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<List<FileEntry>> list(
+    EnvironmentPath directory, {
+    bool details = true,
+  }) async => [
     for (final entry in files.entries)
       if (p.posix.dirname(entry.key) == directory.path)
         FileEntry(

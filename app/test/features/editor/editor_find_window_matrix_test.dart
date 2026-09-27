@@ -13,10 +13,13 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/test_machine.dart';
+import '../../support/memory_documents.dart';
 
 const _path = '/repo/lib/main.dart';
 
 class _Store extends DocumentStore {
+  _Store() : super(noServerFiles());
+
   static final _text = List.generate(
     200,
     (i) => 'final value$i = compute($i); // line $i',

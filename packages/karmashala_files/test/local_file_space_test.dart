@@ -7,12 +7,11 @@ library;
 import 'dart:io';
 
 import 'package:agent_cli/process.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/files/data/local_file_space.dart';
-import 'package:karmashala/src/features/files/domain/file_space.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_files/karmashala_files.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/temp_directory.dart';
+import 'support/temp_directory.dart';
 
 void main() {
   late Directory tmp;

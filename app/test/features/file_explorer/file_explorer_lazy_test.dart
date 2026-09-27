@@ -1,40 +1,23 @@
-import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
-import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 
-import '../../support/fake_command_runner.dart';
+import 'explorer_fixture.dart';
 
 /// A folder of thousands of files costs the rows on screen, not the folder.
 void main() {
   const root = r'C:\big';
   const count = 5000;
 
-  final listings = <String, List<DirEntry>>{
+  final listings = {
     root: [
-      const DirEntry(
-        name: 'a-dir',
-        isDirectory: true,
-        windowsPath: r'C:\big\a-dir',
-      ),
+      dirEntry(r'C:\big\a-dir'),
       for (var i = 0; i < count; i++)
-        DirEntry(
-          name: 'file-${i.toString().padLeft(4, '0')}.txt',
-          isDirectory: false,
-          windowsPath: 'C:\\big\\file-$i.txt',
-        ),
+        fileEntry('C:\\big\\file-${i.toString().padLeft(4, '0')}.txt'),
     ],
-    r'C:\big\a-dir': const [
-      DirEntry(
-        name: 'inner.txt',
-        isDirectory: false,
-        windowsPath: r'C:\big\a-dir\inner.txt',
-      ),
-    ],
+    r'C:\big\a-dir': [fileEntry(r'C:\big\a-dir\inner.txt')],
   };
 
   late ProviderContainer container;
@@ -44,23 +27,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    container = ProviderContainer(
-      overrides: [
-        selectedRepoWindowsRootProvider.overrideWithValue(root),
-        activeEditorHostPathProvider.overrideWithValue(null),
-        directoryListingProvider.overrideWith(
-          (ref, dir) async => listings[dir] ?? const [],
-        ),
-        revealInFileManagerProvider.overrideWithValue(
-          RevealInFileManager(
-            host: FakeCommandRunner(),
-            translator: const PathTranslator(),
-            environmentFor: (_) => null,
-            fileManagerOverride: HostFileManager.windowsExplorer,
-          ),
-        ),
-      ],
-    );
+    container = ProviderContainer(overrides: explorerOverrides(root, listings));
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -110,8 +77,8 @@ void main() {
     container
         .read(fileRevealTargetProvider.notifier)
         .reveal(
-          const FileRevealTarget(
-            hostPath: r'C:\big\file-4000.txt',
+          FileRevealTarget(
+            path: at(r'C:\big\file-4000.txt'),
             isDirectory: false,
           ),
         );

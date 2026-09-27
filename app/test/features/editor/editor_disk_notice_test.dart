@@ -10,6 +10,7 @@ import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../terminal/fake_instance.dart';
+import '../../support/memory_documents.dart';
 import '../../support/test_machine.dart';
 
 const _path = r'C:\repo\lib\main.dart';
@@ -19,23 +20,25 @@ final _initial = '${_lines.join('\n')}\n';
 
 /// A disk another process writes behind the editor's back.
 class _Disk extends DocumentStore {
-  final Map<String, String> files = {_path: _initial};
+  _Disk() : super(noServerFiles());
+
+  final Map<String, String> contents = {_path: _initial};
   final Map<String, DateTime> _modified = {};
   var _clock = 0;
   var stats = 0;
 
   void external(String? text) {
     if (text == null) {
-      files.remove(_path);
+      contents.remove(_path);
     } else {
-      files[_path] = text;
+      contents[_path] = text;
     }
     _modified[_path] = DateTime.utc(2026, 9, 22, 12, 0, ++_clock);
   }
 
   @override
   Future<SourceDocument> load(String hostPath) async {
-    final text = files[hostPath];
+    final text = contents[hostPath];
     if (text == null) {
       return SourceDocument(
         hostPath: hostPath,
@@ -54,7 +57,7 @@ class _Disk extends DocumentStore {
   }
 
   FileStamp? _stampOf(String hostPath) {
-    final text = files[hostPath];
+    final text = contents[hostPath];
     if (text == null) return null;
     return FileStamp(length: text.length, modified: _modified[hostPath]);
   }
@@ -82,7 +85,7 @@ void main() {
   late _Disk disk;
   late ProviderContainer container;
 
-  Future<void> pumpView(WidgetTester tester, {required bool showing}) =>
+  Future<void> pumpView(WidgetTester tester) =>
       tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -94,7 +97,7 @@ void main() {
                 child: SizedBox(
                   width: 900,
                   height: 600,
-                  child: EditorTabView(hostPath: _path, showing: showing),
+                  child: EditorTabView(hostPath: _path),
                 ),
               ),
             ),
@@ -102,7 +105,7 @@ void main() {
         ),
       );
 
-  Future<void> mount(WidgetTester tester, {bool showing = true}) async {
+  Future<void> mount(WidgetTester tester) async {
     final db = TestMachine();
     disk = _Disk();
     container = ProviderContainer(
@@ -112,23 +115,25 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    await pumpView(tester, showing: showing);
+    await pumpView(tester);
     await tester.pump();
     await tester.pump();
   }
 
   Future<void> teardown(WidgetTester tester) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    await tester.pump(const Duration(milliseconds: 200));
+    // Past autosave's delay, which an edit arms.
+    await tester.pump(const Duration(seconds: 2));
     await tester.pumpWidget(const SizedBox());
   }
 
   CodeLineEditingController controller(WidgetTester tester) =>
       tester.widget<AppCodeEditor>(find.byType(AppCodeEditor)).controller;
 
-  /// One poll's worth of time, and the frames its stat and read resolve in.
+  /// What the server's watch sets off when the file moves: a check, and the
+  /// frames its stat and read resolve in.
   Future<void> poll(WidgetTester tester) async {
-    await tester.pump(EditorTabView.diskPollInterval);
+    await container.read(openDocumentsProvider.notifier).checkOnDisk(_path);
     await tester.pump();
     await tester.pump();
   }
@@ -229,7 +234,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(AlertDialog), findsNothing, reason: 'no 2nd prompt');
-      expect(disk.files[_path], 'mine\n');
+      expect(disk.contents[_path], 'mine\n');
       await teardown(tester);
     });
 
@@ -273,7 +278,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('This file changed on disk'), findsOneWidget);
-      expect(disk.files[_path], 'theirs\n');
+      expect(disk.contents[_path], 'theirs\n');
       await tester.tap(find.text('Cancel'));
       await tester.pump();
       await teardown(tester);
@@ -301,28 +306,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(disk.files[_path], _initial);
+    expect(disk.contents[_path], _initial);
     expect(find.textContaining('Deleted on disk'), findsNothing);
-    await teardown(tester);
-  });
-
-  testWidgets('a hidden editor does not poll; showing it checks at once', (
-    tester,
-  ) async {
-    await mount(tester, showing: false);
-    final before = disk.stats;
-
-    disk.external('changed while hidden\n');
-    await poll(tester);
-    await poll(tester);
-    expect(disk.stats, before);
-    expect(controller(tester).text, _initial);
-
-    await pumpView(tester, showing: true);
-    await tester.pump();
-    await tester.pump();
-
-    expect(controller(tester).text, 'changed while hidden\n');
     await teardown(tester);
   });
 

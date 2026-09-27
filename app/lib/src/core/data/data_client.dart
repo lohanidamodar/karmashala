@@ -98,6 +98,7 @@ class DataClient {
     this._connection,
     this._waitForServer, {
     AppLogger? logger,
+    this.serverOnThisMachine = true,
   }) : _log = logger ?? AppLogger.named('data');
 
   /// A client with no server to reach — [reason] says why. Reads find
@@ -121,6 +122,7 @@ class DataClient {
     String? unavailableReason,
     Duration waitForServer = const Duration(seconds: 20),
     AppLogger? logger,
+    bool serverOnThisMachine = true,
   }) async {
     final client = DataClient._(
       dial,
@@ -130,6 +132,7 @@ class DataClient {
       ),
       waitForServer,
       logger: logger,
+      serverOnThisMachine: serverOnThisMachine,
     );
     if (!await client._dialOnce(unavailableReason)) {
       unawaited(client._redial());
@@ -139,6 +142,11 @@ class DataClient {
 
   final Future<DataEndpoint?> Function()? _dial;
   final AppLogger _log;
+
+  /// Whether the server runs on this client's machine, so a path it spells
+  /// for its own disk (`files.resolve`'s `localPath`) opens here too. A
+  /// server elsewhere hands its files over as bytes.
+  final bool serverOnThisMachine;
   final Duration _waitForServer;
   DataEndpoint? _endpoint;
   DataConnection _connection;
@@ -224,6 +232,12 @@ class DataClient {
   /// creation's stage, a cleanup sweep — here or by another client. Nothing
   /// of it is copied: a view that shows it asks again.
   Stream<GitChange> get gitChanges => _gitChanges.stream;
+
+  final _fileChanges = StreamController<FileChanged>.broadcast(sync: true);
+
+  /// A path this link watches (`files.watch`) changed on disk. Told to this
+  /// client alone; a new link watches nothing until asked again.
+  Stream<FileChanged> get fileChanges => _fileChanges.stream;
 
   /// The key [knownHosts] keeps a trusted key under.
   static String knownHostKey(String host, int port) => '$host:$port';
@@ -803,6 +817,8 @@ class DataClient {
               browserState = state;
           }
           if (!_runsChanges.isClosed) _runsChanges.add(change);
+        case final FileChanged change:
+          if (!_fileChanges.isClosed) _fileChanges.add(change);
       }
     }
   }
@@ -948,6 +964,7 @@ class DataClient {
     unawaited(_sshChanges.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
+    unawaited(_fileChanges.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());

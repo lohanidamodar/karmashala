@@ -7,7 +7,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../application/file_panel_controller.dart';
-import '../domain/file_space.dart';
+import 'package:karmashala_files/values.dart';
 import 'file_name_dialog.dart';
 
 /// One side of the file browser: where it is looking, what is there, and the

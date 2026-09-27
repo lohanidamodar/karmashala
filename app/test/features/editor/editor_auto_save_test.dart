@@ -12,9 +12,10 @@ import 'package:karmashala/src/features/settings/presentation/settings_catalog.d
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
+import '../../support/memory_documents.dart';
 
 class _Store extends DocumentStore {
-  _Store(this.mode);
+  _Store(this.mode) : super(noServerFiles());
 
   final DocumentMode mode;
   var attempts = 0;
