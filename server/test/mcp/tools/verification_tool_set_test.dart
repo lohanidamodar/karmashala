@@ -1,8 +1,13 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
+import 'package:karmashala_devices/devices.dart' show AndroidSdk;
 import 'package:karmashala_host/src/browser/server_browser.dart';
+import 'package:karmashala_host/src/devices/server_device_claims.dart';
+import 'package:karmashala_host/src/devices/server_devices.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/mcp/tools/server_verification_runs.dart';
 import 'package:karmashala_host/src/mcp/tools/verification_tool_set.dart';
@@ -16,6 +21,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../../support/fake_browser.dart';
+import '../../support/fake_command_runner.dart';
 
 /// The blocks of an `_mcpContent` result.
 List<Map<String, Object?>> blocks(Object? result) => [
@@ -27,9 +33,9 @@ List<Map<String, Object?>> blocks(Object? result) => [
 String textOf(Object? result) =>
     blocks(result).firstWhere((b) => b['type'] == 'text')['text']! as String;
 
-/// `verification_*` as the server runs them: a review of a change recorded
-/// here, over a real store and data service, and the calls it hands to the
-/// app because only the app drives a browser or a device.
+/// `verification_*` as the server runs them, all of them: a review of a
+/// change, a page on its browser and a device on its machine (slice 4a),
+/// over a real store and data service.
 void main() {
   late AppDatabase db;
   late DataService data;
@@ -122,30 +128,44 @@ void main() {
     ),
   );
 
-  group('what the server hands to the app', () {
-    test('a device run drives the app, so its start is the app\'s; a page '
-        'run is the server\'s', () async {
+  group('everything is answered here (slice 4a: nothing is the app\'s)', () {
+    test('a server with no browser or no devices refuses those runs in '
+        'words', () async {
       await expectLater(
         call('verification_start', {'url': 'https://a.test'}),
         refusal('This Karmashala server drives no browser'),
       );
-      expect(
-        tools.call('verification_start', {
+      await expectLater(
+        call('verification_start', {
           'serial': 'FAKE123',
           'package': 'com.example.app',
         }, 's'),
-        isNull,
+        refusal('This Karmashala server drives no devices'),
+      );
+      expect(runs.activeRun, isNull);
+    });
+
+    test('note, finish and a get with no id, with nothing recording, say '
+        'what to do', () async {
+      await expectLater(
+        call('verification_note', {'text': 'x'}, 's'),
+        refusal('verification_start'),
+      );
+      await expectLater(
+        call('verification_finish', {'verdict': 'pass'}, 's'),
+        refusal('verification_start'),
+      );
+      await expectLater(
+        call('verification_get', const {}, 's'),
+        refusal('verification_list'),
       );
     });
 
-    test('note, finish and a get with no id mean the app\'s run while the '
-        'server records nothing', () {
-      expect(tools.call('verification_note', {'text': 'x'}, 's'), isNull);
-      expect(
-        tools.call('verification_finish', {'verdict': 'pass'}, 's'),
-        isNull,
+    test('an unknown tool in the namespace is named, not swallowed', () async {
+      await expectLater(
+        call('verification_teleport'),
+        refusal('Unknown verification tool: verification_teleport'),
       );
-      expect(tools.call('verification_get', const {}, 's'), isNull);
     });
 
     test('a list and a get by id are read here', () async {
@@ -498,4 +518,361 @@ void main() {
       },
     );
   });
+
+  group('a device on the server\'s machine (slice 4a)', () {
+    late _FakeAdb adb;
+    late ServerDeviceClaims claims;
+    late ServerDevices devices;
+    AndroidSdk? sdk;
+
+    ServerVerificationRuns deviceRuns() => ServerVerificationRuns(
+      context,
+      newId: () => 'run-${(++ids).toString().padLeft(3, '0')}',
+      devices: devices,
+    );
+
+    setUp(() {
+      adb = _FakeAdb();
+      sdk = _sdk;
+      claims = ServerDeviceClaims(database: db, tell: data.announce);
+      devices = ServerDevices(
+        database: db,
+        claims: claims,
+        runners: FakeCommandRunnerFactory(fallback: adb.runner),
+        canRunSimulators: false,
+        findSdk: (_) async => sdk,
+      );
+      runs = deviceRuns();
+      tools = VerificationToolSet(runs);
+    });
+    tearDown(() async {
+      claims.close();
+      await devices.close();
+    });
+
+    const device = {'serial': 'FAKE123', 'package': 'com.example.app'};
+
+    test('a serial starts a run that launches the package as its first '
+        'step', () async {
+      final text = textOf(await call('verification_start', device));
+      expect(text, contains('device_*'));
+      expect(text, contains('com.example.app'));
+      expect(adb.called('monkey -p com.example.app'), isTrue);
+      final run = (await runs.get('run-001'))!;
+      expect(run.target.kind, VerificationTargetKind.device);
+      expect(run.title, 'Verify com.example.app');
+      expect(run.steps.first.kind, VerificationStepKind.launch);
+      expect(run.steps.first.summary, contains('com.example.app'));
+    });
+
+    test('launch:false verifies what is already on screen', () async {
+      await call('verification_start', {...device, 'launch': false});
+      expect(adb.called('monkey'), isFalse);
+    });
+
+    test('every adb call during the run is a step, and the UI tree a '
+        'file', () async {
+      await call('verification_start', {...device, 'launch': false});
+      final service = (await devices.adb())!;
+      await service.tap('FAKE123', 100, 200);
+      await service.dumpUiHierarchy('FAKE123');
+      await call('verification_note', {
+        'text': 'the header is where it should be',
+      });
+      await call('verification_finish', {'verdict': 'pass'});
+
+      final run = (await runs.get('run-001'))!;
+      expect(
+        run.steps.map((s) => s.summary),
+        containsAll(['Tapped (100, 200)', 'the header is where it should be']),
+      );
+      final tree = run.artifacts.firstWhere(
+        (a) => a.kind == VerificationArtifactKind.uiTree,
+      );
+      expect(
+        File(
+          p.join(run.artifactDirectory, tree.relativePath),
+        ).readAsStringSync(),
+        contains('Settings'),
+      );
+    });
+
+    test('finishing collects a screenshot, the UI tree and the package\'s '
+        'log, then takes the sink off', () async {
+      await call('verification_start', device);
+      final text = textOf(
+        await call('verification_finish', {
+          'verdict': 'pass',
+          'reason': 'the screen shows Settings',
+        }),
+      );
+      expect(text, startsWith('PASS'));
+      final service = (await devices.adb())!;
+      expect(service.actionSink, isNull, reason: 'the sink comes off');
+
+      final run = (await runs.get('run-001'))!;
+      expect(
+        run.artifacts.map((a) => a.kind),
+        containsAll([
+          VerificationArtifactKind.logcat,
+          VerificationArtifactKind.uiTree,
+          VerificationArtifactKind.screenshot,
+        ]),
+      );
+      final logcat = run.artifacts.firstWhere(
+        (a) => a.kind == VerificationArtifactKind.logcat,
+      );
+      expect(
+        String.fromCharCodes((await runs.readArtifact(logcat))!),
+        contains('boom'),
+      );
+      expect(
+        File(p.join(run.artifactDirectory, 'report.md')).readAsStringSync(),
+        contains('**Verdict: PASS**'),
+      );
+
+      // Nothing is recorded once the run is finished.
+      final before = run.steps.length;
+      await service.tap('FAKE123', 1, 1);
+      expect((await runs.get('run-001'))!.steps, hasLength(before));
+    });
+
+    test('an app that was not running says so instead of an empty '
+        'file', () async {
+      adb.packageRunning = false;
+      await call('verification_start', device);
+      await call('verification_finish', {'verdict': 'inconclusive'});
+      expect(
+        (await runs.get('run-001'))!.steps.map((s) => s.summary).join('\n'),
+        contains('not running'),
+      );
+    });
+
+    test('an unknown serial is named, and the run stays finishable', () async {
+      await expectLater(
+        call('verification_start', {'serial': 'NOT-HERE'}),
+        refusal('NOT-HERE'),
+      );
+      expect(runs.activeRun, isNotNull);
+      await call('verification_finish', {'verdict': 'inconclusive'});
+      final run = (await runs.get('run-001'))!;
+      expect(run.steps.first.summary, 'Could not reach the target');
+    });
+
+    test('a package with no launcher activity is reported, not guessed '
+        'at', () async {
+      adb.packageInstalled = false;
+      await expectLater(
+        call('verification_start', {'serial': 'FAKE123', 'package': 'x.y'}),
+        throwsA(isA<StateError>()),
+      );
+      final run = (await runs.get(runs.activeRun!.id))!;
+      expect(run.steps.last.summary, contains('Could not reach the target'));
+    });
+
+    test(
+      'no Android SDK on the server\'s machine is refused in words',
+      () async {
+        sdk = null;
+        await expectLater(
+          call('verification_start', device),
+          refusal('No Android SDK was found on the server\'s machine'),
+        );
+        expect(runs.activeRun, isNotNull, reason: 'finishable, as a page run');
+      },
+    );
+
+    test('a second run is refused while the first is recording', () async {
+      await call('verification_start', {...device, 'launch': false});
+      await expectLater(
+        call('verification_start', {...device, 'launch': false}),
+        refusal('already recording'),
+      );
+    });
+
+    group('verification_get of a device run', () {
+      Future<String> finishedRun() async {
+        await call('verification_start', {
+          ...device,
+          'title': 'a run with evidence',
+        });
+        await (await devices.adb())!.screenshot('FAKE123');
+        await call('verification_finish', {
+          'verdict': 'fail',
+          'reason': 'save throws',
+        });
+        return (await runs.list()).first.id;
+      }
+
+      int imagesIn(Object? result) =>
+          blocks(result).where((b) => b['type'] == 'image').length;
+
+      test('is compact by default: no images, no file contents', () async {
+        final id = await finishedRun();
+        final result = await call('verification_get', {'id': id});
+        expect(imagesIn(result), 0);
+        final text = textOf(result);
+        expect(text, contains('FAIL — a run with evidence'));
+        expect(text, contains('Steps ('));
+        expect(text, contains('Captured ('));
+        expect(text, isNot(contains('boom')));
+        expect(text, contains('images:true'));
+        expect(text, contains('full:true'));
+      });
+
+      test('images:true attaches them as image blocks', () async {
+        final id = await finishedRun();
+        final result = await call('verification_get', {
+          'id': id,
+          'images': true,
+        });
+        expect(imagesIn(result), greaterThan(0));
+        expect(blocks(result).first['mimeType'], 'image/png');
+      });
+
+      test('full:true brings the evidence text with it', () async {
+        final id = await finishedRun();
+        expect(
+          textOf(await call('verification_get', {'id': id, 'full': true})),
+          contains('boom'),
+        );
+      });
+
+      test('with no id it reads the run that is recording now', () async {
+        await call('verification_start', {...device, 'title': 'in progress'});
+        final text = textOf(await call('verification_get'));
+        expect(text, contains('STILL RECORDING'));
+        expect(text, contains('in progress'));
+      });
+    });
+
+    group('the caller is the producer of the verdict', () {
+      test('verifying another session names both sides', () async {
+        await call('verification_start', {
+          ...device,
+          'sessionId': 'work-1',
+        }, 'review-1');
+        final run = runs.activeRun!;
+        expect(run.sessionId, 'work-1');
+        expect(run.producedBySessionId, 'review-1');
+        expect(run.attribution, VerdictAttribution.independent);
+      });
+
+      test('an independent pass carries no self-verified warning, and lands '
+          'in the subject\'s decision record', () async {
+        await call('verification_start', {
+          ...device,
+          'sessionId': 'work-1',
+        }, 'review-1');
+        final text = textOf(
+          await call('verification_finish', {'verdict': 'pass'}, 'review-1'),
+        );
+        expect(text, isNot(contains('SELF-VERIFIED')));
+        final decision = DecisionRecordDao(db).forSession('work-1').single;
+        expect(decision.kind, DecisionKind.verificationVerdict);
+        expect(decision.originId, 'run-001');
+        expect(DecisionRecordDao(db).forSession('review-1'), isEmpty);
+      });
+
+      test('the list column says which runs graded themselves', () async {
+        await call('verification_start', device, 'work-1');
+        await call('verification_finish', {'verdict': 'pass'}, 'work-1');
+        final text = textOf(
+          await call('verification_list', const {}, 'work-1'),
+        );
+        expect(text, contains('verifier'));
+        expect(text, contains('self'));
+      });
+    });
+  });
+}
+
+const _adbPath = '/sdk/platform-tools/adb';
+
+const _sdk = AndroidSdk(
+  root: EnvironmentPath(environmentId: 'localPosix', path: '/sdk'),
+  adb: EnvironmentPath(environmentId: 'localPosix', path: _adbPath),
+);
+
+/// The UI dump a fake device answers with.
+const String _uiXml =
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<hierarchy rotation="0">'
+    '<node index="0" text="" resource-id="" class="android.widget.FrameLayout" '
+    'package="com.example.app" content-desc="" bounds="[0,0][1080,2340]">'
+    '<node index="0" text="Settings" resource-id="com.example.app:id/title" '
+    'class="android.widget.TextView" package="com.example.app" '
+    'content-desc="" clickable="true" enabled="true" '
+    'bounds="[40,200][600,280]" />'
+    '</node></hierarchy>';
+
+/// A 1×1 PNG's first bytes, so a pulled screenshot is an image.
+final Uint8List _png = Uint8List.fromList([
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+  0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+]);
+
+/// A scripted adb on the server's machine: every command a run makes has an
+/// answer, and the argv of each is kept. Nothing reaches a real device.
+class _FakeAdb {
+  _FakeAdb() {
+    runner = FakeCommandRunner(
+      environmentId: 'localPosix',
+      responder: _respond,
+    );
+  }
+
+  final String serial = 'FAKE123';
+
+  /// Whether `pidof` finds the package.
+  bool packageRunning = true;
+
+  /// False makes `monkey` report that the package has no launcher activity.
+  bool packageInstalled = true;
+
+  late final FakeCommandRunner runner;
+
+  List<String> get calls => [
+    for (final request in runner.requests) request.arguments.join(' '),
+  ];
+
+  bool called(String fragment) => calls.any((c) => c.contains(fragment));
+
+  CommandResult _respond(CommandRequest request) {
+    final argv = request.arguments.join(' ');
+    CommandResult ok(String stdout) =>
+        CommandResult(exitCode: 0, stdout: stdout, stderr: '');
+    if (argv.contains('devices')) {
+      return ok(
+        'List of devices attached\n'
+        '$serial\tdevice product:test model:Test transport_id:1\n',
+      );
+    }
+    if (argv.contains('monkey')) {
+      return ok(
+        packageInstalled
+            ? 'Events injected: 1\n'
+            : '** No activities found to run, monkey aborted.',
+      );
+    }
+    if (argv.contains('wm size')) return ok('Physical size: 1080x2340');
+    if (argv.contains('uiautomator dump')) {
+      return ok('UI hierchary dumped to: /data/local/tmp/x.xml');
+    }
+    if (argv.contains('logcat')) {
+      return ok(
+        '08-30 12:00:00.100  4242  4242 I MainActivity: started\n'
+        '08-30 12:00:00.200  4242  4242 E MainActivity: boom\n',
+      );
+    }
+    if (request.arguments.contains('pull')) {
+      // `screenshot` is device file → `adb pull` → host file, read back.
+      File(request.arguments.last).writeAsBytesSync(_png);
+      return ok('');
+    }
+    // After logcat on purpose: "logcat -d" contains "cat ".
+    if (argv.contains('cat ')) return ok(_uiXml);
+    if (argv.contains('pidof')) return ok(packageRunning ? '4242' : '');
+    return ok('');
+  }
 }

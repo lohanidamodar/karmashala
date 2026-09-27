@@ -10,7 +10,6 @@ import '../agents/application/host_hook_endpoint.dart';
 import '../terminal/application/local_host_providers.dart';
 import 'control_server_status.dart';
 import 'host_session_mcp.dart';
-import 'mcp_session_token_reaper.dart';
 import 'session_mcp.dart';
 
 /// Whether this machine's server serves agents' MCP: whenever one may be
@@ -34,7 +33,6 @@ class HostAgentTools {
   final ProviderContainer _container;
   final AppLogger _logger;
   final HandshakePermissions _permissions;
-  McpSessionTokenReaper? _reaper;
 
   /// Publishes [HostSessionMcp]. False, with nothing published, when there is
   /// no local host to point at.
@@ -69,15 +67,12 @@ class HostAgentTools {
     _container
         .read(controlServerStatusProvider.notifier)
         .set(ControlServerStatus.atHost);
-    _reaper = McpSessionTokenReaper(_container, null, logger: _logger)..start();
     _logger.info('Agent tools are served by the session host.');
     return true;
   }
 
   /// Withdraws the wiring. The configs stay: agents outlive this app.
   Future<void> stop() async {
-    _reaper?.stop();
-    _reaper = null;
     try {
       _container.read(sessionMcpProvider.notifier).adopt(null);
       _container

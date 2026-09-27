@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala_device_pane/widgets.dart';
 
 import 'settings_catalog.dart';
 import 'settings_section.dart';

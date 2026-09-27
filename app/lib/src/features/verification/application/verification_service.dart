@@ -4,19 +4,14 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/report.dart';
-import 'package:karmashala_verification/tools.dart';
+import 'package:karmashala_verification/tools.dart' show VerificationException;
 import 'package:karmashala_verification/verification.dart';
 
 import '../data/verification_data.dart';
-import 'verification_recorder.dart';
 
-export 'package:karmashala_verification/command_checks.dart' show CommandCheck;
-export 'package:karmashala_verification/tools.dart'
-    show VerificationException, VerificationTools;
+export 'package:karmashala_verification/tools.dart' show VerificationException;
 
 /// "A run started, stepped or finished" — owned apart from
 /// [VerificationService] so a listener never reaches the artifact root for it.
@@ -33,40 +28,19 @@ class VerificationChangeSignal {
   Future<void> dispose() => _controller.close();
 }
 
-/// Starts, records and finishes verification runs. One at a time: the evidence
-/// sink goes on the app's single adb service. The server records a review of
-/// a change and a page run itself (its browser, slice 3d); the runs here
-/// drive a device attached to this app's machine.
-class VerificationService implements VerificationToolBackend {
+/// The runs as this app reads, exports, attaches and deletes them. Every run
+/// is recorded by the server — a review of a change, a page on its browser, a
+/// device on its machine (slice 4a) — so nothing here starts or finishes one.
+class VerificationService {
   VerificationService(
     this._data,
     this._store, {
-    required this.adbOf,
     VerificationChangeSignal? changes,
-    String Function()? newId,
-    DateTime Function()? now,
   }) : _changes = changes ?? VerificationChangeSignal(),
-       _ownsChanges = changes == null,
-       _newId = newId ?? _timestampId,
-       _now = now ?? _utcNow;
+       _ownsChanges = changes == null;
 
   final VerificationData _data;
   final VerificationArtifactStore _store;
-
-  /// adb, or null when no Android SDK was found.
-  final AdbService? Function() adbOf;
-
-  final String Function() _newId;
-  final DateTime Function() _now;
-
-  static DateTime _utcNow() => DateTime.now().toUtc();
-
-  VerificationRecorder? _recorder;
-
-  @override
-  VerificationRun? get activeRun => _recorder?.run;
-
-  bool get isRecording => _recorder != null;
 
   Stream<void> get changes => _changes.stream;
   final VerificationChangeSignal _changes;
@@ -77,274 +51,13 @@ class VerificationService implements VerificationToolBackend {
 
   void _changed() => _changes.bump();
 
-  /// Begins recording against [target]: a device target fronts its package
-  /// unless [launch] is false. A page is the server's to verify.
-  @override
-  Future<VerificationRun> start({
-    required VerificationTarget target,
-    String? title,
-    String? sessionId,
-    String? producedBySessionId,
-    bool launch = true,
-  }) async {
-    if (target.isBrowser) {
-      throw const VerificationException(
-        'A page is verified by the Karmashala server, which drives the '
-        'browser; this app records device runs only.',
-      );
-    }
-    final open = _recorder;
-    if (open != null) {
-      throw VerificationException(
-        'A verification run is already recording: "${open.run.title}" '
-        '(${open.run.id}). Finish it before starting another.',
-      );
-    }
-
-    final id = _newId();
-    final directory = await _store.createDirectory(id);
-    final run = VerificationRun(
-      id: id,
-      title: (title == null || title.trim().isEmpty)
-          ? _defaultTitle(target)
-          : title.trim(),
-      target: target,
-      sessionId: sessionId,
-      producedBySessionId: producedBySessionId,
-      startedAt: _now(),
-      artifactDirectory: directory.path,
-    );
-    await _data.start(run);
-
-    final recorder = VerificationRecorder(_data, _store, run: run, now: _now);
-    _recorder = recorder;
-    _changed();
-
-    try {
-      switch (target.kind) {
-        case VerificationTargetKind.device:
-          await _openDevice(recorder, target, launch: launch);
-        case VerificationTargetKind.browser || VerificationTargetKind.change:
-          // A change run must not touch adb even to ask.
-          break;
-      }
-    } on Object catch (error) {
-      // The run survives an unreachable target: still finishable as
-      // inconclusive, rather than losing the record of having tried.
-      recorder.note('Could not reach the target', detail: '$error');
-      rethrow;
-    } finally {
-      _changed();
-    }
-    return run;
-  }
-
-  Future<void> _openDevice(
-    VerificationRecorder recorder,
-    VerificationTarget target, {
-    required bool launch,
-  }) async {
-    final adb = adbOf();
-    if (adb == null) {
-      throw const VerificationException(
-        'No Android SDK was found, so no device can be verified.',
-      );
-    }
-    adb.actionSink = recorder.recordDevice;
-    final serial = target.serial;
-    if (serial == null || serial.isEmpty) {
-      throw const VerificationException(
-        'A device verification needs a serial. Use list_devices to find one.',
-      );
-    }
-    final devices = await adb.listDevices();
-    final device = devices.where((d) => d.serial == serial).firstOrNull;
-    if (device == null) {
-      throw VerificationException(
-        'No device with serial $serial is connected.',
-      );
-    }
-    if (!device.isReady) {
-      throw VerificationException(
-        'Device $serial is ${device.state.name}, not ready.',
-      );
-    }
-    final package = target.packageName;
-    if (launch && package != null && package.isNotEmpty) {
-      await adb.launchPackage(serial, package);
-    }
-  }
-
-  /// Waits for every queued step and artifact write to land.
-  Future<void> flush() => _recorder?.drain() ?? Future<void>.value();
-
-  /// Adds a step the agent wrote itself.
-  @override
-  void note(String text, {String? detail}) {
-    final recorder = _require();
-    if (text.trim().isEmpty) {
-      throw const VerificationException('A note needs something to say.');
-    }
-    recorder.note(text.trim(), detail: detail);
-    _changed();
-  }
-
-  /// Records several gates this app ran as **one** run, the worst verdict
-  /// among them (see `CommandCheckRecorder.recordBatch`).
-  Future<VerificationRun> recordCommandChecks({
-    required String title,
-    required String workingDirectory,
-    required String environmentId,
-    required DateTime startedAt,
-    required List<CommandCheck> checks,
-    String? sessionId,
-    String? producedBySessionId,
-  }) => _commandChecks.recordBatch(
-    title: title,
-    startedAt: startedAt,
-    checks: checks,
-    sessionId: sessionId,
-    producedBySessionId: producedBySessionId,
-  );
-
-  /// Records a gate this app ran itself in one call. It takes no recording
-  /// slot, so it cannot clobber an open run.
-  Future<VerificationRun> recordCommandCheck({
-    required String title,
-    required List<String> command,
-    required String workingDirectory,
-    required String environmentId,
-    required DateTime startedAt,
-    required int? exitCode,
-    String output = '',
-    String? sessionId,
-    String? producedBySessionId,
-  }) => _commandChecks.recordOne(
-    title: title,
-    command: command,
-    workingDirectory: workingDirectory,
-    environmentId: environmentId,
-    startedAt: startedAt,
-    exitCode: exitCode,
-    output: output,
-    sessionId: sessionId,
-    producedBySessionId: producedBySessionId,
-  );
-
-  late final CommandCheckRecorder _commandChecks = CommandCheckRecorder(
-    _data,
-    _store,
-    newId: _newId,
-    now: _now,
-    onChanged: _changed,
-  );
-
-  /// Closes the run: trailing evidence, the verdict, and the report.
-  @override
-  Future<VerificationRun> finish({
-    required VerificationVerdict verdict,
-    String? reason,
-    String? producedBySessionId,
-  }) async {
-    final recorder = _require();
-    final run = recorder.run;
-    try {
-      await _collectClosingEvidence(recorder, run);
-    } finally {
-      await _detach(run);
-    }
-    await recorder.drain();
-
-    if (recorder.problems.isNotEmpty) {
-      recorder.note(
-        'The recorder could not write '
-        '${recorder.problems.length} item(s)',
-        detail: recorder.problems.join('\n'),
-      );
-      await recorder.drain();
-    }
-
-    final finished = await _data.finish(
-      run.id,
-      verdict: verdict,
-      reason: reason?.trim(),
-      producedBySessionId: producedBySessionId,
-    );
-    _recorder = null;
-    await _writeReport(finished);
-    _changed();
-    return finished;
-  }
-
-  /// Collected without being asked, at the end. Each piece is guarded alone.
-  Future<void> _collectClosingEvidence(
-    VerificationRecorder recorder,
-    VerificationRun run,
-  ) async {
-    // A change run's evidence is the reviewer's notes and the verdict's reason.
-    if (!run.target.isDevice) return;
-    final adb = adbOf();
-    final serial = run.target.serial;
-    if (adb == null || serial == null) return;
-    await _bestEffort(() => adb.screenshot(serial));
-    await _bestEffort(() => adb.dumpUiHierarchy(serial));
-    final package = run.target.packageName;
-    if (package != null && package.isNotEmpty) {
-      final entries = await _bestEffort(
-        () => adb.readLogcat(
-          serial,
-          packageName: package,
-          minLevel: LogLevel.debug,
-          maxLines: 400,
-        ),
-      );
-      if (entries != null && entries.isEmpty) {
-        recorder.note(
-          'No logcat lines for $package — it was not running when the run '
-          'finished.',
-        );
-      }
-    }
-  }
-
-  /// Removes the sinks. Always runs: a leftover one records the next person.
-  Future<void> _detach(VerificationRun run) async {
-    // No sink was installed on a change run.
-    if (!run.target.isDevice) return;
-    final adb = adbOf();
-    if (adb != null) adb.actionSink = null;
-  }
-
-  /// Abandons the active run without a verdict, leaving it open in the record.
-  /// Not "delete": an abandoned run is a fact about what happened.
-  Future<void> abandon() async {
-    final recorder = _recorder;
-    if (recorder == null) return;
-    await _detach(recorder.run);
-    await recorder.drain();
-    _recorder = null;
-    _changed();
-  }
-
   /// Runs newest first, with steps and artifacts — every caller shows a count.
-  /// Every read waits for this service's own queued writes first.
-  @override
-  Future<List<VerificationRun>> list({
-    int limit = 50,
-    String? sessionId,
-  }) async {
-    await flush();
-    return _data.recent(limit: limit, sessionId: sessionId);
-  }
+  Future<List<VerificationRun>> list({int limit = 50, String? sessionId}) =>
+      _data.recent(limit: limit, sessionId: sessionId);
 
-  @override
-  Future<VerificationRun?> get(String id) async {
-    await flush();
-    return _data.get(id);
-  }
+  Future<VerificationRun?> get(String id) => _data.get(id);
 
   /// A run by id or unambiguous prefix; it refuses when several match.
-  @override
   Future<VerificationRun?> find(String idOrPrefix) async {
     final exact = await get(idOrPrefix);
     if (exact != null) return exact;
@@ -352,13 +65,7 @@ class VerificationService implements VerificationToolBackend {
     return matches.length == 1 ? _data.get(matches.single.id) : null;
   }
 
-  /// Every run whose id starts with [prefix] — for explaining a failed [find].
-  @override
-  Future<List<VerificationRun>> matching(String prefix) =>
-      _data.matching(prefix);
-
   /// The bytes of one artifact, or null when the file is gone.
-  @override
   Future<List<int>?> readArtifact(VerificationArtifact artifact) =>
       _store.read(artifact);
 
@@ -370,7 +77,6 @@ class VerificationService implements VerificationToolBackend {
   }
 
   Future<void> delete(String id) async {
-    if (_recorder?.run.id == id) await abandon();
     await _data.delete(id);
     await _store.deleteRun(id);
     _changed();
@@ -382,10 +88,6 @@ class VerificationService implements VerificationToolBackend {
     if (run == null) {
       throw VerificationException('No verification run with id $id.');
     }
-    return _writeReport(run);
-  }
-
-  Future<String> _writeReport(VerificationRun run) async {
     final inlined = <String, String>{};
     for (final artifact in run.artifacts) {
       if (!shouldInline(artifact)) continue;
@@ -402,39 +104,8 @@ class VerificationService implements VerificationToolBackend {
   }
 
   Future<void> dispose() async {
-    await abandon();
     if (_ownsChanges) await _changes.dispose();
   }
-
-  VerificationRecorder _require() {
-    final recorder = _recorder;
-    if (recorder == null) {
-      throw const VerificationException(
-        'No verification run is recording. Call verification_start first.',
-      );
-    }
-    return recorder;
-  }
-
-  /// Runs [action], returning null instead of throwing: a screenshot that
-  /// cannot be collected must not lose the run's verdict.
-  Future<T?> _bestEffort<T>(Future<T> Function() action) async {
-    try {
-      return await action();
-    } on Object {
-      return null;
-    }
-  }
-
-  static String _defaultTitle(VerificationTarget target) =>
-      switch (target.kind) {
-        VerificationTargetKind.browser => 'Verify ${target.url ?? 'the page'}',
-        VerificationTargetKind.device =>
-          'Verify ${target.packageName ?? target.serial ?? 'the device'}',
-        VerificationTargetKind.change => 'Review of the change',
-      };
-
-  static String _timestampId() => verificationRunId(DateTime.now());
 }
 
 /// The steps of a run, most recent first — what a pane's timeline shows.

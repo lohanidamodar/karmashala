@@ -17,10 +17,11 @@ import 'snippet_tool_set.dart';
 import 'session_tool_schemas.dart';
 import 'usage_tool_set.dart';
 import 'build_tool_schemas.dart';
+import 'device_tool_set.dart' show deviceToolSchemas;
 import 'flutter_tool_schemas.dart';
 
 /// Every tool the server runs itself, in the order `tools/list` serves them —
-/// before the app's own (panes, the editor, devices, recordings).
+/// before the app's own (panes, the editor, a device's recording).
 /// `serve` registers one family per group below, in this order.
 const List<Map<String, Object?>> serverToolSchemas = [
   ...instructionsToolSchemas,
@@ -43,4 +44,5 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...flutterAppToolSchemas,
   ...flutterRunToolSchemas,
   ...projectBuildToolSchemas,
+  ...deviceToolSchemas,
 ];

@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 import '../../support/fake_data_server.dart';
@@ -34,8 +33,8 @@ AttachedApp attachedApp({
 FlutterAppRegistry registryOf(List<AttachedApp> apps) =>
     FlutterAppRegistry(apps: apps, lookedAt: kAttachedAt);
 
-/// A container over a fake server holding [apps], with no adb and no devices
-/// — opening the pane spawns nothing and reads no real phone.
+/// A container over a fake server holding [apps]. Reading a phone's log for
+/// an app is the server's (slice 4a), so the pane spawns nothing.
 Future<(ProviderContainer, FakeDataServer)> flutterPaneContainer({
   List<AttachedApp>? apps,
 }) async {
@@ -43,8 +42,6 @@ Future<(ProviderContainer, FakeDataServer)> flutterPaneContainer({
   final container = ProviderContainer(
     overrides: [
       clockProvider.overrideWithValue(FixedClock(kAttachedAt)),
-      adbServiceProvider.overrideWithValue(null),
-      devicesProvider.overrideWith((ref) async => const []),
       await server.override(),
     ],
   );

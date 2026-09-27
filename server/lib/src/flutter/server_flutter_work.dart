@@ -12,9 +12,9 @@ import 'package:path/path.dart' as p;
 
 import '../data/runs_work.dart';
 import '../domain/session_registry.dart';
+import '../devices/server_device_claims.dart' show FlutterDeviceClaims;
 import '../domain/uuid.dart';
 import 'attached_apps.dart';
-import 'flutter_device_claims.dart';
 import 'flutter_logs_source.dart';
 import 'flutter_loop.dart';
 import 'flutter_sdk_readings.dart';
@@ -39,7 +39,8 @@ class ServerFlutterWork implements FlutterWork {
     DtdChannelOpener openDtd = openDtdOverWebSocket,
     VmServiceConnector connect = connectVmServiceOverWebSocket,
     DtdPidFiles? dtdPidFiles,
-    FlutterDeviceClaims? claims,
+    required FlutterDeviceClaims claims,
+    Future<String?> Function()? androidSdkRoot,
     String? operatingSystem,
     bool? windows,
     DateTime Function()? clock,
@@ -90,6 +91,7 @@ class ServerFlutterWork implements FlutterWork {
       runners: runners,
       hostEnvironment: hostEnvironment,
       claims: claims,
+      androidSdkRoot: androidSdkRoot,
       operatingSystem: os,
       newId: ids,
       clock: now,

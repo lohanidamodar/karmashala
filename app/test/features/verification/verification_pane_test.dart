@@ -7,7 +7,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/verification/application/evidence_reader.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
-import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala/src/features/verification/presentation/verification_pane.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
@@ -202,7 +201,8 @@ void main() {
   testWidgets('a run being recorded is marked with the shared status dot', (
     tester,
   ) async {
-    final open = seed(id: 'run-live', title: 'still recording');
+    // The newest run is still open: the server is recording it.
+    seed(id: 'run-live', title: 'still recording');
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -212,9 +212,7 @@ void main() {
             const _SyncEvidenceReader(),
           ),
           verificationRootReadyProvider.overrideWith((ref) async => h.root),
-          verificationServiceProvider.overrideWithValue(
-            _Recording(open, h.service),
-          ),
+          verificationServiceProvider.overrideWithValue(h.service),
           verificationChangesProvider.overrideWithValue(h.changes),
         ],
         child: MaterialApp(
@@ -716,21 +714,4 @@ class _ManualEvidenceReader implements VerificationEvidenceReader {
     pending.add(completer);
     return completer.future;
   }
-}
-
-/// A service with a run open, and nothing else a list needs.
-class _Recording implements VerificationService {
-  _Recording(this.activeRun, this.delegate);
-
-  @override
-  final VerificationRun? activeRun;
-
-  final VerificationService delegate;
-
-  @override
-  Future<List<VerificationRun>> list({int limit = 50, String? sessionId}) =>
-      delegate.list(limit: limit, sessionId: sessionId);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

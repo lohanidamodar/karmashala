@@ -1,7 +1,7 @@
 /// Everything this package knows about a device: the vocabulary (`src/domain`)
 /// and the drivers that speak it (`src/data`). Nothing in `domain` starts a
-/// process, and nothing here reads a provider — the graph is `providers.dart`
-/// and the surfaces are `pane.dart` and `widgets.dart`. A DAO is still the
+/// process, and nothing here reads a provider — the graph, the pane and its widgets
+/// are `karmashala_device_pane`'s. A DAO is still the
 /// app's; this layer takes values in and hands values back.
 library;
 
@@ -16,7 +16,6 @@ export 'src/data/avd_system_images.dart';
 export 'src/data/device_gesture_sink.dart';
 export 'src/data/device_keyboard_sink.dart';
 export 'src/data/device_stream.dart';
-export 'src/data/host_clipboard.dart';
 export 'src/data/loopback_media_server.dart';
 export 'src/data/mjpeg_stream.dart';
 export 'src/data/recording_sink.dart';
@@ -46,6 +45,7 @@ export 'src/domain/device_input.dart';
 export 'src/domain/device_keyboard.dart';
 export 'src/domain/device_recording.dart';
 export 'src/domain/device_target.dart';
+export 'src/domain/host_clipboard.dart';
 export 'src/domain/ios_simulator.dart';
 export 'src/domain/logcat_entry.dart';
 export 'src/domain/logcat_filter.dart';

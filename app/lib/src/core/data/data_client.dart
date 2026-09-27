@@ -286,6 +286,10 @@ class DataClient {
   /// The server's browser, as last told; null until the server has said.
   BrowserState? browserState;
 
+  /// Who drives which device on the server's machine, as last told (slice
+  /// 4a).
+  List<DeviceHold> deviceHolds = const [];
+
   final _runsChanges = StreamController<RunsChange>.broadcast(sync: true);
 
   /// The server's apps, runs and browser moving.
@@ -815,6 +819,8 @@ class DataClient {
               hostedRuns.remove(runId);
             case BrowserStateChanged(:final state):
               browserState = state;
+            case DeviceClaimsChanged(:final holds):
+              deviceHolds = holds;
           }
           if (!_runsChanges.isClosed) _runsChanges.add(change);
         case final FileChanged change:

@@ -7,7 +7,6 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
-import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
@@ -28,7 +27,8 @@ class _FlutterAppPaneState extends ConsumerState<FlutterAppPane> {
   @override
   void initState() {
     super.initState();
-    // After the first frame: opening a surface must not make that frame wait on
+    // Looking is also what has the server read its phones' logs for an app
+    // announcing itself, for a while (slice 4a). After the first frame: opening a surface must not make that frame wait on
     // a directory read.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(attachedAppsProvider.notifier).look();
@@ -37,9 +37,6 @@ class _FlutterAppPaneState extends ConsumerState<FlutterAppPane> {
 
   @override
   Widget build(BuildContext context) {
-    // Watching this is what puts a `logcat` reader on each connected device.
-    // Nothing else subscribes, so a closed pane reads no device at all.
-    ref.watch(androidAppDiscoveryProvider);
     final registry = ref.watch(attachedAppsProvider);
     final selectedId = ref.watch(paneFlutterAppIdProvider);
     final selected = selectedId == null ? null : registry.byId(selectedId);

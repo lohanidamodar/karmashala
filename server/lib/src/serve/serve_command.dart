@@ -6,6 +6,8 @@ import 'package:agent_cli/process.dart'
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DecisionRecorded, kFlutterLogsStream;
+import 'package:karmashala_flutter_apps/flutter_apps.dart'
+    show FlutterAppException;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
@@ -18,6 +20,9 @@ import '../automations/daemon_automations.dart';
 import '../automations/session_mcp_access.dart';
 import '../companion/daemon_companion.dart';
 import '../domain/session_registry.dart';
+import '../devices/device_app_discovery.dart';
+import '../devices/server_device_claims.dart';
+import '../devices/server_devices.dart';
 import '../files/server_files.dart';
 import '../git/server_git.dart';
 import '../hooks/hook_endpoint_file.dart';
@@ -28,6 +33,7 @@ import '../browser/server_browser.dart';
 import '../flutter/server_flutter_work.dart';
 import '../mcp/tools/browser_tool_set.dart';
 import '../mcp/tools/build_tool_set.dart';
+import '../mcp/tools/device_tool_set.dart';
 import '../mcp/tools/flutter_tool_set.dart';
 import '../mcp/daemon_mcp.dart';
 import '../mcp/mcp_tool_relay.dart';
@@ -351,7 +357,25 @@ Future<int> runServe(
     hostEnvironment: hostEnvironment,
   );
   data.browserWork = browser;
+  // The devices on this machine (slice 4a): one claims registry — agents'
+  // device tools, flutter run and a pane here answer to it, and every client
+  // hears who holds what — and the adb every one of them resolves the same way.
+  final deviceClaims = ServerDeviceClaims(
+    database: database,
+    tell: data.announce,
+  )..start();
+  data
+    ..watchers.add(deviceClaims.watch)
+    ..greeters.add(deviceClaims.greeting);
+  final devices = ServerDevices(
+    database: database,
+    claims: deviceClaims,
+    runners: ssh.runners,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
   final flutter = ServerFlutterWork(
+    claims: deviceClaims,
+    androidSdkRoot: devices.androidSdkRoot,
     registry: registry,
     database: database,
     tell: data.announce,
@@ -363,6 +387,20 @@ Future<int> runServe(
   data
     ..flutterWork = flutter
     ..streamSources[kFlutterLogsStream] = flutter.logs;
+  // A phone on this machine announcing a Flutter app is attached while the
+  // apps are being looked at — with no client on this machine at all.
+  final appDiscovery = DeviceAppDiscovery(
+    adb: devices.adb,
+    offer: ({required hostUri, required serial}) async {
+      try {
+        await flutter.apps.attach(hostUri.toString(), deviceSerial: serial);
+      } on FlutterAppException {
+        // Nothing answered there; the registry says why.
+      }
+    },
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  flutter.apps.onLooked = () => unawaited(appDiscovery.looked());
   final checkoutRows = CheckoutRows(database);
   final mcpTools = McpToolRelay(
     cachePath: paths.mcpToolsPath,
@@ -392,7 +430,9 @@ Future<int> runServe(
         worktrees: worktrees,
         liveness: liveness,
       ),
-      VerificationToolSet(ServerVerificationRuns(tools, browser: browser)),
+      VerificationToolSet(
+        ServerVerificationRuns(tools, browser: browser, devices: devices),
+      ),
     ]),
   );
   server = HostServer(
@@ -540,7 +580,9 @@ Future<int> runServe(
         rows: checkoutRows,
       ),
     )
-    ..add(BuildToolSet(builds: flutter.builds, rows: checkoutRows));
+    ..add(BuildToolSet(builds: flutter.builds, rows: checkoutRows))
+    // list_devices and device_* drive this machine's devices (slice 4a).
+    ..add(DeviceToolSet(devices));
   // A client composes its catalogue from `serverToolSchemas`: a family
   // served here but missing there is a tool no client lists (found once).
   assert(
@@ -681,6 +723,9 @@ Future<int> runServe(
   // Its links and watchers, before the sessions it hosts end; then the
   // Chrome this server launched (never one it only attached to).
   await flutter.close();
+  appDiscovery.close();
+  deviceClaims.close();
+  await devices.close();
   await browser.close();
   await recording.close();
   await registry.shutdown();

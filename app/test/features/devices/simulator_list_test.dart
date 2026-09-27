@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala_device_pane/providers.dart';
+import 'package:karmashala_device_pane/widgets.dart';
 import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';

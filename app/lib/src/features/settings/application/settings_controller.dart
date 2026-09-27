@@ -161,6 +161,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// The Android SDK the pane and the server use; empty for the usual search.
+  void setAndroidSdkPath(String path) {
+    state = state.copyWith(androidSdkPath: path.trim());
+    _save();
+  }
+
   void setAutoStart(bool value) {
     state = state.copyWith(autoStart: value);
     _save();

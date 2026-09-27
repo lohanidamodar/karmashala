@@ -37,31 +37,6 @@ class DecisionRecorder {
     }
   }
 
-  /// A verification run reached a verdict — `verification_finish`, and nothing
-  /// else. [attribution] says whether the verifier was also the author.
-  Future<DecisionRecord?> recordVerificationVerdict({
-    required String sessionId,
-    required String runId,
-    required String verdict,
-    required String title,
-    String? reason,
-    String? attribution,
-    String? producedBySessionId,
-  }) => _append(
-    sessionId: sessionId,
-    kind: DecisionKind.verificationVerdict,
-    summary: reason == null || reason.trim().isEmpty
-        ? '$verdict — $title'
-        : '$verdict — $title. $reason',
-    detail: attribution,
-    decidedBy: producedBySessionId == null
-        ? null
-        : _agentNameFor(producedBySessionId),
-    recordedBySessionId: producedBySessionId,
-    origin: DecisionOrigin.verificationRun,
-    originId: runId,
-  );
-
   /// Somebody asked for a checkpoint **and said what it was for**: the label
   /// is what makes it a decision rather than a record that time passed.
   Future<DecisionRecord?> recordCheckpoint({

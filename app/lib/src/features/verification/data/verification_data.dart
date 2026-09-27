@@ -49,29 +49,6 @@ class VerificationData implements VerificationRecords {
   Future<List<VerificationRun>> matching(String prefix) =>
       _ask(VerificationMatching(prefix));
 
-  Future<VerificationRun> start(VerificationRun run) =>
-      _write(VerificationStart(run));
-
-  Future<void> addStep(String runId, VerificationStep step) =>
-      _write(VerificationStepAdd(runId, step));
-
-  Future<void> addArtifact(VerificationArtifact artifact) =>
-      _write(VerificationArtifactAdd(artifact));
-
-  Future<VerificationRun> finish(
-    String id, {
-    required VerificationVerdict verdict,
-    String? reason,
-    String? producedBySessionId,
-  }) => _write(
-    VerificationFinish(
-      id,
-      verdict: verdict,
-      reason: reason,
-      producedBySessionId: producedBySessionId,
-    ),
-  );
-
   @override
   Future<VerificationRun> record(VerificationRun run) =>
       _write(VerificationRecord(run));

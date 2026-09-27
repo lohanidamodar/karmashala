@@ -3001,6 +3001,573 @@
       }
     },
     {
+      "name": "list_devices",
+      "description": "List everything this machine can drive: connected Android devices and running emulators, plus iOS Simulators (every booted one, and the bootable ones newest-runtime-first). Android devices appear under \"devices\" keyed by serial; simulators under \"simulators\" keyed by udid, with \"running\" saying which are up. Either identifier can be passed to every other device_* tool. Devices that are not usable (unauthorized, offline, no installed runtime) are included and marked so you can explain the problem rather than reporting no devices. Coordinates: Android is device pixels, a simulator is points.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number",
+            "description": "Max simulators to list (default 40). A Mac can hold hundreds; booted ones are always listed."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_screenshot",
+      "description": "Capture the current screen of an Android device or iOS simulator as a PNG image. Use this to see what an app is actually showing. serial (or udid) is optional when exactly one device is ready. NOTE on a simulator the image is in PIXELS while taps are in POINTS — prefer device_ui_dump when you intend to touch something.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string",
+            "description": "Android serial or simulator udid from list_devices."
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_tap",
+      "description": "Tap the screen at (x, y). On Android these are DEVICE PIXELS (the space list_devices reports as screen size, not the size of any screenshot you scaled). On an iOS simulator they are POINTS, which a screenshot is NOT in. Reads the screen immediately before it acts and refuses when the structure has changed since this app last read the device — a coordinate for a screen that is gone lands wherever the new one happens to put something. Pass verify: false for a surface with nothing in its hierarchy. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "verify": {
+            "type": "boolean",
+            "description": "Read the screen immediately before tapping and refuse if it has moved since it was last read. Default true. Pass false only for a surface with nothing in its hierarchy — a canvas, a game, a custom-painted view — where there is nothing for the check to be about; the reply then says the tap was sent unverified."
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_type",
+      "description": "Type text into whatever field currently has focus, on Android or on an iOS simulator. Tap the field first. Android escapes shell characters for you; iOS types through XCUITest, so anything the keyboard can produce travels as itself. Pass submit to press Enter after the text, which is what runs a command or sends a form.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "text": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean",
+            "description": "Press Enter after typing. A real key press, not the keyboard's own action button, so it also reaches views that handle their own keys — a Flutter text field, an embedded terminal. The reply says submitted: true only when the key actually went."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_key",
+      "description": "Press a hardware button: back, home, recents, power, volumeUp, volumeDown, enter, tab or delete. All nine work on Android. On an iOS simulator home and power are real buttons, enter/tab/delete are typed into the focused field, and back/recents/volume are refused with a reason — iOS has no system back button and its app switcher cannot be reached by injected touches.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "key": {
+            "type": "string",
+            "description": "back | home | recents | power | volumeUp | volumeDown | enter | tab | delete"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_files_list",
+      "description": "Look at a device's storage. Called with no path it returns the places this device can reach, each with whether it is writable — these are not branches of one filesystem, so do not assume \"/\". Called with a path it lists that directory. A directory this device will not let us read comes back as a refusal, never as an empty listing, and any lines the listing could not be parsed from are reported under `unparsed` rather than dropped.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "path": {
+            "type": "string",
+            "description": "A directory on the device. Omit to get the reachable roots."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_file_pull",
+      "description": "Copy a file off the device onto this computer. Returns `host_path`, which is a real path on this machine that can be read straight afterwards. Defaults to the system temp directory; pass destination_directory to choose somewhere else.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "device_path": {
+            "type": "string",
+            "description": "The file on the device. Use device_files_list to find one."
+          },
+          "destination_directory": {
+            "type": "string",
+            "description": "Where to put it on this computer. Optional."
+          }
+        },
+        "required": [
+          "device_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_file_push",
+      "description": "Copy a file from this computer onto the device. Refuses rather than replacing an existing file unless overwrite is true, because there is no undo on the device. If device_path names a directory the file lands inside it under its own name, and the reply says so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "host_path": {
+            "type": "string",
+            "description": "The file on this computer."
+          },
+          "device_path": {
+            "type": "string",
+            "description": "Destination path on the device."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "Replace an existing file. Default false."
+          }
+        },
+        "required": [
+          "host_path",
+          "device_path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_logcat",
+      "description": "Read recent device log output, newest last. On Android this is logcat: filter to one app with package (strongly recommended — the unfiltered system log is huge and mostly noise) and raise level to see only warnings or errors. On an iOS simulator it is `log show` over the last 5 minutes: level is refused (iOS levels are not Android levels) and package is matched as a plain substring of each line, which the reply says.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "package": {
+            "type": "string",
+            "description": "Android application id, e.g. com.example.app. On iOS, a substring to match in each line."
+          },
+          "level": {
+            "type": "string",
+            "description": "Android only. Minimum level: verbose, debug, info, warning, error, fatal."
+          },
+          "lines": {
+            "type": "number",
+            "description": "Max lines (default 200)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_boot",
+      "description": "Start a virtual device and wait until it can actually be talked to — not just until it appears. Takes an AVD name, an iOS simulator udid, or a simulator name (\"iPhone 17 Pro\") when that names exactly one. Boots headless: no window of its own, which is what device_screenshot and device_ui_dump are for. Already running is success. Returns the id every other device_* tool wants — an emulator serial, or the udid.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "AVD name, simulator udid, or simulator name."
+          },
+          "serial": {
+            "type": "string",
+            "description": "Alias for name."
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for name."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "device_install_app",
+      "description": "Install a build onto a device or simulator: an .apk on Android (reinstalling over any existing copy and keeping its data), or a simulator .app bundle on iOS. This is what turns build-run-drive into one loop. An .ipa is refused — it carries the device slice, and a simulator needs the simulator slice (flutter build ios --simulator). On iOS the reply carries the bundle id read out of the bundle, ready for device_launch_app; on Android adb does not report one, so pass your applicationId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute path to the .apk or the .app bundle directory."
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_launch_app",
+      "description": "Launch an installed app by Android applicationId or iOS bundle id. On Android the launcher activity is resolved for you; pass activity to start a specific one instead. On iOS pass relaunch=true to terminate any running copy first, which is what makes it a cold start rather than a switch to the front.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "appId": {
+            "type": "string",
+            "description": "com.example.app (Android) or com.example.App (iOS)."
+          },
+          "activity": {
+            "type": "string",
+            "description": "Android only. Activity to start, e.g. .MainActivity. Refused on iOS, which has no activities."
+          },
+          "relaunch": {
+            "type": "boolean",
+            "description": "iOS only. Terminate a running copy first."
+          }
+        },
+        "required": [
+          "appId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_terminate_app",
+      "description": "Stop a running app — force-stop on Android, simctl terminate on a simulator. An app that was not running is not an error.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "appId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_stop_emulator",
+      "description": "Shut a running Android emulator OR iOS simulator down, freeing its memory and CPU. Virtual devices only — a physical phone cannot be stopped this way. On Android anything the emulator has not written to a snapshot is lost; a simulator keeps its apps and data for the next boot. The id is required and never inferred.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string",
+            "description": "Emulator serial (emulator-5554), AVD name, or simulator udid. Prefer the AVD name: a stopped emulator keeps no serial, so the name is the only handle that survives a stop."
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          }
+        },
+        "required": [
+          "serial"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_ui_dump",
+      "description": "Read the accessibility (view) hierarchy of the current screen: what is on it, what each element says, and the exact point to tap for each one. Works on Android (uiautomator) and on an iOS simulator (WebDriverAgent). Prefer this over device_screenshot when you intend to touch something — a screenshot cannot tell you what is tappable, coordinates read off an image are guesswork, and on iOS the image is in a different unit from the tap. By default only nodes that carry text or accept input are listed; pass full=true for every node, including layout containers. Custom-painted views — Flutter CustomPaint, canvas games, embedded terminals — expose no text here at all and appear as one empty View; read those with device_screenshot rather than dumping again. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Include every node instead of only the useful ones. Much larger; use it only when the default listing is missing something."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Keep only nodes whose text, content-description, resource id or class contains this (case-insensitive)."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max nodes to list (default 200)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_find_elements",
+      "description": "Find elements on the current screen by text, resource id, content-description or class, and get the point to tap for each. Matching is case-insensitive and by substring unless exact=true. text matches BOTH the text and the content-description, which is what makes it work on Flutter apps: they put their labels in content-desc and leave text empty. On iOS the same query runs against the XCUITest tree, where an element's value and label are mapped onto those same two fields. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "text": {
+            "type": "string",
+            "description": "Visible text or content-description to look for."
+          },
+          "resourceId": {
+            "type": "string",
+            "description": "Resource id, in full (com.app:id/ok) or short (ok)."
+          },
+          "contentDesc": {
+            "type": "string",
+            "description": "Content-description only, ignoring text."
+          },
+          "className": {
+            "type": "string",
+            "description": "Class, in full or by last segment (Button)."
+          },
+          "exact": {
+            "type": "boolean",
+            "description": "Require the whole value to match, not a substring."
+          },
+          "clickable": {
+            "type": "boolean",
+            "description": "Keep only elements marked clickable."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max matches (default 50)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "device_tap_element",
+      "description": "Tap the element matching a query rather than a coordinate — tap_element(text: \"Sign in\") instead of tap(357, 126). This is far more reliable: it survives layout changes, it cannot be off by a scale factor — which on iOS is a factor of three — and it tells you what it actually hit. It re-reads the hierarchy first, so it acts on the screen as it is now. Refuses rather than guessing when the query matches several elements (pass index) or nothing, and refuses to tap an element that is scrolled off screen. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serial": {
+            "type": "string"
+          },
+          "udid": {
+            "type": "string",
+            "description": "Alias for serial."
+          },
+          "text": {
+            "type": "string",
+            "description": "Visible text or content-description to tap."
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "contentDesc": {
+            "type": "string"
+          },
+          "className": {
+            "type": "string"
+          },
+          "exact": {
+            "type": "boolean"
+          },
+          "clickable": {
+            "type": "boolean",
+            "description": "Only consider elements marked clickable."
+          },
+          "index": {
+            "type": "number",
+            "description": "Which match to tap (0-based) when the query is ambiguous."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "open_session",
       "description": "Open one session by its id. A Karmashala session that is still running is reattached to a tab; anything else is resumed. An imported CLI session opens a new external terminal window every time this is called, and nothing here closes one — do not call it over a list of sessions.",
       "inputSchema": {
@@ -3712,573 +4279,6 @@
       }
     },
     {
-      "name": "list_devices",
-      "description": "List everything this machine can drive: connected Android devices and running emulators, plus iOS Simulators (every booted one, and the bootable ones newest-runtime-first). Android devices appear under \"devices\" keyed by serial; simulators under \"simulators\" keyed by udid, with \"running\" saying which are up. Either identifier can be passed to every other device_* tool. Devices that are not usable (unauthorized, offline, no installed runtime) are included and marked so you can explain the problem rather than reporting no devices. Coordinates: Android is device pixels, a simulator is points.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "limit": {
-            "type": "number",
-            "description": "Max simulators to list (default 40). A Mac can hold hundreds; booted ones are always listed."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_screenshot",
-      "description": "Capture the current screen of an Android device or iOS simulator as a PNG image. Use this to see what an app is actually showing. serial (or udid) is optional when exactly one device is ready. NOTE on a simulator the image is in PIXELS while taps are in POINTS — prefer device_ui_dump when you intend to touch something.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string",
-            "description": "Android serial or simulator udid from list_devices."
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_tap",
-      "description": "Tap the screen at (x, y). On Android these are DEVICE PIXELS (the space list_devices reports as screen size, not the size of any screenshot you scaled). On an iOS simulator they are POINTS, which a screenshot is NOT in. Reads the screen immediately before it acts and refuses when the structure has changed since this app last read the device — a coordinate for a screen that is gone lands wherever the new one happens to put something. Pass verify: false for a surface with nothing in its hierarchy. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "x": {
-            "type": "number"
-          },
-          "y": {
-            "type": "number"
-          },
-          "verify": {
-            "type": "boolean",
-            "description": "Read the screen immediately before tapping and refuse if it has moved since it was last read. Default true. Pass false only for a surface with nothing in its hierarchy — a canvas, a game, a custom-painted view — where there is nothing for the check to be about; the reply then says the tap was sent unverified."
-          }
-        },
-        "required": [
-          "x",
-          "y"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_type",
-      "description": "Type text into whatever field currently has focus, on Android or on an iOS simulator. Tap the field first. Android escapes shell characters for you; iOS types through XCUITest, so anything the keyboard can produce travels as itself. Pass submit to press Enter after the text, which is what runs a command or sends a form.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "text": {
-            "type": "string"
-          },
-          "submit": {
-            "type": "boolean",
-            "description": "Press Enter after typing. A real key press, not the keyboard's own action button, so it also reaches views that handle their own keys — a Flutter text field, an embedded terminal. The reply says submitted: true only when the key actually went."
-          }
-        },
-        "required": [
-          "text"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_key",
-      "description": "Press a hardware button: back, home, recents, power, volumeUp, volumeDown, enter, tab or delete. All nine work on Android. On an iOS simulator home and power are real buttons, enter/tab/delete are typed into the focused field, and back/recents/volume are refused with a reason — iOS has no system back button and its app switcher cannot be reached by injected touches.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "key": {
-            "type": "string",
-            "description": "back | home | recents | power | volumeUp | volumeDown | enter | tab | delete"
-          }
-        },
-        "required": [
-          "key"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_files_list",
-      "description": "Look at a device's storage. Called with no path it returns the places this device can reach, each with whether it is writable — these are not branches of one filesystem, so do not assume \"/\". Called with a path it lists that directory. A directory this device will not let us read comes back as a refusal, never as an empty listing, and any lines the listing could not be parsed from are reported under `unparsed` rather than dropped.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "path": {
-            "type": "string",
-            "description": "A directory on the device. Omit to get the reachable roots."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_file_pull",
-      "description": "Copy a file off the device onto this computer. Returns `host_path`, which is a real path on this machine that can be read straight afterwards. Defaults to the system temp directory; pass destination_directory to choose somewhere else.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "device_path": {
-            "type": "string",
-            "description": "The file on the device. Use device_files_list to find one."
-          },
-          "destination_directory": {
-            "type": "string",
-            "description": "Where to put it on this computer. Optional."
-          }
-        },
-        "required": [
-          "device_path"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_file_push",
-      "description": "Copy a file from this computer onto the device. Refuses rather than replacing an existing file unless overwrite is true, because there is no undo on the device. If device_path names a directory the file lands inside it under its own name, and the reply says so.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "host_path": {
-            "type": "string",
-            "description": "The file on this computer."
-          },
-          "device_path": {
-            "type": "string",
-            "description": "Destination path on the device."
-          },
-          "overwrite": {
-            "type": "boolean",
-            "description": "Replace an existing file. Default false."
-          }
-        },
-        "required": [
-          "host_path",
-          "device_path"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_logcat",
-      "description": "Read recent device log output, newest last. On Android this is logcat: filter to one app with package (strongly recommended — the unfiltered system log is huge and mostly noise) and raise level to see only warnings or errors. On an iOS simulator it is `log show` over the last 5 minutes: level is refused (iOS levels are not Android levels) and package is matched as a plain substring of each line, which the reply says.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "package": {
-            "type": "string",
-            "description": "Android application id, e.g. com.example.app. On iOS, a substring to match in each line."
-          },
-          "level": {
-            "type": "string",
-            "description": "Android only. Minimum level: verbose, debug, info, warning, error, fatal."
-          },
-          "lines": {
-            "type": "number",
-            "description": "Max lines (default 200)."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_boot",
-      "description": "Start a virtual device and wait until it can actually be talked to — not just until it appears. Takes an AVD name, an iOS simulator udid, or a simulator name (\"iPhone 17 Pro\") when that names exactly one. Boots headless: no window of its own, which is what device_screenshot and device_ui_dump are for. Already running is success. Returns the id every other device_* tool wants — an emulator serial, or the udid.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "AVD name, simulator udid, or simulator name."
-          },
-          "serial": {
-            "type": "string",
-            "description": "Alias for name."
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for name."
-          }
-        },
-        "required": [
-          "name"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "device_install_app",
-      "description": "Install a build onto a device or simulator: an .apk on Android (reinstalling over any existing copy and keeping its data), or a simulator .app bundle on iOS. This is what turns build-run-drive into one loop. An .ipa is refused — it carries the device slice, and a simulator needs the simulator slice (flutter build ios --simulator). On iOS the reply carries the bundle id read out of the bundle, ready for device_launch_app; on Android adb does not report one, so pass your applicationId.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "path": {
-            "type": "string",
-            "description": "Absolute path to the .apk or the .app bundle directory."
-          }
-        },
-        "required": [
-          "path"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_launch_app",
-      "description": "Launch an installed app by Android applicationId or iOS bundle id. On Android the launcher activity is resolved for you; pass activity to start a specific one instead. On iOS pass relaunch=true to terminate any running copy first, which is what makes it a cold start rather than a switch to the front.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "appId": {
-            "type": "string",
-            "description": "com.example.app (Android) or com.example.App (iOS)."
-          },
-          "activity": {
-            "type": "string",
-            "description": "Android only. Activity to start, e.g. .MainActivity. Refused on iOS, which has no activities."
-          },
-          "relaunch": {
-            "type": "boolean",
-            "description": "iOS only. Terminate a running copy first."
-          }
-        },
-        "required": [
-          "appId"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_terminate_app",
-      "description": "Stop a running app — force-stop on Android, simctl terminate on a simulator. An app that was not running is not an error.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "appId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "appId"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_stop_emulator",
-      "description": "Shut a running Android emulator OR iOS simulator down, freeing its memory and CPU. Virtual devices only — a physical phone cannot be stopped this way. On Android anything the emulator has not written to a snapshot is lost; a simulator keeps its apps and data for the next boot. The id is required and never inferred.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string",
-            "description": "Emulator serial (emulator-5554), AVD name, or simulator udid. Prefer the AVD name: a stopped emulator keeps no serial, so the name is the only handle that survives a stop."
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          }
-        },
-        "required": [
-          "serial"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_ui_dump",
-      "description": "Read the accessibility (view) hierarchy of the current screen: what is on it, what each element says, and the exact point to tap for each one. Works on Android (uiautomator) and on an iOS simulator (WebDriverAgent). Prefer this over device_screenshot when you intend to touch something — a screenshot cannot tell you what is tappable, coordinates read off an image are guesswork, and on iOS the image is in a different unit from the tap. By default only nodes that carry text or accept input are listed; pass full=true for every node, including layout containers. Custom-painted views — Flutter CustomPaint, canvas games, embedded terminals — expose no text here at all and appear as one empty View; read those with device_screenshot rather than dumping again. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "full": {
-            "type": "boolean",
-            "description": "Include every node instead of only the useful ones. Much larger; use it only when the default listing is missing something."
-          },
-          "filter": {
-            "type": "string",
-            "description": "Keep only nodes whose text, content-description, resource id or class contains this (case-insensitive)."
-          },
-          "limit": {
-            "type": "number",
-            "description": "Max nodes to list (default 200)."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_find_elements",
-      "description": "Find elements on the current screen by text, resource id, content-description or class, and get the point to tap for each. Matching is case-insensitive and by substring unless exact=true. text matches BOTH the text and the content-description, which is what makes it work on Flutter apps: they put their labels in content-desc and leave text empty. On iOS the same query runs against the XCUITest tree, where an element's value and label are mapped onto those same two fields. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "text": {
-            "type": "string",
-            "description": "Visible text or content-description to look for."
-          },
-          "resourceId": {
-            "type": "string",
-            "description": "Resource id, in full (com.app:id/ok) or short (ok)."
-          },
-          "contentDesc": {
-            "type": "string",
-            "description": "Content-description only, ignoring text."
-          },
-          "className": {
-            "type": "string",
-            "description": "Class, in full or by last segment (Button)."
-          },
-          "exact": {
-            "type": "boolean",
-            "description": "Require the whole value to match, not a substring."
-          },
-          "clickable": {
-            "type": "boolean",
-            "description": "Keep only elements marked clickable."
-          },
-          "limit": {
-            "type": "number",
-            "description": "Max matches (default 50)."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "device_tap_element",
-      "description": "Tap the element matching a query rather than a coordinate — tap_element(text: \"Sign in\") instead of tap(357, 126). This is far more reliable: it survives layout changes, it cannot be off by a scale factor — which on iOS is a factor of three — and it tells you what it actually hit. It re-reads the hierarchy first, so it acts on the screen as it is now. Refuses rather than guessing when the query matches several elements (pass index) or nothing, and refuses to tap an element that is scrolled off screen. LOCATING POLICY — dynamic first, coordinates as a checked fallback. Prefer device_tap_element: it resolves the element against the screen as it is at the instant of the tap, so it survives a layout change, a different screen size and a scale factor, and it tells you what it hit. Use device_tap only when the dynamic attempt has failed, and only with coordinates you verified during exploration — device_ui_dump and device_find_elements report them in the space this device actually takes. There is no speed reason to skip the dynamic path: device_tap reads the screen before it acts, so the two cost the same, and device_tap is the one that gets refused when the screen has moved since you looked.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "serial": {
-            "type": "string"
-          },
-          "udid": {
-            "type": "string",
-            "description": "Alias for serial."
-          },
-          "text": {
-            "type": "string",
-            "description": "Visible text or content-description to tap."
-          },
-          "resourceId": {
-            "type": "string"
-          },
-          "contentDesc": {
-            "type": "string"
-          },
-          "className": {
-            "type": "string"
-          },
-          "exact": {
-            "type": "boolean"
-          },
-          "clickable": {
-            "type": "boolean",
-            "description": "Only consider elements marked clickable."
-          },
-          "index": {
-            "type": "number",
-            "description": "Which match to tap (0-based) when the query is ambiguous."
-          }
-        }
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": false,
-        "openWorldHint": true,
-        "movesAttentionHint": false
-      }
-    },
-    {
       "name": "inbox_list",
       "description": "Everything waiting on somebody: agents asking for approval, turns that failed, turns that finished unread, and pull requests that went red, were sent back, or are ready to merge. Each item carries the source's own detail, so the prompt a blocked agent is waiting on is here too. This is where an agent orchestrating other agents finds out what to do next. Unseen items only unless includeSeen is set.",
       "inputSchema": {
@@ -4728,70 +4728,6 @@
       "category": "appProjects",
       "summary": "What a checkout is, and the artifact its own toolchain builds."
     },
-    "open_session": {
-      "category": "sessions",
-      "summary": "Reattach to a session or resume it; an imported one opens a window."
-    },
-    "session_handoff": {
-      "category": "sessions",
-      "summary": "Continue a session in a different agent, on the same branch."
-    },
-    "session_fork": {
-      "category": "sessions",
-      "summary": "Branch a session into one that shares its history and then diverges."
-    },
-    "session_fork_from_checkpoint": {
-      "category": "sessions",
-      "summary": "Fork a session and roll its files back to a checkpoint; not its conversation."
-    },
-    "open_sessions_in_tmux": {
-      "category": "sessions",
-      "summary": "Open several sessions as tmux windows in one terminal tab (WSL)."
-    },
-    "terminal_list": {
-      "category": "terminals",
-      "summary": "The layout: tabs, panes, focus, detached panes, shell profiles."
-    },
-    "terminal_open": {
-      "category": "terminals",
-      "summary": "Open a terminal tab the user can watch and take over."
-    },
-    "terminal_run": {
-      "category": "terminals",
-      "summary": "Run a command in a pane and wait for its output and exit code."
-    },
-    "terminal_output": {
-      "category": "terminals",
-      "summary": "Read a pane's recent output — the screen as it stands, not a log."
-    },
-    "terminal_close": {
-      "category": "terminals",
-      "summary": "Close a tab; a busy pane detaches and keeps running unless killed."
-    },
-    "terminal_record_start": {
-      "category": "terminals",
-      "summary": "Record a pane. Everything printed is captured, nothing redacted."
-    },
-    "terminal_record_stop": {
-      "category": "terminals",
-      "summary": "Stop the recording and render it to mp4, gif or numbered pictures."
-    },
-    "device_record_start": {
-      "category": "devices",
-      "summary": "Record the device screen from the live view's own frames."
-    },
-    "device_record_stop": {
-      "category": "devices",
-      "summary": "Stop that recording and say what file it produced, if any."
-    },
-    "snippet_insert": {
-      "category": "snippets",
-      "summary": "Type a saved snippet at a pane's prompt and stop, for the user to run."
-    },
-    "select_checkout": {
-      "category": "workspace",
-      "summary": "Point the Explorer, diff view and side panel at a checkout."
-    },
     "list_devices": {
       "category": "devices",
       "summary": "Everything this machine can drive, and what is wrong with the rest."
@@ -4859,6 +4795,70 @@
     "device_tap_element": {
       "category": "devices",
       "summary": "Tap what a query matches, not a coordinate. One session drives at a time."
+    },
+    "open_session": {
+      "category": "sessions",
+      "summary": "Reattach to a session or resume it; an imported one opens a window."
+    },
+    "session_handoff": {
+      "category": "sessions",
+      "summary": "Continue a session in a different agent, on the same branch."
+    },
+    "session_fork": {
+      "category": "sessions",
+      "summary": "Branch a session into one that shares its history and then diverges."
+    },
+    "session_fork_from_checkpoint": {
+      "category": "sessions",
+      "summary": "Fork a session and roll its files back to a checkpoint; not its conversation."
+    },
+    "open_sessions_in_tmux": {
+      "category": "sessions",
+      "summary": "Open several sessions as tmux windows in one terminal tab (WSL)."
+    },
+    "terminal_list": {
+      "category": "terminals",
+      "summary": "The layout: tabs, panes, focus, detached panes, shell profiles."
+    },
+    "terminal_open": {
+      "category": "terminals",
+      "summary": "Open a terminal tab the user can watch and take over."
+    },
+    "terminal_run": {
+      "category": "terminals",
+      "summary": "Run a command in a pane and wait for its output and exit code."
+    },
+    "terminal_output": {
+      "category": "terminals",
+      "summary": "Read a pane's recent output — the screen as it stands, not a log."
+    },
+    "terminal_close": {
+      "category": "terminals",
+      "summary": "Close a tab; a busy pane detaches and keeps running unless killed."
+    },
+    "terminal_record_start": {
+      "category": "terminals",
+      "summary": "Record a pane. Everything printed is captured, nothing redacted."
+    },
+    "terminal_record_stop": {
+      "category": "terminals",
+      "summary": "Stop the recording and render it to mp4, gif or numbered pictures."
+    },
+    "device_record_start": {
+      "category": "devices",
+      "summary": "Record the device screen from the live view's own frames."
+    },
+    "device_record_stop": {
+      "category": "devices",
+      "summary": "Stop that recording and say what file it produced, if any."
+    },
+    "snippet_insert": {
+      "category": "snippets",
+      "summary": "Type a saved snippet at a pane's prompt and stop, for the user to run."
+    },
+    "select_checkout": {
+      "category": "workspace",
+      "summary": "Point the Explorer, diff view and side panel at a checkout."
     },
     "inbox_list": {
       "category": "records",

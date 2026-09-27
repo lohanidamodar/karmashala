@@ -1,11 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_devices/devices.dart';
+import 'package:karmashala_devices/karmashala_devices.dart';
 
 import 'support/fake_command_runner.dart';
 import 'fake_scrcpy_control_channel.dart';

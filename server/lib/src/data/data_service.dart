@@ -324,7 +324,19 @@ class DataService {
   /// same handler a client's is, and told to every client.
   R applyAsServer<R>(DataRequest<R> request) => _handle(null, request).value;
 
+  /// Told every batch the server tells, whoever wrote it — the server's own
+  /// parts that follow rows (the device claims release an ended session's
+  /// devices). Not a link: nothing here counts as a subscribed client.
+  final watchers = <void Function(List<DataChange> changes)>[];
+
+  /// What each of the server's own parts tells a client that subscribes, on
+  /// arrival (the device claims standing now).
+  final greeters = <List<DataChange> Function()>[];
+
   void _tell(DataSession? origin, DataChanges batch) {
+    for (final watcher in List.of(watchers)) {
+      watcher(batch.changes);
+    }
     for (final link in _links) {
       if (link != origin && link._subscribed) link._deliver(batch);
     }
@@ -622,6 +634,7 @@ class DataSession implements FileWatchLink {
       ...?_service.sshWork?.greeting(),
       ...?_service.flutterWork?.greeting(),
       ...?_service.browserWork?.greeting(),
+      for (final greeter in _service.greeters) ...greeter(),
     ];
     if (greeting.isNotEmpty) {
       _deliver(DataChanges(_service._revision, List.unmodifiable(greeting)));

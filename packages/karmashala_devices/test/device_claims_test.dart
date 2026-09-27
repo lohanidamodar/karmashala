@@ -1,7 +1,6 @@
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_devices/devices.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_devices/karmashala_devices.dart';
+import 'package:test/test.dart';
 
 import 'support/fakes.dart';
 
@@ -330,6 +329,65 @@ void main() {
       );
       expect(busy.message, contains('Reproduce the crash'));
       expect(busy.message, isNot(contains('Fix the login flow')));
+    });
+  });
+
+  group('telling whoever shows the claims (slice 4a)', () {
+    test('a take, a release and a lapse are told; a renewal is not', () {
+      var told = 0;
+      final registry = claims()..onChanged = () => told++;
+
+      registry.claim(deviceId: 'd', sessionId: 's1', verb: 'device_tap');
+      expect(told, 1);
+      registry.claim(deviceId: 'd', sessionId: 's1', verb: 'device_type');
+      registry.observed(deviceId: 'd', sessionId: 's1');
+      expect(told, 1, reason: 'renewing changes who holds nothing');
+
+      registry.release('s1');
+      expect(told, 2);
+      registry.release('s1');
+      expect(told, 2, reason: 'nothing was held, so nothing changed');
+
+      registry.claim(deviceId: 'd', sessionId: 's2', verb: 'device_tap');
+      clock.advance(kDeviceClaimLapse);
+      registry.sweep();
+      expect(told, 4);
+      expect(registry.held, isEmpty);
+    });
+
+    test('an ended holder is swept away and told', () {
+      var told = 0;
+      final registry = claims()..onChanged = () => told++;
+      registry.claim(deviceId: 'd', sessionId: 's1', verb: 'device_tap');
+      live.remove('s1');
+      registry.sweep();
+      expect(told, 2);
+      expect(registry.standingClaims, isEmpty);
+    });
+
+    test('held reads without pruning, so a listener cannot prune under '
+        'itself', () {
+      final registry = claims();
+      registry.claim(deviceId: 'd', sessionId: 's1', verb: 'device_tap');
+      live.remove('s1');
+      expect(registry.held.single.holderSessionId, 's1');
+      expect(registry.standing('d'), isNull);
+      expect(registry.held, isEmpty);
+    });
+
+    test('the busy sentence is one wording for a refusal and a question', () {
+      final registry = claims();
+      final held = registry.claim(
+        deviceId: 'd',
+        sessionId: 's1',
+        verb: 'device_tap',
+      )!;
+      expect(
+        deviceBusyMessage('install', held, clock.nowUtc()),
+        _busy(
+          () => registry.claim(deviceId: 'd', sessionId: 's2', verb: 'install'),
+        ).message,
+      );
     });
   });
 

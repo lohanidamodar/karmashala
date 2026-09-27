@@ -6,7 +6,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
-import 'package:karmashala_devices/providers.dart';
+import 'package:karmashala_device_pane/providers.dart';
 
 import '../../support/fake_data_server.dart';
 

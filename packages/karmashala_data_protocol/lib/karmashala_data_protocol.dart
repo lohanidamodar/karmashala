@@ -11,6 +11,7 @@ export 'src/data_endpoint.dart';
 export 'src/data_envelope.dart';
 export 'src/data_request.dart';
 export 'src/data_stream.dart';
+export 'src/device_values.dart';
 export 'src/environment_values.dart';
 export 'src/files_values.dart';
 export 'src/git_values.dart';

@@ -40,6 +40,11 @@ class FakeRunsWork {
   /// A run the server started (or ended), told to every window.
   void run(HostedRun run) => _server._tell(null, [HostedRunChanged(run)]);
 
+  /// Who drives which device on the server's machine (slice 4a), told to
+  /// every window.
+  void holds(List<DeviceHold> holds) =>
+      _server._tell(null, [DeviceClaimsChanged(holds)]);
+
   /// Streams [records] on app [appId]'s console, as one batch; [dropped]
   /// counts what the server did not send. Kept, so a window that opens the
   /// console later gets them first, as the server's ring gives them.

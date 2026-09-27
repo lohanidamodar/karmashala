@@ -45,6 +45,7 @@ workspace:
   - packages/karmashala_companion_server
   - packages/karmashala_core
   - packages/karmashala_data_protocol
+  - packages/karmashala_device_pane
   - packages/karmashala_devices
   - packages/karmashala_environments
   - packages/karmashala_files

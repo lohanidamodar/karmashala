@@ -129,6 +129,10 @@ dependencies:
     path: ../packages/karmashala_ssh
   # A machine's files: this disk, WSL's share and SFTP, the save, the copy and
   # Quick Open's walk (slice 3c).
+  # Android devices and iOS simulators on the server's machine (slice 4a):
+  # adb and simctl, the fleet, the claims, the UI tree. Pure Dart.
+  karmashala_devices:
+    path: ../packages/karmashala_devices
   karmashala_files:
     path: ../packages/karmashala_files
   karmashala_store:

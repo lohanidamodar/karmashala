@@ -68,7 +68,9 @@ class _RunList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final runs = ref.watch(verificationRunsProvider).value ?? const [];
-    final active = ref.watch(verificationServiceProvider).activeRun;
+    // The server records every run; the newest still open is the one it is
+    // recording (each row also says "still recording").
+    final active = runs.isNotEmpty && runs.first.isOpen;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -77,7 +79,7 @@ class _RunList extends ConsumerWidget {
           title: runs.isEmpty
               ? 'No runs'
               : '${runs.length} run${runs.length == 1 ? '' : 's'}',
-          trailing: active == null
+          trailing: !active
               ? null
               : Row(
                   mainAxisSize: MainAxisSize.min,

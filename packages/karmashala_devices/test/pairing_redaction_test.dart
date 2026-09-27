@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:karmashala_core/logging.dart';
 
 /// The two cases `karmashala_devices`' `wireless_pairing_test` left behind:

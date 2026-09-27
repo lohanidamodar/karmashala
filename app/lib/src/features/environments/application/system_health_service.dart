@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import 'package:karmashala_device_pane/ports.dart';
 import 'package:karmashala_devices/devices.dart';
 import '../../mcp/control_server_status.dart';
 import '../../mcp/host_session_mcp.dart';
@@ -276,6 +277,8 @@ class SystemHealthService {
     final sdk = await AndroidSdkDiscoveryService(
       runner: runner,
       environment: host,
+      // The same rule the pane and the server follow: one adb per machine.
+      handSetRoot: ref.read(deviceAndroidSdkPathProvider),
     ).discover();
     if (sdk == null) {
       return const SystemCheck.notChecked(

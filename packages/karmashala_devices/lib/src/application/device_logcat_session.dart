@@ -1,18 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import 'device_ports.dart';
 import '../../devices.dart';
-import 'device_providers.dart';
 
 /// A live `logcat` for one device, over the same `AdbService` the
 /// `device_logcat` tool snapshots through — `streamLogcat`, without `-d`.
-class DeviceLogcatSession extends ChangeNotifier {
+class DeviceLogcatSession {
   DeviceLogcatSession({
     required this.serial,
     required AdbService? adb,
@@ -195,23 +190,23 @@ class DeviceLogcatSession extends ChangeNotifier {
     unawaited(process?.kill());
   }
 
-  @override
   void dispose() {
     _generation++;
     _detach();
-    super.dispose();
+    _listeners.clear();
+  }
+
+  final _listeners = <void Function()>[];
+
+  /// Called after every change a reader could see. The same shape as
+  /// Flutter's `Listenable`, so a pane can wrap this without copying it.
+  void addListener(void Function() listener) => _listeners.add(listener);
+
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
+  void notifyListeners() {
+    for (final listener in List.of(_listeners)) {
+      listener();
+    }
   }
 }
-
-/// One session per device, disposed with the last widget watching it.
-/// `autoDispose` is the whole bound on cost: no watcher, no `logcat`.
-final deviceLogcatSessionProvider = Provider.autoDispose
-    .family<DeviceLogcatSession, String>((ref, serial) {
-      final session = DeviceLogcatSession(
-        serial: serial,
-        adb: ref.watch(adbServiceProvider),
-        clock: ref.watch(deviceClockProvider),
-      );
-      ref.onDispose(session.dispose);
-      return session;
-    });

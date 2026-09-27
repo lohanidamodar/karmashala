@@ -92,7 +92,7 @@ void main() {
       // The list the pane draws. This is the read that used to throw
       // `ProviderException` and paint a white rectangle.
       expect(await container.read(verificationRunsProvider.future), isEmpty);
-      expect(container.read(verificationServiceProvider).activeRun, isNull);
+      expect(container.read(verificationServiceProvider), isNotNull);
     },
   );
 

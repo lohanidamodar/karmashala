@@ -9,7 +9,7 @@ void main() {
     Directory('lib'),
     Directory('../packages/karmashala_ui/lib'),
     Directory('../packages/karmashala_companion/lib'),
-    Directory('../packages/karmashala_devices/lib'),
+    Directory('../packages/karmashala_device_pane/lib'),
   ];
 
   /// Where a state layer or a duration may be named.

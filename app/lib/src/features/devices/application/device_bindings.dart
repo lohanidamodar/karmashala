@@ -1,17 +1,20 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/karmashala_devices.dart';
-import 'package:karmashala_devices/ports.dart';
+import 'package:karmashala_device_pane/ports.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DeviceClaimsChanged, DeviceHold;
+
+import '../../../core/data/data_providers.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../../../core/paths/app_support_directory.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
-import '../../sessions/application/session_providers.dart';
 import '../../settings/application/settings_controller.dart';
 
-/// What the app fills into `karmashala_devices`'s seven ports. Installed once,
+/// What the app fills into `karmashala_device_pane`'s ports. Installed once,
 /// on the root container: every default the package ships is honest on its
 /// own, so a container without these still works — it just uses this
 /// machine's clock, no SSH, a temp folder and preferences it forgets.
@@ -27,16 +30,15 @@ final deviceBindings = [
   deviceSlimmingPreferencesProvider.overrideWith(
     SettingsSlimmingPreferences.new,
   ),
-  deviceClaimsProvider.overrideWith(
-    (ref) => DeviceClaims(
-      clock: ref.watch(clockProvider),
-      holder: (sessionId) {
-        final session = ref.read(sessionsDataProvider).getById(sessionId);
-        if (session == null || session.isOver) return null;
-        return session.title;
-      },
-    ),
-  ),
+  deviceAndroidSdkPathProvider.overrideWith((ref) {
+    final path = ref.watch(
+      settingsControllerProvider.select((s) => s.androidSdkPath),
+    );
+    return path.isEmpty ? null : path;
+  }),
+  // The server's claims, when the server runs on this machine: the pane's
+  // devices are then the ones its agents drive (slice 4a). No registry here.
+  deviceHoldersProvider.overrideWith(serverDeviceHolders),
   devicePathRevealerProvider.overrideWith(
     (ref) => _ShellPathRevealer(ref.watch(revealInFileManagerProvider)),
   ),
@@ -100,4 +102,28 @@ class _ShellPathRevealer implements DevicePathRevealer {
   @override
   Future<String?> reveal(EnvironmentPath path, {bool select = false}) async =>
       (await _shell.reveal(path, select: select)).error;
+}
+
+/// The server's claims as the pane's holders, by device — only when the
+/// server runs on this machine, whose devices the pane shows. A server
+/// elsewhere drives its own machine's devices, not these.
+Map<String, DeviceClaim> serverDeviceHolders(Ref ref) {
+  final client = ref.watch(dataClientProvider);
+  if (!client.serverOnThisMachine) return const {};
+  final changes = client.runsChanges.listen((change) {
+    if (change is DeviceClaimsChanged) ref.invalidateSelf();
+  });
+  ref.onDispose(changes.cancel);
+  return {
+    for (final DeviceHold hold in client.deviceHolds)
+      hold.deviceId: DeviceClaim(
+        deviceId: hold.deviceId,
+        holderSessionId: hold.holderSessionId,
+        holderTitle: hold.holderTitle,
+        takenAt: hold.takenAt,
+        lastCallAt: hold.lastCallAt,
+        lastVerb: hold.lastVerb,
+        calls: hold.calls,
+      ),
+  };
 }

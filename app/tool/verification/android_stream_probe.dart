@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_devices/pane.dart';
+import 'package:karmashala_device_pane/pane.dart';
 import 'package:media_kit/media_kit.dart';
 
 // An opt-in probe, never part of the ordinary suite. Its own scrcpy session

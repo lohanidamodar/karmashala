@@ -15,10 +15,9 @@
 
 import 'dart:io';
 
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_devices/pane.dart';
-import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala_device_pane/providers.dart';
+import 'package:karmashala_device_pane/pane.dart';
+import 'package:karmashala_device_pane/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

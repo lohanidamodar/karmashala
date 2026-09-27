@@ -10,9 +10,8 @@ import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
 import 'package:karmashala_media/media.dart';
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_devices/pane.dart';
+import 'package:karmashala_device_pane/providers.dart';
+import 'package:karmashala_device_pane/pane.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

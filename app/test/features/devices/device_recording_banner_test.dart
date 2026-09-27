@@ -8,9 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala_device_pane/providers.dart';
+import 'package:karmashala_device_pane/widgets.dart';
 
 import '../../support/fake_command_runner.dart';
 

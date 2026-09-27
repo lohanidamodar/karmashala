@@ -112,6 +112,9 @@ enum MessageType {
   dataStreamOpen(0x3b),
   dataStreamItems(0x3c),
   dataStreamClose(0x3d),
+  // 0x3e–0x3f are reserved for slice 4b's device byte stream and input (a
+  // mirror of a device on the server's machine). Protocol 24 (slice 4a) added
+  // no frame: the claims change rides the data channel.
 
   // 0xf0 and up never change and are answered without hello, whatever the
   // protocol: `karmashala_host stop` must reach a host of any version

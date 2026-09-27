@@ -4,8 +4,9 @@ import 'dart:io';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 /// Every running Flutter app the server can reach: found through its own
-/// runs' out-files, the tooling daemons on its machine, or an address handed
-/// to it (a desktop's phone, forwarded there). Nothing polls; [onChanged]
+/// runs' out-files, the tooling daemons on its machine, a phone on its
+/// machine whose log announced one (`DeviceAppDiscovery`, forwarded by the
+/// server's own adb), or an address handed to it. Nothing polls; [onChanged]
 /// hears every change of [registry].
 class ServerAttachedApps {
   ServerAttachedApps({
@@ -50,10 +51,16 @@ class ServerAttachedApps {
 
   FlutterAppLink? linkFor(String id) => _links[id];
 
+  /// Told whenever somebody looks for apps — the device-log discovery
+  /// (`DeviceAppDiscovery`) reads the phones while they are being looked at.
+  void Function()? onLooked;
+
   /// Looks for running apps: attaches to anything new, re-measures anything
   /// unreachable. Concurrent calls share one sweep.
-  Future<void> look() =>
-      _looking ??= _look().whenComplete(() => _looking = null);
+  Future<void> look() {
+    onLooked?.call();
+    return _looking ??= _look().whenComplete(() => _looking = null);
+  }
 
   Future<void> _look() async {
     if (!_open) return;

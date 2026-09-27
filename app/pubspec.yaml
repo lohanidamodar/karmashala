@@ -40,10 +40,15 @@ dependencies:
   karmashala_media:
     path: ../packages/karmashala_media
   # Android devices and iOS simulators: adb, simctl, scrcpy, WebDriverAgent,
-  # the UI tree and screen recording. Built beside the app in phase A —
-  # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
+  # the UI tree, screen recording and the cores above them. Pure Dart — the
+  # server drives its machine's devices with it (slice 4a).
   karmashala_devices:
     path: ../packages/karmashala_devices
+  # The device pane: this machine's own devices, mirrored and driven by a
+  # person, and the Riverpod graph under it. Agents' device tools are the
+  # server's.
+  karmashala_device_pane:
+    path: ../packages/karmashala_device_pane
   # Finding, running and driving a Flutter app from outside it: project and
   # SDK discovery, the four routes to a VM service address, the Dart Tooling
   # Daemon and the VM service link. Built beside the app in phase A — nothing

@@ -9,10 +9,9 @@ import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pa
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/github/presentation/github_view.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
-import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala_devices/ports.dart';
-import 'package:karmashala_devices/providers.dart';
-import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala_device_pane/ports.dart';
+import 'package:karmashala_device_pane/providers.dart';
+import 'package:karmashala_device_pane/widgets.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala_ui/theme.dart';
 

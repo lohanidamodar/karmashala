@@ -1149,8 +1149,10 @@ vendor's directory layout is baked into discovery.
 
 **Only a *persisted* location can go stale unobserved**, so that is the line.
 Most of this app is on the safe side of it by construction: toolchain lookups
-(`git`, `gh`, `adb`, Chrome, editors, terminals) are resolved by bare name on
-every spawn; `karmashala_mcp` and WebDriverAgent are found relative to
+(`git`, `gh`, Chrome, editors, terminals) are resolved by bare name on
+every spawn; `adb` by one rule every user of it on a machine shares, on
+every probe (the `androidSdkPath` setting, `ANDROID_HOME`, `ANDROID_SDK_ROOT`,
+the default SDK, the PATH — docs/daemon-architecture.md, slice 4a); `karmashala_mcp` and WebDriverAgent are found relative to
 `Platform.resolvedExecutable` per call; `scrcpy-server` is a bundle asset
 staged into `systemTemp` under a per-start name; `CliStoreLocator` rebuilds
 every store home from `$HOME` each time; `execution_environments

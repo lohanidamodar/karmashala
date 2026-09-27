@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:karmashala_browser/browser.dart'
     show BrowserAction, BrowserException;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_devices/devices.dart'
+    show AdbService, DeviceAction, LogLevel;
 import 'package:karmashala_environments/store.dart' show AgentInstallationDao;
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
@@ -18,21 +20,22 @@ import 'package:karmashala_verification/verification.dart';
 import 'package:path/path.dart' as p;
 
 import '../../browser/server_browser.dart';
+import '../../devices/server_devices.dart';
 import 'server_tool_context.dart';
 
-/// The server's one recording slot: a review of a change, or a page on the
+/// The server's one recording slot: a review of a change, a page on the
 /// server's own browser (slice 3d) — every `browser_*` call a step, with its
-/// screenshots. Its rows go through the data API, so every client's copy
-/// follows the run; its evidence and report are written under
-/// `<data dir>/verification`, where the app's pane reads them.
-///
-/// A device run is the app's (its adb), and is never started here — see
-/// `VerificationToolSet`.
+/// screenshots — or a device on the server's machine (slice 4a), every adb
+/// call on it a step through `AdbService.actionSink`. Its rows go through the
+/// data API, so every client's copy follows the run; its evidence and report
+/// are written under `<data dir>/verification`, where the app's pane reads
+/// them.
 class ServerVerificationRuns implements VerificationToolBackend {
   ServerVerificationRuns(
     this._context, {
     String Function()? newId,
     this.browser,
+    this.devices,
   }) : _newId = newId,
        _runs = VerificationDao(_context.database),
        _store = VerificationArtifactStore(
@@ -46,6 +49,13 @@ class ServerVerificationRuns implements VerificationToolBackend {
 
   /// The browser a page run drives; null refuses page runs in words.
   final ServerBrowser? browser;
+
+  /// The devices on the server's machine a device run drives (slice 4a);
+  /// null refuses device runs in words.
+  final ServerDevices? devices;
+
+  /// The adb a device run put its recorder on, until it finishes.
+  AdbService? _deviceAdb;
 
   VerificationRun? _active;
   _RunRecorder? _recorder;
@@ -70,10 +80,10 @@ class ServerVerificationRuns implements VerificationToolBackend {
         '(${open.id}). Finish it before starting another.',
       );
     }
-    if (target.kind == VerificationTargetKind.device) {
-      throw StateError(
-        'The server records a review of a change or a page; a device run is '
-        'the app\'s.',
+    if (target.isDevice && devices == null) {
+      throw const VerificationException(
+        'This Karmashala server drives no devices, so no device can be '
+        'verified here.',
       );
     }
     final pageBrowser = browser;
@@ -114,7 +124,86 @@ class ServerVerificationRuns implements VerificationToolBackend {
         await pageBrowser.afterUse();
       }
     }
+    if (target.isDevice) {
+      try {
+        await _openDevice(recorder, target, launch: launch);
+      } on Object catch (error) {
+        // As a page: an unreachable device still leaves a finishable run.
+        recorder.note('Could not reach the target', detail: '$error');
+        rethrow;
+      }
+    }
     return run;
+  }
+
+  /// Puts the recorder on this machine's adb — every device call is a step,
+  /// whoever makes it — checks the device, and fronts the package unless
+  /// [launch] is false.
+  Future<void> _openDevice(
+    _RunRecorder recorder,
+    VerificationTarget target, {
+    required bool launch,
+  }) async {
+    final adb = await devices!.adb();
+    if (adb == null) {
+      throw const VerificationException(
+        'No Android SDK was found on the server\'s machine, so no device can '
+        'be verified.',
+      );
+    }
+    _deviceAdb = adb..actionSink = recorder.recordDevice;
+    final serial = target.serial;
+    if (serial == null || serial.isEmpty) {
+      throw const VerificationException(
+        'A device verification needs a serial. Use list_devices to find one.',
+      );
+    }
+    final listed = await adb.listDevices();
+    final device = listed.where((d) => d.serial == serial).firstOrNull;
+    if (device == null) {
+      throw VerificationException(
+        'No device with serial $serial is connected.',
+      );
+    }
+    if (!device.isReady) {
+      throw VerificationException(
+        'Device $serial is ${device.state.name}, not ready.',
+      );
+    }
+    final package = target.packageName;
+    if (launch && package != null && package.isNotEmpty) {
+      await adb.launchPackage(serial, package);
+    }
+  }
+
+  /// Collected without being asked, at the end: a screenshot, the UI tree and
+  /// the package's log — each a step, since the recorder is still on.
+  Future<void> _collectDeviceEvidence(
+    _RunRecorder recorder,
+    VerificationRun run,
+  ) async {
+    final adb = _deviceAdb;
+    final serial = run.target.serial;
+    if (adb == null || serial == null) return;
+    await _bestEffort(() => adb.screenshot(serial));
+    await _bestEffort(() => adb.dumpUiHierarchy(serial));
+    final package = run.target.packageName;
+    if (package != null && package.isNotEmpty) {
+      final entries = await _bestEffort(
+        () => adb.readLogcat(
+          serial,
+          packageName: package,
+          minLevel: LogLevel.debug,
+          maxLines: 400,
+        ),
+      );
+      if (entries != null && entries.isEmpty) {
+        recorder.note(
+          'No logcat lines for $package — it was not running when the run '
+          'finished.',
+        );
+      }
+    }
   }
 
   /// Installs the recorder on the browser, attaches (or opens the page), and
@@ -164,6 +253,15 @@ class ServerVerificationRuns implements VerificationToolBackend {
         await _bestEffort(pageBrowser.service.stopObserving);
         pageBrowser.service.actionSink = null;
         await pageBrowser.afterUse();
+      }
+    }
+    if (run.target.isDevice) {
+      try {
+        await _collectDeviceEvidence(recorder, run);
+      } finally {
+        // Always: a leftover sink records the next person's device calls.
+        _deviceAdb?.actionSink = null;
+        _deviceAdb = null;
       }
     }
     await recorder.drain();
@@ -243,7 +341,9 @@ class ServerVerificationRuns implements VerificationToolBackend {
   static String _defaultTitle(VerificationTarget target) =>
       switch (target.kind) {
         VerificationTargetKind.browser => 'Verify ${target.url ?? 'the page'}',
-        _ => 'Review of the change',
+        VerificationTargetKind.device =>
+          'Verify ${target.packageName ?? target.serial ?? 'the device'}',
+        VerificationTargetKind.change => 'Review of the change',
       };
 
   @override
@@ -377,6 +477,23 @@ class _RunRecorder {
     slug: action.verb,
   );
 
+  void recordDevice(DeviceAction action) => _append(
+    kind: _deviceKind(action.verb),
+    summary: action.summary,
+    detail: action.verb == 'uiDump' || action.verb == 'logcat'
+        ? null
+        : action.detail,
+    ok: action.ok,
+    png: action.png,
+    text: action.text,
+    textKind: switch (action.verb) {
+      'uiDump' => VerificationArtifactKind.uiTree,
+      'logcat' => VerificationArtifactKind.logcat,
+      _ => VerificationArtifactKind.other,
+    },
+    slug: action.verb,
+  );
+
   void note(String text, {String? detail}) => _append(
     kind: VerificationStepKind.note,
     summary: text,
@@ -477,6 +594,18 @@ class _RunRecorder {
       }
     });
   }
+
+  static VerificationStepKind _deviceKind(String verb) => switch (verb) {
+    'launch' => VerificationStepKind.launch,
+    'tap' => VerificationStepKind.tap,
+    'swipe' => VerificationStepKind.swipe,
+    'type' => VerificationStepKind.type,
+    'key' => VerificationStepKind.key,
+    'screenshot' => VerificationStepKind.screenshot,
+    'uiDump' => VerificationStepKind.uiDump,
+    'logcat' => VerificationStepKind.logcat,
+    _ => VerificationStepKind.other,
+  };
 
   static VerificationStepKind _browserKind(String verb) => switch (verb) {
     'navigate' => VerificationStepKind.navigate,

@@ -12,7 +12,7 @@ import 'package:path/path.dart' as p;
 import '../domain/uuid.dart';
 import '../server/gui_session.dart';
 import 'attached_apps.dart';
-import 'flutter_device_claims.dart';
+import '../devices/server_device_claims.dart' show FlutterDeviceClaims;
 import 'flutter_sdk_readings.dart';
 import 'hosted_runs.dart';
 
@@ -51,12 +51,12 @@ class ServerFlutterLoop {
     required this.recorder,
     this.runners = const CommandRunnerFactory(),
     this.hostEnvironment = const {},
-    FlutterDeviceClaims? claims,
+    required this.claims,
+    this.androidSdkRoot,
     String? operatingSystem,
     String Function()? newId,
     DateTime Function()? clock,
-  }) : claims = claims ?? MemoryFlutterDeviceClaims(),
-       _operatingSystem = operatingSystem ?? Platform.operatingSystem,
+  }) : _operatingSystem = operatingSystem ?? Platform.operatingSystem,
        _newId = newId ?? newUuid,
        _now = clock ?? _utcNow;
 
@@ -68,6 +68,11 @@ class ServerFlutterLoop {
   final CommandRunnerFactory runners;
   final Map<String, String> hostEnvironment;
   final FlutterDeviceClaims claims;
+
+  /// The Android SDK the server resolved for this machine, or null: laid
+  /// into every Flutter command here as ANDROID_HOME, so flutter run talks to
+  /// the same adb (and adb daemon) as the device tools and the pane.
+  final Future<String?> Function()? androidSdkRoot;
   final String _operatingSystem;
   final String Function() _newId;
   final DateTime Function() _now;
@@ -425,6 +430,16 @@ class ServerFlutterLoop {
     });
   }
 
+  /// ANDROID_HOME for a Flutter command on this machine, none for a WSL
+  /// distribution (its own SDK, its own adb daemon).
+  Future<Map<String, String>> _androidVariables(
+    ExecutionEnvironment environment,
+  ) async {
+    if (environment.kind == EnvironmentKind.wsl) return const {};
+    final root = await androidSdkRoot?.call();
+    return root == null ? const {} : {'ANDROID_HOME': root};
+  }
+
   Future<FlutterLoopOutcome> _start({
     required FlutterCommandKind kind,
     required EnvironmentPath project,
@@ -440,6 +455,7 @@ class ServerFlutterLoop {
     final HostedRun hostedRun;
     try {
       hostedRun = hosted.start(
+        variables: await _androidVariables(environment),
         argv: argv,
         directory: project,
         environment: environment,

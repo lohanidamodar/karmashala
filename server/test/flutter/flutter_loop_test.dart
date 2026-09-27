@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
-import 'package:karmashala_host/src/flutter/flutter_device_claims.dart';
+import 'package:karmashala_core/util.dart';
+import 'package:karmashala_devices/karmashala_devices.dart'
+    show kDeviceClaimLapse;
+import 'package:karmashala_host/src/devices/server_device_claims.dart';
 import 'package:karmashala_host/src/flutter/flutter_loop.dart';
 import 'package:test/test.dart';
 
@@ -382,12 +385,77 @@ void main() {
     });
   });
 
-  test('the in-memory claims lapse', () {
-    var now = DateTime.utc(2026);
-    final claims = MemoryFlutterDeviceClaims(clock: () => now);
-    expect(claims.claim(deviceId: 'd', sessionId: 'a', verb: 'run'), isNull);
-    expect(claims.claim(deviceId: 'd', sessionId: 'b', verb: 'run'), isNotNull);
-    now = now.add(const Duration(minutes: 11));
-    expect(claims.claim(deviceId: 'd', sessionId: 'b', verb: 'run'), isNull);
+  test("a flutter run's claim lapses like any device claim", () {
+    final clock = _Clock(fixtureNow);
+    final claims = ServerDeviceClaims(
+      database: fixture.database,
+      tell: (_) {},
+      clock: clock,
+    );
+    addTearDown(claims.close);
+    expect(claims.claim(deviceId: 'd', sessionId: 's1', verb: 'run'), isNull);
+    expect(
+      claims.claim(deviceId: 'd', sessionId: 's2', verb: 'run'),
+      isNotNull,
+    );
+    clock.now = clock.now.add(kDeviceClaimLapse);
+    expect(claims.claim(deviceId: 'd', sessionId: 's2', verb: 'run'), isNull);
   });
+
+  group('the same adb as the device tools', () {
+    EnvironmentPath localProject() {
+      fixture.database.execute(
+        'INSERT INTO execution_environments (id, kind, name, created_at) '
+        "VALUES ('local', 'localPosix', 'This Mac', ?);",
+        [fixtureNow.toIso8601String()],
+      );
+      final project = Directory('${fixture.root.path}/app')
+        ..createSync(recursive: true);
+      File('${project.path}/pubspec.yaml').writeAsStringSync(appPubspec);
+      Directory('${project.path}/.dart_tool').createSync();
+      File(
+        '${project.path}/.dart_tool/package_config.json',
+      ).writeAsStringSync('{}');
+      return EnvironmentPath(environmentId: 'local', path: project.path);
+    }
+
+    test("a run on this machine carries the server's ANDROID_HOME", () async {
+      final project = localProject();
+      final local = fixture.build(
+        windows: false,
+        androidSdkRoot: () async => '/chosen/sdk',
+      );
+      final outcome = await local.loop.run(
+        project: project,
+        deviceId: 'emulator-5554',
+      );
+      expect(outcome.preflight.isClear, isTrue, reason: '${outcome.preflight}');
+      expect(
+        fixture.pty.started.last.environment['ANDROID_HOME'],
+        '/chosen/sdk',
+      );
+      await local.close();
+    });
+
+    test('a WSL run keeps its own SDK', () async {
+      final wsl = fixture.build(androidSdkRoot: () async => '/chosen/sdk');
+      final outcome = await wsl.loop.run(
+        project: wslProject,
+        deviceId: 'emulator-5554',
+      );
+      expect(outcome.preflight.isClear, isTrue, reason: '${outcome.preflight}');
+      expect(
+        fixture.pty.started.last.environment.containsKey('ANDROID_HOME'),
+        isFalse,
+      );
+      await wsl.close();
+    });
+  });
+}
+
+class _Clock implements Clock {
+  _Clock(this.now);
+  DateTime now;
+  @override
+  DateTime nowUtc() => now.toUtc();
 }

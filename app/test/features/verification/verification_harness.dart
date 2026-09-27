@@ -1,15 +1,13 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/data/verification_data.dart';
-import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/verification.dart';
+import 'package:path/path.dart' as p;
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
 
 /// A 1×1 PNG, so an artifact written by a test is a real image.
@@ -18,149 +16,21 @@ final Uint8List tinyPng = Uint8List.fromList([
   0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
 ]);
 
-const _sdkRoot = r'C:\sdk';
-const _adbPath = r'C:\sdk\platform-tools\adb.exe';
-
-final AndroidSdk fakeSdk = const AndroidSdk(
-  root: EnvironmentPath(environmentId: 'windows', path: _sdkRoot),
-  adb: EnvironmentPath(environmentId: 'windows', path: _adbPath),
-);
-
-/// The UI dump a fake device answers with.
-const String fakeUiXml =
-    '<?xml version="1.0" encoding="UTF-8"?>'
-    '<hierarchy rotation="0">'
-    '<node index="0" text="" resource-id="" class="android.widget.FrameLayout" '
-    'package="com.example.app" content-desc="" bounds="[0,0][1080,2340]">'
-    '<node index="0" text="Settings" resource-id="com.example.app:id/title" '
-    'class="android.widget.TextView" package="com.example.app" '
-    'content-desc="" clickable="true" enabled="true" '
-    'bounds="[40,200][600,280]" />'
-    '</node></hierarchy>';
-
-/// A scripted adb: every command a run makes has an answer, and the calls are
-/// recorded so a test can assert on the actual argv.
-class FakeAdb {
-  FakeAdb({this.serial = 'FAKE123', this.packageRunning = true}) {
-    runner = FakeCommandRunner(responder: _respond);
-    service = AdbService(
-      runner: runner,
-      sdk: fakeSdk,
-      readHostFile: (_) async => tinyPng,
-      uiDumpRetryDelay: Duration.zero,
-    );
-  }
-
-  final String serial;
-
-  /// Whether `pidof` finds the package. False is the "app is not running" case
-  /// that makes a logcat slice legitimately empty.
-  bool packageRunning;
-
-  /// Set to make `monkey` report that the package has no launcher activity.
-  bool packageInstalled = true;
-
-  late final FakeCommandRunner runner;
-  late final AdbService service;
-
-  /// The argv of every adb call, joined, in order.
-  List<String> get calls => [
-    for (final request in runner.requests) request.arguments.join(' '),
-  ];
-
-  bool called(String fragment) => calls.any((c) => c.contains(fragment));
-
-  CommandResult _respond(CommandRequest request) {
-    final argv = request.arguments.join(' ');
-    if (argv.contains('devices')) {
-      return CommandResult(
-        exitCode: 0,
-        stdout:
-            'List of devices attached\n'
-            '$serial\tdevice product:test model:Test transport_id:1\n',
-        stderr: '',
-      );
-    }
-    if (argv.contains('monkey')) {
-      return CommandResult(
-        exitCode: 0,
-        stdout: packageInstalled
-            ? 'Events injected: 1\n'
-            : '** No activities found to run, monkey aborted.',
-        stderr: '',
-      );
-    }
-    if (argv.contains('wm size')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout: 'Physical size: 1080x2340',
-        stderr: '',
-      );
-    }
-    if (argv.contains('uiautomator dump')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout: 'UI hierchary dumped to: /data/local/tmp/x.xml',
-        stderr: '',
-      );
-    }
-    if (argv.contains('logcat')) {
-      return const CommandResult(
-        exitCode: 0,
-        stdout:
-            '08-30 12:00:00.100  4242  4242 I MainActivity: started\n'
-            '08-30 12:00:00.200  4242  4242 E MainActivity: boom\n',
-        stderr: '',
-      );
-    }
-    // Checked after logcat on purpose: "logcat -d" contains "cat ".
-    if (argv.contains('cat ')) {
-      return const CommandResult(exitCode: 0, stdout: fakeUiXml, stderr: '');
-    }
-    if (argv.contains('pidof')) {
-      return CommandResult(
-        exitCode: 0,
-        stdout: packageRunning ? '4242' : '',
-        stderr: '',
-      );
-    }
-    return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-  }
-}
-
-/// Everything a verification-service test needs, wired to fakes: the runs are
-/// kept by a [FakeDataServer], the evidence files in a temp folder.
+/// Everything a verification test needs, wired to fakes: the runs are kept by
+/// a [FakeDataServer], the evidence files in a temp folder. Every run is the
+/// server's to record (slice 4a); [record] stands in for one it recorded.
 class VerificationHarness {
-  VerificationHarness._(
-    this.server,
-    this.client, {
-    DateTime Function()? now,
-    String Function()? newId,
-  }) : root = Directory.systemTemp.createTempSync('verify-run') {
+  VerificationHarness._(this.server, this.client)
+    : root = Directory.systemTemp.createTempSync('verify-run') {
     data = VerificationData(client);
     store = VerificationArtifactStore(root);
-    service = VerificationService(
-      data,
-      store,
-      adbOf: () => adb.service,
-      changes: changes,
-      now: now,
-      newId: newId ?? _sequentialId,
-    );
+    service = VerificationService(data, store, changes: changes);
   }
 
   /// A harness over a fresh fake server, its client primed.
-  static Future<VerificationHarness> start({
-    DateTime Function()? now,
-    String Function()? newId,
-  }) async {
+  static Future<VerificationHarness> start() async {
     final server = FakeDataServer();
-    return VerificationHarness._(
-      server,
-      await server.connect(),
-      now: now,
-      newId: newId,
-    );
+    return VerificationHarness._(server, await server.connect());
   }
 
   final Directory root;
@@ -170,19 +40,77 @@ class VerificationHarness {
   late final VerificationArtifactStore store;
   late final VerificationService service;
 
+  /// The signal the service publishes into, held here so a widget test can
+  /// override `verificationChangesProvider` with the same one.
+  final changes = VerificationChangeSignal();
+
   /// The run as the server holds it, whole.
   VerificationRun? stored(String id) => server.verificationRows.getRun(id);
 
-  /// The signal the service publishes into, held here so a widget test can
-  /// override `verificationChangesProvider` with the same one. Without that the
-  /// pane would watch a different signal from the service it is given and stop
-  /// following a run live — which is the whole point of the stream.
-  final changes = VerificationChangeSignal();
-
-  final adb = FakeAdb();
-
   var _ids = 0;
-  String _sequentialId() => 'run-${(++_ids).toString().padLeft(3, '0')}';
+
+  /// A run as the server would have recorded it — [steps] and [texts] (an
+  /// artifact per entry, written to disk) included — and its whole record.
+  Future<VerificationRun> record({
+    String? id,
+    String title = 'the save button saves',
+    VerificationTarget target = const VerificationTarget.device(
+      serial: 'FAKE123',
+      packageName: 'com.example.app',
+    ),
+    VerificationVerdict? verdict = VerificationVerdict.pass,
+    String? reason,
+    String? sessionId,
+    String? producedBySessionId,
+    List<String> steps = const [],
+    Map<VerificationArtifactKind, String> texts = const {},
+    DateTime? startedAt,
+  }) async {
+    final runId = id ?? 'run-${(++_ids).toString().padLeft(3, '0')}';
+    final directory = await store.createDirectory(runId);
+    final at = startedAt ?? DateTime.utc(2026, 9, 27, 12, _ids);
+    final artifacts = <VerificationArtifact>[];
+    for (final MapEntry(key: kind, value: text) in texts.entries) {
+      artifacts.add(
+        await store.writeText(
+          runId: runId,
+          kind: kind,
+          label: kind.name,
+          name: kind.name,
+          text: text,
+          at: at,
+        ),
+      );
+    }
+    final run = VerificationRun(
+      id: runId,
+      title: title,
+      target: target,
+      sessionId: sessionId,
+      producedBySessionId: producedBySessionId,
+      startedAt: at,
+      finishedAt: verdict == null ? null : at.add(const Duration(seconds: 5)),
+      artifactDirectory: directory.path,
+      verdict: verdict,
+      reason: reason,
+      steps: [
+        for (final (index, summary) in steps.indexed)
+          VerificationStep(
+            ordinal: index + 1,
+            kind: VerificationStepKind.note,
+            summary: summary,
+            at: at,
+          ),
+      ],
+      artifacts: artifacts,
+    );
+    await data.record(run);
+    changes.bump();
+    return (await data.get(runId))!;
+  }
+
+  String pathIn(VerificationRun run, VerificationArtifact artifact) =>
+      p.join(run.artifactDirectory, artifact.relativePath);
 
   Future<void> dispose() async {
     await service.dispose();

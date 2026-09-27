@@ -67,6 +67,7 @@ class Settings {
     this.androidSlimming = true,
     this.androidSlimmingEnabled = kDefaultAndroidSlimming,
     this.androidEmulatorGpu = 'auto',
+    this.androidSdkPath = '',
     this.explorerPaneWidth = 304,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
@@ -164,6 +165,10 @@ class Settings {
 
   /// [AndroidGpuMode.id] for the renderer; a string, so unknown modes survive.
   final String androidEmulatorGpu;
+
+  /// The Android SDK a person named, or empty: tried first by the pane and
+  /// the server alike (`sdkCandidateRoots`), so both reach one adb.
+  final String androidSdkPath;
 
   final double explorerPaneWidth;
   final double detailSidebarWidth;
@@ -347,6 +352,7 @@ class Settings {
     bool? androidSlimming,
     List<String>? androidSlimmingEnabled,
     String? androidEmulatorGpu,
+    String? androidSdkPath,
     double? explorerPaneWidth,
     double? detailSidebarWidth,
     bool? compactDensity,
@@ -417,6 +423,7 @@ class Settings {
     androidSlimmingEnabled:
         androidSlimmingEnabled ?? this.androidSlimmingEnabled,
     androidEmulatorGpu: androidEmulatorGpu ?? this.androidEmulatorGpu,
+    androidSdkPath: androidSdkPath ?? this.androidSdkPath,
     explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
@@ -523,6 +530,7 @@ class Settings {
     'androidSlimming': androidSlimming,
     'androidSlimmingEnabled': androidSlimmingEnabled,
     'androidEmulatorGpu': androidEmulatorGpu,
+    if (androidSdkPath.isNotEmpty) kAndroidSdkPathSetting: androidSdkPath,
     'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
@@ -654,6 +662,7 @@ class Settings {
       androidEmulatorGpu: json['androidEmulatorGpu'] is String
           ? json['androidEmulatorGpu'] as String
           : 'auto',
+      androidSdkPath: androidSdkPathIn(json) ?? '',
       explorerPaneWidth: toDouble(json['explorerPaneWidth']) ?? 304,
       detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
       collapsedExplorerNodes: json['collapsedExplorerNodes'] is List
@@ -805,6 +814,7 @@ class Settings {
       other.androidSlimming == androidSlimming &&
       _listEquals(other.androidSlimmingEnabled, androidSlimmingEnabled) &&
       other.androidEmulatorGpu == androidEmulatorGpu &&
+      other.androidSdkPath == androidSdkPath &&
       other.explorerPaneWidth == explorerPaneWidth &&
       other.detailSidebarWidth == detailSidebarWidth &&
       other.compactDensity == compactDensity &&
@@ -921,6 +931,7 @@ class Settings {
         explorerContextScope,
         Object.hashAll(androidSlimmingEnabled),
         androidEmulatorGpu,
+        androidSdkPath,
         Object.hashAllUnordered(
           defaultModels.entries.map((e) => Object.hash(e.key, e.value)),
         ),

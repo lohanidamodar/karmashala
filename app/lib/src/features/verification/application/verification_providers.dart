@@ -4,7 +4,6 @@ import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/data/data_providers.dart';
-import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_session/session.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -79,12 +78,11 @@ final verificationChangesProvider = Provider<VerificationChangeSignal>((ref) {
   return signal;
 });
 
-/// The one recorder. Long-lived: disposing it mid-run leaves its sinks in.
+/// The runs as this app reads them; the server records every one.
 final verificationServiceProvider = Provider<VerificationService>((ref) {
   final service = VerificationService(
     ref.watch(verificationDataProvider),
     ref.watch(verificationArtifactStoreProvider),
-    adbOf: () => ref.read(adbServiceProvider),
     changes: ref.watch(verificationChangesProvider),
   );
   ref.onDispose(service.dispose);

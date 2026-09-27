@@ -84,6 +84,26 @@ void main() {
       );
       expect(roots, [r'C:\L\Android\Sdk']);
     });
+
+    test('a hand-set SDK comes before everything the environment says', () {
+      // The one rule the pane, the server's tools and `flutter run` share:
+      // two adb versions on one machine restart each other's daemon.
+      final roots = sdkCandidateRoots(
+        kind: EnvironmentKind.localPosix,
+        env: {'ANDROID_HOME': '/env/sdk', 'HOME': '/home/d'},
+        handSet: '/chosen/sdk',
+      );
+      expect(roots.take(2), ['/chosen/sdk', '/env/sdk']);
+    });
+  });
+
+  group('androidSdkPathIn', () {
+    test('reads the setting, and nothing for a blank or absent one', () {
+      expect(androidSdkPathIn({'androidSdkPath': ' /sdk '}), '/sdk');
+      expect(androidSdkPathIn({'androidSdkPath': '  '}), isNull);
+      expect(androidSdkPathIn(const <String, Object?>{}), isNull);
+      expect(androidSdkPathIn('not a map'), isNull);
+    });
   });
 
   group('adbPathIn', () {

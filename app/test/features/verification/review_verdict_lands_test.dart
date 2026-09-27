@@ -19,8 +19,9 @@ import '../fanout/fanout_harness.dart';
 /// new column, no new link kind and no new lookup.
 ///
 /// So this is deliberately end to end — a real fan-out, a real review launch,
-/// and the reviewer's own `verification_*` calls — rather than three unit tests
-/// that each assume the seam they do not cross.
+/// and the run the reviewer's verification_* calls leave (recorded by the
+/// server since slice 4a) — rather than three unit tests that each assume the
+/// seam they do not cross.
 void main() {
   late Harness h;
   late Directory root;
@@ -32,9 +33,33 @@ void main() {
     verification = VerificationService(
       VerificationData(h.container.read(dataClientProvider)),
       VerificationArtifactStore(root),
-      adbOf: () => null,
     );
   });
+
+  /// A finished review of the change, as the server records one.
+  Future<void> recordReview({
+    required String subject,
+    required String reviewer,
+    required String title,
+    required String reason,
+  }) async {
+    final at = DateTime.now().toUtc();
+    await VerificationData(h.container.read(dataClientProvider)).record(
+      VerificationRun(
+        id: 'review-${at.microsecondsSinceEpoch}',
+        title: title,
+        target: const VerificationTarget.change(),
+        sessionId: subject,
+        producedBySessionId: reviewer,
+        startedAt: at,
+        finishedAt: at,
+        verdict: VerificationVerdict.pass,
+        reason: reason,
+        artifactDirectory: root.path,
+      ),
+    );
+  }
+
   tearDown(() async {
     await verification.dispose();
     h.container.dispose();
@@ -62,23 +87,14 @@ void main() {
             claim: launch.comparison.prompt,
           );
 
-      // What the reviewer does with the brief it was handed.
-      final tools = VerificationTools(
-        verification,
-        callerSessionId: review.session.id,
+      // What the reviewer's verification_* calls leave: a finished change
+      // run the server recorded (slice 4a: it records every run).
+      await recordReview(
+        subject: subject.session.id,
+        reviewer: review.session.id,
+        title: 'Review of the trailing-comma fix',
+        reason: 'Nothing wrong found; the two new tests cover the case.',
       );
-      await tools.call('verification_start', {
-        'change': true,
-        'sessionId': subject.session.id,
-        'title': 'Review of the trailing-comma fix',
-      });
-      await tools.call('verification_note', {
-        'text': 'The lexer change is covered by two tests.',
-      });
-      await tools.call('verification_finish', {
-        'verdict': 'pass',
-        'reason': 'Nothing wrong found; the two new tests cover the case.',
-      });
 
       final candidate = launch.comparison.candidates.firstWhere(
         (c) => c.sessionId == subject.session.id,
@@ -110,18 +126,12 @@ void main() {
           sessionId: subject.session.id,
           targetInstallationId: secondRoverInstall.id,
         );
-    final tools = VerificationTools(
-      verification,
-      callerSessionId: review.session.id,
+    await recordReview(
+      subject: subject.session.id,
+      reviewer: review.session.id,
+      title: 'Review of the change',
+      reason: 'Read the whole diff and found nothing to raise.',
     );
-    await tools.call('verification_start', {
-      'change': true,
-      'sessionId': subject.session.id,
-    });
-    await tools.call('verification_finish', {
-      'verdict': 'pass',
-      'reason': 'Read the whole diff and found nothing to raise.',
-    });
 
     // The record exists, is attached to the work, and says who signed it —
     // "nothing found" as a fact rather than as an absence.

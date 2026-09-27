@@ -3,11 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../core/util/clock_provider.dart';
 import '../automations/application/project_check_tools.dart';
-import '../verification/application/verification_providers.dart';
-import 'package:karmashala_verification/tools.dart';
 import 'attention_tools.dart';
-import 'decision_tools.dart';
-import 'device_tools.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/catalogue.dart';
@@ -57,9 +53,9 @@ class McpToolDispatcher implements HostMcpTools {
       ]);
 
   /// The server's tools a forwarded call still lands here for: a session in
-  /// one of this app's panes, a device verification run, a check
-  /// in a checkout only this app's panes reach. An SSH checkout is the
-  /// server's own since slice 3a.
+  /// one of this app's panes, a check in a checkout only this app's panes
+  /// reach. An SSH checkout is the server's own since slice 3a; devices and
+  /// every verification run since slice 4a.
   static const Set<String> answeredForOwnPanes = {
     'session_send',
     'session_answer',
@@ -68,11 +64,6 @@ class McpToolDispatcher implements HostMcpTools {
     'session_rename',
     'session_end',
     'open_new_session',
-    'verification_start',
-    'verification_note',
-    'verification_finish',
-    'verification_list',
-    'verification_get',
     'checks_run',
   };
 
@@ -133,11 +124,6 @@ class McpToolDispatcher implements HostMcpTools {
         ).call(name, args);
       case final String name when WorkspaceControlTools.handles(name):
         return WorkspaceControlTools(_container).call(name, args);
-      case final String name when DeviceControlTools.handles(name):
-        return DeviceControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
       case final String name when TerminalControlTools.handles(name):
         return TerminalControlTools(_container).call(name, args);
       case final String name when RecordingControlTools.handles(name):
@@ -149,31 +135,14 @@ class McpToolDispatcher implements HostMcpTools {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      case final String name when name.startsWith('verification_'):
-        await resolveVerificationRoot();
-        final verification = _container.read(verificationServiceProvider);
-        // Noted *before* the call, because finishing clears the active run: the
-        // seam where verification writes to the decision record.
-        final finishing = name == 'verification_finish'
-            ? verification.activeRun?.id
-            : null;
-        // The caller is the producer of every verdict recorded here (G3).
-        final answer = await VerificationTools(
-          verification,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-        if (finishing != null) {
-          recordFinishedVerdict(_container, await verification.get(finishing));
-        }
-        return answer;
       default:
         throw ArgumentError('Unknown tool: $tool');
     }
   }
 
-  /// The tools only this app can run — its panes, the editor,
-  /// devices, recordings, the inbox, and continuing a session into a visible
-  /// tab. The server runs every other tool itself and serves these beside its
+  /// The tools only this app can run — its panes, the editor, a device's
+  /// recording (it needs the pane's live view), the inbox, and continuing a
+  /// session into a visible tab. The server runs every other tool itself and serves these beside its
   /// own; a call it forwards for a tool it also serves (a session in one of
   /// this app's panes) still lands in [dispatch].
   static const List<Map<String, dynamic>> toolSchemas = [
@@ -184,7 +153,6 @@ class McpToolDispatcher implements HostMcpTools {
     ...recordingControlToolSchemas,
     ...snippetControlToolSchemas,
     ...workspaceControlToolSchemas,
-    ...deviceControlToolSchemas,
     ...attentionControlToolSchemas,
   ];
 }

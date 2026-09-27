@@ -86,6 +86,7 @@ class HostedRuns {
     required String title,
     required HostedRunFamily family,
     void Function(HostedRun run)? onEnded,
+    Map<String, String> variables = const {},
   }) {
     final refused = refusalFor(environment);
     if (refused != null) throw HostedRunRefused(refused);
@@ -111,7 +112,9 @@ class HostedRuns {
       request = PtySpawnRequest(
         argv: argv,
         workingDirectory: directory.path,
-        environment: const {'TERM': 'xterm-256color'},
+        // Laid over the server's own: `ANDROID_HOME`, so `flutter run`
+        // reaches the same adb as the server's device tools (slice 4a).
+        environment: {'TERM': 'xterm-256color', ...variables},
         columns: 120,
         rows: 40,
       );

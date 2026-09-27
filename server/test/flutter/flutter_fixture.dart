@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import 'package:karmashala_core/util.dart';
+import 'package:karmashala_host/src/devices/server_device_claims.dart';
 import 'package:karmashala_host/src/domain/session_registry.dart';
 import 'package:karmashala_host/src/flutter/server_flutter_work.dart';
 import 'package:karmashala_host/src/pty/fake_pty.dart';
@@ -139,7 +141,26 @@ class FlutterFixture {
         "path, created_at) VALUES ('rb', 'p1', 'remote', 'box', "
         "'/srv/app', ?);",
         [at],
+      )
+      ..execute(
+        'INSERT INTO agent_installations '
+        '(id, agent_kind, environment_id, executable_path, created_at) '
+        "VALUES ('a1', 'claudeCode', 'wsl:Ubuntu', '/usr/bin/claude', ?);",
+        [at],
       );
+    for (final (id, title) in [('s1', 'Drive the emulator'), ('s2', 'Other')]) {
+      database.execute(
+        'INSERT INTO sessions (id, repository_id, agent_installation_id, '
+        'title, use_worktree, status, created_at) '
+        "VALUES (?, 'r1', 'a1', ?, 0, 'running', ?);",
+        [id, title, at],
+      );
+    }
+    claims = ServerDeviceClaims(
+      database: database,
+      tell: told.addAll,
+      clock: _FixtureClock(),
+    );
     registry = SessionRegistry(launcher: pty);
     work = build();
   }
@@ -149,6 +170,9 @@ class FlutterFixture {
   late final AppDatabase database;
   final pty = KillablePtyLauncher();
   late final SessionRegistry registry;
+
+  /// The one claims registry, over this store's sessions (s1, s2).
+  late final ServerDeviceClaims claims;
   late ServerFlutterWork work;
   final told = <DataChange>[];
   final reachable = <String, FakeVmService>{};
@@ -160,7 +184,10 @@ class FlutterFixture {
     Map<String, String> hostEnvironment = const {},
     String operatingSystem = 'linux',
     bool windows = true,
+    Future<String?> Function()? androidSdkRoot,
   }) => ServerFlutterWork(
+    claims: claims,
+    androidSdkRoot: androidSdkRoot,
     registry: registry,
     database: database,
     tell: told.addAll,
@@ -191,6 +218,7 @@ class FlutterFixture {
 
   Future<void> close() async {
     await work.close();
+    claims.close();
     await registry.shutdown();
     database.close();
     if (root.existsSync()) root.deleteSync(recursive: true);
@@ -223,3 +251,9 @@ class KillablePtyLauncher implements PtyLauncher {
 
 /// Lets queued microtasks and the timers they set run.
 Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+
+/// The fixture's fixed moment, as the claims read it.
+class _FixtureClock implements Clock {
+  @override
+  DateTime nowUtc() => fixtureNow;
+}

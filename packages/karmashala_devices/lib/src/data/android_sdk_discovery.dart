@@ -13,12 +13,29 @@ String _join(EnvironmentKind kind, List<String> parts) {
       .join(sep);
 }
 
+/// The field of the app's settings (`settings.v1`) that names an Android SDK
+/// by hand. Read by the pane and by the server alike (slice 4a).
+const String kAndroidSdkPathSetting = 'androidSdkPath';
+
+/// The Android SDK a person named in the decoded settings [settings], or null.
+String? androidSdkPathIn(Object? settings) {
+  if (settings is! Map) return null;
+  final value = settings[kAndroidSdkPathSetting];
+  return value is String && value.trim().isNotEmpty ? value.trim() : null;
+}
+
 /// Ordered SDK root candidates for [kind], given the environment variables [env]
-/// read from that environment. `ANDROID_HOME`, then `ANDROID_SDK_ROOT`, then the
-/// platform default. Blank values are ignored: unset often expands to empty.
+/// read from that environment. **The one rule every adb user on a machine
+/// follows** — the pane, the server's tools and `flutter run` must reach the
+/// same adb, because two adb versions restart each other's daemon: [handSet]
+/// (the `androidSdkPath` setting) first, then `ANDROID_HOME`, then
+/// `ANDROID_SDK_ROOT`, then the platform default; `adb` on the PATH is the
+/// discovery's last resort. Blank values are ignored: unset often expands to
+/// empty. `ANDROID_ADB_SERVER_PORT` is never used — one daemon, its own port.
 List<String> sdkCandidateRoots({
   required EnvironmentKind kind,
   required Map<String, String> env,
+  String? handSet,
 }) {
   final roots = <String>[];
   void add(String? value) {
@@ -28,6 +45,7 @@ List<String> sdkCandidateRoots({
     roots.add(trimmed);
   }
 
+  add(handSet);
   add(env['ANDROID_HOME']);
   add(env['ANDROID_SDK_ROOT']);
 
@@ -168,16 +186,28 @@ const List<String> kEmulatorVersionFlag = ['-version'];
 /// runs through [runner], so a WSL SDK is probed inside WSL — the two adb
 /// servers are different and their device lists are not interchangeable.
 class AndroidSdkDiscoveryService {
-  AndroidSdkDiscoveryService({required this.runner, required this.environment});
+  AndroidSdkDiscoveryService({
+    required this.runner,
+    required this.environment,
+    this.handSetRoot,
+  });
 
   final CommandRunner runner;
   final ExecutionEnvironment environment;
+
+  /// The SDK root a person named (`androidSdkPath`), tried before anything
+  /// the environment says. See [sdkCandidateRoots].
+  final String? handSetRoot;
 
   EnvironmentKind get _kind => environment.kind;
 
   Future<AndroidSdk?> discover() async {
     final env = await _readEnvironmentVariables();
-    for (final root in sdkCandidateRoots(kind: _kind, env: env)) {
+    for (final root in sdkCandidateRoots(
+      kind: _kind,
+      env: env,
+      handSet: handSetRoot,
+    )) {
       final adb = adbPathIn(root, _kind);
       if (await _isRunnable(adb, kAdbVersionFlag)) {
         return _sdkAt(root, adb);
