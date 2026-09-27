@@ -63,7 +63,7 @@ class RepoToolFixture {
   late final WorktreeService worktrees;
 
   /// [relative] under the temp folder.
-  String path(String relative) => p.join(root.path, relative);
+  String path(String relative) => p.join(root.path, p.normalize(relative));
 
   /// [directory] on this machine, as a row spells it.
   EnvironmentPath here(String directory) =>

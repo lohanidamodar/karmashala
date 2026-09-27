@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:karmashala_remote/remote.dart';
+import 'package:path/path.dart' as p;
 
 /// How many committed attachments are kept; the newest win.
 const int kCompanionAttachmentKeep = 20;
@@ -161,8 +162,12 @@ class CompanionAttachmentStore {
     }
     _inFlight.remove(deviceId);
     await root.create(recursive: true);
+    // The agent is handed this path, so it is spelled this machine's way.
     final committed = File(
-      '${root.path}/$kCompanionAttachmentPrefix${upload.id}_${upload.safeName}',
+      p.join(
+        root.path,
+        '$kCompanionAttachmentPrefix${upload.id}_${upload.safeName}',
+      ),
     );
     await upload.file.rename(committed.path);
     await _pruneToKeep();

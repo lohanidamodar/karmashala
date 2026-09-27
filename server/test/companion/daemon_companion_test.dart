@@ -23,6 +23,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_companion_server/store.dart';
 import 'package:karmashala_store/devices.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 import 'package:karmashala_session_engine/store.dart';
 
@@ -96,7 +97,7 @@ void main() {
       database: database,
       registry: registry,
       hostName: 'desk',
-      dataDirectory: '${home.path}/data',
+      dataDirectory: p.join(home.path, 'data'),
       lanPort: 0,
       config: const CompanionConfig(enabled: true),
       transcriptPollInterval: Duration.zero,
@@ -805,7 +806,10 @@ void main() {
           typed,
           startsWith('what is wrong here?\n\nAttached image(s):\n'),
         );
-        expect(path, startsWith('${home.path}/data/attachments/'));
+        expect(
+          path,
+          startsWith(p.join(home.path, 'data', 'attachments') + p.separator),
+        );
         expect(path, endsWith('.png'));
         expect(File(path).readAsBytesSync(), [1, 2, 3, 4]);
         expect(utf8.decode(pty.writes.last), '\r');

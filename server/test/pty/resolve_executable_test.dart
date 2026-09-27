@@ -1,3 +1,6 @@
+@TestOn('mac-os || linux')
+library;
+
 import 'dart:io';
 
 import 'package:karmashala_host/karmashala_host.dart';

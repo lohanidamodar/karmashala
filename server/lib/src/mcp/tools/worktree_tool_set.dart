@@ -5,6 +5,7 @@ import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
+import 'package:path/path.dart' as p;
 
 import 'checkout_delivery.dart';
 import 'checkout_reach.dart';
@@ -118,6 +119,9 @@ class WorktreeToolSet extends ServerToolSet {
         );
       }
 
+      // git lists Windows worktrees with forward slashes.
+      String spelled(String path) =>
+          usesWindowsPaths(environment.kind) ? p.windows.normalize(path) : path;
       for (final worktree in await _worktrees.list(repository.path)) {
         if (Checkout(worktree.path) == Checkout(path)) {
           throw StateError(
@@ -129,7 +133,7 @@ class WorktreeToolSet extends ServerToolSet {
         if (worktree.branch == branchName) {
           throw StateError(
             'The branch $branchName is already checked out at '
-            '${worktree.path.path}. Git allows one worktree per branch, so '
+            '${spelled(worktree.path.path)}. Git allows one worktree per branch, so '
             'pick another branch.',
           );
         }

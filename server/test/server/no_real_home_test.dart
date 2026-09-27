@@ -72,7 +72,8 @@ void main() {
         'own', () {
       expect(
         defaultServerDataDirectory(environment: const {'HOME': '/h'}),
-        Platform.isWindows ? r'\h\.karmashala' : '/h/.karmashala',
+        // The given home, joined the way this machine joins.
+        Platform.isWindows ? r'/h\.karmashala' : '/h/.karmashala',
       );
       expect(
         HostPaths.resolve(

@@ -64,7 +64,9 @@ void main() {
   List<String> worktreePaths() => [
     for (final line
         in fixture.git(app, ['worktree', 'list', '--porcelain']).split('\n'))
-      if (line.startsWith('worktree ')) line.substring('worktree '.length),
+      // git spells Windows paths with forward slashes.
+      if (line.startsWith('worktree '))
+        p.normalize(line.substring('worktree '.length).trim()),
   ];
 
   group('worktree_create', () {

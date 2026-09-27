@@ -146,6 +146,9 @@ void main() {
         newId: () => 's1',
         hostEnvironment: const {},
         environmentOf: rows.environment,
+        // Only a Windows server reaches WSL, and there agents do not update
+        // themselves unless allowed.
+        windows: true,
       );
       final session = await launcher.start(
         HostedLaunch(
@@ -166,7 +169,10 @@ void main() {
       expect(started.argv[6], '/usr/bin/claude');
       expect(started.workingDirectory, isNull);
       expect(started.environment['KARMASHALA_SESSION_ID'], session.id);
-      expect(started.environment['WSLENV'], 'KARMASHALA_SESSION_ID/u');
+      expect(
+        started.environment['WSLENV'],
+        'KARMASHALA_SESSION_ID/u:DISABLE_AUTOUPDATER/u',
+      );
       expect(started.argv.any((a) => a.contains('mcp')), isFalse);
     });
 
