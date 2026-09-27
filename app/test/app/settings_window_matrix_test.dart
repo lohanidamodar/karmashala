@@ -18,8 +18,6 @@ import 'package:karmashala/src/features/remote/application/pairing_in_progress.d
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
 import 'package:karmashala/src/features/remote/presentation/ssh_relays_panel.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -491,9 +489,6 @@ void main() {
         ...noProcessOverrides(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         discoveredTerminalThemesProvider.overrideWithValue(const []),
-        localRelayStatusProvider.overrideWithValue(
-          const LocalRelayStatus.stopped(),
-        ),
         remoteAccessControllerProvider.overrideWith(_PairingAccess.new),
       ],
     );
@@ -533,9 +528,6 @@ void main() {
           ...noProcessOverrides(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           discoveredTerminalThemesProvider.overrideWithValue(const []),
-          localRelayStatusProvider.overrideWithValue(
-            const LocalRelayStatus.stopped(),
-          ),
           remoteAccessControllerProvider.overrideWith(_PairingAccess.new),
           sshRelaySetupFactoryProvider.overrideWithValue(
             (host, port) async => box,

@@ -4,14 +4,9 @@ import 'package:karmashala/src/core/probe/probe_mode.dart';
 import 'package:karmashala/src/core/paths/server_data_directory.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
 import 'package:karmashala_host/server_config.dart';
-import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-
-import '../../support/fake_data_server.dart';
 
 void main() {
   group('remote access is the server config, not the app settings', () {
@@ -140,47 +135,60 @@ void main() {
     });
   });
 
-  group('the local relay port, still the app\'s', () {
-    test('the local relay defaults to the standard port', () {
-      expect(const Settings().localRelayPort, 8787);
+  group('the local relay is the server\'s', () {
+    test('its switch, its port and what it is doing come from the server', () {
+      final read = RemoteAccessSettings.fromSettings(
+        {
+          'companion': {
+            'enabled': true,
+            'localRelay': true,
+            'localRelayPort': 9001,
+          },
+        },
+        localRelayReport: {
+          'state': 'running',
+          'port': 9001,
+          'url': 'ws://192.168.1.7:9001',
+          'endpoints': [
+            {'url': 'ws://192.168.1.7:9001', 'primary': true},
+            {'url': 'ws://10.0.0.3:9001', 'primary': false},
+          ],
+          'firewallHint': true,
+        },
+      );
+      expect(read.localRelay, isTrue);
+      expect(read.localRelayPort, 9001);
+      expect(read.localRelayReport.running, isTrue);
+      expect(read.localRelayReport.url, Uri.parse('ws://192.168.1.7:9001'));
+      expect(read.localRelayReport.otherUrls, [
+        Uri.parse('ws://10.0.0.3:9001'),
+      ]);
+      expect(read.localRelayReport.firewallHint, isTrue);
     });
 
-    test('the port survives a JSON round-trip', () {
-      const s = Settings(localRelayPort: 9001);
-      final restored = Settings.fromJson(s.toJson());
-      expect(restored.localRelayPort, 9001);
-      expect(restored, s);
+    test('off, on the standard port, and unreported until a server says', () {
+      final fresh = RemoteAccessSettings.fromConfig(ServerConfig.empty);
+      expect(fresh.localRelay, isFalse);
+      expect(fresh.localRelayPort, 8787);
+      expect(fresh.localRelayReport.state, LocalRelayRunState.unknown);
+      final failed = RemoteAccessSettings.fromSettings(
+        const {},
+        localRelayReport: {'state': 'error', 'error': 'port 8787 is taken'},
+      );
+      expect(failed.localRelayReport.state, LocalRelayRunState.error);
+      expect(failed.localRelayReport.error, 'port 8787 is taken');
     });
 
-    test('a junk port reads back as the default', () {
-      final restored = Settings.fromJson(const {
-        'localRelayPort': 'yes please',
-      });
-      expect(restored.localRelayPort, 8787);
+    test('the app\'s own settings keep no port for it, and read none', () {
+      final restored = Settings.fromJson(const {'localRelayPort': 9001});
+      expect(restored, const Settings());
+      expect(const Settings().toJson(), isNot(contains('localRelayPort')));
     });
 
     test('the retired relay mode is neither read nor written', () {
-      // Carried into remote.relay_prefs.v1 by the store's v50 upgrade.
       final restored = Settings.fromJson(const {'remoteRelayMode': 'local'});
       expect(restored, const Settings());
       expect(const Settings().toJson(), isNot(contains('remoteRelayMode')));
-    });
-
-    test('the port participates in equality', () {
-      expect(const Settings(localRelayPort: 9001), isNot(const Settings()));
-    });
-
-    test('the controller persists the port', () async {
-      final server = FakeDataServer();
-      final container = ProviderContainer(overrides: [await server.override()]);
-      addTearDown(container.dispose);
-      final controller = container.read(settingsControllerProvider.notifier);
-
-      controller.setLocalRelayPort(9001);
-
-      await pumpEventQueue();
-      final stored = SettingsRepository(server.store).load();
-      expect(stored.localRelayPort, 9001);
     });
   });
 }

@@ -48,6 +48,7 @@ import 'package:karmashala_session/events.dart'
     show DecisionKind, DecisionOrigin, DecisionRecord;
 import '../automations/session_mcp_access.dart';
 import '../companion/daemon_companion.dart';
+import '../companion/local_relay.dart' show LocalRelayState;
 import '../domain/session_registry.dart';
 import '../devices/device_app_discovery.dart';
 import '../devices/server_device_claims.dart';
@@ -372,6 +373,8 @@ Future<int> runServe(
     lanPort: settings.companionPort,
     lanAddress: settings.bind,
     config: settings.companion,
+    localRelayEnabled: settings.localRelay,
+    localRelayPort: settings.localRelayPort,
     prompts: prompts,
     onLog: (message) => errSink.writeln('karmashala_host: $message'),
   );
@@ -847,6 +850,8 @@ Future<int> runServe(
       config: settings.companion,
       lanAddress: settings.bind,
       lanPort: settings.companionPort,
+      localRelayEnabled: settings.localRelay,
+      localRelayPort: settings.localRelayPort,
     );
   }
   // Devices, revoke, agents and the config, from `karmashala_host` and the
@@ -947,6 +952,7 @@ Future<int> runServe(
           : 'companion on port ${companion.port} (bound to ${settings.bind}), '
                 '${companion.paired()} phone(s) paired',
     )
+    ..writeln(_localRelayLine(companionServing ? companion : null))
     // Said out loud: coming back with nothing and coming back with four dead
     // sessions are different situations.
     ..writeln(
@@ -1166,6 +1172,20 @@ Future<DaemonAutomations?> _startAutomations({
     errSink.writeln('karmashala_host: automations did not start ($error)');
     return null;
   }
+}
+
+/// What the greeting says of the LAN relay this server hosts.
+String _localRelayLine(DaemonCompanion? companion) {
+  if (companion == null || !companion.localRelayEnabled) {
+    return 'local relay off (companion.localRelay in server.json)';
+  }
+  final status = companion.localRelayStatus;
+  return switch (status.state) {
+    LocalRelayState.running =>
+      'local relay on ${status.primaryUrl ?? 'port ${status.boundPort}'}',
+    LocalRelayState.error => 'local relay failed: ${status.error}',
+    LocalRelayState.stopped => 'local relay stopped (phones are not served)',
+  };
 }
 
 /// Starts serving phones. False, reported, when it cannot: sessions do not

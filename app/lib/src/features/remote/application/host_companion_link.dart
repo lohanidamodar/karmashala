@@ -1,7 +1,7 @@
-/// This app's half of the phone companion the server serves: where the app's
-/// embedded relay listens, the pairing windows it opens, and the server
-/// config calls (`server.config.get` / `set`). Every phone call is the
-/// server's own (slice 5c): nothing is answered here.
+/// This app's half of the phone companion the server serves: the pairing
+/// windows it opens and the server config calls (`server.config.get` /
+/// `set`). Every phone call is the server's own (slice 5c), and so is the LAN
+/// relay phones meet it at: nothing is answered or served here.
 library;
 
 import 'dart:async';
@@ -34,7 +34,6 @@ class HostCompanionLink implements HostCompanionPeer {
 
   HostLifecycleFeed? _feed;
   StreamSubscription<CompanionEventMessage>? _events;
-  String? _localRelayUrl;
   final Map<int, Completer<PairedDevice>> _pairings = {};
 
   /// Whether a link to the host is open, so pairing can be asked for.
@@ -46,7 +45,6 @@ class HostCompanionLink implements HostCompanionPeer {
     _feed = feed;
     _events = feed.companionEvents.listen(_onEvent);
     // Every link, not just the first: the host may be a new one.
-    feed.attachCompanion(localRelayUrl: _localRelayUrl);
     onAttached?.call();
   }
 
@@ -55,15 +53,6 @@ class HostCompanionLink implements HostCompanionPeer {
     _stopListening();
     _feed = null;
     _failPairings('the session host went away before a phone paired');
-  }
-
-  /// Where this app's embedded relay listens from now on (null: none) — sent
-  /// at once when a link is open, and on every link after.
-  void setLocalRelay(Uri? localRelay) {
-    final url = localRelay?.toString();
-    if (url == _localRelayUrl) return;
-    _localRelayUrl = url;
-    _feed?.attachCompanion(localRelayUrl: _localRelayUrl);
   }
 
   /// Asks the server one administrative question (`ServerMethod`). Throws

@@ -40,9 +40,7 @@ void main() {
   setUp(() {
     host = FakeHostLifecycle();
     recorded = {};
-    link = HostCompanionLink(
-      deviceById: (id) async => recorded[id],
-    );
+    link = HostCompanionLink(deviceById: (id) async => recorded[id]);
   });
 
   Future<HostLifecycleFeed> attach() async {
@@ -52,25 +50,18 @@ void main() {
   }
 
   group('the link', () {
-    test(
-      'attaches as the app on every link, with its embedded relay',
-      () async {
-        link.setLocalRelay(Uri.parse('ws://192.168.1.4:8787'));
-        expect(host.companionAttaches, isEmpty, reason: 'no link yet');
-
-        await attach();
-        expect(host.companionAttaches.single, 'ws://192.168.1.4:8787');
-
-        link.setLocalRelay(null);
-        expect(host.companionAttaches.last, isNull, reason: 'told at once');
-        link.setLocalRelay(null);
-        expect(host.companionAttaches, hasLength(2), reason: 'nothing moved');
-
-        link.detached();
-        await attach();
-        expect(host.companionAttaches, hasLength(3));
-      },
-    );
+    test('a link opening asks the settings again, on every link', () async {
+      var attached = 0;
+      link = HostCompanionLink(
+        deviceById: (id) async => recorded[id],
+        onAttached: () => attached++,
+      );
+      await attach();
+      expect(attached, 1);
+      link.detached();
+      await attach();
+      expect(attached, 2, reason: 'the host may be a new one');
+    });
 
     test('asks the server over the link, and says so with no link', () async {
       await expectLater(
@@ -190,8 +181,7 @@ void main() {
       await attach();
     });
 
-    tearDown(() async {
-      await controller.shutdown();
+    tearDown(() {
       container.dispose();
     });
 
@@ -226,6 +216,23 @@ void main() {
       await controller.setRemoteAccess(hostedEnabled: false);
       expect(server.config.relayEnabled, isFalse);
       expect(container.read(remoteAccessSettingsProvider).relayEnabled, false);
+    });
+
+    test('the local relay and its port are the server config: the app runs '
+        'no relay of its own', () async {
+      await controller.setRemoteAccess(enabled: true);
+      expect(server.config.localRelay, isNull, reason: 'off until asked');
+
+      await controller.setRemoteAccess(localRelay: true);
+      expect(server.config.localRelay, isTrue);
+      expect(container.read(remoteAccessSettingsProvider).localRelay, isTrue);
+
+      await controller.setRemoteAccess(localRelayPort: 9797);
+      expect(server.config.localRelayPort, 9797);
+      expect(container.read(remoteAccessSettingsProvider).localRelayPort, 9797);
+
+      await controller.setRemoteAccess(localRelay: false);
+      expect(server.config.localRelay, isFalse);
     });
 
     test('a link attaching reads what the server serves by again', () async {

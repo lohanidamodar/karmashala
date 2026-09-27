@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/remote/presentation/remote_access_section.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_notice.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../support/memory_server_config.dart';
@@ -68,13 +66,7 @@ void main() {
   testWidgets('Remote access says "no relay" with the shared notice', (
     tester,
   ) async {
-    final container = ProviderContainer(
-      overrides: [
-        localRelayStatusProvider.overrideWithValue(
-          const LocalRelayStatus.stopped(),
-        ),
-      ],
-    );
+    final container = ProviderContainer();
     addTearDown(container.dispose);
     setRemoteAccessNow(container, enabled: true);
     setRemoteAccessNow(container, hostedEnabled: false);

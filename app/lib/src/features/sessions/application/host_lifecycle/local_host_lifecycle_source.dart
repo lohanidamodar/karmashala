@@ -30,7 +30,6 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       hookSnapshot: [for (final hook in watch.hookSnapshot) _hookOf(hook)],
       hooks: watch.hooks.map(_hookOf),
       companionEvents: watch.companionEvents,
-      attachCompanion: watch.attachCompanion,
       serverCall: watch.serverCall,
       noticeCompanion: watch.noticeCompanion,
       pairCompanion: watch.pairCompanion,

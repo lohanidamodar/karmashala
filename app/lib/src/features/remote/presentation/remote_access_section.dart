@@ -5,18 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_section.dart';
 import 'package:karmashala_core/logging.dart';
 
-import '../application/relay_prefs.dart';
 import '../application/remote_access_controller.dart';
 import '../application/remote_access_settings.dart';
 import '../application/remote_providers.dart';
 import '../application/ssh_relays.dart';
 import 'package:karmashala_remote/remote.dart';
-import '../relay_local/local_relay_providers.dart';
-import '../relay_local/local_relay_service.dart';
 import 'device_permissions_dialog.dart';
 import 'pairing_dialog.dart';
 import 'rename_device_dialog.dart';
@@ -26,9 +22,9 @@ import '../../settings/presentation/settings_row.dart';
 
 /// Settings → Remote access: the enable switch, the local and hosted relays,
 /// the relays on SSH hosts, the paired devices with last-seen and revoke, and
-/// the pairing button. The switch, the internet relay and its URL are this
-/// machine's server config (`server.json`), read and written through the
-/// server; the local relay is this app's own listener.
+/// the pairing button. Every switch here is this machine's server config
+/// (`server.json`), read and written through the server — the local relay
+/// too, which the server hosts itself so phones reach it with the app closed.
 class RemoteAccessSection extends ConsumerStatefulWidget {
   const RemoteAccessSection({super.key});
 
@@ -46,8 +42,9 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
   @override
   void initState() {
     super.initState();
-    _relay.text = _relayText(ref.read(remoteAccessSettingsProvider));
-    _port.text = '${ref.read(settingsControllerProvider).localRelayPort}';
+    final access = ref.read(remoteAccessSettingsProvider);
+    _relay.text = _relayText(access);
+    _port.text = '${access.localRelayPort}';
   }
 
   /// The URL field's text: empty for the PopupBits relay, as its hint says.
@@ -62,6 +59,8 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
     bool? enabled,
     bool? hostedEnabled,
     String? relayUrl,
+    bool? localRelay,
+    int? localRelayPort,
   }) async {
     try {
       await ref
@@ -70,6 +69,8 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
             enabled: enabled,
             hostedEnabled: hostedEnabled,
             relayUrl: relayUrl,
+            localRelay: localRelay,
+            localRelayPort: localRelayPort,
           );
     } on Object catch (error, stack) {
       _log.warning('Remote access settings were not changed.', error, stack);
@@ -85,12 +86,9 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
 
   void _setEnabled(bool value) => unawaited(_change(enabled: value));
 
-  /// Start/stop the embedded relay. Persisted, so it auto-starts with remote
-  /// access on later launches; the hosted relay is untouched by this.
-  void _setLocalEnabled(bool value) {
-    ref.read(relayPrefsProvider.notifier).setLocalEnabled(value);
-    ref.read(remoteAccessControllerProvider).sync();
-  }
+  /// Start/stop the server's LAN relay. The server keeps it running with or
+  /// without this app; the hosted relay is untouched by this.
+  void _setLocalEnabled(bool value) => unawaited(_change(localRelay: value));
 
   /// Turn the hosted relay on or off. Its devices park while it is off.
   void _setHostedEnabled(bool value) =>
@@ -106,15 +104,14 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
 
   /// The local port, applied when editing ends; junk snaps back.
   void _applyPort() {
-    final settings = ref.read(settingsControllerProvider);
+    final current = ref.read(remoteAccessSettingsProvider).localRelayPort;
     final parsed = int.tryParse(_port.text.trim());
     if (parsed == null || parsed < 1 || parsed > 65535) {
-      _port.text = '${settings.localRelayPort}';
+      _port.text = '$current';
       return;
     }
-    if (parsed == settings.localRelayPort) return;
-    ref.read(settingsControllerProvider.notifier).setLocalRelayPort(parsed);
-    ref.read(remoteAccessControllerProvider).sync();
+    if (parsed == current) return;
+    unawaited(_change(localRelayPort: parsed));
   }
 
   @override
@@ -123,18 +120,18 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
     // What the server decided replaces the field's text — read late, or
     // changed from elsewhere — unless the person is typing in it.
     ref.listen(remoteAccessSettingsProvider, (previous, next) {
+      if (previous?.localRelayPort != next.localRelayPort) {
+        _port.text = '${next.localRelayPort}';
+      }
       final text = _relayText(next);
       if (previous != null && _relayText(previous) == text) return;
       _relay.text = text;
     });
-    final prefs = ref.watch(relayPrefsProvider);
     final devices = ref.watch(pairedDevicesProvider);
     final sshRelays = ref.watch(sshRelaysProvider);
     // A device is parked while the relay it was paired through is off: the
     // row says so instead of leaving "last seen" to imply it is served.
-    final localLive =
-        prefs.localEnabled &&
-        ref.watch(localRelayStatusProvider).state == LocalRelayState.running;
+    final localLive = access.localRelay && access.localRelayReport.running;
 
     return SettingsSection(
       title: 'REMOTE ACCESS',
@@ -150,7 +147,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
           if (access.enabled) ...[
             const SizedBox(height: Insets.sm),
             _RelaySwitches(
-              prefs: prefs,
+              access: access,
               hostedEnabled: access.relayEnabled,
               port: _port,
               relay: _relay,
@@ -195,7 +192,7 @@ SshRelayEntry? _sshRelayOf(PairedDevice device, List<SshRelayEntry> relays) {
 /// served on whichever one it was paired through.
 class _RelaySwitches extends StatelessWidget {
   const _RelaySwitches({
-    required this.prefs,
+    required this.access,
     required this.hostedEnabled,
     required this.port,
     required this.relay,
@@ -205,7 +202,8 @@ class _RelaySwitches extends StatelessWidget {
     required this.onRelayDone,
   });
 
-  final RelayPrefs prefs;
+  /// The server's config, the local relay's switch and report among it.
+  final RemoteAccessSettings access;
 
   /// Whether the internet relay is served — the server's config.
   final bool hostedEnabled;
@@ -227,11 +225,11 @@ class _RelaySwitches extends StatelessWidget {
         SettingsSwitchRow(
           label: 'Local relay (this computer)',
           help: 'For phones on the same network.',
-          value: prefs.localEnabled,
+          value: access.localRelay,
           onChanged: onLocalChanged,
         ),
-        if (prefs.localEnabled) ...[
-          const _LocalRelayStatusRow(),
+        if (access.localRelay) ...[
+          _LocalRelayStatusRow(report: access.localRelayReport),
           const SizedBox(height: Insets.sm),
           Align(
             alignment: Alignment.centerLeft,
@@ -270,7 +268,7 @@ class _RelaySwitches extends StatelessWidget {
             onSubmitted: (_) => onRelayDone(),
             onEditingComplete: onRelayDone,
           ),
-        if (!prefs.localEnabled && !hostedEnabled)
+        if (!access.localRelay && !hostedEnabled)
           const Padding(
             padding: EdgeInsets.only(top: Insets.xs),
             child: SettingsNotice(
@@ -347,50 +345,50 @@ class _PairedDevicesList extends StatelessWidget {
   }
 }
 
-/// What the embedded relay is doing: the ws URL a phone dials, the other
-/// addresses, the bind error with a retry, and the firewall hint.
+/// What the server's LAN relay is doing, as the server last said: the ws URL
+/// a phone dials, the other addresses, the bind error with a retry, and the
+/// firewall hint.
 class _LocalRelayStatusRow extends ConsumerWidget {
-  const _LocalRelayStatusRow();
+  const _LocalRelayStatusRow({required this.report});
+
+  final LocalRelayReport report;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final status = ref.watch(localRelayStatusProvider);
-    final primary = status.primaryUrl;
+    final status = report;
+    final primary = status.url;
 
     final (
       IconData icon,
       SettingsNoticeTone tone,
       String message,
     ) = switch (status.state) {
-      LocalRelayState.running when primary != null => (
+      LocalRelayRunState.running when primary != null => (
         AppIcons.checkCircle,
         SettingsNoticeTone.positive,
         'Relay running at $primary',
       ),
-      LocalRelayState.running => (
+      LocalRelayRunState.running => (
         AppIcons.warningCircle,
         SettingsNoticeTone.danger,
-        'Relay running on port ${status.boundPort}, but this computer has '
+        'Relay running on port ${status.port}, but this computer has '
             'no local network address a phone could dial.',
       ),
-      LocalRelayState.error => (
+      LocalRelayRunState.error => (
         AppIcons.warningCircle,
         SettingsNoticeTone.danger,
         'Local relay: ${status.error}',
       ),
-      LocalRelayState.stopped => (
+      LocalRelayRunState.stopped || LocalRelayRunState.unknown => (
         AppIcons.pauseCircle,
         SettingsNoticeTone.neutral,
         'Local relay is starting…',
       ),
     };
 
-    final others = [
-      for (final endpoint in status.endpoints)
-        if (!endpoint.primary) '${endpoint.url}',
-    ];
+    final others = [for (final url in status.otherUrls) '$url'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,10 +397,16 @@ class _LocalRelayStatusRow extends ConsumerWidget {
           tone: tone,
           icon: icon,
           message: message,
-          action: status.state == LocalRelayState.error
+          action: status.state == LocalRelayRunState.error
               ? TextButton(
-                  onPressed: () =>
-                      ref.read(remoteAccessControllerProvider).sync(),
+                  // Applies the server's config again, which retries the
+                  // bind, and shows how that went.
+                  onPressed: () => unawaited(
+                    ref
+                        .read(remoteAccessControllerProvider)
+                        .setRemoteAccess(localRelay: true)
+                        .catchError((Object _) {}),
+                  ),
                   child: const Text('Retry'),
                 )
               : null,

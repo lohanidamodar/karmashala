@@ -5,6 +5,7 @@
 library;
 
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
+import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,5 +64,56 @@ void main() {
     expect(endpoints, hasLength(2));
     expect(endpoints.first, local, reason: 'value equality is part of the pin');
     expect(endpoints.first.kind, PairingRelayKind.local);
+  });
+
+  group('the server\'s local relay', () {
+    final running = LocalRelayReport(
+      state: LocalRelayRunState.running,
+      url: Uri.parse('ws://192.168.1.4:8787'),
+      port: 8787,
+    );
+
+    test('is offered first, at the address the server reports, while it '
+        'runs', () {
+      setRemoteAccessNow(
+        container,
+        enabled: true,
+        localRelay: true,
+        localRelayReport: running,
+      );
+
+      final endpoints = container.read(pairingRelayEndpointsProvider);
+      expect(endpoints.map((e) => e.kind), [
+        PairingRelayKind.local,
+        PairingRelayKind.internet,
+      ]);
+      expect(endpoints.first.label, 'Local network');
+      expect(endpoints.first.url, Uri.parse('ws://192.168.1.4:8787'));
+    });
+
+    test('is not offered while it is switched off, failed or unreported: '
+        'nobody would be waiting there', () {
+      for (final (on, report) in [
+        (false, running),
+        (true, const LocalRelayReport(state: LocalRelayRunState.error)),
+        (true, LocalRelayReport.unknown),
+      ]) {
+        setRemoteAccessNow(
+          container,
+          enabled: true,
+          localRelay: on,
+          localRelayReport: report,
+        );
+        expect(
+          container.read(pairingRelayEndpointsProvider).map((e) => e.kind),
+          [PairingRelayKind.internet],
+        );
+      }
+    });
+
+    test('with every relay off nothing is offered', () {
+      setRemoteAccessNow(container, enabled: true, hostedEnabled: false);
+      expect(container.read(pairingRelayEndpointsProvider), isEmpty);
+    });
   });
 }

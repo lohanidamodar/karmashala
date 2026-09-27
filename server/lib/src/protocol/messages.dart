@@ -21,7 +21,8 @@ part 'stop_messages.dart';
 /// 28: slice 5b (sessions and every agent-facing MCP tool at the server,
 /// which asks windows through `ClientIntent`s; 0x1d–0x1f retired — nothing
 /// agent-facing is forwarded to an app).
-const int kProtocolVersion = 28;
+/// 29: the LAN relay in the server (0x20 `companionAttach` retired).
+const int kProtocolVersion = 29;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -746,8 +747,9 @@ class PairMessage extends HostMessage {
   /// Empty for a box with an address of its own, which is most of them.
   final String relay;
 
-  /// Whether [relay] is the desktop app's own embedded relay, which the row
-  /// then names by its marker rather than a LAN address that will change.
+  /// Whether the pairing is met at the server's own LAN relay (wherever it
+  /// listens now; [relay] is then ignored), which the row names by its
+  /// marker rather than a LAN address that will change.
   final bool relayIsLocal;
 
   /// What the device that pairs through this window is called on this host,
@@ -892,7 +894,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.watching => WatchingMessage.decode(frame),
   MessageType.lifecycle => LifecycleMessage.decode(frame),
   MessageType.hook => HookMessage.decode(frame),
-  MessageType.companionAttach => CompanionAttachMessage.decode(frame),
   MessageType.companionNotice => CompanionNoticeMessage.decode(frame),
   MessageType.companionEvent => CompanionEventMessage.decode(frame),
   MessageType.agentStatus => AgentStatusMessage.decode(frame),

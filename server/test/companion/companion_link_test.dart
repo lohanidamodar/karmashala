@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
+import 'package:karmashala_remote/pairing.dart' show PairingPayload;
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
@@ -12,14 +13,15 @@ import '../serve/pipe_connection.dart';
 T roundTrip<T extends HostMessage>(T message) =>
     decodeMessage(FrameParser().add(message.toFrame().encode()).single) as T;
 
-/// A desktop's side of the companion over the host protocol (slice 5c): its
-/// lifecycle link says where its embedded relay listens, and carries pairing
-/// and the pairing dialog closing — nothing else. Every phone call is the
-/// server's to answer, a desktop attached or not. How phones are served is
+/// A desktop's side of the companion over the host protocol (slice 5c, and
+/// protocol 29): its lifecycle link carries pairing and the pairing dialog
+/// closing — nothing else. Every phone call is the server's to answer, and the
+/// LAN relay phones meet it at is the server's own. How phones are served is
 /// the server's config, never the link's.
 void main() {
   group('the companion frames survive the wire', () {
-    test('forwarded calls and their answers are retired', () {
+    test('forwarded calls and their answers are retired, and the attach', () {
+      expect(MessageType.fromCode(0x20), isNull);
       expect(MessageType.fromCode(0x21), isNull);
       expect(MessageType.fromCode(0x22), isNull);
     });
@@ -42,14 +44,6 @@ void main() {
       );
       expect(event.kind, CompanionEventKind.pairingEnded);
       expect((event.requestId, event.error), (9, 'expired'));
-    });
-
-    test('the attach, with and without an embedded relay', () {
-      final back = roundTrip(
-        const CompanionAttachMessage(localRelayUrl: 'ws://192.168.1.4:8787'),
-      );
-      expect(back.localRelayUrl, 'ws://192.168.1.4:8787');
-      expect(roundTrip(const CompanionAttachMessage()).localRelayUrl, isNull);
     });
   });
 
@@ -92,10 +86,9 @@ void main() {
     Future<void> settle() =>
         Future<void>.delayed(const Duration(milliseconds: 20));
 
-    test('a desktop attached changes nobody\'s answer: the server gives '
+    test('a desktop linked changes nobody\'s answer: the server gives '
         'its own', () async {
       final before = await companion.bindings.listSessions();
-      watch.attachCompanion();
       await settle();
       // Nothing reaches the desktop: the answer is the server's, the same.
       expect(
@@ -108,25 +101,37 @@ void main() {
       expect(await companion.bindings.listSessions(), isEmpty);
     });
 
-    test('the embedded relay is served while the app is attached', () async {
-      watch.attachCompanion(localRelayUrl: 'ws://127.0.0.1:8787');
-      await settle();
-      expect(companion.config.localRelayUrl, Uri.parse('ws://127.0.0.1:8787'));
-      expect(companion.config.enabled, isTrue, reason: 'the server config');
+    test('the local relay is the server\'s: a pairing is met there, and it '
+        'outlives the desktop\'s link', () async {
+      await companion.reconfigure(
+        config: const CompanionConfig(enabled: true),
+        lanAddress: '127.0.0.1',
+        lanPort: 0,
+        localRelayEnabled: true,
+        // Never 8787 in a test: the owner's own server may hold it.
+        localRelayPort: 0,
+      );
+      final url = companion.localRelayStatus.primaryUrl!;
+      expect(url.host, '127.0.0.1');
+      expect(companion.config.localRelayUrl, url);
+
+      final window = await watch.pairCompanion(
+        capabilities: CapabilitySet.all.bits,
+        relayIsLocal: true,
+      );
+      expect(PairingPayload.decode(window.payload).relay, url);
 
       await watch.close();
       await settle();
       expect(
         companion.config.localRelayUrl,
-        isNull,
-        reason: 'it closed with the app',
+        url,
+        reason: 'no desktop link holds it open',
       );
+      expect(companion.localRelayStatus.running, isTrue);
     });
 
     test('a pairing window is opened, drawn and ended', () async {
-      watch.attachCompanion();
-      await settle();
-
       final window = await watch.pairCompanion(
         capabilities: CapabilitySet.all.bits,
       );
@@ -151,8 +156,6 @@ void main() {
         lanAddress: '127.0.0.1',
         lanPort: 0,
       );
-      watch.attachCompanion();
-      await settle();
 
       await expectLater(
         watch.pairCompanion(capabilities: CapabilitySet.all.bits),

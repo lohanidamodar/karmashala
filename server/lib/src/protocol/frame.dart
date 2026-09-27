@@ -54,14 +54,14 @@ enum MessageType {
   // forwarded to the app) are retired in protocol 28 — the server runs every
   // agent-facing tool itself and asks a window only through a `ClientIntent`
   // on the data channel (slice 5b).
-  // Protocol 4: the daemon serves the phone companion. client → host: where
-  // the desktop's embedded relay listens (protocol 10 — how phones are
-  // served is the server's `server.json`, never sent on a link); client →
-  // host: the pairing dialog closed; host → client: a pairing window ended.
+  // Protocol 4: the daemon serves the phone companion. client → host: the
+  // pairing dialog closed; host → client: a pairing window ended. How phones
+  // are served is the server's `server.json`, never sent on a link.
+  // 0x20 (`companionAttach`: where the app's embedded relay listened) is
+  // retired in protocol 29 — the server hosts the LAN relay itself.
   // 0x21–0x22 (`companionCall`, `companionResult`: calls forwarded to the
   // app) are retired in protocol 27 — the server answers every phone call
   // itself (slice 5c).
-  companionAttach(0x20),
   companionNotice(0x23),
   companionEvent(0x24),
   // 0x25, 0x27–0x2a (protocol 5: `automationNotice`, `automationCall`,

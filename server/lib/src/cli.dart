@@ -44,6 +44,7 @@ const _configValueFlags = {
   'relay',
   'relay-token',
   'extra-relay',
+  'local-relay-port',
   'mcp-port',
 };
 const _configSwitches = {
@@ -55,6 +56,8 @@ const _configSwitches = {
   'no-notes',
   'relay-enabled',
   'no-relay-enabled',
+  'local-relay',
+  'no-local-relay',
 };
 
 const _configFlagsUsage = '''
@@ -65,6 +68,8 @@ const _configFlagsUsage = '''
   --relay-token=<t>       that relay's token (32+ url-safe characters)
   --[no-]relay-enabled    serve through --relay (default on); off keeps it
   --extra-relay=<url>     another relay, repeatable
+  --[no-]local-relay      run this server's own LAN relay at --bind (default off)
+  --local-relay-port=<n>  that relay's port (default 8787)
   --[no-]beacon           announce on the LAN (default off)
   --[no-]notes            phone notes (default on)
   --[no-]companion        serve phones at all (default off)

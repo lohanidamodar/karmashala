@@ -73,12 +73,6 @@ class HostLifecycleWatch {
   /// client opened ended.
   Stream<CompanionEventMessage> get companionEvents => _companionEvents.stream;
 
-  /// Tells the host this client's embedded relay listens at [localRelayUrl]
-  /// (null: none), for as long as this link is open. How phones are served is
-  /// the server's config: [serverCall] `server.config.set` changes it.
-  void attachCompanion({String? localRelayUrl}) =>
-      _write(CompanionAttachMessage(localRelayUrl: localRelayUrl));
-
   /// Asks the server one administrative question (`ServerMethod`) and
   /// completes with its answer. Throws [HostLifecycleWatchRefused] with the
   /// server's reason when it refuses, or when the link closes first.

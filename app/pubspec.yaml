@@ -186,13 +186,6 @@ dependencies:
     path: ../packages/karmashala_agent_status
   karmashala_local_ipc:
     path: ../packages/local_ipc
-  # The relay server itself, embedded in the desktop app so "This computer
-  # (local network)" needs nothing hosted; also started in-process by tests.
-  karmashala_relay:
-    path: ../relay
-  # The relay's contract: its default port and close codes.
-  karmashala_relay_protocol:
-    path: ../relay/protocol
   # End-to-end sealing for the mobile companion (XChaCha20-Poly1305, HKDF).
   cryptography: ^2.9.0
   dartssh2: ^4.1.0
@@ -299,6 +292,11 @@ dev_dependencies:
   # Read back what the launch-at-login writes, in
   # test/features/system/launch_at_startup_windows_test.dart.
   win32_registry: ^3.0.3
+  # A real relay the companion suites pair and talk through, in-process. The
+  # LAN relay phones meet a machine at is the server's (`karmashala_host`),
+  # never the app's.
+  karmashala_relay:
+    path: ../relay
 
 # App icons: `flutter test tool/icon/render_icons.dart` draws the mark and its
 # Android layers, then `dart run flutter_launcher_icons` fans them out to every

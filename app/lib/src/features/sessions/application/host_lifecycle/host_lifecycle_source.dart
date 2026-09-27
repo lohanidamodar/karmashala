@@ -15,7 +15,6 @@ class HostLifecycleFeed {
     this.hookSnapshot = const [],
     Stream<RelayedAgentHook>? hooks,
     Stream<CompanionEventMessage>? companionEvents,
-    void Function({String? localRelayUrl})? attachCompanion,
     void Function(CompanionNoticeMessage notice)? noticeCompanion,
     CompanionPair? pairCompanion,
     this.statusSnapshot = const [],
@@ -27,7 +26,6 @@ class HostLifecycleFeed {
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
        companionEvents = companionEvents ?? const Stream.empty(),
-       attachCompanion = attachCompanion ?? _noAttach,
        serverCall = serverCall ?? _noServerCalls,
        noticeCompanion = noticeCompanion ?? _noNotice,
        pairCompanion = pairCompanion ?? _noPairing;
@@ -48,7 +46,6 @@ class HostLifecycleFeed {
   final Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)
   answerPrompt;
 
-  static void _noAttach({String? localRelayUrl}) {}
   static Future<Map<String, Object?>> _noServerCalls(
     String method, [
     Map<String, Object?> arguments = const {},
@@ -73,11 +70,6 @@ class HostLifecycleFeed {
 
   /// What the host's companion tells this app: a pairing window ended.
   final Stream<CompanionEventMessage> companionEvents;
-
-  /// Tells the host this app's embedded relay listens at `localRelayUrl`
-  /// (null: none) while this link is open. How phones are served is the
-  /// server's own config — [serverCall] `server.config.set`.
-  final void Function({String? localRelayUrl}) attachCompanion;
 
   /// Asks the server one administrative question (`ServerMethod`): its config,
   /// its agent CLIs. Throws with the server's reason when it refuses.

@@ -3,37 +3,10 @@ part of 'messages.dart';
 // The companion in the daemon (protocol 4). Since protocol 27 (slice 5c) the
 // server answers every phone call itself, app or no app: nothing is
 // forwarded (`companionCall` 0x21 and `companionResult` 0x22 are retired).
-// What stays on the desktop's link is where its embedded relay listens, the
-// pairing window it opened, and that window closing. JSON inside a
+// Since protocol 29 the LAN relay is the server's own too (`companionAttach`
+// 0x20, where the app's embedded relay listened, is retired). What stays on a
+// client's link is the pairing window it opened and that window closing. JSON inside a
 // length-prefixed string, like the lifecycle feed.
-
-/// client → host: this desktop's embedded relay listens at [localRelayUrl]
-/// (null: it runs none). Sent on every link and again when the embedded relay
-/// moves; the relay closes with the desktop, so the server serves through it
-/// only while this link is open. How phones are served is not here: that is
-/// the server's `server.json`, changed with `server.config.set`.
-class CompanionAttachMessage extends HostMessage {
-  const CompanionAttachMessage({this.localRelayUrl});
-
-  final String? localRelayUrl;
-
-  @override
-  Frame toFrame() => Frame(
-    MessageType.companionAttach,
-    0,
-    (WireWriter()..str(jsonEncode({'localRelayUrl': ?localRelayUrl}))).take(),
-  );
-
-  static CompanionAttachMessage decode(Frame frame) {
-    final map = _object(
-      _decodeJson(WireReader(frame.payload).str()),
-      'companion attach',
-    );
-    return CompanionAttachMessage(
-      localRelayUrl: _optional<String>(map, 'localRelayUrl'),
-    );
-  }
-}
 
 /// What a desktop tells the host's companion. Attention, approvals and
 /// session lists are the server's own since slice 5c; only the pairing

@@ -40,8 +40,7 @@ class HostServer {
   final LifecycleFeed lifecycle;
   final String ptyLibrary;
 
-  /// The phone companion: pairing windows and where a desktop's embedded
-  /// relay listens.
+  /// The phone companion: the pairing windows a client opens and closes.
   ///
   /// Injected rather than built here, because it needs a store and listeners
   /// and this class needs neither — and a `serve` that was started without a
@@ -148,7 +147,6 @@ class _ClientSession {
     _data?.close();
     _streams?.closeAll();
     await _lifecycleWatch?.cancel();
-    await _server.companion?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
     await _connection.close();
@@ -302,12 +300,6 @@ class _ClientSession {
           message.requestId,
           _send,
           runByClient: message.runByClient,
-        );
-      case CompanionAttachMessage(:final localRelayUrl):
-        await _server.companion?.adopt(
-          this,
-          localRelayUrl == null ? null : Uri.tryParse(localRelayUrl),
-          _send,
         );
       case CompanionNoticeMessage():
         await _server.companion?.notice(this, message);

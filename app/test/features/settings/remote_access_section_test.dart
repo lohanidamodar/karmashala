@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/application/pairing_in_progress.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
@@ -11,9 +10,6 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala/src/features/remote/presentation/remote_access_section.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
-import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,44 +72,32 @@ void main() {
     server = MemoryServerConfigSource();
   });
 
-  Widget app({
-    LocalRelayStatus relayStatus = const LocalRelayStatus.stopped(),
-  }) => ProviderScope(
-    overrides: [
-      dataClientProvider.overrideWithValue(dataClient),
-      serverConfigIn(server),
-      localRelayStatusProvider.overrideWithValue(relayStatus),
-      remoteAccessControllerProvider.overrideWith((ref) {
-        fake = _FakeAccess(ref);
-        return fake;
-      }),
-    ],
-    child: const MaterialApp(
-      home: Scaffold(body: SingleChildScrollView(child: RemoteAccessSection())),
-    ),
-  );
+  /// [relayStatus] is what the server reports of its LAN relay.
+  Widget app({LocalRelayReport relayStatus = const LocalRelayReport()}) =>
+      ProviderScope(
+        overrides: [
+          dataClientProvider.overrideWithValue(dataClient),
+          serverConfigIn(server..localRelayReport = relayStatus),
+          remoteAccessControllerProvider.overrideWith((ref) {
+            fake = _FakeAccess(ref);
+            return fake;
+          }),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: RemoteAccessSection()),
+          ),
+        ),
+      );
 
-  /// A relay running at a primary LAN URL plus one virtual-adapter address.
-  LocalRelayStatus running({bool firewallHint = false}) => LocalRelayStatus(
-    state: LocalRelayState.running,
-    boundPort: 8787,
+  /// The server's relay running at a primary LAN URL plus one
+  /// virtual-adapter address.
+  LocalRelayReport running({bool firewallHint = false}) => LocalRelayReport(
+    state: LocalRelayRunState.running,
+    port: 8787,
     firewallHint: firewallHint,
-    endpoints: const [
-      LocalRelayEndpoint(
-        ip: '192.168.1.7',
-        interfaceName: 'Wi-Fi',
-        port: 8787,
-        primary: true,
-        reachable: true,
-      ),
-      LocalRelayEndpoint(
-        ip: '172.22.32.1',
-        interfaceName: 'vEthernet (WSL)',
-        port: 8787,
-        primary: false,
-        reachable: true,
-      ),
-    ],
+    url: Uri.parse('ws://192.168.1.7:8787'),
+    otherUrls: [Uri.parse('ws://172.22.32.1:8787')],
   );
 
   PairedDevice device({
@@ -269,17 +253,18 @@ void main() {
     expect(find.text('Port'), findsNothing);
   });
 
-  testWidgets('turning the local relay on persists it and shows its URL — '
-      'the hosted one keeps running', (tester) async {
+  testWidgets('turning the local relay on writes the server config and shows '
+      'where the server\'s relay runs — the hosted one keeps running', (
+    tester,
+  ) async {
     await tester.pumpWidget(app(relayStatus: running()));
     await enableRemoteAccess(tester);
 
     await toggleRelay(tester, localTitle);
 
-    // Persisted, so it auto-starts with remote access on later launches.
-    expect(RelayPrefsController.readFrom(data.store)!.localEnabled, isTrue);
+    // The server's config: it runs the relay, app or no app.
+    expect(server.config.localRelay, isTrue);
     expect(server.config.relayEnabled ?? true, isTrue);
-    // The controller was woken — that is what auto-starts the local relay.
     expect(fake.syncCalls, 2);
     expect(find.text('Relay running at ws://192.168.1.7:8787'), findsOneWidget);
     expect(
@@ -347,10 +332,7 @@ void main() {
     await toggleRelay(tester, hostedTitle);
 
     expect(server.config.relayEnabled, isFalse);
-    expect(
-      RelayPrefsController.readFrom(data.store)?.localEnabled ?? false,
-      isFalse,
-    );
+    expect(server.config.localRelay ?? false, isFalse);
     expect(find.textContaining('No relay is switched on'), findsOneWidget);
     expect(find.text('Relay URL'), findsNothing);
     expect(find.text('Port'), findsNothing);
@@ -374,13 +356,12 @@ void main() {
     );
   });
 
-  testWidgets('a bind failure shows the reason and Retry resyncs', (
-    tester,
-  ) async {
+  testWidgets('a bind failure shows the server\'s reason and Retry asks it '
+      'again', (tester) async {
     await tester.pumpWidget(
       app(
-        relayStatus: const LocalRelayStatus(
-          state: LocalRelayState.error,
+        relayStatus: const LocalRelayReport(
+          state: LocalRelayRunState.error,
           error: 'port 8787 is already in use by another program',
         ),
       ),
@@ -393,10 +374,13 @@ void main() {
       findsOneWidget,
     );
 
-    final calls = fake.syncCalls;
+    // The server retries the bind whenever its config is applied: Retry
+    // applies it again.
+    final writes = server.patches.length;
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
-    expect(fake.syncCalls, calls + 1);
+    expect(server.patches, hasLength(writes + 1));
+    expect(server.patches.last['companion'], containsPair('localRelay', true));
   });
 
   testWidgets('a refused firewall rule becomes the Defender hint', (
@@ -409,9 +393,8 @@ void main() {
     expect(find.textContaining('Windows Defender Firewall'), findsOneWidget);
   });
 
-  testWidgets('the port field persists when editing ends; junk snaps back', (
-    tester,
-  ) async {
+  testWidgets('the port is written to the server config when editing ends; '
+      'junk snaps back', (tester) async {
     await tester.pumpWidget(app(relayStatus: running()));
     await enableRemoteAccess(tester);
     await toggleRelay(tester, localTitle);
@@ -422,14 +405,14 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    expect(SettingsRepository(data.store).load().localRelayPort, 9000);
+    expect(server.config.localRelayPort, 9000);
     expect(fake.syncCalls, greaterThanOrEqualTo(3));
 
     await tester.enterText(find.byType(TextField), 'not a port');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    expect(SettingsRepository(data.store).load().localRelayPort, 9000);
+    expect(server.config.localRelayPort, 9000);
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, '9000');
   });

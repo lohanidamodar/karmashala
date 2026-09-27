@@ -34,6 +34,7 @@ class RemoteHostService {
     List<Uri> extraRelays = const [],
     this.lanPort = kDefaultLanPort,
     this.lanAddress = '0.0.0.0',
+    this.lanHost,
     this.advertise = true,
     this.transcriptPollInterval = const Duration(seconds: 2),
     this.newStreamFlow = StreamFlow.new,
@@ -69,8 +70,8 @@ class RemoteHostService {
   /// pairing with no relay named is a direct one.
   final Uri? relay;
 
-  /// Where the embedded local relay can be dialled right now, or null while
-  /// it is stopped — local-relay devices are parked then.
+  /// Where the local relay can be dialled right now, or null while it is
+  /// stopped — local-relay devices are parked then.
   Uri? _localRelayUrl;
 
   bool _hostedEnabled;
@@ -90,6 +91,10 @@ class RemoteHostService {
   /// server's config says so. The listener carries only the sealed
   /// protocol; this narrows who can knock, not what they can do.
   final Object lanAddress;
+
+  /// The address a phone on this network reaches the LAN listener at, when
+  /// the host knows one without a local relay to read it from.
+  final String? lanHost;
 
   /// Whether to run the multicast beacon. Off in tests — the LAN listener
   /// itself is plain loopback-friendly TCP.
@@ -185,7 +190,7 @@ class RemoteHostService {
   /// multicast; loopback is never announced and DHCP can make it stale.
   String? get lanHint {
     final port = _lanServer?.port;
-    final host = _localRelayUrl?.host;
+    final host = _localRelayUrl?.host ?? lanHost;
     if (port == null || host == null || host.isEmpty) return null;
     if (host == '127.0.0.1' || host == 'localhost' || host == '::1') {
       return null;

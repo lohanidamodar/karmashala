@@ -15,7 +15,8 @@ typedef CompanionPairingWindow = ({
 /// a test hands in a fake.
 abstract interface class CompanionHandler {
   /// Opens a pairing window granting [capabilities], met at [relay] — empty
-  /// for this host's default, or a direct pairing where it has none. A
+  /// for this host's default, or a direct pairing where it has none; with
+  /// [relayIsLocal], at this server's own LAN relay wherever it listens. A
   /// non-empty [label] names the device that pairs through it.
   Future<CompanionPairingWindow> openPairing({
     required int capabilities,
@@ -24,17 +25,6 @@ abstract interface class CompanionHandler {
     String label = '',
   });
 
-  /// [owner] is the desktop app from now on, its embedded relay listening at
-  /// [localRelay] (null: none); frames to it go through [send].
-  Future<void> adopt(
-    Object owner,
-    Uri? localRelay,
-    void Function(HostMessage) send,
-  );
-
   /// News from the desktop.
   Future<void> notice(Object owner, CompanionNoticeMessage notice);
-
-  /// [owner] hung up.
-  Future<void> detach(Object owner);
 }

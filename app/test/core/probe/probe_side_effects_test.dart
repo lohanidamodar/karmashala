@@ -15,10 +15,7 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/application/host_companion_link.dart';
 import 'package:karmashala/src/features/remote/application/host_companion_providers.dart';
-import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
@@ -269,24 +266,15 @@ void main() {
     });
   });
 
-  group('remote access and the local relay', () {
-    late LocalRelayService relay;
+  group('remote access', () {
     late FakeHostLifecycle host;
 
     Future<ProviderContainer> remoteContainer(bool probe) async {
-      relay = LocalRelayService(
-        bindAddress: '127.0.0.1',
-        interfaces: () async => [(name: 'lo', ip: '127.0.0.1')],
-      );
-      addTearDown(relay.stop);
       host = FakeHostLifecycle();
-      final link = HostCompanionLink(
-        deviceById: (_) async => null,
-      );
+      final link = HostCompanionLink(deviceById: (_) async => null);
       final container = containerWith(
         probe: probe,
         extra: [
-          localRelayServiceProvider.overrideWithValue(relay),
           companionAtHostProvider.overrideWithValue(true),
           hostCompanionLinkProvider.overrideWithValue(link),
           remoteAccessControllerProvider.overrideWith(
@@ -298,38 +286,22 @@ void main() {
       return container;
     }
 
-    Future<RemoteAccessController> enableEverything(
-      ProviderContainer container,
-    ) async {
+    // The LAN relay is the server's since protocol 29: no instance of the
+    // app binds a port for phones, probe or not. What is left to keep a
+    // probe from is pairing a phone to the real server.
+    test('a probe cannot pair', () async {
+      final container = await remoteContainer(true);
       final controller = container.read(remoteAccessControllerProvider);
-      addTearDown(controller.shutdown);
       setRemoteAccessNow(container, enabled: true);
-      container.read(settingsControllerProvider.notifier).setLocalRelayPort(0);
-      container.read(relayPrefsProvider.notifier).setLocalEnabled(true);
       await controller.sync();
-      return controller;
-    }
 
-    test('the fixture sees an ordinary instance bind the relay', () async {
-      await enableEverything(await remoteContainer(false));
-
-      expect(relay.isRunning, isTrue);
-      expect(host.companionAttaches.last, isNotNull);
+      expect(
+        () => controller.beginPairing(capabilities: CapabilitySet.all),
+        throwsStateError,
+      );
+      expect(host.pairings, isEmpty);
+      expect(host.serverCalls, isEmpty, reason: 'nothing written to it');
     });
-
-    test(
-      'a probe binds no relay, tells the server none and cannot pair',
-      () async {
-        final controller = await enableEverything(await remoteContainer(true));
-
-        expect(relay.isRunning, isFalse);
-        expect(host.companionAttaches.last, isNull);
-        expect(
-          () => controller.beginPairing(capabilities: CapabilitySet.all),
-          throwsStateError,
-        );
-      },
-    );
   });
 
   group('OS integration', () {

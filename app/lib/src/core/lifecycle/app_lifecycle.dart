@@ -11,7 +11,6 @@ import '../../features/agents/application/agent_path_repair_providers.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/remote/application/remote_access_controller.dart';
-import '../../features/remote/relay_local/local_relay_providers.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
@@ -27,7 +26,7 @@ import 'package:karmashala_core/logging.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
 /// regardless. The sum of the per-step caps: one hang cannot starve the rest.
-const kShutdownBudget = Duration(milliseconds: 3450);
+const kShutdownBudget = Duration(milliseconds: 3250);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -54,8 +53,6 @@ const kShutdownStepBudgets = <String, Duration>{
   'agent hook installation': _kHookStepBudget,
   'agent hook uninstall': _kHookStepBudget,
   'background watchers': _kStepBudget,
-  'remote access': _kStepBudget,
-  'local relay': _kStepBudget,
   'system integration': _kStepBudget,
   'terminal processes': _kTerminalStepBudget,
   'provider teardown': _kContainerStepBudget,
@@ -120,8 +117,8 @@ class AppLifecycle {
       registerOsQuit: registerOsQuit,
       endProcess: endProcess,
     );
-    // Mounting the remote-access controller here is what makes "enabled last
-    // run" mean "listening this run". Off by default, it starts nothing.
+    // Mounting the remote-access controller here keeps the server's config
+    // in step with what only this app knows (its SSH relays, Notes).
     _container.read(remoteAccessControllerProvider);
     _systemIntegration = service;
     _container.read(systemIntegrationProvider.notifier).adopt(service);
@@ -364,21 +361,9 @@ class AppLifecycle {
       }
     });
 
-    // 2c. Remote access: the LAN listener, the beacon and every device channel.
-    //     Closing cleanly lets a phone back off instead of reconnecting forever.
-    await _step('remote access', watch, () async {
-      if (_container.exists(remoteAccessControllerProvider)) {
-        await _container.read(remoteAccessControllerProvider).shutdown();
-      }
-    });
-
-    // 2d. The embedded local relay, after the host service stopped dialling it:
-    //     close the socket so the port is free the moment the app is gone.
-    await _step('local relay', watch, () async {
-      if (_container.exists(localRelayServiceProvider)) {
-        await _container.read(localRelayServiceProvider).stop();
-      }
-    });
+    // Remote access has nothing to close: the phone listener, the beacon,
+    // the LAN relay and every device channel are the server's, and outlive
+    // the app.
 
     // 4. The OS integration: hotkeys, tray, listeners.
     await _step(

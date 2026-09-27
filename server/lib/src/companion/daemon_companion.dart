@@ -38,6 +38,7 @@ import '../status/daemon_prompt_answers.dart';
 import 'companion_handler.dart';
 import 'daemon_session_control.dart';
 import 'daemon_worktrees.dart';
+import 'local_relay.dart';
 import 'registry_screens.dart';
 import 'package:karmashala_session_engine/store.dart';
 
@@ -51,8 +52,10 @@ import 'package:karmashala_session_engine/store.dart';
 /// nothing is forwarded to a desktop). How it serves is the server's own
 /// config (`server.json`, [config]), which the desktop's Remote access
 /// settings write through `server.config.set` and [reconfigure] applies at
-/// once; the only thing a desktop adds is where its embedded relay listens,
-/// while its link is open.
+/// once. That includes the LAN relay phones on this network meet it at
+/// (`companion.localRelay`): the server hosts it itself ([ServerLocalRelay])
+/// and listens through it, so nothing a phone reaches depends on a desktop
+/// app running.
 class DaemonCompanion implements CompanionHandler {
   DaemonCompanion({
     required this.database,
@@ -62,6 +65,10 @@ class DaemonCompanion implements CompanionHandler {
     int lanPort = kHostCompanionPort,
     String lanAddress = '127.0.0.1',
     CompanionConfig config = CompanionConfig.off,
+    bool localRelayEnabled = false,
+    int localRelayPort = kDefaultLocalRelayPort,
+    ServerLocalRelay? localRelay,
+    LanInterfaceLister? lanInterfaces,
     this.transcriptPollInterval = const Duration(seconds: 2),
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
@@ -77,6 +84,9 @@ class DaemonCompanion implements CompanionHandler {
   }) : _lanPort = lanPort,
        _lanAddress = lanAddress,
        _own = config,
+       _localRelayEnabled = localRelayEnabled,
+       _localRelayPort = localRelayPort,
+       _lanInterfaces = lanInterfaces ?? lanInterfaceAddresses,
        _relayFactory = relayFactory,
        _pushPost = pushPost,
        _now = clock ?? DateTime.now,
@@ -103,6 +113,13 @@ class DaemonCompanion implements CompanionHandler {
       final service = _service;
       if (service != null) unawaited(service.reconcileDevices());
     };
+    this.localRelay =
+        localRelay ??
+        ServerLocalRelay(
+          // netsh exists only on Windows; elsewhere the OS prompt is the story.
+          firewall: Platform.isWindows ? const LocalCommandRunner() : null,
+          onLog: onLog,
+        );
     final directory = dataDirectory;
     attachments = directory == null
         ? null
@@ -122,16 +139,21 @@ class DaemonCompanion implements CompanionHandler {
   String get lanAddress => _lanAddress;
   String _lanAddress;
 
-  /// How the server's config says to serve, without the app's embedded relay.
+  /// How the server's config says to serve; [config] adds where the local
+  /// relay can be dialled while it runs.
   CompanionConfig get ownConfig => _own;
   CompanionConfig _own;
 
-  /// Where a connected desktop's embedded relay listens, or null — none, or
-  /// no desktop. Never kept: it closes with the desktop.
-  Uri? _localRelay;
+  /// The LAN relay this server hosts while `companion.localRelay` is on and
+  /// phones are served.
+  late final ServerLocalRelay localRelay;
 
-  /// The link that told [_localRelay], so its hang-up drops it.
-  Object? _relayOwner;
+  /// Whether the config asks for [localRelay], and on which port.
+  bool get localRelayEnabled => _localRelayEnabled;
+  bool _localRelayEnabled;
+  int _localRelayPort;
+
+  final LanInterfaceLister _lanInterfaces;
 
   /// What the server's attention says of a session (slice 5c), set by
   /// `serve` once it is built: its agent's status, what it asks of a person,
@@ -471,28 +493,50 @@ class DaemonCompanion implements CompanionHandler {
     // The one moment provably no upload is in flight.
     await attachments?.sweep();
     _events = sessionEvents.listen(_onLifecycle);
-    await _serialised(() => _apply(_served()));
+    await _serialised(_bringInLine);
   }
 
-  /// Serves by [config] from now on, bound to [lanAddress] on [lanPort]: the
-  /// server's config changed (`server.config.set`). The listener restarts
-  /// only when what it was started with moved; relays are re-pointed in
-  /// place.
+  /// Serves by [config] from now on, bound to [lanAddress] on [lanPort], its
+  /// LAN relay on [localRelayPort] while [localRelayEnabled]: the server's
+  /// config changed (`server.config.set`). The listener restarts only when
+  /// what it was started with moved; relays are re-pointed in place.
   Future<void> reconfigure({
     required CompanionConfig config,
     required String lanAddress,
     required int lanPort,
+    bool localRelayEnabled = false,
+    int localRelayPort = kDefaultLocalRelayPort,
   }) => _serialised(() async {
     final moved = lanAddress != _lanAddress || lanPort != _lanPort;
     _own = config;
     _lanAddress = lanAddress;
     _lanPort = lanPort;
+    _localRelayEnabled = localRelayEnabled;
+    _localRelayPort = localRelayPort;
     if (moved) await _stopService();
-    await _apply(_served());
+    await _bringInLine();
   });
 
-  /// The server's config, with the connected app's embedded relay.
-  CompanionConfig _served() => _own.withLocalRelay(_localRelay);
+  /// The local relay brought to what the config asks, then the phone
+  /// listener served by the config plus where that relay can be dialled.
+  Future<void> _bringInLine() async {
+    if (_own.enabled && _localRelayEnabled) {
+      await localRelay.ensureRunning(
+        port: _localRelayPort,
+        address: _lanAddress,
+      );
+    } else {
+      await localRelay.stop();
+    }
+    final status = localRelay.status;
+    await _apply(
+      _own.withLocalRelay(status.running ? status.primaryUrl : null),
+    );
+  }
+
+  /// What the local relay is doing now — for `server.config.get`, the
+  /// desktop's settings row and the greeting.
+  LocalRelayStatus get localRelayStatus => localRelay.status;
 
   @override
   Future<CompanionPairingWindow> openPairing({
@@ -506,9 +550,22 @@ class DaemonCompanion implements CompanionHandler {
       throw StateError('remote access is switched off on this machine');
     }
     final named = relay.trim();
-    final via = named.isEmpty ? null : _usableRelay(named);
-    if (named.isNotEmpty && via == null) {
-      throw FormatException('"$relay" is not a relay this host can dial');
+    final Uri? via;
+    if (relayIsLocal) {
+      // This server's own LAN relay, wherever it listens now: the pairing is
+      // met there and the row remembers only that it was the local one.
+      via = localRelay.status.running ? localRelay.status.primaryUrl : null;
+      if (via == null) {
+        throw StateError(
+          'the local relay is not running on this machine'
+          '${localRelay.status.error == null ? '' : ' (${localRelay.status.error})'}',
+        );
+      }
+    } else {
+      via = named.isEmpty ? null : _usableRelay(named);
+      if (named.isNotEmpty && via == null) {
+        throw FormatException('"$relay" is not a relay this host can dial');
+      }
     }
     final session = await service.beginPairing(
       capabilities: CapabilitySet(capabilities),
@@ -550,19 +607,6 @@ class DaemonCompanion implements CompanionHandler {
   }
 
   @override
-  Future<void> adopt(
-    Object owner,
-    Uri? localRelay,
-    void Function(HostMessage) send,
-  ) {
-    _relayOwner = owner;
-    return _serialised(() {
-      _localRelay = localRelay;
-      return _apply(_served());
-    });
-  }
-
-  @override
   Future<void> notice(Object owner, CompanionNoticeMessage notice) async {
     final service = _service;
     if (service == null) return;
@@ -572,21 +616,13 @@ class DaemonCompanion implements CompanionHandler {
     }
   }
 
-  @override
-  Future<void> detach(Object owner) async {
-    if (!identical(_relayOwner, owner)) return;
-    _relayOwner = null;
-    // The desktop's embedded relay closed with it; nothing waits there.
-    await _serialised(() {
-      _localRelay = null;
-      return _apply(_served());
-    });
-  }
-
   Future<void> close() async {
     await _events?.cancel();
     _events = null;
-    await _serialised(_stopService);
+    await _serialised(() async {
+      await _stopService();
+      await localRelay.stop();
+    });
   }
 
   /// Something a phone's list shows moved — a status, who is waiting: live
@@ -686,6 +722,7 @@ class DaemonCompanion implements CompanionHandler {
       extraRelays: next.extraRelays,
       lanPort: _lanPort,
       lanAddress: _lanAddress,
+      lanHost: await _lanHost(),
       advertise: next.advertise,
       transcriptPollInterval: transcriptPollInterval,
       now: _now,
@@ -696,6 +733,26 @@ class DaemonCompanion implements CompanionHandler {
     );
     _service = started;
     await started.start();
+  }
+
+  /// The address a phone on this network dials the LAN listener at, for the
+  /// hint `host.status` carries: the bound address when it names one, else
+  /// this machine's likeliest LAN address. Null on loopback.
+  Future<String?> _lanHost() async {
+    final bound = InternetAddress.tryParse(_lanAddress);
+    if (bound == null || bound.isLoopback) return null;
+    if (bound != InternetAddress.anyIPv4 && bound != InternetAddress.anyIPv6) {
+      return bound.address;
+    }
+    try {
+      final addresses = await _lanInterfaces();
+      if (addresses.isEmpty) return null;
+      final ranked = [...addresses]
+        ..sort((a, b) => lanAddressScore(a).compareTo(lanAddressScore(b)));
+      return ranked.first.ip;
+    } on Object {
+      return null;
+    }
   }
 
   Future<void> _stopService() async {
@@ -722,7 +779,7 @@ class DaemonCompanion implements CompanionHandler {
   }
 
   /// The relay a pairing names, or null when it names none this host can
-  /// dial. [kLocalRelayMarker] is a word for the app's own relay, not a URL.
+  /// dial. [kLocalRelayMarker] is a word for the local relay, not a URL.
   static Uri? _usableRelay(String url) {
     if (url == kLocalRelayMarker) return null;
     final parsed = Uri.tryParse(url);

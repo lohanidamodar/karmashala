@@ -813,22 +813,13 @@ void main() {
     );
   });
 
-  group('with a desktop attached (slice 5c: nothing is forwarded)', () {
-    final desktop = Object();
-    late List<HostMessage> sent;
-
-    setUp(() async {
-      sent = [];
-      await companion.adopt(desktop, null, sent.add);
-    });
-
+  group('every answer is the server\'s (slice 5c: nothing is forwarded)', () {
     test('usage is the server\'s own', () async {
       final client = await dial();
       final snapshot = await client.usage();
 
       expect(snapshot.accounts.single.windows.single.percent, 42);
       expect(usage.asked, ['a1']);
-      expect(sent, isEmpty, reason: 'nothing is asked of a desktop');
     });
 
     test('the session list is the server\'s, with its attention', () async {
@@ -844,15 +835,6 @@ void main() {
       expect(sessions.single.sessionId, 's1');
       expect(sessions.single.attention, kAttentionNeedsApproval);
       expect(sessions.single.usageLimit, 'Codex hit its limit.');
-      expect(sent, isEmpty);
-    });
-
-    test('a desktop leaving changes no answer', () async {
-      insertRow('s1');
-      final client = await dial();
-      await companion.detach(desktop);
-      final after = await client.listSessions();
-      expect(after.single.sessionId, 's1');
     });
 
     test('a prompt in a session the server does not run is refused in words, '
@@ -874,7 +856,6 @@ void main() {
         companion.bindings.approvalEvidenceFor('s1'),
         throwsA(isA<RemoteApiRefusal>()),
       );
-      expect(sent, isEmpty);
     });
   });
 
@@ -996,18 +977,9 @@ void main() {
   });
 
   group('settings', () {
-    test('the app adds only its embedded relay, and takes it along', () async {
-      final app = Object();
-      await companion.adopt(app, Uri.parse('ws://192.168.1.4:8787'), (_) {});
-
-      expect(
-        companion.config.localRelayUrl,
-        Uri.parse('ws://192.168.1.4:8787'),
-      );
-      expect(companion.config.enabled, isTrue, reason: 'the server config');
-      expect(companion.ownConfig.localRelayUrl, isNull);
-
-      await companion.detach(app);
+    test('no local relay unless the config asks for one', () async {
+      expect(companion.localRelayEnabled, isFalse);
+      expect(companion.localRelayStatus.state, LocalRelayState.stopped);
       expect(companion.config.localRelayUrl, isNull);
       expect(companion.service, isNotNull, reason: 'still serving');
     });

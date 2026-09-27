@@ -7,8 +7,6 @@ import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_startup.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala/src/features/agents/application/host_hook_endpoint.dart';
@@ -232,37 +230,12 @@ void main() {
     });
   });
 
-  group('the local relay it stops', () {
-    test(
-      'shutdown closes a running embedded relay and frees its port',
-      () async {
-        // Loopback and an empty interface list: nothing leaves this machine.
-        final relay = LocalRelayService(
-          bindAddress: '127.0.0.1',
-          interfaces: () async => [],
-        );
-        final container = ProviderContainer(
-          overrides: [localRelayServiceProvider.overrideWithValue(relay)],
-        );
-        final lifecycle = AppLifecycle(container);
-        await container.read(localRelayServiceProvider).ensureRunning(0);
-        final port = relay.status.boundPort!;
-
-        await lifecycle.shutdown();
-
-        expect(relay.status.state, LocalRelayState.stopped);
-        final rebound = await ServerSocket.bind('127.0.0.1', port);
-        await rebound.close();
-      },
-    );
-  });
-
   group('the budget', () {
     test('is the itemised sum of the steps, and both are pinned', () {
       // Pinned to literals on purpose. The two bounds this replaces were
       // written against `kShutdownBudget` itself, so widening the constant —
       // the exact regression they existed to catch — kept them green.
-      expect(kShutdownBudget, const Duration(milliseconds: 3450));
+      expect(kShutdownBudget, const Duration(milliseconds: 3250));
       expect(
         kShutdownStepBudgets.values.reduce((a, b) => a + b),
         kShutdownBudget,
@@ -273,7 +246,7 @@ void main() {
         const Duration(milliseconds: 2500),
         reason: '1500 was under the measured cost of one taskkill.exe',
       );
-      expect(kShutdownStepBudgets, hasLength(8));
+      expect(kShutdownStepBudgets, hasLength(6));
     });
 
     test('a spent budget skips every step but still disposes', () async {

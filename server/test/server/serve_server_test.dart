@@ -370,12 +370,11 @@ void main() {
     });
 
     test('the app on its lifecycle link reads and writes the config too, and '
-        'its attach adds only its embedded relay', () async {
+        'is told what the local relay is doing', () async {
       final server = await InProcessServer.start(root, serveArgs());
       addTearDown(server.stop);
       final app = (await HostLifecycleWatch.connect(server.paths.socketPath))!;
       addTearDown(app.close);
-      app.attachCompanion(localRelayUrl: 'ws://127.0.0.1:8787');
 
       final set = await app.serverCall(ServerMethod.configSet, {
         'patch': {
@@ -388,6 +387,11 @@ void main() {
       );
       final got = await app.serverCall(ServerMethod.configGet);
       expect(((got['file']! as Map)['companion']! as Map)['enabled'], isTrue);
+      expect(
+        ((got['settings']! as Map)['companion']! as Map)['localRelay'],
+        isFalse,
+      );
+      expect((got['localRelay']! as Map)['state'], 'stopped');
       await expectLater(
         app.serverCall('server.nothing'),
         throwsA(isA<HostLifecycleWatchRefused>()),

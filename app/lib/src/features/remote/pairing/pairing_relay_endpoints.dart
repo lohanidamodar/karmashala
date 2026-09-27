@@ -7,7 +7,6 @@ import 'package:riverpod/riverpod.dart';
 import '../application/remote_access_controller.dart';
 import '../application/remote_access_settings.dart';
 import '../application/ssh_relays.dart';
-import '../relay_local/relay_endpoints.dart';
 
 /// Where an endpoint's relay lives, which decides its icon and its story.
 enum PairingRelayKind { local, sshHost, internet }
@@ -41,33 +40,48 @@ class PairingRelayEndpoint {
       'PairingRelayEndpoint($label, ${redactRelayUrl(url)}, ${kind.name})';
 }
 
-/// The endpoints the dialog shows, one per relay the host is serving. **Empty
-/// is real**: with every relay off, no code could be redeemed.
+/// The endpoints the dialog shows, one per relay the server is serving: its
+/// own LAN relay first (it always works on a shared network), then the
+/// person's own boxes, then the internet relay. **Empty is real**: with every
+/// relay off, no code could be redeemed. With remote access off, the internet
+/// relay is offered — switching it on is part of pairing.
 final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
   ref,
 ) {
-  final offered = ref.watch(relayEndpointsProvider);
-  if (offered.isNotEmpty) {
+  final access = ref.watch(remoteAccessSettingsProvider);
+  if (!access.enabled) {
     return [
-      for (final option in offered)
-        PairingRelayEndpoint(
-          label: option.label,
-          url: option.url,
-          kind: switch (option.kind) {
-            RelayEndpointKind.local => PairingRelayKind.local,
-            RelayEndpointKind.sshHost => PairingRelayKind.sshHost,
-            RelayEndpointKind.internet => PairingRelayKind.internet,
-          },
-        ),
+      PairingRelayEndpoint(
+        label: 'Internet',
+        url: hostedRelayOf(access),
+        kind: PairingRelayKind.internet,
+      ),
     ];
   }
-  final access = ref.watch(remoteAccessSettingsProvider);
-  if (access.enabled) return const [];
+  final local = access.localRelayReport;
+  final localUrl = local.url;
   return [
-    PairingRelayEndpoint(
-      label: 'Internet',
-      url: hostedRelayOf(access),
-      kind: PairingRelayKind.internet,
-    ),
+    // Where the server's relay listens now; the server itself decides where a
+    // local pairing is met.
+    if (access.localRelay && local.running && localUrl != null)
+      PairingRelayEndpoint(
+        label: 'Local network',
+        url: localUrl,
+        kind: PairingRelayKind.local,
+      ),
+    // The person's own boxes before somebody else's relay.
+    for (final entry in ref.watch(sshRelaysProvider))
+      if (entry.enabled)
+        PairingRelayEndpoint(
+          label: entry.hostName,
+          url: entry.url,
+          kind: PairingRelayKind.sshHost,
+        ),
+    if (access.relayEnabled)
+      PairingRelayEndpoint(
+        label: 'Internet',
+        url: hostedRelayOf(access),
+        kind: PairingRelayKind.internet,
+      ),
   ];
 });

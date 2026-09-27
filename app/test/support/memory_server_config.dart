@@ -12,15 +12,31 @@ class MemoryServerConfigSource implements ServerConfigSource {
   ServerConfig config;
   final patches = <Map<String, Object?>>[];
 
+  /// What the server says its LAN relay is doing, alongside every answer.
+  LocalRelayReport localRelayReport = LocalRelayReport.unknown;
+
   @override
-  Future<RemoteAccessSettings> read() async =>
-      RemoteAccessSettings.fromConfig(config);
+  Future<RemoteAccessSettings> read() async => _answer();
 
   @override
   Future<RemoteAccessSettings> write(Map<String, Object?> patch) async {
     patches.add(patch);
     config = config.patchedWith(patch);
-    return RemoteAccessSettings.fromConfig(config);
+    return _answer();
+  }
+
+  RemoteAccessSettings _answer() {
+    final file = RemoteAccessSettings.fromConfig(config);
+    return RemoteAccessSettings(
+      enabled: file.enabled,
+      relay: file.relay,
+      relayEnabled: file.relayEnabled,
+      extraRelays: file.extraRelays,
+      localRelay: file.localRelay,
+      localRelayPort: file.localRelayPort,
+      localRelayReport: localRelayReport,
+      notes: file.notes,
+    );
   }
 }
 
@@ -48,12 +64,15 @@ Future<void> setRemoteAccess(
 });
 
 /// [setRemoteAccess] at once, without the server config: what the app knows
-/// is replaced, and nothing is written anywhere.
+/// is replaced — the server's local relay and its report among it — and
+/// nothing is written anywhere.
 void setRemoteAccessNow(
   ProviderContainer container, {
   bool? enabled,
   String? relayUrl,
   bool? hostedEnabled,
+  bool? localRelay,
+  LocalRelayReport? localRelayReport,
 }) {
   final current = container.read(remoteAccessSettingsProvider);
   final relay = relayUrl?.trim();
@@ -67,6 +86,9 @@ void setRemoteAccessNow(
               : (relay.isEmpty ? null : Uri.parse(relay)),
           relayEnabled: hostedEnabled ?? current.relayEnabled,
           extraRelays: current.extraRelays,
+          localRelay: localRelay ?? current.localRelay,
+          localRelayPort: current.localRelayPort,
+          localRelayReport: localRelayReport ?? current.localRelayReport,
           notes: current.notes,
         ),
       );

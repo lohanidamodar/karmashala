@@ -98,7 +98,6 @@ class Settings {
     this.letAgentsUpdateThemselves,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
-    this.localRelayPort = 8787,
     this.uiTextScale = 1.0,
     this.terminalFontSize = defaultTerminalFontSize,
     this.notesEnabled = true,
@@ -268,9 +267,6 @@ class Settings {
   /// The imported terminal theme as `<format>:<path>`, or `null` for built-in.
   final String? terminalThemeSource;
 
-  /// The embedded relay's port; the default matches the relay package's own.
-  final int localRelayPort;
-
   /// Overall UI text scale (1.0 = 100%); multiplies the OS scale, not replaces.
   final double uiTextScale;
 
@@ -379,7 +375,6 @@ class Settings {
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
-    int? localRelayPort,
     double? uiTextScale,
     double? terminalFontSize,
     bool? notesEnabled,
@@ -456,7 +451,6 @@ class Settings {
     terminalThemeSource: clearTerminalThemeSource
         ? null
         : (terminalThemeSource ?? this.terminalThemeSource),
-    localRelayPort: localRelayPort ?? this.localRelayPort,
     uiTextScale: uiTextScale ?? this.uiTextScale,
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
     notesEnabled: notesEnabled ?? this.notesEnabled,
@@ -555,7 +549,6 @@ class Settings {
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
-    'localRelayPort': localRelayPort,
     'uiTextScale': uiTextScale,
     'terminalFontSize': terminalFontSize,
     'notesEnabled': notesEnabled,
@@ -735,9 +728,6 @@ class Settings {
       terminalThemeSource: json['terminalThemeSource'] is String
           ? json['terminalThemeSource'] as String
           : null,
-      localRelayPort: json['localRelayPort'] is int
-          ? json['localRelayPort'] as int
-          : 8787,
       // Clamped on read: a hand-edited 0.1 leaves Settings itself unreadable.
       uiTextScale: (toDouble(json['uiTextScale']) ?? 1.0).clamp(
         minUiTextScale,
@@ -831,7 +821,6 @@ class Settings {
       other.letAgentsUpdateThemselves == letAgentsUpdateThemselves &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
-      other.localRelayPort == localRelayPort &&
       other.uiTextScale == uiTextScale &&
       other.terminalFontSize == terminalFontSize &&
       other.notesEnabled == notesEnabled &&
@@ -883,7 +872,6 @@ class Settings {
       shellIntegrationEnabled,
       restoreLivePanes,
       terminalThemeSource,
-      localRelayPort,
       uiTextScale,
       terminalFontSize,
       notesEnabled,

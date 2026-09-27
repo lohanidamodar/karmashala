@@ -16,6 +16,71 @@ import '../../../core/paths/server_data_directory.dart';
 import 'host_companion_link.dart';
 import 'host_companion_providers.dart';
 
+/// What the server's own LAN relay is doing, as `server.config.get` tells
+/// it (`localRelay`): the settings row and the pairing dialog's "Local
+/// network" tab read it. The relay is the server's; the app only shows it.
+class LocalRelayReport {
+  const LocalRelayReport({
+    this.state = LocalRelayRunState.stopped,
+    this.url,
+    this.port,
+    this.otherUrls = const [],
+    this.error,
+    this.firewallHint = false,
+  });
+
+  /// Nothing told: a server that was not asked, or the file read directly.
+  static const LocalRelayReport unknown = LocalRelayReport(
+    state: LocalRelayRunState.unknown,
+  );
+
+  final LocalRelayRunState state;
+
+  /// The address a phone should dial, when the server has one.
+  final Uri? url;
+  final int? port;
+
+  /// The other addresses it can be dialled on.
+  final List<Uri> otherUrls;
+
+  /// Why it is not running — e.g. the port is taken.
+  final String? error;
+
+  /// The server could not add its firewall rule (Windows, no admin).
+  final bool firewallHint;
+
+  bool get running => state == LocalRelayRunState.running;
+
+  factory LocalRelayReport.fromJson(Object? json) {
+    if (json is! Map<String, Object?>) return unknown;
+    Uri? uri(Object? value) => value is String ? Uri.tryParse(value) : null;
+    final endpoints = json['endpoints'];
+    return LocalRelayReport(
+      state: switch (json['state']) {
+        'running' => LocalRelayRunState.running,
+        'error' => LocalRelayRunState.error,
+        'stopped' => LocalRelayRunState.stopped,
+        _ => LocalRelayRunState.unknown,
+      },
+      url: uri(json['url']),
+      port: json['port'] is int ? json['port']! as int : null,
+      otherUrls: [
+        for (final endpoint in endpoints is List ? endpoints : const [])
+          if (endpoint is Map<String, Object?> && endpoint['primary'] != true)
+            ?uri(endpoint['url']),
+      ],
+      error: json['error'] is String ? json['error']! as String : null,
+      firewallHint: json['firewallHint'] == true,
+    );
+  }
+}
+
+enum LocalRelayRunState { unknown, stopped, running, error }
+
+/// The port the server's LAN relay binds unless the config moves it — the
+/// relay's own default, which the server decides too.
+const int kLocalRelayPortDefault = 8787;
+
 /// How this machine's server serves phones, as its config decides it.
 class RemoteAccessSettings {
   const RemoteAccessSettings({
@@ -23,6 +88,9 @@ class RemoteAccessSettings {
     this.relay,
     this.relayEnabled = true,
     this.extraRelays = const [],
+    this.localRelay = false,
+    this.localRelayPort = kLocalRelayPortDefault,
+    this.localRelayReport = LocalRelayReport.unknown,
     this.notes = true,
     this.loaded = true,
   });
@@ -47,14 +115,26 @@ class RemoteAccessSettings {
   /// The relays on this person's SSH hosts the server listens on too.
   final List<Uri> extraRelays;
 
+  /// Whether the server runs its own LAN relay (`companion.localRelay`), and
+  /// on which port.
+  final bool localRelay;
+  final int localRelayPort;
+
+  /// What that relay is doing, as the server last said.
+  final LocalRelayReport localRelayReport;
+
   /// Whether a phone's `notes.get` answers.
   final bool notes;
 
   /// Whether this came from the server's config, rather than [unknown].
   final bool loaded;
 
-  /// From `server.config.get`'s `settings` — every field decided.
-  factory RemoteAccessSettings.fromSettings(Map<String, Object?> settings) {
+  /// From `server.config.get`'s `settings` — every field decided — and its
+  /// `localRelay` report.
+  factory RemoteAccessSettings.fromSettings(
+    Map<String, Object?> settings, {
+    Object? localRelayReport,
+  }) {
     final companion = settings['companion'];
     final json = companion is Map<String, Object?>
         ? companion
@@ -68,6 +148,11 @@ class RemoteAccessSettings {
       extraRelays: [
         for (final value in extras is List ? extras : const []) ?uri(value),
       ],
+      localRelay: json['localRelay'] == true,
+      localRelayPort: json['localRelayPort'] is int
+          ? json['localRelayPort']! as int
+          : kLocalRelayPortDefault,
+      localRelayReport: LocalRelayReport.fromJson(localRelayReport),
       notes: json['notes'] != false,
     );
   }
@@ -80,6 +165,8 @@ class RemoteAccessSettings {
         relay: config.relay,
         relayEnabled: config.relayEnabled ?? true,
         extraRelays: config.extraRelays ?? const [],
+        localRelay: config.localRelay ?? false,
+        localRelayPort: config.localRelayPort ?? kLocalRelayPortDefault,
         notes: config.notes ?? true,
       );
 }
@@ -115,6 +202,7 @@ class HostServerConfigSource implements ServerConfigSource {
     final settings = answer['settings'];
     return RemoteAccessSettings.fromSettings(
       settings is Map<String, Object?> ? settings : const {},
+      localRelayReport: answer['localRelay'],
     );
   }
 }

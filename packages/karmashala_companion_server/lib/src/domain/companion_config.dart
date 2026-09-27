@@ -1,6 +1,6 @@
 /// How the session host serves phones: what its `server.json` says — which
-/// the desktop's Remote access settings write — plus, while the desktop app
-/// is connected, where that app's embedded relay listens.
+/// the desktop's Remote access settings write — plus, while the server's own
+/// LAN relay runs, where it can be dialled.
 class CompanionConfig {
   const CompanionConfig({
     required this.enabled,
@@ -25,8 +25,8 @@ class CompanionConfig {
   /// Whether the hosted relay is switched on.
   final bool hostedEnabled;
 
-  /// The app's embedded relay while it runs. Never kept: it is the app's own
-  /// listener and closes with it.
+  /// Where the server's own LAN relay can be dialled while it runs. Never
+  /// kept: read off the running relay.
   final Uri? localRelayUrl;
 
   /// Relays on the person's own SSH hosts.
@@ -39,7 +39,7 @@ class CompanionConfig {
   /// find it that way; a box has no business multicasting.
   final bool advertise;
 
-  /// The same config with the app's embedded relay at [url], or none.
+  /// The same config with the local relay at [url], or none.
   CompanionConfig withLocalRelay(Uri? url) => CompanionConfig(
     enabled: enabled,
     relay: relay,

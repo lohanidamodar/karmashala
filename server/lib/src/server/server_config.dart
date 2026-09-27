@@ -34,7 +34,7 @@ class ServerConfigError implements Exception {
 ///     "enabled": true, "bind": "0.0.0.0", "port": 47820, "beacon": false,
 ///     "relay": "wss://relay.example.com", "relayToken": "<32+ url-safe>",
 ///     "relayEnabled": true, "extraRelays": ["ws://box:8787/k/<token>"],
-///     "notes": true
+///     "localRelay": true, "localRelayPort": 8787, "notes": true
 ///   },
 ///   "mcp": {"port": 47821}
 /// }
@@ -50,6 +50,8 @@ class ServerConfig {
     this.relayToken,
     this.relayEnabled,
     this.extraRelays,
+    this.localRelay,
+    this.localRelayPort,
     this.notes,
     this.mcpPort,
   });
@@ -83,6 +85,13 @@ class ServerConfig {
   /// More relays this server listens on, each a full URL (token included).
   final List<Uri>? extraRelays;
 
+  /// Whether this server runs its own LAN relay — "Local relay (this
+  /// computer)" — for phones on the same network, at [bind].
+  final bool? localRelay;
+
+  /// The port that relay binds (the relay's own default, 8787, when unset).
+  final int? localRelayPort;
+
   /// Whether a phone's `notes.get` answers.
   final bool? notes;
 
@@ -100,6 +109,8 @@ class ServerConfig {
     relayToken: other.relayToken ?? relayToken,
     relayEnabled: other.relayEnabled ?? relayEnabled,
     extraRelays: other.extraRelays ?? extraRelays,
+    localRelay: other.localRelay ?? localRelay,
+    localRelayPort: other.localRelayPort ?? localRelayPort,
     notes: other.notes ?? notes,
     mcpPort: other.mcpPort ?? mcpPort,
   );
@@ -115,6 +126,8 @@ class ServerConfig {
       'relayEnabled': ?relayEnabled,
       if (extraRelays != null)
         'extraRelays': [for (final uri in extraRelays!) uri.toString()],
+      'localRelay': ?localRelay,
+      'localRelayPort': ?localRelayPort,
       'notes': ?notes,
     };
     return {
@@ -196,6 +209,16 @@ class ServerConfig {
                     '$source: "companion.extraRelays"',
                   )!,
               ],
+        localRelay: typed<bool>(
+          companion,
+          'localRelay',
+          'companion.localRelay',
+        ),
+        localRelayPort: typed<int>(
+          companion,
+          'localRelayPort',
+          'companion.localRelayPort',
+        ),
         notes: typed<bool>(companion, 'notes', 'companion.notes'),
         mcpPort: typed<int>(mcp, 'port', 'mcp.port'),
       ),
@@ -212,6 +235,8 @@ class ServerConfig {
     'relayToken',
     'relayEnabled',
     'extraRelays',
+    'localRelay',
+    'localRelayPort',
     'notes',
   ];
 
@@ -272,6 +297,8 @@ class ServerConfig {
         extraRelays: extras.isEmpty
             ? null
             : [for (final text in extras) _uri(text, '--extra-relay')!],
+        localRelay: toggle('local-relay', 'no-local-relay'),
+        localRelayPort: port('local-relay-port'),
         notes: toggle('notes', 'no-notes'),
         mcpPort: port('mcp-port'),
       ),
@@ -284,6 +311,7 @@ class ServerConfig {
     Never refuse(String why) => throw ServerConfigError('$source: $why');
     for (final (label, port) in [
       ('companion port', config.companionPort),
+      ('local relay port', config.localRelayPort),
       ('MCP port', config.mcpPort),
     ]) {
       if (port != null && (port < 0 || port > 65535)) {
@@ -402,6 +430,8 @@ class ServerSettings {
     required this.companionPort,
     required this.mcpPort,
     required this.companion,
+    this.localRelay = false,
+    this.localRelayPort = kDefaultRelayPort,
   });
 
   /// The address the phone listener binds when nothing says: loopback. A
@@ -425,6 +455,8 @@ class ServerSettings {
       companionPort: config.companionPort ?? kHostCompanionPort,
       mcpPort: config.mcpPort ?? kPreferredMcpPort,
       companion: companionConfigOf(config),
+      localRelay: config.localRelay ?? false,
+      localRelayPort: config.localRelayPort ?? kDefaultRelayPort,
     );
   }
 
@@ -435,6 +467,11 @@ class ServerSettings {
 
   /// How phones are served.
   final CompanionConfig companion;
+
+  /// Whether the server runs its LAN relay while phones are served, bound at
+  /// [bind] on [localRelayPort].
+  final bool localRelay;
+  final int localRelayPort;
 
   /// These settings as `server.config.get` reports them: every field decided.
   /// The relay is shown as configured, its token never.
@@ -449,6 +486,8 @@ class ServerSettings {
       'relayTokenSet': decided.relayToken != null,
       'relayEnabled': decided.relayEnabled ?? true,
       'extraRelays': [for (final uri in companion.extraRelays) uri.toString()],
+      'localRelay': localRelay,
+      'localRelayPort': localRelayPort,
       'notes': companion.notesEnabled,
     },
     'mcp': {'port': mcpPort},

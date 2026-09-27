@@ -66,9 +66,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
   /// Each link's companion events, pushed by the test as the daemon.
   final companionEventLinks = <StreamController<CompanionEventMessage>>[];
 
-  /// Each attach the app sent, in order: where its embedded relay was.
-  final companionAttaches = <String?>[];
-
   /// The server calls the app made, in order, and how they are answered —
   /// refused when nobody set [answerServerCall].
   final serverCalls = <({String method, Map<String, Object?> arguments})>[];
@@ -123,8 +120,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
       hookSnapshot: List.of(hookSnapshot),
       hooks: hooks.stream,
       companionEvents: companionEvents.stream,
-      attachCompanion: ({localRelayUrl}) =>
-          companionAttaches.add(localRelayUrl),
       serverCall: (method, [arguments = const {}]) {
         serverCalls.add((method: method, arguments: arguments));
         final answer = answerServerCall;

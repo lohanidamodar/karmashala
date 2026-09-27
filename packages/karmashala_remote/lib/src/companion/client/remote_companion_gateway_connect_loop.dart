@@ -43,7 +43,7 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
     if (_record?.pin.kind == CompanionRouteKind.relay) return;
     if (_link.value != CompanionLinkState.connected) return;
     if (_linkPath.value != CompanionLinkPath.relay) return;
-    // The desktop IS the relay: the embedded local relay is served on the very
+    // The machine IS the relay: its LAN relay is served on the very
     // address the beacon arrives from, so a "direct" socket would reach the
     // same machine one hop shorter, for a dial every two seconds.
     if (host.address.address == _activeRelay?.host) {

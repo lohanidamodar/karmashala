@@ -9,9 +9,6 @@ import 'package:karmashala/src/features/remote/application/remote_access_control
 import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
-import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
-import 'package:karmashala/src/features/remote/relay_local/relay_endpoints.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh_host/host.dart';
 import '../../support/memory_server_config.dart';
@@ -92,9 +89,6 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
-        localRelayStatusProvider.overrideWithValue(
-          const LocalRelayStatus.stopped(),
-        ),
         remoteAccessControllerProvider.overrideWith(
           (ref) => access = _Access(ref),
         ),
@@ -193,10 +187,6 @@ void main() {
       expect(entry.display, 'ws://203.0.113.9:8787');
       expect('$entry', isNot(contains(_token)));
       expect(
-        '${RelayEndpointOption(label: 'do-box', url: _url, kind: RelayEndpointKind.sshHost)}',
-        isNot(contains(_token)),
-      );
-      expect(
         '${PairingRelayEndpoint(label: 'do-box', url: _url, kind: PairingRelayKind.sshHost)}',
         isNot(contains(_token)),
       );
@@ -221,17 +211,13 @@ void main() {
               ),
             );
 
-        final offered = container.read(relayEndpointsProvider);
+        final offered = container.read(pairingRelayEndpointsProvider);
         expect(offered.map((o) => o.kind), [
-          RelayEndpointKind.sshHost,
-          RelayEndpointKind.internet,
+          PairingRelayKind.sshHost,
+          PairingRelayKind.internet,
         ]);
         expect(offered.first.label, 'do-box');
         expect(offered.first.url, _url, reason: 'the phone needs the token');
-        expect(
-          container.read(pairingRelayEndpointsProvider).first.kind,
-          PairingRelayKind.sshHost,
-        );
       },
     );
 
@@ -252,9 +238,10 @@ void main() {
               ),
             );
 
-        expect(container.read(relayEndpointsProvider).map((o) => o.kind), [
-          RelayEndpointKind.internet,
-        ]);
+        expect(
+          container.read(pairingRelayEndpointsProvider).map((o) => o.kind),
+          [PairingRelayKind.internet],
+        );
       },
     );
   });

@@ -48,6 +48,7 @@ class ServerAdministration implements ServerAdmin {
             'port': ?companion?.port,
             'bind': settings.bind,
             'relay': ?(relay == null ? null : scrubRelayLog('$relay')),
+            'localRelay': ?companion?.localRelayStatus.toJson(),
           },
         };
       case ServerMethod.devicesList:
@@ -81,7 +82,7 @@ class ServerAdministration implements ServerAdmin {
           'summary': scan.summary,
         };
       case ServerMethod.configGet:
-        return config.describe();
+        return _withLocalRelay(config.describe());
       case ServerMethod.configSet:
         final patch = arguments['patch'];
         if (patch is! Map<String, Object?>) {
@@ -90,7 +91,7 @@ class ServerAdministration implements ServerAdmin {
           );
         }
         try {
-          return await config.set(patch);
+          return _withLocalRelay(await config.set(patch));
         } on ServerConfigError catch (error) {
           throw ServerCallRefused('$error');
         } on FileSystemException catch (error) {
@@ -102,6 +103,13 @@ class ServerAdministration implements ServerAdmin {
         throw ServerCallRefused('this server does not answer "$method"');
     }
   }
+
+  /// The config's answer, with what the LAN relay it asks for is doing:
+  /// the desktop's settings row and its pairing tab read it.
+  Map<String, Object?> _withLocalRelay(Map<String, Object?> described) => {
+    ...described,
+    'localRelay': ?companion?.localRelayStatus.toJson(),
+  };
 
   DaemonCompanion _companion() =>
       companion ??

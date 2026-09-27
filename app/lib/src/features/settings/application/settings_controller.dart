@@ -482,11 +482,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void setLocalRelayPort(int port) {
-    state = state.copyWith(localRelayPort: port);
-    _save();
-  }
-
   /// [_raw] first: the copy tells its listeners synchronously, and this
   /// write must not read as another client's.
   void _save() {

@@ -13,8 +13,8 @@ import 'server_data_directory.dart';
 /// writes the server's `server.json` — owner-only from its first
 /// byte, since it can hold the relay token — from the same flags `serve`
 /// takes (`--name`, `--bind`, `--companion-port`, `--beacon`, `--relay`,
-/// `--relay-token`, `--extra-relay`, `--no-notes`, `--mcp-port`,
-/// `--no-companion`). Refuses to replace a file that is there without
+/// `--relay-token`, `--extra-relay`, `--local-relay`, `--local-relay-port`,
+/// `--no-notes`, `--mcp-port`, `--no-companion`). Refuses to replace a file that is there without
 /// `--force`. What the installers run, so a hand-written file and theirs are
 /// checked by the same rules.
 ///
@@ -81,6 +81,8 @@ Future<int> runInit(
             relayToken: config.relayToken == null ? null : '…',
             relayEnabled: config.relayEnabled,
             extraRelays: config.extraRelays,
+            localRelay: config.localRelay,
+            localRelayPort: config.localRelayPort,
             notes: config.notes,
             mcpPort: config.mcpPort,
           ).toJson(),

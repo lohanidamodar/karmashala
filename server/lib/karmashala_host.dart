@@ -46,6 +46,7 @@ export 'src/automations/hosted_check_runner.dart' show kCheckSessionPrefix;
 export 'src/automations/session_mcp_access.dart';
 export 'src/companion/companion_handler.dart';
 export 'src/companion/daemon_companion.dart';
+export 'src/companion/local_relay.dart';
 export 'src/companion/registry_screens.dart';
 export 'src/store/store_probe.dart';
 export 'src/transport/socket_transport.dart';

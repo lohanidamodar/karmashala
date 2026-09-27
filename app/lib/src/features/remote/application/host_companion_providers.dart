@@ -16,8 +16,8 @@ final companionAtHostProvider = Provider<bool>(
   (ref) => ref.watch(localHostSessionAccessProvider) != null,
 );
 
-/// This app's half of the companion the server serves: its embedded relay,
-/// pairing and the server's config. Every phone call is the server's.
+/// This app's half of the companion the server serves: pairing and the
+/// server's config. Every phone call is the server's, and so is its LAN relay.
 final hostCompanionLinkProvider = Provider<HostCompanionLink>((ref) {
   late final HostCompanionLink link;
   link = HostCompanionLink(

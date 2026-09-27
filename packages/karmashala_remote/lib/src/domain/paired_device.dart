@@ -3,9 +3,10 @@ import 'dart:typed_data';
 import '../protocol.dart';
 import 'companion_presence.dart';
 
-/// The [PairedDevice.relayUrl] sentinel meaning "the relay embedded in this
-/// app" — resolved to the live local relay at serve time, because the LAN IP
-/// and port move while the fact "my own relay" does not.
+/// The [PairedDevice.relayUrl] sentinel meaning "this machine's own LAN
+/// relay" (the server's, since it moved out of the desktop app) — resolved to
+/// the live local relay at serve time, because the LAN IP and port move while
+/// the fact "my own relay" does not.
 const String kLocalRelayMarker = 'local';
 
 /// One phone paired with this desktop host — its identity, its long-lived key,
@@ -62,10 +63,10 @@ class PairedDevice {
   final CompanionPresence presence;
 
   /// The relay this device was paired through, or [kLocalRelayMarker] for the
-  /// embedded local relay. Null only for a row missed by the v19 backfill.
+  /// machine's own LAN relay. Null only for a row missed by the v19 backfill.
   final String? relayUrl;
 
-  /// Whether this device's frames travel through the embedded local relay.
+  /// Whether this device's frames travel through the machine's LAN relay.
   bool get pairedViaLocalRelay => relayUrl == kLocalRelayMarker;
 
   /// The hosted relay URL stored at pairing, or null for a local-relay

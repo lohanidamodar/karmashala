@@ -94,6 +94,8 @@ class ServerConfigService {
     relay: config.relay,
     relayEnabled: config.relayEnabled,
     extraRelays: config.extraRelays,
+    localRelay: config.localRelay,
+    localRelayPort: config.localRelayPort,
     notes: config.notes,
     mcpPort: config.mcpPort,
   );

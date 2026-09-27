@@ -146,31 +146,37 @@ int companionPortOf(String greeting) {
 }
 
 /// A desktop's side of the companion, over the same lifecycle link the app
-/// opens (`LocalHostLifecycleSource` → `HostLifecycleWatch`): the attach it
-/// sends on every link (where its embedded relay listens), the pairing it
+/// opens (`LocalHostLifecycleSource` → `HostLifecycleWatch`): the pairing it
 /// asks for, and the pairing dialog closing. Since slice 5c nothing is
-/// forwarded to it: every phone call is the server's.
+/// forwarded to it: every phone call is the server's, and since protocol 29
+/// the LAN relay is the server's too.
 class AppLink {
   AppLink._(this.watch);
 
   final HostLifecycleWatch watch;
 
-  /// A link that attaches as `HostCompanionLink.attached` does when [asApp].
-  /// Otherwise it only watches — a `pair` over SSH.
+  /// A link as the app opens it ([asApp]), or a `pair` over SSH: since
+  /// protocol 29 the two say the same things.
   static Future<AppLink> connect(
     String socketPath, {
     bool asApp = false,
   }) async {
     final watch = await HostLifecycleWatch.connect(socketPath);
     if (watch == null) throw StateError('no host at $socketPath');
-    if (asApp) watch.attachCompanion();
     return AppLink._(watch);
   }
 
   /// Opens a pairing window granting [capabilities], direct (no relay), as the
-  /// pairing dialog does for a machine with no relay configured.
-  Future<PairingPayload> pair(CapabilitySet capabilities) async {
-    final window = await watch.pairCompanion(capabilities: capabilities.bits);
+  /// pairing dialog does for a machine with no relay configured — or, with
+  /// [atLocalRelay], met at the server's own LAN relay ("Local network").
+  Future<PairingPayload> pair(
+    CapabilitySet capabilities, {
+    bool atLocalRelay = false,
+  }) async {
+    final window = await watch.pairCompanion(
+      capabilities: capabilities.bits,
+      relayIsLocal: atLocalRelay,
+    );
     return PairingPayload.decode(window.payload);
   }
 

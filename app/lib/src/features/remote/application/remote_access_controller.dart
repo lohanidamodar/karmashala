@@ -1,8 +1,8 @@
 /// Brings the phone companion in line with the settings. The Remote access
 /// settings are the server's config (`server.json`, [remoteAccessSettingsProvider])
-/// and the server serves the phones by it; this app writes what only it knows
-/// into it (its SSH hosts' relays, the Notes switch) and tells it where the
-/// app's embedded relay listens. The relays are independent: turning one off
+/// and the server serves the phones by it — its LAN relay included, which it
+/// hosts itself; this app writes what only it knows into it (its SSH hosts'
+/// relays, the Notes switch). The relays are independent: turning one off
 /// *parks* its devices, restarting nothing.
 library;
 
@@ -15,14 +15,10 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import '../../../core/probe/probe_mode.dart';
 import '../../notes/application/notes_providers.dart';
-import '../../settings/application/settings_controller.dart';
-import '../../settings/domain/settings.dart';
 import 'package:karmashala_remote/remote.dart';
-import '../relay_local/local_relay_providers.dart';
 import 'host_companion_link.dart';
 import 'host_companion_providers.dart';
 import 'pairing_in_progress.dart';
-import 'relay_prefs.dart';
 import 'remote_access_settings.dart';
 import 'ssh_relays.dart';
 import 'remote_providers.dart';
@@ -78,6 +74,8 @@ class RemoteAccessController {
     bool? enabled,
     bool? hostedEnabled,
     String? relayUrl,
+    bool? localRelay,
+    int? localRelayPort,
   }) async {
     final current = _ref.read(remoteAccessSettingsProvider);
     final relay = relayUrl == null
@@ -86,6 +84,8 @@ class RemoteAccessController {
     final companion = <String, Object?>{
       'enabled': ?enabled,
       'relayEnabled': ?hostedEnabled,
+      'localRelay': ?localRelay,
+      'localRelayPort': ?localRelayPort,
       if (relay != null) ...{'relay': relay, 'relayToken': null},
       if (enabled == true) ...{
         'bind': '0.0.0.0',
@@ -111,9 +111,8 @@ class RemoteAccessController {
     'notes': _ref.read(notesEnabledProvider),
   };
 
-  /// Gives the server's config what only this app knows, and tells the server
-  /// where this app's embedded relay is — or stops that relay when remote
-  /// access is off, or no link to the server's companion is open.
+  /// Gives the server's config what only this app knows, while remote access
+  /// is on and a link to the server's companion is open.
   Future<void> sync() {
     _chain = _chain.then((_) => _sync()).catchError((
       Object error,
@@ -132,50 +131,18 @@ class RemoteAccessController {
   static final _log = AppLogger.named('remote.access');
 
   Future<void> _sync() async {
-    final settings = _ref.read(settingsControllerProvider);
     final host = _host;
     final remote = _ref.read(remoteAccessSettingsProvider.notifier);
     if (!_ref.read(remoteAccessSettingsProvider).loaded) await remote.load();
     final access = _ref.read(remoteAccessSettingsProvider);
-    // A probe binds no relay port, opens no firewall rule and dials no relay:
-    // the phone is paired to the real app, and 8787 is its port.
-    if (!access.enabled || isDisabledByProbe || host == null) {
-      await _stopLocalRelay();
-      host?.setLocalRelay(null);
-      return;
-    }
-    final prefs = _ref.read(relayPrefsProvider);
-    // The embedded relay is this app's own, brought to what its prefs ask.
-    final localUrl = await _syncLocalRelay(settings, prefs);
+    // A probe writes nothing into the real server's config.
+    if (!access.enabled || isDisabledByProbe || host == null) return;
     final sshRelays = _ref.read(activeSshRelayUrlsProvider);
     final notes = _ref.read(notesEnabledProvider);
     if (access.notes != notes || !_sameUris(access.extraRelays, sshRelays)) {
       await remote.update({'companion': _appOwned()});
     }
-    host.setLocalRelay(localUrl);
   }
-
-  /// Starts or stops the embedded relay to match the prefs, answering where it
-  /// can be dialled; null when it is off or failed to bind.
-  Future<Uri?> _syncLocalRelay(Settings settings, RelayPrefs prefs) async {
-    final localRelay = _ref.read(localRelayServiceProvider);
-    if (!prefs.localEnabled) {
-      await localRelay.stop();
-      return null;
-    }
-    await localRelay.ensureRunning(settings.localRelayPort);
-    if (!localRelay.isRunning) return null; // The bind failed; status says why.
-    // No LAN address (a machine with no network): loopback keeps the host
-    // consistent until the next sync finds one.
-    return localRelay.status.primaryUrl ??
-        Uri(
-          scheme: 'ws',
-          host: '127.0.0.1',
-          port: localRelay.status.boundPort ?? settings.localRelayPort,
-        );
-  }
-
-  Future<void> _stopLocalRelay() => _ref.read(localRelayServiceProvider).stop();
 
   /// Shows a new pairing code; throws [StateError] while remote access is off
   /// or no link to the server's companion is open. [relayIsLocal] is what the
@@ -236,12 +203,6 @@ class RemoteAccessController {
       _log.warning('The server refused the device $what: ${refusal.message}');
     }
   }
-
-  /// The lifecycle teardown: the embedded relay stops with the app.
-  Future<void> shutdown() {
-    _chain = _chain.then((_) => _stopLocalRelay()).catchError((Object _) {});
-    return _chain;
-  }
 }
 
 bool _sameUris(List<Uri> a, List<Uri> b) {
@@ -259,9 +220,6 @@ final remoteAccessControllerProvider = Provider<RemoteAccessController>((ref) {
   // The host answers `notes.get` itself, by its config's switch, which this
   // keeps in step with the app's.
   ref.listen(notesEnabledProvider, (_, _) => unawaited(controller.sync()));
-  ref.onDispose(() {
-    unawaited(controller.shutdown());
-  });
   // Bring the service up if the user had it enabled last run.
   unawaited(controller.sync());
   return controller;
