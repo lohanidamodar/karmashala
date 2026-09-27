@@ -6,7 +6,7 @@ import '../../../core/probe/probe_mode.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_providers.dart';
 

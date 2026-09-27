@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show HostSupervision, HostSupervisionPhase;
 import '../../ssh/presentation/host_sessions_dialog.dart';

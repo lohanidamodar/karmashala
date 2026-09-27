@@ -1,132 +1,24 @@
-import '../workspaces/data/workspace_data.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_git/repositories.dart';
 import '../explorer/application/checkout_picker.dart';
-import '../git/application/changes_providers.dart';
-import '../projects/application/projects_controller.dart';
-import '../sessions/application/delivery_providers.dart';
-import '../sessions/application/session_providers.dart';
-import 'package:karmashala_session/session.dart';
+import '../workspaces/data/workspace_data.dart';
 
-/// Where the work is: the checkouts under a project, and what one of them owes.
-/// Every session runs in a checkout, where `list_projects` stops at the project.
-///
-/// The server runs `list_checkouts`, `project_rescan` and `delivery_status`
-/// itself (and serves their schemas); a call reaches this only for a checkout
-/// on an SSH host, which only this app reaches. `select_checkout` moves this
-/// app's own screen and is always here.
+/// `select_checkout`: moves this app's own screen, so it is always the app's.
+/// `list_checkouts`, `project_rescan` and `delivery_status` are the server's
+/// (and so is an SSH checkout's, since slice 3a).
 class WorkspaceControlTools {
-  WorkspaceControlTools(this._container, {this.callerSessionId});
+  WorkspaceControlTools(this._container);
 
   final ProviderContainer _container;
-  final String? callerSessionId;
 
-  static const Set<String> _names = <String>{
-    'list_checkouts',
-    'project_rescan',
-    'select_checkout',
-    'delivery_status',
-  };
-
-  static bool handles(String name) => _names.contains(name);
+  static bool handles(String name) => name == 'select_checkout';
 
   Future<Object?> call(String name, Map<String, dynamic> args) async =>
       switch (name) {
-        'list_checkouts' => _listCheckouts(args['projectId'] as String?),
-        'project_rescan' => _rescan(args['projectId'] as String?),
         'select_checkout' => _select(args['repositoryId'] as String?),
-        'delivery_status' => _delivery(_targetSession(args)),
         _ => throw ArgumentError('Unknown tool: $name'),
       };
-
-  String _targetSession(Map<String, dynamic> args) {
-    final named = args['sessionId'] as String?;
-    if (named != null && named.trim().isNotEmpty) return named.trim();
-    final caller = callerSessionId;
-    if (caller != null && caller.isNotEmpty) return caller;
-    throw ArgumentError(
-      'No sessionId, and this caller is not running inside a session. Pass '
-      'sessionId — list_sessions has the ids.',
-    );
-  }
-
-  Future<Object?> _listCheckouts(String? projectId) async {
-    if (projectId == null || projectId.isEmpty) {
-      throw ArgumentError('projectId is required. list_projects has the ids.');
-    }
-    final repositories = _container
-        .read(workspaceDataProvider)
-        .repositoriesOf(projectId);
-    if (repositories.isEmpty) {
-      throw StateError(
-        'No project with id $projectId, or it has no checkouts. Try '
-        'project_rescan.',
-      );
-    }
-    // One `git worktree list` per family, and it may simply fail: a checkout
-    // whose git could not answer is absent from the map rather than wrong in it.
-    final labels = await _container.read(
-      checkoutLabelsProvider(projectId).future,
-    );
-    final selected = _container.read(selectedRepositoryIdProvider);
-    // Who else is standing here: without occupancy, fan-out candidates sharing
-    // every repository but the primary one could not notice each other.
-    final rows = _container.read(sessionsDataProvider).getAll();
-    return <String, Object?>{
-      'projectId': projectId,
-      'checkouts': <Object?>[
-        for (final repository in repositories)
-          <String, Object?>{
-            'repositoryId': repository.id,
-            'name': repository.name,
-            'path': repository.path.path,
-            'environmentId': repository.path.environmentId,
-            'selected': repository.id == selected,
-            'branch': labels[repository.id]?.branch ?? 'not recorded',
-            'isWorktree': labels[repository.id]?.isWorktree,
-            // Sessions the workspace records as working in this exact
-            // directory: an empty list is **not** a promise that nobody is here.
-            'sessionsWorkingHere': <Object?>[
-              for (final session in sessionsWorkingIn(
-                repository.path,
-                excluding: '',
-                among: rows,
-                pathsMatch: samePath,
-              ))
-                <String, Object?>{
-                  'sessionId': session.id,
-                  'title': session.title,
-                  'status': session.status.name,
-                },
-            ],
-          },
-      ],
-    };
-  }
-
-  /// Re-reads a project's directory for checkouts it does not know about, and
-  /// returns what is there afterwards: a diff would be a fact nobody measured.
-  Future<Object?> _rescan(String? projectId) async {
-    if (projectId == null || projectId.isEmpty) {
-      throw ArgumentError('projectId is required. list_projects has the ids.');
-    }
-    final found = await _container
-        .read(projectsControllerProvider.notifier)
-        .rediscover(projectId);
-    return <String, Object?>{
-      'projectId': projectId,
-      'checkouts': <Object?>[
-        for (final repository in found)
-          <String, Object?>{
-            'repositoryId': repository.id,
-            'name': repository.name,
-            'path': repository.path.path,
-          },
-      ],
-      'count': found.length,
-    };
-  }
 
   /// Points Explorer, the diff view and the side panel at one checkout, through
   /// the same `CheckoutPicker` the side panel's own picker calls.
@@ -149,59 +41,6 @@ class WorkspaceControlTools {
       'path': repository.path.path,
       'projectId': repository.projectId,
       'selected': true,
-    };
-  }
-
-  /// What a session's checkout still owes. Every count is nullable at the
-  /// source, and an unknown reads "not recorded" rather than `0`.
-  Future<Object?> _delivery(String sessionId) async {
-    final session = _container.read(sessionsDataProvider).getById(sessionId);
-    if (session == null) {
-      throw StateError('No session with id $sessionId.');
-    }
-    final delivery = await _container.read(
-      sessionDeliveryProvider(sessionId).future,
-    );
-    final actions = _container.read(sessionDeliveryActionsProvider(sessionId));
-    final pr = delivery.pullRequest;
-    return <String, Object?>{
-      'sessionId': sessionId,
-      'title': session.title,
-      'stage': delivery.stage.label,
-      'branch': delivery.branch ?? 'not recorded',
-      'baseBranch': delivery.baseBranch ?? 'not recorded',
-      'upstream': delivery.upstream ?? 'not recorded',
-      'hasWorktree': delivery.hasWorktree,
-      'archived': delivery.archived,
-      'dirtyFiles': delivery.dirtyFiles ?? 'not recorded',
-      'aheadOfBase': delivery.aheadOfBase ?? 'not recorded',
-      'behindBase': delivery.behindBase ?? 'not recorded',
-      'unpushed': delivery.unpushed ?? 'not recorded',
-      'agentRunning': delivery.agentRunning ?? 'not recorded',
-      'pullRequest': pr == null
-          ? 'not recorded — no open pull request was found for this branch'
-          : <String, Object?>{
-              'number': pr.number,
-              'title': pr.title,
-              'state': pr.state.name,
-              'url': pr.url,
-              'isDraft': pr.isDraft,
-              'mergeable': pr.mergeable ?? 'not recorded',
-              'reviewDecision': pr.reviewDecision?.name ?? 'not recorded',
-              'checks': pr.checks.toString(),
-            },
-      // What the delivery strip would offer a user looking at this session, so
-      // an agent and the person beside it are choosing from the same list.
-      'actions': <Object?>[
-        for (final offered in actions)
-          <String, Object?>{
-            'action': offered.action.name,
-            'label': offered.action.label,
-            'primary': offered.isPrimary,
-            'available': offered.disabledReason == null,
-            'unavailableBecause': offered.disabledReason,
-          },
-      ],
     };
   }
 }

@@ -84,7 +84,11 @@ void main() {
         tester,
         build: () => app(
           container,
-          SshSecretDialog(host: host(), kind: SshSecretKind.passphrase),
+          SshSecretDialog(
+            hostName: host().name,
+            address: host().address,
+            kind: SshSecretKind.passphrase,
+          ),
         ),
         because: 'a password prompt over a connection that is already waiting',
       );

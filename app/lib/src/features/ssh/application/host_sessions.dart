@@ -1,12 +1,11 @@
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import '../../../core/probe/probe_mode.dart';
 import 'host_session_providers.dart';
-import 'ssh_failure.dart';
 
 /// What one machine's session host is holding, and the two things a person can
 /// do about it from here. The host outlives this app by design, so a session it

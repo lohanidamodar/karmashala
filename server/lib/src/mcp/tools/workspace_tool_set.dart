@@ -18,9 +18,9 @@ import 'session_liveness.dart';
 /// does not know, and what a session's checkout still owes. Every session
 /// runs in a checkout, where `list_projects` stops at the project.
 ///
-/// A project or session in an environment the server does not reach (an SSH
-/// host; WSL off Windows) is handed to the app. `select_checkout` moves the
-/// app's own screen and stays the app's.
+/// An SSH host's checkouts are read over the server's own connection (slice
+/// 3a); only WSL off Windows is handed to the app. `select_checkout` moves
+/// the app's own screen and stays the app's.
 class WorkspaceToolSet extends ServerToolSet {
   WorkspaceToolSet(
     this._context, {

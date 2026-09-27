@@ -14,10 +14,10 @@ import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 import 'session_liveness.dart';
 
-/// Making a git worktree and taking one away, on the server's own machine.
+/// Making a git worktree and taking one away, wherever the server reaches —
+/// its own machine, and an SSH box over its own connection (slice 3a).
 /// Removing is not the mirror of creating: `worktree_remove` refuses unless
-/// the branch is merged **and** pushed. A checkout the server does not reach
-/// (an SSH host) is handed to the app.
+/// the branch is merged **and** pushed.
 class WorktreeToolSet extends ServerToolSet {
   WorktreeToolSet(
     this._context, {

@@ -40,6 +40,7 @@ import 'automation_values.dart';
 import 'environment_values.dart';
 import 'refusal.dart';
 import 'session_values.dart';
+import 'ssh_values.dart';
 import 'workspace_values.dart';
 import 'worktree_values.dart';
 
@@ -57,6 +58,7 @@ part 'requests/snippets_requests.dart';
 part 'requests/pairings_requests.dart';
 part 'requests/conversations_requests.dart';
 part 'requests/agent_work_requests.dart';
+part 'requests/ssh_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -241,6 +243,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _pairingsRequestFromJson(kind, args) ??
     _conversationsRequestFromJson(kind, args) ??
     _agentWorkRequestFromJson(kind, args) ??
+    _sshRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.

@@ -6,7 +6,6 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
-import 'package:karmashala_host/src/agents/forwarded_runs.dart';
 import 'package:karmashala_host/src/agents/server_agent_work.dart';
 import 'package:karmashala_host/src/agents/server_usage.dart';
 import 'package:karmashala_session/session.dart';
@@ -80,7 +79,6 @@ void main() {
     vendor = ScriptedUsageService(clock: clock, answer: (_) => reading(20));
     work = ServerAgentWork(
       data: service,
-      runs: ForwardedRuns(),
       clock: clock,
       ids: CountingIds(),
       usageService: (_) => vendor,

@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/remote/relay_local/local_relay_providers
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/remote/relay_local/relay_endpoints.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import '../../support/memory_server_config.dart';
 
 import '../../support/fake_data_server.dart';

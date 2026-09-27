@@ -104,13 +104,9 @@ enum MessageType {
   // bottom rows to send with the next report.
   paneFacts(0x36),
   paneTailsWanted(0x37),
-  // Protocol 18 (slice 2a): commands the server runs through the app, for
-  // the one reach it has no transport of its own for (SSH). client → host:
-  // "run them through me"; host → client: one command; client → host: how
-  // it ended.
-  runOffer(0x38),
-  runCall(0x39),
-  runResult(0x3a),
+  // 0x38–0x3a (protocol 18: commands the server ran through the app over
+  // SSH) are gone: since protocol 19 the server reaches SSH itself.
+
   // 0xf0 and up never change and are answered without hello, whatever the
   // protocol: `karmashala_host stop` must reach a host of any version
   // (`stop_messages.dart`). Everything above belongs below 0xf0.

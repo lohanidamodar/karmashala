@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
-import 'package:karmashala/src/features/mcp/workspace_tools.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -279,54 +278,6 @@ void main() {
           ),
           isEmpty,
         );
-      }
-    });
-
-    test('list_checkouts names the occupants of each checkout', () async {
-      final container = ProviderContainer(overrides: [await server.override()]);
-      addTearDown(container.dispose);
-
-      // Four candidates in four worktrees of `app`, and one ordinary session
-      // working in `app` itself: the tool must distinguish them.
-      server.sessionRows.insert(
-        Session(
-          id: 'in-app',
-          repositoryId: 'r-app',
-          agentInstallationId: 'a1',
-          title: 'Working in the checkout itself',
-          useWorktree: false,
-          workingDirectory: const EnvironmentPath(
-            environmentId: 'windows',
-            path: r'C:\src\demo\app',
-          ),
-          status: SessionStatus.running,
-          createdAt: testTime,
-        ),
-      );
-
-      final result =
-          await WorkspaceControlTools(
-                container,
-              ).call('list_checkouts', {'projectId': 'p1'})
-              as Map<String, Object?>;
-      final checkouts = (result['checkouts']! as List)
-          .cast<Map<String, Object?>>();
-      final byName = {
-        for (final checkout in checkouts) checkout['name'] as String: checkout,
-      };
-
-      expect(
-        (byName['app']!['sessionsWorkingHere']! as List)
-            .cast<Map<String, Object?>>()
-            .map((s) => s['sessionId']),
-        ['in-app'],
-      );
-      // The candidates are in worktrees, which are not `repositories` rows
-      // here, so they show up nowhere — and `api` and `docs` read empty, which
-      // is what "no session recorded here" looks like. The tool's own
-      // description says that is not a promise the checkout is free.
-      for (final name in ['api', 'docs']) {
-        expect(byName[name]!['sessionsWorkingHere'], isEmpty);
       }
     });
   });

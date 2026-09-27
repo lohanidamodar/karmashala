@@ -20,10 +20,16 @@ class HostedCheckRunner implements CheckCommandRunner {
     required this.registry,
     required this.newId,
     bool Function()? stopping,
+    this.remote,
   }) : _stopping = stopping ?? _never;
 
   final SessionRegistry registry;
   final String Function() newId;
+
+  /// The runner for a directory on an SSH box, or null for one on this
+  /// machine. A check there runs as one command over the server's own
+  /// connection — no session to watch, its output kept as the tail.
+  final CommandRunner? Function(EnvironmentPath directory)? remote;
 
   /// True once the host is shutting down: a check it killed on the way out
   /// failed nothing, so its exit is not read as a verdict.
@@ -37,6 +43,8 @@ class HostedCheckRunner implements CheckCommandRunner {
     required EnvironmentPath directory,
     required String title,
   }) async {
+    final runner = remote?.call(directory);
+    if (runner != null) return _runRemotely(runner, check, directory);
     final id = '$kCheckSessionPrefix${newId()}';
     final HostSession session;
     try {
@@ -76,5 +84,46 @@ class HostedCheckRunner implements CheckCommandRunner {
       // Pruned already; the verdict is what matters.
     }
     return CheckExecution.ran(exitCode: end.exitCode, tail: tail);
+  }
+
+  Future<CheckExecution> _runRemotely(
+    CommandRunner runner,
+    ProjectCheck check,
+    EnvironmentPath directory,
+  ) async {
+    if (check.command.isEmpty) {
+      return CheckExecution.refused(
+        '"${check.name}" has no command. Whether the work still stands is '
+        'unknown, not proven.',
+      );
+    }
+    final CommandResult result;
+    try {
+      result = await runner.run(
+        CommandRequest(
+          executable: check.command.first,
+          arguments: check.command.sublist(1),
+          workingDirectory: directory,
+        ),
+      );
+    } on Object catch (error) {
+      return CheckExecution.refused(
+        '"${check.name}" did not run: $error. Whether the work still stands '
+        'is unknown, not proven.',
+      );
+    }
+    if (_stopping()) {
+      return CheckExecution.refused(
+        '"${check.name}" was stopped because the server was shutting down. '
+        'Whether the work still stands is unknown, not proven.',
+      );
+    }
+    final lines = '${result.stdout}${result.stderr}'.split('\n');
+    return CheckExecution.ran(
+      exitCode: result.exitCode,
+      tail: lines.length <= kCheckRowsRecorded
+          ? lines
+          : lines.sublist(lines.length - kCheckRowsRecorded),
+    );
   }
 }

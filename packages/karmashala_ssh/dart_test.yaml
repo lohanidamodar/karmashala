@@ -1,0 +1,4 @@
+# The live suite dials a real SSH server; it runs only when asked for,
+# and skips itself without KARMASHALA_SSH_HOST and friends.
+tags:
+  live-ssh:

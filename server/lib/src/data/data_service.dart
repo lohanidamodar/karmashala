@@ -23,6 +23,7 @@ import 'notes_handler.dart';
 import 'pairings_handler.dart';
 import 'preferences_handler.dart';
 import 'snippets_handler.dart';
+import 'ssh_work.dart';
 import 'sessions_handler.dart';
 import 'todos_handler.dart';
 import 'workspace_handler.dart';
@@ -82,6 +83,10 @@ class DataService {
   /// import), set by `serve`; without them that work is refused
   /// `unavailable`.
   AgentWork? agentWork;
+
+  /// The server's own SSH (a test connection, a disconnect, a prompt's
+  /// answer), set by `serve`; without it that work is refused `unavailable`.
+  SshWork? sshWork;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -129,6 +134,11 @@ class DataService {
 
   /// The number of the last write, since this service started.
   int get revision => _revision;
+
+  /// Whether a client is subscribed to be told things — a desktop app; the
+  /// server's own links and a phone's companion never subscribe. What the
+  /// server's SSH asks a person goes only where somebody can answer.
+  bool get hasSubscribers => _links.any((link) => link._subscribed);
 
   /// One client link. [deliver] gets the changes other links make once the
   /// client has sent [DataSubscribe].
@@ -310,7 +320,7 @@ class DataService {
               )),
         // Reads disks and endpoints, so answered when done:
         // `DataSession.handleLater`.
-        AgentWorkRequest() => throw DataRefused.invalid(
+        AgentWorkRequest() || SshWorkRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
         final AutomationsRequest r => _automations.handle(r, changes),
@@ -456,7 +466,8 @@ class DataSession {
   static bool isAnsweredLater(DataRequest<Object?> request) =>
       request is ConversationsCatchUp ||
       request is CheckpointWorkRequest ||
-      request is AgentWorkRequest;
+      request is AgentWorkRequest ||
+      request is SshWorkRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
@@ -480,6 +491,13 @@ class DataSession {
           (throw const DataRefused.unavailable(
             'this server does no work for its agents',
           ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final SshWorkRequest<Object?> asked) {
+      final work =
+          _service.sshWork ??
+          (throw const DataRefused.unavailable('this server reaches no SSH'));
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }
@@ -524,6 +542,12 @@ class DataSession {
 
   DataAck _subscribe() {
     _subscribed = true;
+    // What is already under way — a connection's state, a question still
+    // open — told to this client alone, at the revision it is joining at.
+    final greeting = _service.sshWork?.greeting() ?? const <DataChange>[];
+    if (greeting.isNotEmpty) {
+      _deliver(DataChanges(_service._revision, List.unmodifiable(greeting)));
+    }
     return const DataAck();
   }
 }

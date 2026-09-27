@@ -6,6 +6,7 @@
 library;
 
 export 'src/repositories/data/checkout_presence_probe.dart';
+export 'src/repositories/data/posix_repository_discovery.dart';
 export 'src/repositories/data/repository_discovery.dart';
 export 'src/repositories/domain/checkout.dart';
 export 'src/repositories/domain/checkout_retirement.dart';

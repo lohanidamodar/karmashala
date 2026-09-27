@@ -318,6 +318,20 @@ $map = [ordered]@{
              'test/app/minimum_window_matrix_test.dart')
     owns = @('lib/src/features/ssh', 'test/features/ssh')
   }
+  ssh_host = @{
+    pkg  = 'packages/karmashala_ssh_host'
+    # Deploying the server on a box, the relay set-up and a phone's pairing
+    # there (split from `karmashala_ssh` in slice 3a): the app's install panel,
+    # host sessions and pairing dialogs, the relays panel and the host panes
+    # reach it.
+    app  = @('test/features/ssh',
+             'test/features/remote/ssh_relays_test.dart',
+             'test/features/remote/ssh_relays_panel_test.dart',
+             'test/terminal/host_pane_test.dart',
+             'test/terminal/ssh_host_pane_test.dart',
+             'test/features/settings/session_host_status_test.dart')
+    owns = @()
+  }
   notifications = @{
     pkg  = 'packages/karmashala_notifications'
     # `test/features/notifications` whole: what is left in it is the app's

@@ -34,6 +34,10 @@ class SshHostKeyVerifier {
   /// itself precisely instead of surfacing a bare handshake error.
   HostKeyPresentation? lastPresentation;
 
+  /// Why the last unknown key could not even be put to a person, when the
+  /// decision threw rather than answered — the words a refusal carries.
+  Object? lastRefusal;
+
   /// Classifies [fingerprint] without touching the store or prompting.
   HostKeyPresentation classify(String keyType, String fingerprint) {
     final known = knownHosts.find(host, port);
@@ -58,6 +62,7 @@ class SshHostKeyVerifier {
     final fingerprint = utf8.decode(fingerprintBytes, allowMalformed: true);
     final presentation = classify(keyType, fingerprint);
     lastPresentation = presentation;
+    lastRefusal = null;
 
     switch (presentation.verdict) {
       case HostKeyVerdict.trusted:
@@ -78,7 +83,15 @@ class SshHostKeyVerifier {
           );
           return false;
         }
-        final accepted = await decide(presentation);
+        final bool accepted;
+        try {
+          accepted = await decide(presentation);
+        } on Object catch (refusal) {
+          // Nobody could be asked — the decision says why, in its own words.
+          lastRefusal = refusal;
+          _logger.warning('Host key for $host:$port not asked: $refusal');
+          return false;
+        }
         if (!accepted) {
           _logger.warning(
             'Host key for $host:$port was not accepted; connection refused.',

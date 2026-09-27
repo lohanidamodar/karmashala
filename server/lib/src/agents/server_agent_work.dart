@@ -8,7 +8,6 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../data/agent_work.dart';
 import '../data/data_service.dart';
-import 'forwarded_runs.dart';
 import 'server_accounts.dart';
 import 'server_detection.dart';
 import 'server_imports.dart';
@@ -21,13 +20,13 @@ const String kAgentWorkVariable = 'KARMASHALA_AGENT_WORK';
 /// Everything the server does for the agents on its machine (slice 2a),
 /// built once by `serve` over its data service and answering the clients'
 /// `AgentWorkRequest`s: usage ([usage]), accounts ([accounts]), detection
-/// ([detection]) and the CLI import ([imports]). Commands in an SSH
-/// environment go through the app ([ForwardedRuns]); everything else runs
-/// here.
+/// ([detection]) and the CLI import ([imports]). Commands run where
+/// [runners] reaches: this machine, its WSL distributions, and an SSH box
+/// through the server's own connection (`ServerSsh`, slice 3a).
 class ServerAgentWork implements AgentWork {
   ServerAgentWork({
     required DataService data,
-    required ForwardedRuns runs,
+    CommandRunnerFactory runners = const CommandRunnerFactory(),
     Clock clock = const SystemClock(),
     IdGenerator? ids,
     AgentRegistry registry = AgentRegistry.builtIn,
@@ -38,9 +37,8 @@ class ServerAgentWork implements AgentWork {
     this.onItsOwn = true,
   }) : _data = data {
     final generator = ids ?? RandomIdGenerator();
-    final factory = ServerRunnerFactory(runs);
     CommandRunner runnerFor(ExecutionEnvironment environment) =>
-        factory.forEnvironment(environment);
+        runners.forEnvironment(environment);
     final stores = CliStoreLocator(
       runnerFor: (id) => runnerFor(
         data.environments.where((e) => e.id == id).firstOrNull ??

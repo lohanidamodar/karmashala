@@ -149,9 +149,14 @@ void main() {
       expect(answer.error, contains('list_projects'));
     });
 
-    test('a project on an SSH host is the app\'s to answer', () async {
+    test('a project on an SSH host is read over the server\'s own '
+        'connection', () async {
       _sshProject(fixture);
-      expect(tools.call('list_checkouts', {'projectId': 'remote'}, null), null);
+      final answer = await call('list_checkouts', {'projectId': 'remote'});
+      final checkouts = ((answer.value! as Map)['checkouts']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+      expect(checkouts.single['environmentId'], 'box');
+      expect(checkouts.single['branch'], 'main');
     });
   });
 
@@ -177,10 +182,20 @@ void main() {
       expect(answer.error, contains('no longer in the workspace'));
     });
 
-    test('a project on an SSH host is the app\'s to answer', () async {
+    test('a project on an SSH host is scanned with find on the box', () async {
       _sshProject(fixture);
-      expect(tools.call('project_rescan', {'projectId': 'remote'}, null), null);
-    });
+      fixture.repository(fixture.path('box/second'));
+
+      final answer = await call('project_rescan', {'projectId': 'remote'});
+
+      final result = answer.value! as Map<String, Object?>;
+      expect(result['count'], 1);
+      final added = RepositoryDao(
+        fixture.database,
+      ).getByProject('remote').firstWhere((r) => r.id != 'rr');
+      expect(added.path.environmentId, 'box');
+      expect(added.path.path, fixture.path('box/second'));
+    }, testOn: 'posix');
   });
 
   group('delivery_status', () {
@@ -298,9 +313,12 @@ void main() {
   });
 }
 
-/// A project `remote` with one checkout on an SSH host.
+/// A project `remote` with one checkout on an SSH host — a "box" that is
+/// this machine, so the checkout is a real repository under `box/app`.
 void _sshProject(RepoToolFixture fixture) {
   final at = RepoToolFixture.now.toIso8601String();
+  final root = fixture.path('box');
+  final app = fixture.repository(fixture.path('box/app'));
   fixture.database.execute(
     'INSERT INTO execution_environments (id, kind, name, created_at) '
     "VALUES ('box', 'ssh', 'Build box', ?);",
@@ -308,13 +326,15 @@ void _sshProject(RepoToolFixture fixture) {
   );
   fixture.database.execute(
     'INSERT INTO projects (id, name, root_environment_id, root_path, '
-    "created_at) VALUES ('remote', 'Remote', 'box', '/srv/app', ?);",
-    [at],
+    "created_at) VALUES ('remote', 'Remote', 'box', ?, ?);",
+    [root, at],
   );
   fixture.database.execute(
     'INSERT INTO repositories (id, project_id, name, environment_id, path, '
-    "created_at) VALUES ('rr', 'remote', 'app', 'box', '/srv/app', ?);",
-    [at],
+    "created_at) VALUES ('rr', 'remote', 'app', 'box', ?, ?);",
+    [app, at],
   );
+  // A server that reaches no SSH would not answer for it; this one does.
   expect(CheckoutReach(fixture.database).answers('box'), isFalse);
+  expect(fixture.reach.answers('box'), isTrue);
 }

@@ -9,6 +9,7 @@ import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 
+import 'checkout_reach.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 
@@ -16,8 +17,8 @@ import 'server_tool_set.dart';
 /// checkout. Nothing takes a sha from a caller — every write computes it from
 /// disk, and a file git cannot hash gets none.
 abstract interface class ReviewAnchors {
-  /// Whether this server can read [repositoryId]'s files. A checkout it cannot
-  /// (WSL, SSH) is the app's, and its review calls are handed to the app.
+  /// Whether this server can read [repositoryId]'s files — every checkout
+  /// it reaches ([CheckoutReach]); one it cannot is answered in words.
   bool reaches(String repositoryId);
 
   /// The content fingerprint of each of [paths] as they stand on disk. A path
@@ -26,12 +27,15 @@ abstract interface class ReviewAnchors {
   Future<Map<String, String>> shasFor(String repositoryId, List<String> paths);
 }
 
-/// [ReviewAnchors] for the checkouts in this machine's own environment, read
-/// with the git on this machine's `PATH`.
+/// [ReviewAnchors] for the checkouts the server reaches: with [reach], every
+/// one its runners do — this machine, WSL from Windows, an SSH box over the
+/// server's own connection; without, this machine's own environment, read
+/// with the git on its `PATH`.
 class LocalReviewAnchors implements ReviewAnchors {
   LocalReviewAnchors(
     AppDatabase database, {
     CommandRunner runner = const LocalCommandRunner(),
+    this.reach,
     bool? windows,
   }) : _repositories = RepositoryDao(database),
        _environments = ExecutionEnvironmentDao(database),
@@ -43,12 +47,17 @@ class LocalReviewAnchors implements ReviewAnchors {
   final GitService _git;
   final bool _windows;
 
+  /// Where the server runs git; null reaches this machine's own checkouts.
+  final CheckoutReach? reach;
+
   /// An unknown repository is reached: there is nothing of it to hash, which
   /// the tools answer as the app did — an anchor of unknown attachment.
   @override
   bool reaches(String repositoryId) {
     final repository = _repositories.getById(repositoryId);
     if (repository == null) return true;
+    final reach = this.reach;
+    if (reach != null) return reach.answers(repository.path.environmentId);
     final environment = _environments.getById(repository.path.environmentId);
     return switch (environment?.kind) {
       EnvironmentKind.localPosix => !_windows,
@@ -65,7 +74,8 @@ class LocalReviewAnchors implements ReviewAnchors {
     final repository = _repositories.getById(repositoryId);
     if (repository == null) return const {};
     try {
-      return await _git.hashObjects(repository.path, paths);
+      final git = reach?.gitFor(repository.path) ?? _git;
+      return await git.hashObjects(repository.path, paths);
     } on Object {
       // A git that will not answer is "cannot tell", never a silent attached.
       return const {};

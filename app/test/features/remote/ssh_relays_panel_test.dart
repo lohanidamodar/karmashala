@@ -11,7 +11,7 @@ import 'package:karmashala/src/features/remote/presentation/ssh_relays_panel.dar
 import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';

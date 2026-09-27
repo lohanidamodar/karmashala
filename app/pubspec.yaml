@@ -132,6 +132,10 @@ dependencies:
   # Pure Dart.
   karmashala_ssh:
     path: ../packages/karmashala_ssh
+  # Deploying the server on an SSH box, its relay and a phone's pairing there
+  # — the app keeps these, with its own SSH pool, until a later slice.
+  karmashala_ssh_host:
+    path: ../packages/karmashala_ssh_host
   # What a terminal is, as values: profiles and launch contexts, the pane and
   # workspace geometry, the grid vocabulary, OSC shell integration and the cast
   # format. A Flutter package — `xterm2`'s buffer types are its vocabulary

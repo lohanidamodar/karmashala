@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_local_ipc/socket_location.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:path/path.dart' as p;
 
 import '../../features/ssh/fake_host_box.dart';

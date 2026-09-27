@@ -27,7 +27,6 @@ class HostLifecycleSubscriber {
     this.companion,
     this.automations,
     this.panes,
-    this.runs,
     this.retryDelays = kHostRedialDelays,
     this.idleRetry = const Duration(seconds: 30),
     AppLogger? logger,
@@ -78,10 +77,6 @@ class HostLifecycleSubscriber {
   /// link and every loss. Null reports none, and the host adopts nothing
   /// started by hand in them.
   final HostLinkPeer? panes;
-
-  /// This app's half of the commands the server runs through it — an SSH
-  /// box's, which only this app can dial; told of every link and its loss.
-  final HostLinkPeer? runs;
 
   /// Waits before each dial after the link is lost, then [idleRetry] between
   /// dials; a pane starting on the host dials at once through [nudge].
@@ -210,7 +205,6 @@ class HostLifecycleSubscriber {
     companion?.attached(feed);
     automations?.attached(feed);
     panes?.attached(feed);
-    runs?.attached(feed);
   }
 
   /// Runs one forwarded call and answers it; a failure is the text the agent
@@ -268,7 +262,6 @@ class HostLifecycleSubscriber {
     companion?.detached();
     automations?.detached();
     panes?.detached();
-    runs?.detached();
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
@@ -308,7 +301,6 @@ class HostLifecycleSubscriber {
       companion?.detached();
       automations?.detached();
       panes?.detached();
-      runs?.detached();
     }
     final feed = _feed;
     _feed = null;

@@ -11,7 +11,7 @@ import 'package:karmashala/src/features/terminal/application/local_host_provider
 import 'package:karmashala/src/features/terminal/application/local_host_startup.dart';
 import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_host/lifecycle_client.dart' show HookEndpoint;
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:path/path.dart' as p;
 

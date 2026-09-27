@@ -10,7 +10,6 @@ import 'package:karmashala_terminal_runtime/instances.dart'
     show HostTerminalInstance;
 import 'package:riverpod/riverpod.dart';
 
-import '../../../ssh/application/host_ssh_runs.dart';
 import '../../../agents/application/agent_hook_intake.dart';
 import '../../../automations/application/host_automations.dart';
 import '../../../cli_detection/application/cli_detection_providers.dart'
@@ -111,8 +110,6 @@ hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
     automations: ref.read(hostAutomationsLinkProvider),
     // The server adopts and attributes; this app reports its panes.
     panes: ref.read(paneFactsReporterProvider),
-    // The server's commands on an SSH box go through this app's connection.
-    runs: ref.read(hostSshRunsProvider),
   );
   // A pane starting on the host may have just started the host itself: the
   // launch's start failed, or the host went away since.

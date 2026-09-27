@@ -52,6 +52,7 @@ class DaemonAutomations implements AutomationHandler {
     required String dataDirectory,
     required SessionMcpAccessPoint mcp,
     required void Function(List<DataChange> changes) tell,
+    CommandRunnerFactory? remote,
     void Function(String sessionId)? sessionWritten,
     DateTime Function()? clock,
     String Function()? newId,
@@ -72,7 +73,7 @@ class DaemonAutomations implements AutomationHandler {
     final projectChecks = ProjectCheckDao(database);
     final sessions = SessionDao(database);
     final rows = CheckoutRows(database);
-    facts = DaemonCheckoutFacts(rows, windows: windows);
+    facts = DaemonCheckoutFacts(rows, windows: windows, remote: remote);
     _sessions = sessions;
     _automations = automations;
 
@@ -84,6 +85,7 @@ class DaemonAutomations implements AutomationHandler {
         registry: registry,
         newId: ids,
         stopping: () => _stopped,
+        remote: facts.remoteRunnerFor,
       ),
       recorder: CommandCheckRecorder(
         StoreVerificationRecords(
@@ -352,7 +354,7 @@ class DaemonAutomations implements AutomationHandler {
         );
       }
       final directory = _directoryOf(session);
-      if (!facts.isHostLocal(directory)) {
+      if (!facts.runsChecksIn(directory)) {
         return answer(ChecksRunOutcome.elsewhere);
       }
       final result = await checks.runForSession(session, directory);
@@ -384,7 +386,7 @@ class DaemonAutomations implements AutomationHandler {
     final session = _sessions.getById(sessionId);
     if (session == null) return null;
     final directory = _directoryOf(session);
-    if (!facts.isHostLocal(directory)) return null;
+    if (!facts.runsChecksIn(directory)) return null;
     return checks
         .runForSession(session, directory)
         .then<Object?>(sessionChecksReport);

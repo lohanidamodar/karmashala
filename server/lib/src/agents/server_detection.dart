@@ -10,7 +10,7 @@ import '../data/data_service.dart';
 
 /// **Finding the agent CLIs, by the server** — in every environment it can
 /// run a command in: this machine, its WSL distributions, and an SSH box
-/// through the app ([ForwardedRuns]). The rules are `AgentSweep`'s; the rows
+/// over its own connection. The rules are `AgentSweep`'s; the rows
 /// it writes go through the data service's reconciliation (`planReconcile`)
 /// and are told to every client.
 ///

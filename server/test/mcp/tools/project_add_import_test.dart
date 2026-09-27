@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
-import 'package:karmashala_host/src/agents/forwarded_runs.dart';
 import 'package:karmashala_host/src/agents/server_agent_work.dart';
 import 'package:karmashala_host/src/mcp/tools/project_folders.dart';
 import 'package:karmashala_host/src/mcp/tools/project_tool_set.dart';
@@ -56,7 +55,6 @@ void main() {
     final clock = MutableClock(RepoToolFixture.now);
     work = ServerAgentWork(
       data: fixture.data,
-      runs: ForwardedRuns(),
       clock: clock,
       ids: CountingIds('imp'),
       hostEnvironment: {'HOME': home.path, 'USERPROFILE': home.path},

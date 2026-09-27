@@ -22,8 +22,9 @@ const String kWorktreeSetupSessionPrefix = 'karmashala-setup-';
 /// client) — with a repository's setup command run as a
 /// session this host owns (watchable from any client) where the app would
 /// open a pane. [environmentOf] widens where it makes them (the agent tools
-/// reach WSL from a Windows server too); by default only this machine's own
-/// environment.
+/// reach WSL from a Windows server, and an SSH box through [runners]); by
+/// default only this machine's own environment. A setup command on an SSH box
+/// is not run: the server has no session there to run it in, and says so.
 WorktreeService daemonWorktrees({
   required AppDatabase database,
   required SessionRegistry registry,
@@ -31,12 +32,13 @@ WorktreeService daemonWorktrees({
   required String Function() newId,
   required void Function(WorktreeSetupReport report) record,
   WorktreeEnvironmentOf? environmentOf,
+  CommandRunnerFactory runners = const CommandRunnerFactory(),
 }) {
   final rows = CheckoutRows(database);
   final setups = WorktreeSetupDao(database);
   late final WorktreeSetupService setup;
   setup = WorktreeSetupService(
-    runnerFactory: const CommandRunnerFactory(),
+    runnerFactory: runners,
     lookup: (repo) {
       for (final row in database.query(
         'SELECT id, environment_id, path FROM repositories '
@@ -51,6 +53,7 @@ WorktreeService daemonWorktrees({
     },
     record: record,
     openPane: (command) {
+      if (command.environment.kind == EnvironmentKind.ssh) return null;
       final id = '$kWorktreeSetupSessionPrefix${newId()}';
       final session = registry.open(
         id,
@@ -80,7 +83,7 @@ WorktreeService daemonWorktrees({
     ),
   );
   return WorktreeService(
-    runnerFactory: const CommandRunnerFactory(),
+    runnerFactory: runners,
     environmentOf:
         environmentOf ??
         (repo) {

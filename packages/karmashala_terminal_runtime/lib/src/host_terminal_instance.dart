@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';

@@ -8,7 +8,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/paths/server_data_directory.dart';
 import '../../../core/probe/probe_mode.dart';
 import '../../settings/application/settings_controller.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 
 /// Whether this process may reach a session host on this machine at all. Not

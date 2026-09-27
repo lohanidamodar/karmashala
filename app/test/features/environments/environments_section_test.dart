@@ -10,6 +10,8 @@ import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SshConnectionChanged;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
@@ -119,19 +121,32 @@ void main() {
     tester,
   ) async {
     // The trap this guards: agent discovery treats an unreachable environment
-    // as "nothing installed", so without an explicit connect a refused host
-    // would render as a perfectly ordinary empty result.
+    // as "nothing installed". The server dials the box itself (slice 3a); a
+    // refused connection comes back as an unreachable scan, and its
+    // connection's state is told for the chip.
     environments.upsert(sshEnvFixture());
     hosts.upsert(remoteHost());
+    server.agentWork.onDetect = (environmentId) {
+      server.sshWork.tell([
+        const SshConnectionChanged(
+          'h1',
+          SshConnectionState(
+            status: SshConnectionStatus.failed,
+            error: r'Private key not found: C:\keys\missing_id_ed25519',
+          ),
+        ),
+      ]);
+      return AgentDiscoveryReport([
+        EnvironmentScanReport.unreachable(
+          environmentId: environmentId!,
+          environmentName: 'build-box',
+          error: r'Private key not found: C:\keys\missing_id_ed25519',
+        ),
+      ]);
+    };
     await pump(tester);
 
     await tester.tap(find.text('Connect and find agents'));
-    await tester.pump();
-    // The key check is real filesystem work, which only runs outside the
-    // test's fake clock.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 300)),
-    );
     await tester.pumpAndSettle();
 
     // Both the chip and the scan report it — the state and the action agree.

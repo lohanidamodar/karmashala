@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 import '../../support/fake_data_server.dart';

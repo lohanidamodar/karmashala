@@ -1,8 +1,9 @@
 import '../mcp/tools/server_tool_set.dart';
 
-/// `checks_run`: a session's project checks, run by the server in sessions it
-/// owns when the checkout is on this machine. A checkout only the app reaches
-/// (WSL, SSH) is handed to the app, which runs them in its panes.
+/// `checks_run`: a session's project checks, run by the server — in sessions
+/// it owns when the checkout is on this machine, and as commands over its own
+/// connection when it is on an SSH box (slice 3a). A checkout only the app's
+/// panes reach (WSL) is handed to the app, which runs them there.
 class ChecksToolSet extends ServerToolSet {
   const ChecksToolSet(this._run);
 

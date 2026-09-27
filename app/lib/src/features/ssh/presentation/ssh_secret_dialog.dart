@@ -3,25 +3,34 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/ssh_prompt_controller.dart';
-import 'package:karmashala_ssh/connection.dart';
 
 /// Asks for a password or a passphrase, for one connection. There is no
 /// "remember this": what is typed reaches `dartssh2` and nothing else.
 class SshSecretDialog extends StatefulWidget {
-  const SshSecretDialog({required this.host, required this.kind, super.key});
+  const SshSecretDialog({
+    required this.hostName,
+    required this.address,
+    required this.kind,
+    super.key,
+  });
 
-  final SshHost host;
+  /// The saved host's name and `user@host:port` — the server's question
+  /// carries both, for a host it may be testing before it is saved.
+  final String hostName;
+  final String address;
   final SshSecretKind kind;
 
   /// Returns the secret, or `null` if the user cancelled.
   static Future<String?> show(
     BuildContext context, {
-    required SshHost host,
+    required String hostName,
+    required String address,
     required SshSecretKind kind,
   }) => showDialog<String>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => SshSecretDialog(host: host, kind: kind),
+    builder: (_) =>
+        SshSecretDialog(hostName: hostName, address: address, kind: kind),
   );
 
   @override
@@ -62,10 +71,10 @@ class _SshSecretDialogState extends State<SshSecretDialog> {
           children: [
             Text(
               isPassphrase
-                  ? 'The private key for ${widget.host.name} is encrypted. '
+                  ? 'The private key for ${widget.hostName} is encrypted. '
                         'Enter its passphrase to connect to '
-                        '${widget.host.address}.'
-                  : 'Enter the password for ${widget.host.address}.',
+                        '${widget.address}.'
+                  : 'Enter the password for ${widget.address}.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: Insets.lg),

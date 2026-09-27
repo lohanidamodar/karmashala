@@ -61,9 +61,6 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       runChecks: watch.runChecks,
       reportPanes: watch.reportPanes,
       paneTailsWanted: watch.paneTailsWanted,
-      runCalls: watch.runCalls,
-      offerRuns: watch.offerRuns,
-      answerRunCall: watch.answerRunCall,
       statusSnapshot: [
         for (final json in watch.statusSnapshot)
           ?HostedAgentStatus.fromJson(json),

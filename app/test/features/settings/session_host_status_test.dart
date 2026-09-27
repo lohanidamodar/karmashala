@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/terminal/application/local_host_provider
 import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala/src/features/settings/presentation/session_host_status_line.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 
 /// The three facts the supervisor row has to carry, and the one it must refuse
 /// to invent.

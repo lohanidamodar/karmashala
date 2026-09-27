@@ -8,11 +8,9 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_environments/sweep.dart';
 import 'package:karmashala_host/data.dart';
-import 'package:karmashala_host/src/agents/forwarded_runs.dart';
 import 'package:karmashala_host/src/agents/server_agent_work.dart';
 import 'package:karmashala_host/src/agents/server_detection.dart';
 import 'package:karmashala_host/src/data/agent_work.dart';
-import 'package:karmashala_host/src/protocol/messages.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -277,9 +275,9 @@ void main() {
     });
   });
 
-  group('an SSH box, through the app', () {
-    late ForwardedRuns runs;
+  group('an SSH box, over the server\'s own connection', () {
     late ServerAgentWork work;
+    late ScriptedRunner box;
 
     setUp(() {
       app.handle(
@@ -295,10 +293,30 @@ void main() {
           ),
         ),
       );
-      runs = ForwardedRuns();
+      box = ScriptedRunner((request) {
+        final script = request.arguments.join(' ');
+        if (script.contains('exit 0')) {
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        }
+        if (script.contains('command -v claude')) {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '/home/dev/.local/bin/claude\n',
+            stderr: '',
+          );
+        }
+        if (request.executable == '/home/dev/.local/bin/claude') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '2.1.0\n',
+            stderr: '',
+          );
+        }
+        return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+      }, environmentId: sshEnvironmentId('h1'));
       work = ServerAgentWork(
         data: service,
-        runs: runs,
+        runners: _BoxRunners(box),
         clock: clock,
         ids: CountingIds('ssh'),
         usageService: (_) => ScriptedUsageService(
@@ -315,76 +333,58 @@ void main() {
       told.clear();
     });
 
-    tearDown(() {
-      work.stop();
-      runs.close();
-    });
+    tearDown(() => work.stop());
 
-    test('with no app it is unreachable, and says why', () async {
+    test(
+      'each command runs on the box, and what answered is recorded',
+      () async {
+        final report = (await app.handleLater(
+          AgentsDetect(environmentId: sshEnvironmentId('h1')),
+        )).value;
+        final scan = report.environments.single;
+        expect(scan.reachable, isTrue, reason: scan.error);
+        expect(
+          scan.added.single.executable.path,
+          '/home/dev/.local/bin/claude',
+        );
+        expect(scan.added.single.version, '2.1.0');
+        expect(box.requests, isNotEmpty);
+        expect(
+          rows().where((r) => r.environmentId == sshEnvironmentId('h1')),
+          hasLength(1),
+        );
+        expect(toldChanges().whereType<InstallationChanged>(), hasLength(1));
+      },
+    );
+
+    test('a box that cannot be reached is unreachable, in its words', () async {
+      box.responder = (_) => throw CommandException(
+        'build.example.com needs a password, and no Karmashala window is '
+        'connected to ask for it.',
+      );
       final report = (await app.handleLater(
         AgentsDetect(environmentId: sshEnvironmentId('h1')),
       )).value;
       expect(report.environments.single.reachable, isFalse);
-      expect(report.environments.single.error, contains(kRunsAppNotRunning));
-    });
-
-    test('each command is a run call the app answers', () async {
-      final app1 = Object();
-      final calls = <CommandRequest>[];
-      runs.adopt(app1, (message) {
-        final call = message as RunCallMessage;
-        expect(call.environmentId, sshEnvironmentId('h1'));
-        final request = commandRequestFromJson(call.command);
-        calls.add(request);
-        final script = request.arguments.join(' ');
-        final RunResultMessage result;
-        if (script.contains('exit 0')) {
-          result = RunResultMessage.ran(
-            call.callId,
-            exitCode: 0,
-            stdout: '',
-            stderr: '',
-          );
-        } else if (script.contains('command -v claude')) {
-          result = RunResultMessage.ran(
-            call.callId,
-            exitCode: 0,
-            stdout: '/home/dev/.local/bin/claude\n',
-            stderr: '',
-          );
-        } else if (request.executable == '/home/dev/.local/bin/claude') {
-          result = RunResultMessage.ran(
-            call.callId,
-            exitCode: 0,
-            stdout: '2.1.0\n',
-            stderr: '',
-          );
-        } else {
-          result = RunResultMessage.ran(
-            call.callId,
-            exitCode: 1,
-            stdout: '',
-            stderr: '',
-          );
-        }
-        scheduleMicrotask(() => runs.answer(app1, result));
-      });
-
-      final report = (await app.handleLater(
-        AgentsDetect(environmentId: sshEnvironmentId('h1')),
-      )).value;
-      final scan = report.environments.single;
-      expect(scan.reachable, isTrue, reason: scan.error);
-      expect(scan.added.single.executable.path, '/home/dev/.local/bin/claude');
-      expect(scan.added.single.version, '2.1.0');
-      expect(calls, isNotEmpty);
       expect(
-        rows().where((r) => r.environmentId == sshEnvironmentId('h1')),
-        hasLength(1),
+        report.environments.single.error,
+        contains('no Karmashala window is connected'),
       );
-      expect(toldChanges().whereType<InstallationChanged>(), hasLength(1));
     });
   });
+}
+
+/// The server's runners with [box] standing in for the SSH connection.
+class _BoxRunners extends CommandRunnerFactory {
+  const _BoxRunners(this.box);
+
+  final CommandRunner box;
+
+  @override
+  bool get canReachRemote => true;
+
+  @override
+  CommandRunner unsupported(ExecutionEnvironment environment) => box;
 }
 
 /// The detection half of `ServerAgentWork.handle`, over a [ServerDetection]

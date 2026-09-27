@@ -23,7 +23,6 @@ class HostLifecycleWatch {
   final _companionCalls = StreamController<CompanionCallMessage>();
   final _companionEvents = StreamController<CompanionEventMessage>();
   final _automationCalls = StreamController<AutomationCallMessage>();
-  final _runCalls = StreamController<RunCallMessage>();
 
   final _agentStatuses = StreamController<AgentStatusMessage>();
   final _paneTailsWanted = StreamController<PaneTailsWantedMessage>();
@@ -164,16 +163,6 @@ class HostLifecycleWatch {
         ? AutomationResultMessage.success(callId)
         : AutomationResultMessage.failure(callId, error),
   );
-
-  /// Each command the server runs through this client (SSH), once it has
-  /// offered with [offerRuns]; answer each with [answerRunCall].
-  Stream<RunCallMessage> get runCalls => _runCalls.stream;
-
-  /// "Run your SSH commands through me."
-  void offerRuns() => _write(const RunOfferMessage());
-
-  /// How the forwarded command [callId] ended.
-  void answerRunCall(RunResultMessage result) => _write(result);
 
   /// Runs [sessionId]'s project checks in sessions the host owns.
   Future<ChecksRanMessage> runChecks(String sessionId) {
@@ -380,10 +369,6 @@ class HostLifecycleWatch {
       if (!_automationCalls.isClosed) _automationCalls.add(message);
       return;
     }
-    if (message is RunCallMessage) {
-      if (!_runCalls.isClosed) _runCalls.add(message);
-      return;
-    }
 
     if (message is ChecksRanMessage) {
       _checks.remove(message.requestId)?.complete(message);
@@ -445,7 +430,6 @@ class HostLifecycleWatch {
     if (!_companionCalls.isClosed) unawaited(_companionCalls.close());
     if (!_companionEvents.isClosed) unawaited(_companionEvents.close());
     if (!_automationCalls.isClosed) unawaited(_automationCalls.close());
-    if (!_runCalls.isClosed) unawaited(_runCalls.close());
 
     if (!_agentStatuses.isClosed) unawaited(_agentStatuses.close());
     if (!_paneTailsWanted.isClosed) unawaited(_paneTailsWanted.close());

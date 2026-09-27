@@ -243,6 +243,16 @@ class DataClient {
   /// another client. Nothing of the history is copied: a chart asks for it.
   Stream<String> get usageRecorded => _usageRecorded.stream;
 
+  /// Where each of the server's own SSH connections stands, by host id, as
+  /// last told (slice 3a). Absent is idle.
+  final sshConnections = <String, SshConnectionState>{};
+
+  final _sshChanges = StreamController<SshChange>.broadcast(sync: true);
+
+  /// The server's SSH connections moving, and the questions they put to a
+  /// person opening and closing.
+  Stream<SshChange> get sshChanges => _sshChanges.stream;
+
   static bool _sameLinks(
     List<SessionRepositoryLink> a,
     List<SessionRepositoryLink> b,
@@ -742,6 +752,11 @@ class DataClient {
           presets.applyAt(id, null, batch.revision);
         case final EvidenceChange change:
           _applyEvidence(change, batch.revision);
+        case final SshChange change:
+          if (change case SshConnectionChanged(:final hostId, :final state)) {
+            sshConnections[hostId] = state;
+          }
+          if (!_sshChanges.isClosed) _sshChanges.add(change);
       }
     }
   }
@@ -805,6 +820,8 @@ class DataClient {
   void _lost(DataEndpoint endpoint) {
     if (_closed || !identical(endpoint, _endpoint)) return;
     _endpoint = null;
+    // What the server's connections were doing is no longer known.
+    sshConnections.clear();
     _setConnection(
       const DataConnection(
         DataLinkState.connecting,
@@ -882,6 +899,7 @@ class DataClient {
     unawaited(_batchEnds.close());
     unawaited(_usageRecorded.close());
     unawaited(_evidenceChanges.close());
+    unawaited(_sshChanges.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());

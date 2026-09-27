@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DataRefused;
+    show DataRefused, SshTestResult;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/primitives.dart';
@@ -13,11 +13,8 @@ import '../../environments/application/environments_controller.dart';
 import '../../settings/presentation/path_field_row.dart';
 import 'package:agent_cli/process.dart';
 import '../application/ssh_connection_providers.dart';
-import '../application/ssh_failure.dart';
-import '../application/ssh_hosts_controller.dart';
-import '../application/ssh_providers.dart';
-import '../data/environment_key_reader.dart';
 import 'package:karmashala_ssh/connection.dart';
+import '../application/ssh_hosts_controller.dart';
 import 'host_key_changed_alert.dart';
 import '../../settings/presentation/settings_notice.dart';
 
@@ -51,7 +48,7 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
   late String _keyEnvironmentId;
 
   String? _error;
-  SshHostProbe? _probe;
+  SshTestResult? _probe;
   bool _busy = false;
 
   @override
@@ -154,12 +151,10 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
       setState(() => _busy = false);
       return;
     }
-    // Through the pool's `create`, which does not register the connection: the
-    // settings tested are not saved, and nothing inherits a draft session.
-    final probe = await probeSshHost(
-      ref.read(sshConnectionPoolProvider),
-      draft,
-    );
+    // At the server, on a connection of its own: the settings tested are not
+    // saved, and nothing inherits a draft session. A key to trust or a
+    // password is asked through the prompt every window shows.
+    final probe = await ref.read(sshHostTestProvider)(draft: draft);
     if (!mounted) return;
     setState(() {
       _probe = probe;
@@ -430,14 +425,19 @@ class _ConnectionTest extends StatelessWidget {
   final bool busy;
   final VoidCallback onTest;
   final String? error;
-  final SshHostProbe? probe;
+  final SshTestResult? probe;
   final VoidCallback onKeyForgotten;
 
   @override
   Widget build(BuildContext context) {
     final error = this.error;
     final probe = this.probe;
-    final rejection = probe == null ? null : hostKeyRejectionIn(probe.error);
+    // Only a changed key has something to forget; a key nobody trusted was
+    // refused, and the probe's words say so.
+    final rejected = probe?.rejectedKey;
+    final rejection = rejected?.verdict == HostKeyVerdict.changed
+        ? rejected
+        : null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,7 +457,7 @@ class _ConnectionTest extends StatelessWidget {
         if (rejection != null) ...[
           const SizedBox(height: Insets.md),
           HostKeyChangedAlert(
-            presentation: rejection.presentation,
+            presentation: rejection,
             onForgotten: onKeyForgotten,
           ),
         ] else if (probe != null) ...[
@@ -472,7 +472,7 @@ class _ConnectionTest extends StatelessWidget {
 class _ProbeResult extends StatelessWidget {
   const _ProbeResult({required this.probe});
 
-  final SshHostProbe probe;
+  final SshTestResult probe;
 
   @override
   Widget build(BuildContext context) {

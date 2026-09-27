@@ -1,7 +1,7 @@
 /// One family of agent tools the server runs itself (slice 2b): the schemas
 /// it serves and the calls it answers. A call it answers `null` for is handed
 /// to the connected app — a session that runs in one of the app's own panes,
-/// a checkout only the app reaches — and refused in words with no app.
+/// a browser or device run — and refused in words with no app.
 library;
 
 import 'dart:async';

@@ -59,6 +59,7 @@ workspace:
   - packages/karmashala_session_engine
   - packages/karmashala_snippets
   - packages/karmashala_ssh
+  - packages/karmashala_ssh_host
   - packages/karmashala_store
   - packages/karmashala_terminal_core
   - packages/karmashala_terminal_runtime

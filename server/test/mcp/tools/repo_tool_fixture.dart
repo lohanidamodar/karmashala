@@ -178,8 +178,19 @@ class RepoToolFixture {
 /// Local git as it is, and a `gh` that is never started: a test must not
 /// reach GitHub, or whatever account this machine's `gh` is signed in to. It
 /// answers as a `gh` that could not tell, which reads as "no pull request".
+///
+/// An SSH environment is reached too, the way `ServerSsh`'s runners reach
+/// one — but the "box" is this machine, so its checkouts are real folders
+/// under the temp directory and real git answers about them.
 class _NoGitHub extends CommandRunnerFactory {
   const _NoGitHub();
+
+  @override
+  bool get canReachRemote => true;
+
+  @override
+  CommandRunner unsupported(ExecutionEnvironment environment) =>
+      _NoGitHubRunner(const LocalCommandRunner());
 
   @override
   CommandRunner forEnvironment(ExecutionEnvironment environment) =>

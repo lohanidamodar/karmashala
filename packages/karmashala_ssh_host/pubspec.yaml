@@ -1,0 +1,40 @@
+name: karmashala_ssh_host
+description: >-
+  Running the Karmashala server on a machine reached over SSH: which binary a
+  platform needs, deploying and greeting it, the companion port and relay
+  set up on the box, pairing a phone there, and reaching the sessions it owns.
+  Split from `karmashala_ssh` (slice 3a) because it speaks the server's wire
+  protocol — so the server itself can depend on `karmashala_ssh` for its own
+  SSH work without depending on the package that deploys it. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The connection a deploy runs over, and `SshHost`.
+  karmashala_ssh:
+    path: ../karmashala_ssh
+  # The SSH client's channel types a deploy target writes files through.
+  dartssh2: ^4.1.0
+  # Logging.
+  karmashala_core:
+    path: ../karmashala_core
+  # The server's wire protocol, so the deployer's greeting and the binary it
+  # installs cannot drift from what that binary answers.
+  karmashala_host:
+    path: ../../server
+  meta: ^1.16.0
+  # The relay's contract: its default port, the `/k/<token>` prefix and the
+  # health route this package builds its URLs from.
+  karmashala_relay_protocol:
+    path: ../../relay/protocol
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

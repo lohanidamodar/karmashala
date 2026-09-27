@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_host/data.dart' show HostDataLink;
-import 'package:karmashala_ssh/host.dart' show HostDeploymentStatus;
+import 'package:karmashala_ssh_host/host.dart' show HostDeploymentStatus;
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show LocalHostSessionAccess, LocalHostSupervisor;
 

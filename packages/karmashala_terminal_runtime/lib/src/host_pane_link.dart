@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:karmashala_host/protocol.dart';
 
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 
 /// What the host said when a pane attached.
 class HostAttachment {

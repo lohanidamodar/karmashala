@@ -113,6 +113,12 @@ dependencies:
   # Command snippets and saved presets: their DAOs, behind the data API.
   karmashala_snippets:
     path: ../packages/karmashala_snippets
+  # SSH reached by the server itself (slice 3a): its pool over the saved
+  # hosts and trusted keys, the key reader and the SSH command runner. It
+  # depends on nothing of this package's — deploying the server on a box is
+  # `karmashala_ssh_host`, which the app keeps.
+  karmashala_ssh:
+    path: ../packages/karmashala_ssh
   karmashala_store:
     path: ../packages/karmashala_store
   path: ^1.9.1

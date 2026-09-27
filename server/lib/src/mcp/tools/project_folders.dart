@@ -38,8 +38,9 @@ String repoNameFromUrl(String url) {
 /// **What only a machine with the folders can do for a project** — look at
 /// them (scan, clone), in an environment [CheckoutReach] reaches — before
 /// the data service records what was found by its own rules. The server's
-/// counterpart of the app's `ProjectService`; the app keeps that for the New
-/// Project dialog and for an SSH host, which only it reaches.
+/// counterpart of the app's `ProjectService` (which the New Project dialog
+/// still uses). An SSH box's folders are scanned with `find` over the
+/// server's own connection.
 class ProjectFolders {
   ProjectFolders(
     this._context,
@@ -153,6 +154,9 @@ class ProjectFolders {
     EnvironmentPath root,
     ExecutionEnvironment environment,
   ) async {
+    if (environment.kind == EnvironmentKind.ssh) {
+      return _overSsh(environment).discover(root, maxDepth: maxDepth);
+    }
     final found = await discovery.discover(
       _reach.scanPathOf(root),
       maxDepth: maxDepth,
@@ -174,7 +178,8 @@ class ProjectFolders {
     ExecutionEnvironment target,
   ) async {
     final runner = _reach.runners.forEnvironment(target);
-    if (target.kind == EnvironmentKind.wsl) {
+    if (target.kind == EnvironmentKind.wsl ||
+        target.kind == EnvironmentKind.ssh) {
       final targetExpression = path == '~'
           ? r'"$HOME"'
           : path.startsWith('~/')
@@ -240,8 +245,16 @@ cd "\$TARGET" && pwd
           if (isUnder(project.root, repository.path)) repository,
       ];
       if (candidates.isEmpty) return;
-      Future<CheckoutPresence> presenceOf(EnvironmentPath directory) => presence
-          .presenceOf(directory, environment: environment, windows: host);
+      final ssh = environment.kind == EnvironmentKind.ssh
+          ? _overSsh(environment)
+          : null;
+      Future<CheckoutPresence> presenceOf(EnvironmentPath directory) =>
+          ssh?.presenceOf(directory) ??
+          presence.presenceOf(
+            directory,
+            environment: environment,
+            windows: host,
+          );
       if (await presenceOf(project.root) != CheckoutPresence.present) return;
       final presences = await Future.wait([
         for (final candidate in candidates) presenceOf(candidate.path),
@@ -257,6 +270,12 @@ cd "\$TARGET" && pwd
       );
     }
   }
+
+  PosixRepositoryDiscovery _overSsh(ExecutionEnvironment environment) =>
+      PosixRepositoryDiscovery(
+        _reach.runners.forEnvironment(environment),
+        environmentName: environment.name,
+      );
 
   ExecutionEnvironment _environmentOf(String id) =>
       _reach.environment(id) ??

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -16,7 +16,6 @@ import 'package:karmashala_terminal_runtime/host_link.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../application/host_sessions.dart';
-import '../application/ssh_failure.dart';
 import 'host_deploy_failure_notice.dart';
 
 /// **What a machine is still running, and the two things you can do about it.**

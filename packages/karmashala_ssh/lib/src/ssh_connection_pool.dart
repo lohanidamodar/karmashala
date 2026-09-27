@@ -6,16 +6,18 @@ import 'ssh_host.dart';
 import 'ssh_host_key.dart';
 import 'ssh_host_key_verifier.dart';
 
-/// One [SshConnection] per host, reused for the life of the app: a TCP connect
+/// One [SshConnection] per host, reused for the life of the process: a TCP connect
 /// plus a key exchange per command turns a 3 ms probe into hundreds of ms.
 class SshConnectionPool {
   SshConnectionPool({
     required this.hosts,
     required this.knownHosts,
     this.onUnknownHostKey,
+    this.hostKeyDecisionFor,
     this.passwordPrompt,
     this.passphrasePrompt,
     this.keyReader = readLocalPrivateKey,
+    this.onConnection,
     this.clock = const SystemClock(),
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('ssh.pool');
@@ -27,12 +29,21 @@ class SshConnectionPool {
   /// are refused rather than trusted (see [SshHostKeyVerifier]).
   final HostKeyTrustDecision? onUnknownHostKey;
 
+  /// [onUnknownHostKey] for one host, where the question must name which —
+  /// the server's prompt tells every client the host it is about. Wins over
+  /// [onUnknownHostKey] when given.
+  final HostKeyTrustDecision Function(SshHost host)? hostKeyDecisionFor;
+
   final SshSecretPrompt? passwordPrompt;
   final SshSecretPrompt? passphrasePrompt;
 
   /// How a private key file is read. The default opens it on Windows; the app
   /// supplies one that also understands a key inside a WSL distribution.
   final PrivateKeyReader keyReader;
+
+  /// Told of each pooled connection as it is made — how its states are
+  /// followed by whoever reports them.
+  final void Function(String hostId, SshConnection connection)? onConnection;
 
   final Clock clock;
   final AppLogger _logger;
@@ -60,7 +71,9 @@ class SshConnectionPool {
     if (host == null) {
       throw ArgumentError('No SSH host is saved with id "$hostId"');
     }
-    return _byHostId[hostId] = create(host);
+    final connection = _byHostId[hostId] = create(host);
+    onConnection?.call(hostId, connection);
+    return connection;
   }
 
   /// Builds a connection for [host] without registering it. Exposed so a "test
@@ -72,7 +85,7 @@ class SshConnectionPool {
       host: host.host,
       port: host.port,
       clock: clock,
-      onUnknownHostKey: onUnknownHostKey,
+      onUnknownHostKey: hostKeyDecisionFor?.call(host) ?? onUnknownHostKey,
     ),
     passwordPrompt: passwordPrompt,
     passphrasePrompt: passphrasePrompt,

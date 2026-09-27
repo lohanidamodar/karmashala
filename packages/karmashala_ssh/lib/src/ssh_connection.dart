@@ -91,6 +91,11 @@ class SshConnection {
       StreamController<SshConnectionState>.broadcast();
 
   SSHClient? _client;
+  SshConnectionException? _promptRefusal;
+
+  /// A password or passphrase typed for the dial in progress, so its retries
+  /// do not ask again; dropped when the dial ends, whatever the outcome.
+  Map<String, String>? _dialSecrets;
   Future<SSHClient>? _connecting;
   bool _closed = false;
   SshConnectionState _state = const SshConnectionState.idle();
@@ -165,6 +170,15 @@ class SshConnection {
   }
 
   Future<SSHClient> _connectWithRetries() async {
+    _dialSecrets = {};
+    try {
+      return await _dial();
+    } finally {
+      _dialSecrets = null;
+    }
+  }
+
+  Future<SSHClient> _dial() async {
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -222,6 +236,7 @@ class SshConnection {
   }
 
   Future<SSHClient> _connectOnce() async {
+    _promptRefusal = null;
     // Credentials are resolved before the socket is opened: a missing key is a
     // configuration error, and it must not leave a socket it cannot use.
     final identities = await _identities();
@@ -268,8 +283,16 @@ class SshConnection {
       if (presentation != null &&
           presentation.verdict != HostKeyVerdict.trusted) {
         final rejection = HostKeyRejected(presentation);
-        throw SshConnectionException(presentation.describe(), cause: rejection);
+        final refusal = verifier.lastRefusal;
+        throw SshConnectionException(
+          refusal is SshConnectionException
+              ? refusal.message
+              : presentation.describe(),
+          cause: rejection,
+        );
       }
+      final refused = _promptRefusal;
+      if (refused != null) throw refused;
       if (e is SSHAuthFailError) {
         throw SshConnectionException(
           'Authentication as ${host.username}@${host.host} was rejected.',
@@ -339,10 +362,21 @@ class SshConnection {
         '${host.address} needs a $what and nothing is available to ask for it.',
       );
     }
-    final value = await prompt(host);
+    final asked = _dialSecrets?[what];
+    if (asked != null) return asked;
+    final String? value;
+    try {
+      value = await prompt(host);
+    } on SshConnectionException catch (refusal) {
+      // Nobody could be asked: said in the prompt's words, not as a failed
+      // login, which is how dartssh2 reports a password callback that threw.
+      _promptRefusal = refusal;
+      rethrow;
+    }
     if (value == null) {
       throw SshConnectionException('No $what supplied for ${host.address}.');
     }
+    _dialSecrets?[what] = value;
     return value;
   }
 

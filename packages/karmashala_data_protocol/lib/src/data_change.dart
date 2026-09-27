@@ -33,6 +33,7 @@ import 'package:karmashala_verification/verification.dart'
 
 import 'agent_work_values.dart';
 import 'session_values.dart';
+import 'ssh_values.dart';
 import 'worktree_values.dart';
 
 part 'changes/automations_changes.dart';
@@ -40,6 +41,7 @@ part 'changes/checkpoints_changes.dart';
 part 'changes/worktrees_changes.dart';
 part 'changes/snippets_changes.dart';
 part 'changes/pairings_changes.dart';
+part 'changes/ssh_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -570,7 +572,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _checkpointsChangeFromJson(name, json) ??
     _worktreesChangeFromJson(name, json) ??
     _snippetsChangeFromJson(name, json) ??
-    _pairingsChangeFromJson(name, json);
+    _pairingsChangeFromJson(name, json) ??
+    _sshChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

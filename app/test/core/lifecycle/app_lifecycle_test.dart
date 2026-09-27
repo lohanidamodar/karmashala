@@ -14,7 +14,7 @@ import 'package:karmashala/src/features/remote/relay_local/local_relay_providers
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_startup.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_ssh/host.dart' show HostDeployment;
+import 'package:karmashala_ssh_host/host.dart' show HostDeployment;
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

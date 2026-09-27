@@ -3,13 +3,12 @@
 library;
 
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../remote/application/ssh_relay_controller.dart';
 import '../../remote/application/ssh_relays.dart';
 import 'host_session_providers.dart';
-import 'ssh_failure.dart';
 import 'ssh_providers.dart';
 
 /// Builds the installer for one box, over the app's pooled connection and the

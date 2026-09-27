@@ -47,6 +47,9 @@ dependencies:
   # links through.
   karmashala_ssh:
     path: ../karmashala_ssh
+  # Reaching a deployed server's sessions (`HostSessionAccess`).
+  karmashala_ssh_host:
+    path: ../karmashala_ssh_host
   # The preset table's `AppDatabase`, and the row conversions both DAOs use.
   karmashala_store:
     path: ../karmashala_store

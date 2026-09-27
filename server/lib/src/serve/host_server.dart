@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataEnvelope, DataRefused;
 
-import '../agents/forwarded_runs.dart';
 import '../automations/automation_handler.dart';
 import '../companion/companion_handler.dart';
 import '../data/data_service.dart';
@@ -37,9 +36,7 @@ class HostServer {
     this.build,
     this.mcpTools,
     this.automations,
-    ForwardedRuns? runs,
-  }) : runs = runs ?? ForwardedRuns(),
-       _now = clock ?? _utcNow,
+  }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
        lifecycle = LifecycleFeed(registry, clock: clock ?? _utcNow);
 
@@ -82,10 +79,6 @@ class HostServer {
   /// Takes each client's terminal panes as facts ([PaneFactsMessage]):
   /// adoption and attribution decide what they mean. Null ignores them.
   PaneFactsReceiver? panes;
-
-  /// The commands this server runs through the app (SSH): the app offers
-  /// on its lifecycle link, and answers each call.
-  final ForwardedRuns runs;
 
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
@@ -176,7 +169,6 @@ class _ClientSession {
     _server.mcpTools?.detach(this);
     _server.automations?.detach(this);
     _server.panes?.detach(this);
-    _server.runs.detach(this);
     await _server.companion?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
@@ -352,10 +344,6 @@ class _ClientSession {
         _server.automations?.notice(this, message, _send);
       case AutomationResultMessage():
         _server.automations?.answer(this, message);
-      case RunOfferMessage():
-        _server.runs.adopt(this, _send);
-      case RunResultMessage():
-        _server.runs.answer(this, message);
       case ChecksRunMessage():
         _onChecksRun(message);
       case PromptAnswerMessage():

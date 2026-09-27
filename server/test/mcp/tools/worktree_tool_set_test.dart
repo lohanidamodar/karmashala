@@ -212,17 +212,20 @@ void main() {
       expect(answer.error, contains('No checkout with id ghost'));
     });
 
-    test('a checkout on an SSH host is the app\'s', () {
-      _sshCheckout(fixture, projectId);
-      expect(
-        tools.call('worktree_create', {
-          'repositoryId': 'rr',
-          'name': 'mcp',
-          'branch': 'feat/mcp',
-        }, null),
-        isNull,
-      );
-    });
+    test('a checkout on an SSH host gets its worktree over the server\'s '
+        'own connection', () async {
+      final box = _sshCheckout(fixture, projectId);
+      final answer = await call('worktree_create', {
+        'repositoryId': 'rr',
+        'name': 'mcp',
+        'branch': 'feat/mcp',
+      });
+      expect(answer.error, isNull);
+      final result = answer.value! as Map<String, Object?>;
+      expect(result['environmentId'], 'box');
+      expect(result['branch'], 'feat/mcp');
+      expect(fixture.git(box, ['worktree', 'list']), contains('feat/mcp'));
+    }, testOn: 'posix');
   });
 
   group('worktree_remove', () {
@@ -393,17 +396,21 @@ void main() {
       expect(Directory(plain).existsSync(), isTrue);
     });
 
-    test('a checkout on an SSH host is the app\'s', () {
+    test('a checkout on an SSH host is judged by the server', () async {
       record();
       _sshCheckout(fixture, projectId);
-      expect(tools.call('worktree_remove', {'repositoryId': 'rr'}, null), null);
+      final answer = await call('worktree_remove', {'repositoryId': 'rr'});
+      // The main checkout of its repository, read by git on the box.
+      expect(answer.error, contains('main checkout'));
     });
   });
 }
 
-/// A checkout `rr` of [projectId] on an SSH host.
-void _sshCheckout(RepoToolFixture fixture, String projectId) {
+/// A checkout `rr` of [projectId] on an SSH host — a "box" that is this
+/// machine, so it is a real repository; answers its folder.
+String _sshCheckout(RepoToolFixture fixture, String projectId) {
   final at = RepoToolFixture.now.toIso8601String();
+  final app = fixture.repository(fixture.path('box/app'));
   fixture.database.execute(
     'INSERT INTO execution_environments (id, kind, name, created_at) '
     "VALUES ('box', 'ssh', 'Build box', ?);",
@@ -411,7 +418,8 @@ void _sshCheckout(RepoToolFixture fixture, String projectId) {
   );
   fixture.database.execute(
     'INSERT INTO repositories (id, project_id, name, environment_id, path, '
-    "created_at) VALUES ('rr', ?, 'app', 'box', '/srv/app', ?);",
-    [projectId, at],
+    "created_at) VALUES ('rr', ?, 'app', 'box', ?, ?);",
+    [projectId, app, at],
   );
+  return app;
 }

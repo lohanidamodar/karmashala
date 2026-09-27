@@ -1,96 +1,58 @@
 import 'dart:async';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'package:agent_cli/process.dart';
-import 'package:karmashala_ssh/runner.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'ssh_failure.dart';
-import 'ssh_providers.dart';
+import '../../../core/data/data_providers.dart';
 
-/// The live lifecycle of one saved host's connection. Watching does **not**
-/// dial, and the state is emitted at once, so a late subscriber sees the truth.
+/// Where the **server's** connection to one saved host stands, live — the
+/// connection its agent work, checks and scans use (slice 3a). Told by the
+/// server; watching dials nothing.
 final sshConnectionStateProvider = StreamProvider.autoDispose
     .family<SshConnectionState, String>((ref, hostId) {
-      final SshConnection connection;
-      try {
-        connection = ref.watch(sshConnectionPoolProvider).forHostId(hostId);
-      } on ArgumentError {
-        // The host was deleted while its row was still on screen.
-        return Stream.value(const SshConnectionState.idle());
-      }
+      final client = ref.watch(dataClientProvider);
+      SshConnectionState now() =>
+          client.sshConnections[hostId] ?? const SshConnectionState.idle();
       final states = StreamController<SshConnectionState>();
-      final subscription = connection.states.listen(
-        states.add,
-        onDone: () {
-          if (!states.isClosed) states.close();
-        },
-      );
-      states.add(connection.state);
+      final subscription = client.sshChanges.listen((change) {
+        if (change is SshConnectionChanged && change.hostId == hostId) {
+          states.add(now());
+        }
+      });
+      states.add(now());
       ref.onDispose(() {
         subscription.cancel();
-        if (!states.isClosed) states.close();
+        states.close();
       });
       return states.stream;
     });
 
-/// What a "test connection" found out.
-class SshHostProbe {
-  const SshHostProbe._({
-    required this.connected,
-    required this.message,
-    this.error,
-    this.elapsed,
-  });
-
-  const SshHostProbe.success({required String message, Duration? elapsed})
-    : this._(connected: true, message: message, elapsed: elapsed);
-
-  /// Whether the handshake and authentication succeeded.
-  final bool connected;
-
-  /// What to show the user — the remote's own answer on success, the real
-  /// failure on the way down.
-  final String message;
-
-  /// The failure, kept so the UI can recognise a refused host key rather than
-  /// string-matching its message.
-  final Object? error;
-
-  final Duration? elapsed;
-}
-
-/// Connects to [host] once, runs one command, and hangs up. Built through
-/// [SshConnectionPool.create], which does not register the connection.
-Future<SshHostProbe> probeSshHost(SshConnectionPool pool, SshHost host) async {
-  final connection = pool.create(host);
-  final stopwatch = Stopwatch()..start();
+/// Asks the server to connect to saved host [hostId] — or to [draft],
+/// settings not saved yet — once, run one command and hang up. A question it
+/// needs (a key to trust, a password) comes back as a prompt; a failure is an
+/// answer too, in words.
+Future<SshTestResult> testSshHost(
+  Ref ref, {
+  String? hostId,
+  SshHost? draft,
+}) async {
   try {
-    await connection.client();
-    final runner = SshCommandRunner(
-      environmentId: host.environmentId,
-      connection: connection,
-    );
-    final result = await runner.run(
-      const CommandRequest(executable: 'uname', arguments: ['-sr']),
-    );
-    stopwatch.stop();
-    final banner = result.ok
-        ? result.stdout.trim()
-        : 'connected (uname exited ${result.exitCode})';
-    return SshHostProbe.success(
-      message: banner.isEmpty ? 'connected' : banner,
-      elapsed: stopwatch.elapsed,
-    );
-  } on Object catch (e) {
-    stopwatch.stop();
-    return SshHostProbe._(
-      connected: false,
-      message: describeSshFailure(e),
-      error: e,
-      elapsed: stopwatch.elapsed,
-    );
-  } finally {
-    await connection.close();
+    return (await ref
+            .read(dataClientProvider)
+            .send(SshTest(hostId: hostId, draft: draft)))
+        .value;
+  } on DataRefused catch (refusal) {
+    return SshTestResult(connected: false, message: refusal.message);
   }
 }
+
+/// [testSshHost] for a widget.
+final sshHostTestProvider = Provider<SshHostTester>(
+  (ref) =>
+      ({String? hostId, SshHost? draft}) =>
+          testSshHost(ref, hostId: hostId, draft: draft),
+);
+
+typedef SshHostTester =
+    Future<SshTestResult> Function({String? hostId, SshHost? draft});

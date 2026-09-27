@@ -4,8 +4,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/data/agents_data.dart';
-import '../../ssh/application/ssh_failure.dart';
-import '../../ssh/application/ssh_providers.dart';
+import 'package:karmashala_ssh/connection.dart';
 
 /// What the last agent scan of one environment did.
 class EnvironmentScan {
@@ -24,6 +23,8 @@ class EnvironmentScan {
 /// Asks the server to probe **one** environment for installed agents — not
 /// every one: a remote host must be dialled, and one failure belongs to one
 /// environment. Only what it found is recorded; nothing it missed is judged.
+/// The server dials an SSH box itself; a key to trust or a password is asked
+/// through the prompt every window shows.
 class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
   @override
   Map<String, EnvironmentScan> build() => const {};
@@ -34,15 +35,6 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
   Future<void> scan(ExecutionEnvironment environment) async {
     _set(environment.id, const EnvironmentScan(busy: true));
     try {
-      // Connect first, here, where a person can be asked to trust the host's
-      // key: the server's commands on it come through this app's connection,
-      // and a refusal must read as one rather than as nothing installed.
-      if (environment.kind == EnvironmentKind.ssh) {
-        await ref
-            .read(sshConnectionPoolProvider)
-            .forEnvironment(environment)
-            .client();
-      }
       final report = await ref
           .read(agentWorkProvider)
           .detect(environmentId: environment.id);

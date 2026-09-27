@@ -13,5 +13,6 @@ export 'src/environment_values.dart';
 export 'src/preference_keys.dart';
 export 'src/refusal.dart';
 export 'src/session_values.dart';
+export 'src/ssh_values.dart';
 export 'src/workspace_values.dart';
 export 'src/worktree_values.dart';

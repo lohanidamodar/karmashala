@@ -8,9 +8,9 @@ import 'package:karmashala_store/database.dart';
 
 /// **Which checkouts the server can touch itself**, and git, `gh` and the
 /// folder reads for them. The server runs processes on its own machine: its
-/// own environment, and a WSL distribution when that machine is Windows. An
-/// SSH host is not reached from here — a tool about one is the app's, which
-/// holds the transport — and neither is WSL from a Mac or Linux server.
+/// own environment, a WSL distribution when that machine is Windows, and an
+/// SSH box over its own connection when [runners] reaches one (`ServerSsh`,
+/// slice 3a). Only WSL from a Mac or Linux server is out of reach.
 class CheckoutReach {
   CheckoutReach(
     AppDatabase database, {
@@ -40,7 +40,7 @@ class CheckoutReach {
     EnvironmentKind.localPosix => !_windows,
     EnvironmentKind.windowsNative => _windows,
     EnvironmentKind.wsl => _windows && environment.wslDistribution != null,
-    EnvironmentKind.ssh => false,
+    EnvironmentKind.ssh => runners.canReachRemote,
   };
 
   /// Whether a tool about [environmentId] is the server's to answer. An

@@ -3,7 +3,6 @@
 library;
 
 export 'src/client/lifecycle_watch.dart';
-export 'src/agents/forwarded_runs.dart' show commandRequestFromJson;
 export 'src/hooks/hook_endpoint_file.dart';
 export 'src/hooks/hook_server.dart' show kHookSessionHeader;
 export 'src/mcp/mcp_credentials.dart' show McpCredentials;
@@ -31,8 +30,6 @@ export 'src/protocol/messages.dart'
         PairedMessage,
         PromptAnsweredMessage,
         PromptRefusalKind,
-        RunCallMessage,
-        RunResultMessage,
         ServerMethod,
         WelcomeMessage;
 export 'src/transport/socket_transport.dart' show SocketHostConnection;

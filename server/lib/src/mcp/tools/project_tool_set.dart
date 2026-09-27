@@ -11,8 +11,9 @@ import 'server_tool_set.dart';
 /// Adding a project to the workspace and editing one that is already there —
 /// the two writes `list_projects` could only describe. The folders are
 /// looked at here ([ProjectFolders]) and the rows written through the data
-/// service, which every client is told of. A project in an environment the
-/// server does not reach (an SSH host) is handed to the app.
+/// service, which every client is told of. An SSH host's folders are looked
+/// at over the server's own connection (slice 3a); only WSL from a Mac or
+/// Linux server is out of its reach, and handed to the app.
 class ProjectToolSet extends ServerToolSet {
   ProjectToolSet(
     this._context, {

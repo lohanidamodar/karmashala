@@ -129,16 +129,19 @@ void main() {
       expect(projects.getAll(), isEmpty);
     });
 
-    test('a folder on an SSH host is the app\'s to add', () {
+    test('a folder on an SSH host is scanned on the box and added', () async {
       _sshEnvironment(fixture);
-      expect(
-        tools.call('project_add', {
-          'path': '/srv/app',
-          'environmentId': 'box',
-        }, null),
-        isNull,
-      );
-    });
+      final app = fixture.repository(fixture.path('box/app'));
+      final answer = await call('project_add', {
+        'path': fixture.path('box'),
+        'environmentId': 'box',
+      });
+      expect(answer.error, isNull);
+      final checkouts = ((answer.value! as Map)['checkouts']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+      expect(checkouts.single['path'], app);
+      expect(checkouts.single['environmentId'], 'box');
+    }, testOn: 'posix');
   });
 
   group('project_update', () {
@@ -235,17 +238,16 @@ void main() {
       expect(answer.error, contains('list_projects'));
     });
 
-    test('a project moving to an SSH host is the app\'s to move', () {
+    test('a project moving to an SSH folder that is not there changes '
+        'nothing', () async {
       _sshEnvironment(fixture);
-      expect(
-        tools.call('project_update', {
-          'projectId': projectId,
-          'environmentId': 'box',
-          'path': '/srv/app',
-        }, null),
-        isNull,
-      );
-    });
+      final answer = await call('project_update', {
+        'projectId': projectId,
+        'environmentId': 'box',
+        'path': fixture.path('box/never-created'),
+      });
+      expect(answer.error, contains('does not exist'));
+    }, testOn: 'posix');
   });
 }
 

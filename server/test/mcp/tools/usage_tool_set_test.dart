@@ -3,7 +3,6 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_host/data.dart';
-import 'package:karmashala_host/src/agents/forwarded_runs.dart';
 import 'package:karmashala_host/src/agents/server_agent_work.dart';
 import 'package:karmashala_host/src/mcp/tools/usage_tool_set.dart';
 import 'package:karmashala_store/database.dart';
@@ -64,7 +63,6 @@ void main() {
     );
     work = ServerAgentWork(
       data: data,
-      runs: ForwardedRuns(),
       clock: clock,
       ids: CountingIds(),
       usageService: (_) => vendor,

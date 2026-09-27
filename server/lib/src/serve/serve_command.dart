@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:agent_cli/process.dart' show localHostEnvironment;
+import 'package:agent_cli/process.dart'
+    show CommandRunnerFactory, localHostEnvironment;
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DecisionRecorded;
@@ -11,7 +12,6 @@ import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
-import '../agents/forwarded_runs.dart';
 import '../agents/server_agent_work.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_automations.dart';
@@ -59,6 +59,7 @@ import '../server/server_data_directory.dart';
 import '../checkpoints/checkpoint_tool_set.dart';
 import '../checkpoints/daemon_checkpoints.dart';
 import '../sessions/daemon_session_sync.dart';
+import '../ssh/server_ssh.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
 import '../transport/socket_transport.dart';
@@ -272,13 +273,15 @@ Future<int> runServe(
     database: database,
     onDecision: (decision) => data.announce([DecisionRecorded(decision)]),
   );
+  // SSH, reached by the server itself (slice 3a): its pool over the saved
+  // hosts, keys read on this machine, and prompts put to the desktop clients.
+  final ssh = ServerSsh(data: data, database: database)..attach();
   // Usage, accounts, detection and the CLI import: the work done for the
   // agents on this machine, whichever client asks, and on its own.
-  final runs = ForwardedRuns();
   final hostEnvironment = environment ?? Platform.environment;
   final agentWork = ServerAgentWork(
     data: data,
-    runs: runs,
+    runners: ssh.runners,
     hostEnvironment: hostEnvironment,
     // `off`: work only when asked — no usage schedule, no start-up check. For
     // a test's server: its temporary HOME holds no credentials, and its
@@ -307,7 +310,7 @@ Future<int> runServe(
     dataDirectory: dataDirectory,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
-  final reach = CheckoutReach(database);
+  final reach = CheckoutReach(database, runners: ssh.runners);
   // A project an agent adds imports the CLI history of its new checkouts.
   final folders = ProjectFolders(
     tools,
@@ -324,6 +327,7 @@ Future<int> runServe(
     newId: newUuid,
     record: data.recordWorktreeSetup,
     environmentOf: reach.environmentOf,
+    runners: ssh.runners,
   );
   final mcpTools = McpToolRelay(
     cachePath: paths.mcpToolsPath,
@@ -332,7 +336,10 @@ Future<int> runServe(
       InventoryToolSet(tools),
       NotesTodosToolSet(tools),
       DecisionToolSet(tools),
-      ReviewThreadToolSet(tools),
+      ReviewThreadToolSet(
+        tools,
+        anchors: LocalReviewAnchors(database, reach: reach),
+      ),
       SnippetToolSet(tools),
       FanOutToolSet(tools),
       WorkspaceToolSet(
@@ -359,7 +366,6 @@ Future<int> runServe(
     companion: companion,
     build: hostBuildOf(Platform.resolvedExecutable),
     mcpTools: mcpTools,
-    runs: runs,
   )..prompts = prompts;
   server.lifecycle.statusSnapshot = status.snapshot;
   // Every turn's before and after checkpoints, taken here (slice 2b): off the
@@ -444,8 +450,10 @@ Future<int> runServe(
     dataDirectory: dataDirectory,
     errSink: errSink,
     agentStatus: status,
+    remote: ssh.runners,
   );
-  // `checks_run` for a checkout on this machine is the automations'.
+  // `checks_run` for a checkout on this machine or an SSH box is the
+  // automations'.
   mcpTools.tools
     ..add(ChecksToolSet(automations?.localTool ?? (_, _, _) => null))
     // A session this host runs is operated here, app or no app.
@@ -591,7 +599,7 @@ Future<int> runServe(
   tools.close();
   await companion.close();
   agentWork.stop();
-  runs.close();
+  await ssh.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await automations?.close();
@@ -696,10 +704,12 @@ Future<DaemonAutomations?> _startAutomations({
   required String dataDirectory,
   required IOSink errSink,
   DaemonAgentStatus? agentStatus,
+  CommandRunnerFactory? remote,
 }) async {
   if (database == null || recording == null) return null;
   final automations = DaemonAutomations(
     database: database,
+    remote: remote,
     registry: registry,
     dataDirectory: dataDirectory,
     mcp: SessionMcpAccessPoint(

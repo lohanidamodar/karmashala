@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
-import 'package:karmashala_ssh/host.dart'
+import 'package:karmashala_ssh_host/host.dart'
     show HostDeployment, HostDeploymentStatus;
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show HostSupervision, HostSupervisionPhase;

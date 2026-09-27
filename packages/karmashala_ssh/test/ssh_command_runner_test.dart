@@ -1,0 +1,124 @@
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_ssh/runner.dart';
+import 'package:karmashala_ssh/connection.dart';
+import 'package:test/test.dart';
+
+import 'support.dart';
+
+void main() {
+  late MemoryHosts hosts;
+  late MemoryKnownHosts knownHosts;
+
+  final remote = ExecutionEnvironment(
+    id: 'ssh:h1',
+    kind: EnvironmentKind.ssh,
+    name: 'build-box',
+    sshHostId: 'h1',
+    createdAt: testTime,
+  );
+
+  final saved = SshHost(
+    id: 'h1',
+    name: 'build-box',
+    host: '127.0.0.1',
+    port: 2222,
+    username: 'dev',
+    authMethod: SshAuthMethod.privateKey,
+    createdAt: testTime,
+  );
+
+  setUp(() {
+    hosts = MemoryHosts();
+    knownHosts = MemoryKnownHosts();
+  });
+
+  SshConnectionPool pool() =>
+      SshConnectionPool(hosts: hosts, knownHosts: knownHosts);
+
+  test(
+    'the factory builds an SshCommandRunner for an ssh environment',
+    () async {
+      hosts.upsert(saved);
+      final runner = SshCommandRunnerFactory(
+        sshConnections: pool,
+      ).forEnvironment(remote);
+      expect(runner, isA<SshCommandRunner>());
+      expect(runner.environmentId, 'ssh:h1');
+    },
+  );
+
+  test('an ssh environment without a connection pool fails loudly', () {
+    expect(
+      () => const SshCommandRunnerFactory().forEnvironment(remote),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('an ssh environment without a saved host fails loudly', () {
+    expect(
+      () =>
+          SshCommandRunnerFactory(sshConnections: pool).forEnvironment(remote),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('an ssh environment with no host id is rejected', () async {
+    hosts.upsert(saved);
+    final orphan = ExecutionEnvironment(
+      id: 'ssh:orphan',
+      kind: EnvironmentKind.ssh,
+      name: 'orphan',
+      createdAt: testTime,
+    );
+    expect(
+      () =>
+          SshCommandRunnerFactory(sshConnections: pool).forEnvironment(orphan),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('an SSH command creates no process, here or on a worker', () async {
+    hosts.upsert(saved);
+    final runner = SshCommandRunnerFactory(
+      sshConnections: pool,
+    ).forEnvironment(remote);
+    final spawnsHere = processSpawnsOnThisIsolate;
+    final workerBefore = sharedProcessSpawner.isWorkerRunning;
+
+    // `saved` uses key authentication and names no key, so the connection is
+    // refused before a socket is opened — a failure, but one that has been all
+    // the way through `SshCommandRunner.run`.
+    await expectLater(
+      runner.run(const CommandRequest(executable: 'uname')),
+      throwsA(isA<CommandException>()),
+    );
+
+    expect(
+      processSpawnsOnThisIsolate,
+      spawnsHere,
+      reason: 'dartssh2 opens a channel on a socket; there is no process',
+    );
+    expect(
+      sharedProcessSpawner.isWorkerRunning,
+      workerBefore,
+      reason:
+          'the worker isolate exists to move process creation off the isolate '
+          'that draws. Routing SSH through it would start one to carry a '
+          'command that never becomes a process — a hop bought for nothing, '
+          'and a second place for a remote command to fail',
+    );
+  });
+
+  test(
+    'the pool hands the same connection to every runner for a host',
+    () async {
+      hosts.upsert(saved);
+      final shared = pool();
+      expect(
+        identical(shared.forHostId('h1'), shared.forHostId('h1')),
+        isTrue,
+        reason: 'a connection per command would make remote work unusable',
+      );
+    },
+  );
+}

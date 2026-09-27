@@ -6,7 +6,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
-import '../../ssh/application/ssh_failure.dart';
+import 'package:karmashala_ssh/connection.dart';
 import '../application/pairing_in_progress.dart';
 import '../application/remote_access_controller.dart';
 import 'package:karmashala_remote/remote.dart';

@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';

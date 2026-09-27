@@ -48,6 +48,7 @@ part 'fake_worktrees.dart';
 part 'fake_automations.dart';
 part 'fake_conversations.dart';
 part 'fake_agent_work.dart';
+part 'fake_ssh_work.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -196,6 +197,10 @@ class FakeDataServer {
   /// capture and switch, detection and the CLI import — scripted.
   late final agentWork = FakeAgentWork._(this);
 
+  /// The server's own SSH: test connections, disconnects and the answers a
+  /// window gives its questions — scripted.
+  late final sshWork = FakeSshWork._(this);
+
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
   /// and verification switches.
@@ -304,6 +309,9 @@ class FakeDataServer {
           _applyEvidence(change);
         case PairingsChange():
           // Seed devices through [deviceRows]; a change carries no key.
+          break;
+        case SshChange():
+          // Nothing kept: told as it is.
           break;
       }
     }
@@ -416,6 +424,9 @@ class FakeDataServer {
 
   DataReply<R> _handle<R>(FakeDataLink origin, DataRequest<R> request) {
     requests.add(request.kind);
+    if (request case final SshWorkRequest<Object?> work) {
+      return DataReply(sshWork._handle(work) as R, revision, const []);
+    }
     if (request case final AgentWorkRequest<Object?> work) {
       // Agent work is answered when done, and what it wrote is told to every
       // link — the asker's too — as the server announces it.
@@ -544,7 +555,8 @@ class FakeDataServer {
       ClaudeAccountDelete() ||
       CodexAccountDelete() ||
       UsageHistory() => _handleHosts(request, changes),
-      AgentWorkRequest() => throw StateError('answered above'),
+      AgentWorkRequest() ||
+      SshWorkRequest() => throw StateError('answered above'),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

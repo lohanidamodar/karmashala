@@ -13,9 +13,7 @@ import '../verification/application/verification_providers.dart';
 import 'package:karmashala_verification/tools.dart';
 import 'attention_tools.dart';
 import 'decision_tools.dart';
-import 'review_thread_tools.dart';
 import 'device_tools.dart';
-import 'project_tools.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/catalogue.dart';
@@ -26,7 +24,6 @@ import 'recording_tools.dart';
 import 'terminal_tools.dart';
 import 'tmux_tools.dart';
 import 'workspace_tools.dart';
-import 'worktree_tools.dart';
 import '../sessions/application/host_lifecycle/host_lifecycle_subscriber.dart'
     show HostMcpTools;
 
@@ -56,8 +53,8 @@ class McpToolDispatcher implements HostMcpTools {
 
   /// What this app's own control server serves where no Karmashala server
   /// runs (and so nothing else serves agents): its own tools, and the
-  /// server's tools it still answers for its own panes and the checkouts
-  /// only it reaches. Everything else needs the server.
+  /// server's tools it still answers for its own panes. Everything else needs
+  /// the server.
   static List<Map<String, dynamic>> standaloneCatalogue() =>
       annotatedToolSchemas([
         ...toolSchemas,
@@ -66,8 +63,9 @@ class McpToolDispatcher implements HostMcpTools {
       ]);
 
   /// The server's tools a forwarded call still lands here for: a session in
-  /// one of this app's panes, a checkout on an SSH host, a browser or device
-  /// verification run.
+  /// one of this app's panes, a browser or device verification run, a check
+  /// in a checkout only this app's panes reach. An SSH checkout is the
+  /// server's own since slice 3a.
   static const Set<String> answeredForOwnPanes = {
     'session_send',
     'session_answer',
@@ -76,18 +74,6 @@ class McpToolDispatcher implements HostMcpTools {
     'session_rename',
     'session_end',
     'open_new_session',
-    'list_checkouts',
-    'project_rescan',
-    'delivery_status',
-    'project_add',
-    'project_update',
-    'worktree_create',
-    'worktree_remove',
-    'review_thread_list',
-    'review_thread_get',
-    'review_thread_add',
-    'review_thread_reply',
-    'review_thread_status',
     'verification_start',
     'verification_note',
     'verification_finish',
@@ -132,8 +118,6 @@ class McpToolDispatcher implements HostMcpTools {
     switch (tool) {
       case '__list_tools__':
         return toolSchemas;
-      case final String name when ProjectControlTools.handles(name):
-        return ProjectControlTools(_container).call(name, args);
       // The caller's identity matters: a session started here is recorded as
       // its child, which is what the spawn-depth cap counts.
       case final String name when SessionLaunchTools.handles(name):
@@ -153,18 +137,8 @@ class McpToolDispatcher implements HostMcpTools {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      case final String name when ReviewThreadTools.handles(name):
-        return ReviewThreadTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
       case final String name when WorkspaceControlTools.handles(name):
-        return WorkspaceControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
-      case final String name when WorktreeControlTools.handles(name):
-        return WorktreeControlTools(_container).call(name, args);
+        return WorkspaceControlTools(_container).call(name, args);
       case final String name when DeviceControlTools.handles(name):
         return DeviceControlTools(
           _container,
@@ -229,7 +203,7 @@ class McpToolDispatcher implements HostMcpTools {
   /// devices, recordings, the inbox, and continuing a session into a visible
   /// tab. The server runs every other tool itself and serves these beside its
   /// own; a call it forwards for a tool it also serves (a session in one of
-  /// this app's panes, an SSH checkout) still lands in [dispatch].
+  /// this app's panes) still lands in [dispatch].
   static const List<Map<String, dynamic>> toolSchemas = [
     ...sessionLaunchToolSchemas,
     ...sessionHandoffToolSchemas,

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:xterm2/xterm.dart' show Terminal;

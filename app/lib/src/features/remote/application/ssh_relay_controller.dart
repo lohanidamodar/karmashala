@@ -5,11 +5,10 @@ library;
 import 'dart:async';
 
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../ssh/application/host_session_providers.dart';
-import '../../ssh/application/ssh_failure.dart';
 import '../../ssh/application/ssh_providers.dart';
 import 'remote_access_controller.dart';
 import 'ssh_relays.dart';

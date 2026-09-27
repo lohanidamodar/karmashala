@@ -1,5 +1,5 @@
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:riverpod/riverpod.dart';
 
