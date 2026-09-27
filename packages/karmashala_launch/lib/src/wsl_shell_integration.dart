@@ -58,6 +58,9 @@ __k133_precmd() {
   local __k133_s=$?
   if [ -n "${__k133_seen:-}" ]; then printf '\033]133;D;%s\007' "$__k133_s"; fi
   __k133_seen=1
+  # OSC 7: no Linux shell reports its folder by itself. A raw % would read as
+  # a broken escape.
+  printf '\033]7;file://%s\007' "${PWD//\%/%25}"
   printf '\033]133;A\007'
   return $__k133_s
 }
@@ -109,6 +112,7 @@ __k133_precmd() {
   local __k133_s=$?
   if [[ -n ${__k133_seen-} ]]; then printf '\033]133;D;%s\007' "$__k133_s"; fi
   __k133_seen=1
+  printf '\033]7;file://%s\007' "${PWD//\%/%25}"
   printf '\033]133;A\007'
   return $__k133_s
 }
