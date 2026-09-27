@@ -128,26 +128,19 @@ void main() {
     await feed.close();
   });
 
-  test('a watch marks the live rows on this machine it does not hold unknown, '
-      'and says so to that watcher', () async {
+  test('on start, with no client watching, the live rows on this machine it '
+      'does not hold are marked unknown and told', () {
     row('held', 'running');
     row('lost', 'running');
-    row('in-app', 'running');
     row('remote', 'running', repositoryId: 'remote');
     row('done', 'completed');
     registry.open('karmashala_held', request);
     recording.start();
 
-    written.clear();
-    final feed = await watch(runByClient: ['in-app']);
-    await pump();
-
     expect(written, ['lost unknown']);
     expect(statusOf('held'), 'running');
-    expect(statusOf('in-app'), 'running');
     expect(statusOf('remote'), 'running', reason: 'an SSH host speaks for it');
     expect(statusOf('done'), 'completed');
-    await feed.close();
   });
 
   test('without a recording, a host writes nothing and still feeds', () async {

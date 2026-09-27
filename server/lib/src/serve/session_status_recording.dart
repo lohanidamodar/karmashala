@@ -42,6 +42,12 @@ class SessionStatusRecording {
     _keeper.applySnapshot([
       for (final facts in _feed.snapshot()) factsOf(facts, observedAt),
     ]);
+    // Every local terminal runs in this server (slice 5a), so a row on this
+    // machine still claiming to run what it does not hold is a leftover of a
+    // server that has gone, whether or not a client ever watches.
+    _keeper.markUnheld(
+      heldHostSessionIds: {for (final f in _feed.snapshot()) f.sessionId},
+    );
     _feed.onWatched = (runByClient) => _keeper.markUnheld(
       heldHostSessionIds: {for (final f in _feed.snapshot()) f.sessionId},
       runByClient: runByClient,
