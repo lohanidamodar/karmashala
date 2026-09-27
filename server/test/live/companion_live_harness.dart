@@ -45,7 +45,10 @@ void seedStore(Directory dataDir) {
   File(
     '${dataDir.path}/server.json',
   ).writeAsStringSync('{"companion": {"enabled": true}}\n');
-  Process.runSync('chmod', ['600', '${dataDir.path}/server.json']);
+  // Windows keeps no mode bits; the server sets its own ACL on what it writes.
+  if (!Platform.isWindows) {
+    Process.runSync('chmod', ['600', '${dataDir.path}/server.json']);
+  }
   final database = AppDatabase.open(dataDir);
   try {
     final t0 = DateTime.now().toUtc();
@@ -94,7 +97,7 @@ void seedStore(Directory dataDir) {
         'echo "FAKE-GOT<\$line>"\n'
         'exit 0\n',
       );
-    Process.runSync('chmod', ['+x', agent.path]);
+    if (!Platform.isWindows) Process.runSync('chmod', ['+x', agent.path]);
     database.execute(
       'INSERT INTO agent_installations (id, agent_kind, environment_id, '
       'executable_path, created_at, executable_by_user) '

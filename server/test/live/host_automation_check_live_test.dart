@@ -1,4 +1,6 @@
 @Tags(['live'])
+// Its stand-in agents are sh scripts.
+@TestOn('mac-os || linux')
 library;
 
 import 'dart:async';
