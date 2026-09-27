@@ -1,20 +1,20 @@
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 
-import '../protocol/messages.dart';
-import 'automation_app_relay.dart';
 import 'daemon_checkout_facts.dart';
 
-/// A fire in the host: started here when the checkout is on this machine,
-/// forwarded to the app when only it can start there (WSL, SSH), and recorded
-/// as `missed` with the reason when there is no app to forward to.
+/// A fire in the server: started here when the checkout is on this machine
+/// (WSL too, from a Windows server), and recorded as `missed` with the reason
+/// when it is anywhere else — an SSH box, where the server does not start
+/// agents yet (slice 5d). Nothing is handed to an app: there is none to
+/// hand it to (slice 5c).
 class DaemonAutomationFiring implements AutomationFiring {
   DaemonAutomationFiring({
     required this.local,
     required this.facts,
-    required this.relay,
     required this.automations,
     required this.now,
     required this.newId,
@@ -23,7 +23,6 @@ class DaemonAutomationFiring implements AutomationFiring {
   /// Fires a checkout on this machine: the package's runner on host ports.
   final AutomationFiring local;
   final DaemonCheckoutFacts facts;
-  final AutomationAppRelay relay;
   final AutomationRecords automations;
   final DateTime Function() now;
   final String Function() newId;
@@ -41,30 +40,11 @@ class DaemonAutomationFiring implements AutomationFiring {
       await local.fire(automation, scheduledFor, note: note, queued: queued);
       return;
     }
-    final where = facts.describeEnvironment(checkout);
-    String why;
-    try {
-      await relay.call(
-        AutomationCallKind.fireAutomation,
-        automation.id,
-        note: note,
-        scheduledFor: scheduledFor,
-        queuedRunId: queued?.id,
-      );
-      return;
-    } on AutomationRelayFailure catch (failure) {
-      why = failure.message == kAutomationAppNotRunning
-          ? 'This checkout is on $where, where only the Karmashala app starts '
-                'agents, and the app was not running. Nothing was started; run '
-                'it from the app if you still want it.'
-          : 'This checkout is on $where, where only the Karmashala app starts '
-                'agents, and it did not: ${failure.message}';
-    }
     final at = now();
     final missed = queued != null
         ? queued.copyWith(
             state: AutomationRunState.missed,
-            reason: why,
+            reason: notStartedHere(checkout),
             finishedAt: at,
           )
         : AutomationRun(
@@ -73,7 +53,7 @@ class DaemonAutomationFiring implements AutomationFiring {
             scheduledFor: scheduledFor,
             firedAt: at,
             state: AutomationRunState.missed,
-            reason: why,
+            reason: notStartedHere(checkout),
             finishedAt: at,
           );
     if (queued != null) {
@@ -81,5 +61,16 @@ class DaemonAutomationFiring implements AutomationFiring {
     } else {
       automations.insertRun(missed);
     }
+  }
+
+  /// Why nothing was started for a checkout at [checkout], in words.
+  String notStartedHere(EnvironmentPath checkout) {
+    final where = facts.describeEnvironment(checkout);
+    return facts.isSsh(checkout)
+        ? 'This checkout is on $where, an SSH machine; Karmashala does not '
+              'start agents there yet, so nothing was started. Run it there '
+              'by hand if you still want it.'
+        : 'This checkout is on $where, which this Karmashala server cannot '
+              'start agents in, so nothing was started.';
   }
 }

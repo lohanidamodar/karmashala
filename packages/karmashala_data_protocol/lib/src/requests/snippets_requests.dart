@@ -2,34 +2,32 @@ part of '../data_request.dart';
 
 // Command snippets and terminal presets.
 
-DataRequest<Object?>? _snippetsRequestFromJson(
-  String kind,
-  _Arguments args,
-) => switch (kind) {
-  SnippetsList.name => const SnippetsList(),
-  SnippetAdd.name => SnippetAdd(
-    id: args.string('id'),
-    label: args.string('label'),
-    command: args.string('command'),
-    shellId: args.optionalString('shell'),
-    submit: args.boolean('submit', orElse: false),
-  ),
-  SnippetEdit.name => SnippetEdit(
-    id: args.string('id'),
-    label: args.string('label'),
-    command: args.string('command'),
-    shellId: args.optionalString('shell'),
-    submit: args.boolean('submit', orElse: false),
-  ),
-  SnippetDelete.name => SnippetDelete(args.string('id')),
-  PresetSave.name => PresetSave(
-    id: args.string('id'),
-    presetName: args.string('name'),
-    shape: args.value('shape', (json) => json),
-  ),
-  PresetDelete.name => PresetDelete(args.string('id')),
-  _ => null,
-};
+DataRequest<Object?>? _snippetsRequestFromJson(String kind, _Arguments args) =>
+    switch (kind) {
+      SnippetsList.name => const SnippetsList(),
+      SnippetAdd.name => SnippetAdd(
+        id: args.string('id'),
+        label: args.string('label'),
+        command: args.string('command'),
+        shellId: args.optionalString('shell'),
+        submit: args.boolean('submit', orElse: false),
+      ),
+      SnippetEdit.name => SnippetEdit(
+        id: args.string('id'),
+        label: args.string('label'),
+        command: args.string('command'),
+        shellId: args.optionalString('shell'),
+        submit: args.boolean('submit', orElse: false),
+      ),
+      SnippetDelete.name => SnippetDelete(args.string('id')),
+      PresetSave.name => PresetSave(
+        id: args.string('id'),
+        presetName: args.string('name'),
+        shape: args.value('shape', (json) => json),
+      ),
+      PresetDelete.name => PresetDelete(args.string('id')),
+      _ => null,
+    };
 
 /// A request of the snippets and presets.
 sealed class SnippetsRequest<R> extends DataRequest<R> {

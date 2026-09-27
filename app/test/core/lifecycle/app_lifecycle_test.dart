@@ -39,7 +39,7 @@ import '../../features/terminal/fake_instance.dart';
 /// impossible, so the observable behaviour is the assertion.
 bool isDisposed(ProviderContainer container) {
   try {
-    container.read(agentStatusWatcherProvider);
+    container.read(attentionPresenterProvider);
     return false;
   } on StateError {
     return true;
@@ -208,7 +208,7 @@ void main() {
         adapters: natives.adapters,
       );
       // Force the watcher to exist so the step has something to do.
-      container.read(agentStatusWatcherProvider);
+      container.read(attentionPresenterProvider);
       lifecycle.adopt(
         controlServer: _RecordingControlServer(container, order),
         hookInstallation: Future<void>(() => order.add('hooks')),

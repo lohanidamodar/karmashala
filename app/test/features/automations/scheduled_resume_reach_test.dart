@@ -1,9 +1,6 @@
 import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
-    show formatResetClock;
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
-import 'package:karmashala/src/features/remote/application/remote_session_snapshots.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 
 import 'scheduled_resume_harness.dart';
@@ -40,17 +37,6 @@ void main() {
         (name) => name.contains('resume_on') || name.contains('scheduled'),
       ),
       isEmpty,
-    );
-  });
-
-  test('a paired phone reads it in the session card\'s own clause', () {
-    final presence = h.container.read(remoteSessionPresenceProvider);
-    expect(presence('s1').note ?? '', isNot(contains('resumes')));
-
-    final resume = h.controller.schedule(inTwoHours());
-    expect(
-      presence('s1').note,
-      startsWith('resumes ${formatResetClock(resume.fireAt, h.now.toLocal())}'),
     );
   });
 

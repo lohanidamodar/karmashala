@@ -10,11 +10,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/agents_lens.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
-import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_agent_reporting/hooks.dart';
-import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/session.dart';
@@ -32,10 +27,6 @@ import '../../support/test_machine.dart';
 void main() {
   late TestMachine db;
   late FakeDataServer server;
-  late AgentHookReceiver receiver;
-  late SessionStatusRegistry registry;
-  late List<WatchedSession> watched;
-
   WatchedSession watch(String row) => WatchedSession(
     key: AgentSessionKey(AgentIds.claudeCode, 'cli-$row'),
     label: row,
@@ -79,27 +70,6 @@ void main() {
         path: r'C:\src\alpha',
       ),
     );
-    final clock = FixedClock(testTime);
-    final reports = AgentHookReports();
-    receiver = AgentHookReceiver(
-      registry: AgentRegistry.builtIn,
-      reports: reports,
-      clock: clock,
-    );
-    watched = [];
-    registry = SessionStatusRegistry(
-      statusService: AgentStatusService(
-        registry: AgentRegistry.builtIn,
-        hookReports: reports,
-        clock: clock,
-      ),
-      agents: AgentRegistry.builtIn,
-      loadSessions: () => watched,
-      clock: clock,
-    );
-  });
-  tearDown(() {
-    registry.dispose();
   });
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
@@ -114,7 +84,6 @@ void main() {
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(),
         ),
-        sessionStatusRegistryProvider.overrideWithValue(registry),
       ],
     );
     addTearDown(container.dispose);
@@ -139,28 +108,34 @@ void main() {
     return container;
   }
 
-  void hook(String row, String event, {String extra = ''}) {
-    receiver.handle(
-      agentId: AgentIds.claudeCode,
-      event: event,
-      body: '{"session_id":"cli-$row"$extra}',
-    );
-    registry.hookReported(AgentSessionKey(AgentIds.claudeCode, 'cli-$row'));
-  }
+  /// The server's word: [row]'s agent is in a turn, by its hook.
+  void working(String row) => server.attention.statusOf(
+    row,
+    AgentActivityStatus.working,
+    sessionId: 'cli-$row',
+    label: row,
+  );
 
-  void fileWaiting(ProviderContainer c, List<String> ids) => c
-      .read(attentionInboxProvider.notifier)
-      .apply(
-        InboxUpdate(
-          waiting: [
+  /// The server's inbox and waiting list: [ids] need approval, nothing else.
+  void fileWaiting(ProviderContainer c, List<String> ids) =>
+      server.attention.setInbox(
+        AttentionInbox(
+          items: [
             for (final id in ids)
-              SessionAttention(
+              InboxItem(
                 session: watch(id),
-                kind: AttentionKind.needsInput,
+                kind: InboxItemKind.needsApproval,
+                at: testTime,
               ),
           ],
-          watched: {for (final s in watched) s.key},
         ),
+        waiting: [
+          for (final id in ids)
+            SessionAttention(
+              session: watch(id),
+              kind: AttentionKind.needsInput,
+            ),
+        ],
       );
 
   Finder pill() => find.byKey(const ValueKey('agents-needs-you-pill'));
@@ -169,8 +144,6 @@ void main() {
     tester,
   ) async {
     insert('s1');
-    watched = [watch('s1')];
-    await registry.cycle();
     final c = await pump(tester);
 
     expect(find.text('Agents'), findsOneWidget);
@@ -206,9 +179,7 @@ void main() {
       );
     }
     insert('done', status: SessionStatus.completed);
-    watched = [watch('waiting'), watch('busy')];
-    await registry.cycle();
-    hook('busy', 'PreToolUse');
+    working('busy');
     final c = await pump(tester);
     fileWaiting(c, ['waiting']);
 

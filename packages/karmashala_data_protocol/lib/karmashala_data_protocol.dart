@@ -4,6 +4,7 @@
 library;
 
 export 'src/agent_work_values.dart';
+export 'src/attention_values.dart';
 export 'src/automation_values.dart';
 export 'src/browser_values.dart';
 export 'src/data_change.dart';
@@ -22,5 +23,6 @@ export 'src/refusal.dart';
 export 'src/session_values.dart';
 export 'src/ssh_values.dart';
 export 'src/terminal_values.dart';
+export 'src/usage_limit_values.dart';
 export 'src/workspace_values.dart';
 export 'src/worktree_values.dart';

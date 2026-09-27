@@ -1,6 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala_host/protocol.dart' show PaneFacts;
+import 'package:karmashala_host/src/sessions/pane_facts.dart';
 import 'package:karmashala_host/src/sessions/session_adoption.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';

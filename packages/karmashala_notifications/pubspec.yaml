@@ -31,10 +31,6 @@ dependencies:
   # `SessionDelivery` — the ladder a delivery transition is a step on.
   karmashala_session:
     path: ../karmashala_session
-  # `PreferenceStore`, the preference the settings round-trip through at
-  # the server; its provider stays in the app.
-  karmashala_data_protocol:
-    path: ../karmashala_data_protocol
 
 dev_dependencies:
   lints: ^6.1.0

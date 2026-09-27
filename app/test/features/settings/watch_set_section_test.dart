@@ -1,6 +1,6 @@
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
-import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/notifications/application/session_statuses.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
 import 'package:karmashala/src/features/settings/presentation/watch_set_section.dart';
@@ -15,7 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// sessions. It survived to production because nobody could tell, and the
 /// coverage that now makes it tellable reached only the log file.
 void main() {
-  const healthy = SessionStatusCoverage(
+  const healthy = WatchCoverage(
     tracked: 12,
     hookAnswered: 9,
     probeCandidates: 3,
@@ -27,7 +27,7 @@ void main() {
 
   Future<void> pumpPage(
     WidgetTester tester,
-    SessionStatusCoverage? coverage,
+    WatchCoverage? coverage,
   ) async {
     final container = ProviderContainer(
       overrides: [
@@ -82,7 +82,7 @@ void main() {
   ) async {
     await pumpPage(
       tester,
-      const SessionStatusCoverage(
+      const WatchCoverage(
         tracked: 900,
         hookAnswered: 10,
         probeCandidates: 890,
@@ -101,7 +101,7 @@ void main() {
   ) async {
     await pumpPage(
       tester,
-      const SessionStatusCoverage(
+      const WatchCoverage(
         tracked: 4,
         hookAnswered: 0,
         probeCandidates: 4,
@@ -135,7 +135,7 @@ void main() {
   ) async {
     await pumpPage(
       tester,
-      const SessionStatusCoverage(
+      const WatchCoverage(
         tracked: 12,
         hookAnswered: 9,
         probeCandidates: 3,

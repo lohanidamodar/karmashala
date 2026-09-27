@@ -68,6 +68,13 @@ dependencies:
   # Terminal profiles and agent launches: what `terminals.*` carries (5a).
   karmashala_launch:
     path: ../karmashala_launch
+  # A watched session, the inbox and its items, attention and the news
+  # reasons: what `status.*` and `inbox.*` carry (5c); and an agent status
+  # report's JSON.
+  karmashala_notifications:
+    path: ../karmashala_notifications
+  karmashala_agent_status:
+    path: ../karmashala_agent_status
 
 dev_dependencies:
   # `VerificationVerdict`, in the automations envelope test.

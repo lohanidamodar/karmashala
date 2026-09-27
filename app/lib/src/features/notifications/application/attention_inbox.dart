@@ -1,72 +1,115 @@
+import 'dart:async';
+
+import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_notifications/attention.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/clock_provider.dart';
-import '../../follow_ups/application/follow_up_inbox.dart';
+import '../../../core/data/data_providers.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import 'package:karmashala_notifications/attention.dart';
+import '../../sessions/application/session_ui_providers.dart';
 import 'notification_providers.dart';
 
-/// Holds the attention inbox and keeps it honest about what the user has seen.
-/// "Looked at" is selected while the window has focus, as the policy reads it.
+final _log = AppLogger.named('notifications.inbox');
+
+/// The attention inbox **as the server keeps it** (slice 5c): the server
+/// decides what needs a person and files it, follow-ups included; this is
+/// the copy it tells this app, and the verbs a person uses on it, each asked
+/// of the server. The one thing this window says on its own is what it is
+/// looking at (`inbox.seen`), since only it knows its focus and selection.
 class AttentionInboxController extends Notifier<AttentionInbox> {
+  /// What this window last said it was looking at, so the same set is not
+  /// said twice.
+  Set<String>? _lastSeen;
+
   @override
   AttentionInbox build() {
+    // Follow-ups are raised from recorded endings by the sweep this keeps
+    // running; the server files them in the inbox.
+    ref.watch(sessionEndingObserverProvider);
+    final client = ref.watch(dataClientProvider);
+    _lastSeen = null;
+    final changes = client.attentionChanges.listen((change) {
+      switch (change) {
+        case InboxChanged(:final snapshot):
+          // What this window looks at is the server's to mark seen too; a
+          // batch that crossed the saying of it is marked the same here.
+          state = snapshot.inbox.viewed(_lastSeen ?? const {});
+        case InboxOpenWanted(:final openId, :final imported):
+          focusWatchedSession(
+            ref.container,
+            openId: openId,
+            imported: imported,
+          );
+        default:
+          break;
+      }
+    });
+    final connection = client.connectionChanges.listen((_) {
+      // A new link knows nothing of what this window looks at.
+      _lastSeen = null;
+      _syncViewed();
+    });
+    ref.onDispose(() {
+      unawaited(changes.cancel());
+      unawaited(connection.cancel());
+    });
     ref.listen(selectedSessionIdProvider, (_, _) => _syncViewed());
-    // Going to the tab is looking at it: clicking a tab sets no selection, so
-    // without this an item retired "on viewing" missed the ordinary route.
+    // Going to the tab is looking at it: clicking a tab sets no selection.
     ref.listen(foregroundTerminalPaneIdsProvider, (_, _) => _syncViewed());
     ref.listen(selectedImportedSessionIdProvider, (_, _) => _syncViewed());
     ref.listen(windowFocusedProvider, (_, _) => _syncViewed());
-    ref.listen(openFollowUpsProvider, (_, next) {
-      state = state.syncFollowUps(next);
-      // A follow-up for the session already on screen is not news either.
-      _syncViewed();
-    });
-    // Seeded from the same provider, so sessions that ended while the app was
-    // closed are listed at open rather than waiting for a change.
-    return AttentionInbox.empty.syncFollowUps(ref.read(openFollowUpsProvider));
+    // What this window already shows is said at once: nothing about it is
+    // news, here or at the server.
+    final looking = _lookingAt();
+    _lastSeen = looking;
+    // A new link looks at nothing until told: an empty set is not said.
+    if (looking.isNotEmpty) _send(InboxSeen(looking.toList()..sort()));
+    return client.attention.inbox.viewed(looking);
   }
 
-  /// One poll's worth of observations.
-  void apply(InboxUpdate update) {
-    state = state.apply(update, ref.read(clockProvider).nowUtc());
-    // A finished turn that arrives while its session is already on screen was
-    // never news to this user; retire it in the same breath.
-    _syncViewed();
+  void _send(DataRequest<Object?> request) {
+    unawaited(
+      ref
+          .read(dataClientProvider)
+          .send(request)
+          .then<void>(
+            (_) {},
+            onError: (Object error) =>
+                _log.warning('${request.kind} was not answered: $error'),
+          ),
+    );
   }
 
-  /// Files one item nothing polls for. The same viewed rule applies.
+  /// Files one item the server does not watch for itself (a usage limit a
+  /// client saw). The same viewed rule applies there.
   void raise(InboxItem item) {
     state = state.raise(item);
-    _syncViewed();
+    _send(InboxRaise(item));
   }
 
-  void markAllSeen() => state = state.markAllSeen();
+  void markAllSeen() {
+    state = state.markAllSeen();
+    _send(const InboxMarkAllSeen());
+  }
 
-  /// Takes an item off the list for good. A follow-up is resolved in its table
-  /// too, or the next sweep files it again.
+  /// Takes an item off the list for good; a follow-up is resolved in its
+  /// table by the server.
   void dismiss(String id) {
-    if (followUpRowIdIn(id) case final rowId?) {
-      ref.read(followUpServiceProvider).dismissRow(rowId);
-    }
     state = state.dismiss(id);
+    _send(InboxDismiss(id));
   }
 
-  /// Opens an item's source and, by doing so, marks it seen.
+  /// Opens an item: seen at the server, which tells every window — this one
+  /// too — to show its session.
   void open(InboxItem item) {
-    focusWatchedSession(
-      ref.container,
-      openId: item.session.openId,
-      imported: item.session.imported,
-    );
     state = state.viewed({item.session.openId});
+    _send(InboxOpen(item.id));
   }
 
-  /// Reveals the next session that needs you. Goes through [open] so a chord
-  /// marks an item viewed exactly as a click does.
+  /// Opens the next session that needs you, through [open].
   bool openNext() {
     final next = state.nextAfter(
       ref.read(selectedSessionIdProvider) ??
@@ -77,26 +120,37 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     return true;
   }
 
-  void _syncViewed() {
-    if (!ref.read(windowFocusedProvider)) return;
-    // Nothing listed is nothing to retire, and asking what is on screen costs
-    // a scan of the sessions table. `session_start_cost_test` counts it.
-    if (state.items.isEmpty) return;
-    final open = <String>{};
+  /// What this window is looking at: the selected sessions and the
+  /// foreground panes' rows while it has focus, nothing while not.
+  Set<String> _lookingAt() {
+    final looking = <String>{};
+    if (!ref.read(windowFocusedProvider)) return looking;
     final native = ref.read(selectedSessionIdProvider);
-    if (native != null) open.add(native);
+    if (native != null) looking.add(native);
     final imported = ref.read(selectedImportedSessionIdProvider);
-    if (imported != null) open.add(imported);
-    // Targeted, not the whole placement map: `session_start_cost_test` asserts
-    // no fifth provider re-reads every session row.
+    if (imported != null) looking.add(imported);
     final panes = ref.read(foregroundTerminalPaneIdsProvider);
     if (panes.isNotEmpty) {
       for (final row in ref.read(sessionsDataProvider).getByPaneIds(panes)) {
-        open.add(row.id);
+        looking.add(row.id);
       }
     }
-    if (open.isEmpty) return;
-    state = state.viewed(open);
+    return looking;
+  }
+
+  /// Tells the server what this window is looking at: the selected sessions
+  /// and the foreground panes' rows while it has focus, nothing while not.
+  void _syncViewed() {
+    final looking = _lookingAt();
+    final last = _lastSeen;
+    if (last != null &&
+        last.length == looking.length &&
+        last.containsAll(looking)) {
+      return;
+    }
+    _lastSeen = looking;
+    if (looking.isNotEmpty) state = state.viewed(looking);
+    _send(InboxSeen(looking.toList()..sort()));
   }
 }
 

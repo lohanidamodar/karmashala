@@ -14,10 +14,9 @@ import 'workbench.dart';
 import '../../core/data/data_providers.dart';
 import '../../core/data/metadata_keys.dart';
 import '../../core/lifecycle/before_quit.dart';
-import '../../features/automations/application/automation_event_router.dart';
-import '../../features/automations/application/automation_runner.dart';
+import '../../features/automations/application/resume_announcer.dart';
 import '../../features/automations/application/scheduled_resume_observer.dart';
-import '../../features/automations/application/usage_limit_watcher.dart';
+import '../../features/automations/application/usage_limit_notices.dart';
 import '../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
@@ -30,7 +29,7 @@ import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/sessions/application/pending_live_switches.dart';
 import '../../features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
-import '../../features/sessions/application/session_liveness_reconciler.dart';
+import '../../features/sessions/application/session_launch_refusal.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
@@ -147,23 +146,20 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final shell = ref.watch(shellControllerProvider);
     // Watched, not read: Riverpod 3 pauses a provider's own subscriptions while
-    // nothing listens, so a reconciler nobody watches never hears a pane stop.
-    ref.watch(sessionLivenessReconcilerProvider);
+    // nothing listens, so a reporter nobody watches never hears a pane stop.
+    ref.watch(refusedLaunchReporterProvider);
     // And for this machine's host feed, the status of every hosted session.
     ref.watch(hostLifecycleSubscriberProvider);
     // And for a model picked mid-turn, which is sent when the turn ends.
     ref.watch(pendingLiveSwitchesProvider);
     // Same reason: a run the server hosts opens a pane here.
     ref.watch(hostedRunPanesProvider);
-    // And again for scheduled automations: an unwatched observer records no
-    // verdict, silently.
-    ref.watch(automationRunObserverProvider);
     // And for scheduled resumes.
     ref.watch(scheduledResumeObserverProvider);
-    // And for the turn that ends on a usage limit, which offers one.
-    ref.watch(usageLimitWatcherProvider);
-    // And for event automations, which hear status changes only while watched.
-    ref.watch(automationEventRouterProvider);
+    // And for a resume the server ended, which is announced here.
+    ref.watch(serverResumeEndingsProvider);
+    // And for a usage limit the server noticed, whose notice is shown here.
+    ref.watch(usageLimitNoticesProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
     // And for file autosave, whose window-focus trigger has to be heard while

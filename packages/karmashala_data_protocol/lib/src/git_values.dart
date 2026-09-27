@@ -129,10 +129,8 @@ Map<String, Object?> aheadBehindToJson(AheadBehind value) => {
   'behind': value.behind,
 };
 
-AheadBehind aheadBehindFromJson(Map<String, Object?> json) => AheadBehind(
-  ahead: json['ahead']! as int,
-  behind: json['behind']! as int,
-);
+AheadBehind aheadBehindFromJson(Map<String, Object?> json) =>
+    AheadBehind(ahead: json['ahead']! as int, behind: json['behind']! as int);
 
 Map<String, Object?> gitCommitToJson(GitCommit commit) => {
   'sha': commit.sha,
@@ -166,7 +164,10 @@ Map<String, Object?> repositoryOriginToJson(RepositoryOrigin origin) => {
 };
 
 RepositoryOrigin repositoryOriginFromJson(Map<String, Object?> json) =>
-    RepositoryOrigin(url: json['url'] as String?, head: json['head'] as String?);
+    RepositoryOrigin(
+      url: json['url'] as String?,
+      head: json['head'] as String?,
+    );
 
 /// The **local** half of where a checkout's work stands — no `gh`.
 Map<String, Object?> localDeliveryToJson(SessionDelivery delivery) => {
@@ -301,7 +302,8 @@ final class PullRequestReading {
   final BranchProtection protection;
 
   Map<String, Object?> toJson() => {
-    if (pullRequest case final pr?) 'pullRequest': pullRequestSnapshotToJson(pr),
+    if (pullRequest case final pr?)
+      'pullRequest': pullRequestSnapshotToJson(pr),
     'strategies': {
       'merge': ?strategies.mergeCommit,
       'squash': ?strategies.squash,

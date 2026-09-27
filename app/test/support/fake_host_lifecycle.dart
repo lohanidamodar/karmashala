@@ -3,11 +3,7 @@ import 'dart:async';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_source.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/relayed_agent_hook.dart';
 import 'package:karmashala_host/lifecycle_client.dart'
-    show
-        CompanionCallMessage,
-        CompanionEventMessage,
-        CompanionNoticeMessage,
-        PairedMessage;
+    show CompanionEventMessage, CompanionNoticeMessage, PairedMessage;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -78,8 +74,7 @@ class FakeHostLifecycle implements HostLifecycleSource {
 
   StreamController<HostMcpCall> get mcpCallLink => mcpCallLinks.last;
 
-  /// Each link's companion calls and events, pushed by the test as the daemon.
-  final companionCallLinks = <StreamController<CompanionCallMessage>>[];
+  /// Each link's companion events, pushed by the test as the daemon.
   final companionEventLinks = <StreamController<CompanionEventMessage>>[];
 
   /// Each attach the app sent, in order: where its embedded relay was.
@@ -94,17 +89,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
   )?
   answerServerCall;
 
-  /// How the app answered each forwarded companion call.
-  final companionAnswers =
-      <
-        ({
-          int callId,
-          Map<String, Object?>? result,
-          String? code,
-          String? message,
-        })
-      >[];
-
   /// The notices the app sent the host's companion.
   final companionNotices = <CompanionNoticeMessage>[];
 
@@ -112,8 +96,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
   final pairings = <({int capabilities, String relay, bool relayIsLocal})>[];
   PairedMessage Function(int requestId)? answerPairing;
 
-  StreamController<CompanionCallMessage> get companionCallLink =>
-      companionCallLinks.last;
   StreamController<CompanionEventMessage> get companionEventLink =>
       companionEventLinks.last;
 
@@ -131,9 +113,7 @@ class FakeHostLifecycle implements HostLifecycleSource {
     final hooks = StreamController<RelayedAgentHook>();
     final calls = StreamController<HostMcpCall>();
     mcpCallLinks.add(calls);
-    final companionCalls = StreamController<CompanionCallMessage>();
     final companionEvents = StreamController<CompanionEventMessage>();
-    companionCallLinks.add(companionCalls);
     companionEventLinks.add(companionEvents);
     final statuses = StreamController<HostAgentStatusChange>();
     statusLinks.add(statuses);
@@ -159,7 +139,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
       offerMcpTools: offeredTools.add,
       answerMcpCall: (callId, {result, error}) =>
           mcpAnswers.add((callId: callId, result: result, error: error)),
-      companionCalls: companionCalls.stream,
       companionEvents: companionEvents.stream,
       attachCompanion: ({localRelayUrl}) =>
           companionAttaches.add(localRelayUrl),
@@ -171,8 +150,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
         }
         return answer(method, arguments);
       },
-      answerCompanionCall: (callId, {result, code, message}) => companionAnswers
-          .add((callId: callId, result: result, code: code, message: message)),
       noticeCompanion: companionNotices.add,
       statusSnapshot: List.of(statusSnapshot),
       agentStatuses: statuses.stream,
@@ -194,7 +171,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
       close: () async {
         // Not awaited: a link whose app offers no tools never listens.
         if (!calls.isClosed) unawaited(calls.close());
-        if (!companionCalls.isClosed) unawaited(companionCalls.close());
         if (!companionEvents.isClosed) unawaited(companionEvents.close());
         if (!statuses.isClosed) unawaited(statuses.close());
         if (!link.isClosed) await link.close();

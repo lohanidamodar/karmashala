@@ -268,7 +268,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
       (_, _) => unawaited(_raiseWindow()),
     );
 
-    _container.read(agentStatusWatcherProvider).start();
+    _container.read(attentionPresenterProvider).start();
   }
 
   /// Applies [settings] to the OS. Prevent-close is the one value here that is

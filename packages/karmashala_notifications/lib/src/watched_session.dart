@@ -1,4 +1,5 @@
 import 'agent_session_key.dart';
+import 'attention_json.dart';
 
 /// A session the watcher keeps an eye on, with everything needed to talk about
 /// it (a label) and to jump to it (the workspace id it opens under).
@@ -47,4 +48,28 @@ class WatchedSession {
 
   @override
   String toString() => 'WatchedSession($key, $label)';
+
+  /// The wire shape. [stateFilePath] and [paneId] are the watcher's own
+  /// bookkeeping, spelled for the server's machine: they travel, but a client
+  /// reads a file by neither.
+  Map<String, Object?> toJson() => {
+    'key': key.toJson(),
+    'label': label,
+    'openId': openId,
+    if (imported) 'imported': true,
+    'paneId': ?paneId,
+    'stateFilePath': ?stateFilePath,
+  };
+
+  static WatchedSession fromJson(Object? json) {
+    final map = attentionObject(json, 'watched session');
+    return WatchedSession(
+      key: AgentSessionKey.fromJson(map['key']),
+      label: attentionString(map, 'label'),
+      openId: attentionString(map, 'openId'),
+      imported: map['imported'] == true,
+      paneId: map['paneId'] as String?,
+      stateFilePath: map['stateFilePath'] as String?,
+    );
+  }
 }

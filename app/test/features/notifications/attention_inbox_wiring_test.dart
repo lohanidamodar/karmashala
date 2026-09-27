@@ -1,3 +1,4 @@
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -70,26 +71,28 @@ void main() {
 
   // Not `const`: a const set literal may not hold a type that overrides `==`,
   // and `AgentSessionKey` does.
-  void finished() => controller().apply(
-    InboxUpdate(
-      watched: {key},
-      news: [(session: watched, reason: NotificationReason.finished)],
-    ),
-  );
+  void finished() =>
+      FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
+        InboxUpdate(
+          watched: {key},
+          news: [(session: watched, reason: NotificationReason.finished)],
+        ),
+      );
 
-  void waiting() => controller().apply(
-    InboxUpdate(
-      watched: {key},
-      waiting: [
-        SessionAttention(session: watched, kind: AttentionKind.needsInput),
-      ],
-    ),
-  );
+  void waiting() =>
+      FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
+        InboxUpdate(
+          watched: {key},
+          waiting: [
+            SessionAttention(session: watched, kind: AttentionKind.needsInput),
+          ],
+        ),
+      );
 
   test('an item carries the agent\'s own words, like the toast does', () {
     // The inbox is the panel you open *because* you missed the toast. It
     // showing less than the toast did was the wrong way round.
-    controller().apply(
+    FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
       InboxUpdate(
         watched: {key},
         news: [(session: watched, reason: NotificationReason.needsInput)],
@@ -187,11 +190,15 @@ void main() {
     },
   );
 
-  test('opening an item walks to its project and repository', () {
+  test('opening an item walks to its project and repository, on the '
+      "server's cue to every window", () async {
     finished();
     final item = container.read(attentionInboxProvider).items.single;
 
     controller().open(item);
+    // Marked seen here at once; shown when the server says so.
+    expect(container.read(attentionInboxProvider).items, isEmpty);
+    await pumpEventQueue();
 
     expect(container.read(selectedProjectIdProvider), 'p1');
     expect(container.read(selectedRepositoryIdProvider), 'r1');

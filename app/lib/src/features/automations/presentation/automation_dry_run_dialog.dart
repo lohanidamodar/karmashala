@@ -8,7 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
-import '../application/automation_event_router.dart';
+import '../application/automation_rehearsal.dart';
 import '../application/automation_providers.dart';
 
 /// "What would fire if this happened?" — every event rule's answer to one
@@ -46,7 +46,7 @@ class _AutomationDryRunDialogState
   }
 
   AutomationEvent _event() {
-    final router = ref.read(automationEventRouterProvider.notifier);
+    final router = ref.read(automationRehearsalProvider);
     final real = _sessionId == kHypotheticalSession
         ? null
         : router.eventFor(_kind, _sessionId);
@@ -79,7 +79,7 @@ class _AutomationDryRunDialogState
     };
     final event = _event();
     final rehearsals = ref
-        .read(automationEventRouterProvider.notifier)
+        .read(automationRehearsalProvider)
         .dryRun(event)
         .where((r) => r.verdict.outcome != EventRuleOutcome.otherCheckout)
         .toList();

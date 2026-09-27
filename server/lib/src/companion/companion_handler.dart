@@ -32,9 +32,6 @@ abstract interface class CompanionHandler {
     void Function(HostMessage) send,
   );
 
-  /// [owner]'s answer to a call forwarded to it.
-  void answer(Object owner, CompanionResultMessage result);
-
   /// News from the desktop.
   Future<void> notice(Object owner, CompanionNoticeMessage notice);
 

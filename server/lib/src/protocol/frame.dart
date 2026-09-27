@@ -56,27 +56,20 @@ enum MessageType {
   mcpTools(0x1d),
   mcpCall(0x1e),
   mcpResult(0x1f),
-  // Protocol 4: the daemon serves the phone companion and the app answers
-  // what only it can. client → host: "I am the app" and where its embedded
-  // relay listens (protocol 10 — how phones are served is the server's
-  // `server.json`, never sent on a link); host → client: one forwarded call;
-  // client → host: its answer; client → host: news from the desktop; host →
-  // client: news from the companion (device rows moved, a pairing window
-  // ended).
+  // Protocol 4: the daemon serves the phone companion. client → host: where
+  // the desktop's embedded relay listens (protocol 10 — how phones are
+  // served is the server's `server.json`, never sent on a link); client →
+  // host: the pairing dialog closed; host → client: a pairing window ended.
+  // 0x21–0x22 (`companionCall`, `companionResult`: calls forwarded to the
+  // app) are retired in protocol 27 — the server answers every phone call
+  // itself (slice 5c).
   companionAttach(0x20),
-  companionCall(0x21),
-  companionResult(0x22),
   companionNotice(0x23),
   companionEvent(0x24),
-  // Protocol 5: the daemon runs automations and checks. client → host: "I am
-  // the app" / "I changed them"; host → client: "I changed them"; host →
-  // client: one forwarded fire; client → host: its answer; client → host:
-  // run a session's checks; host → client: how that ended.
-  automationNotice(0x25),
-  automationCall(0x27),
-  automationResult(0x28),
-  checksRun(0x29),
-  checksRan(0x2a),
+  // 0x25, 0x27–0x2a (protocol 5: `automationNotice`, `automationCall`,
+  // `automationResult`, `checksRun`, `checksRan`) are retired in protocol
+  // 27: automations fire, resume and check at the server alone, and a
+  // client asks for a session's checks on the data channel (`checks.run`).
   // Protocol 7: the daemon keeps what each hosted agent is doing and answers
   // its prompts. host → client: one session's agent status; client → host:
   // answer a prompt; host → client: how that ended.
@@ -97,11 +90,9 @@ enum MessageType {
   dataRequest(0x32),
   dataAnswer(0x33),
   dataChanges(0x34),
-  // Slice 2b: the app's terminal panes as facts (`pane_messages.dart`).
-  // client → host: every pane it has now; host → client: the panes whose
-  // bottom rows to send with the next report.
-  paneFacts(0x36),
-  paneTailsWanted(0x37),
+  // 0x36–0x37 (slice 2b: `paneFacts`, `paneTailsWanted`, the app's terminal
+  // panes as facts) are retired in protocol 27: every local and WSL pane is
+  // the server's own terminal since slice 5a, read off its own screen.
   // 0x38–0x3a (protocol 18: commands the server ran through the app over
   // SSH) are gone: since protocol 19 the server reaches SSH itself.
   // Protocol 22 (slice 3d): a live stream of a server source — a Flutter
@@ -112,7 +103,8 @@ enum MessageType {
   dataStreamClose(0x3d),
   // 0x3e–0x3f are reserved for slice 5e (outputAck, presence). Protocol 24
   // (slice 4a) added no frame: the claims change rides the data channel;
-  // neither did protocol 25 (slice 5a): `terminals.*` and `env.*` ride it too.
+  // neither did protocol 25 (slice 5a): `terminals.*` and `env.*` ride it too;
+  // nor protocol 27 (slice 5c): `status.*`, `inbox.*` and `checks.run` do.
 
   // 0xf0 and up never change and are answered without hello, whatever the
   // protocol: `karmashala_host stop` must reach a host of any version

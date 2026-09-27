@@ -85,7 +85,6 @@ void main() {
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
-        deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
         repoWorktreesProvider.overrideWith((ref) async => worktrees),
         recentCommitsProvider.overrideWith((ref) async => const <GitCommit>[]),
         repositoryDeliveryProvider.overrideWith(

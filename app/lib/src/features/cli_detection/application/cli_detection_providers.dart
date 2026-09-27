@@ -12,13 +12,13 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_terminal_runtime/screen_reading.dart';
-import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../data/cli_session_mutator.dart';
 import 'agent_store_server_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
-import 'pane_facts_reporter.dart';
+import 'adoptable_pane.dart';
+
+export 'adoptable_pane.dart';
 
 export 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ImportSummary;
@@ -49,26 +49,6 @@ final autoImportRunnerProvider = Provider<AutoImportRunner>(
       : ref.read(agentWorkProvider).importForRepositories([
           for (final repo in repos) repo.id,
         ]),
-);
-
-/// Tells the server this app's terminal panes as facts, over the host link:
-/// the server adopts what a person started by hand in one, and reads the
-/// resume line an agent printed there. Reported on each status cycle.
-final paneFactsReporterProvider = Provider<PaneFactsReporter>(
-  (ref) => PaneFactsReporter(
-    readPanes: () => adoptablePanes(ref),
-    // Not the live-only rule of arming: an agent may print its resume hint
-    // as it exits. `restored` is refused — that buffer is replayed history.
-    readTail: (paneId, lines) {
-      if (!ref.exists(terminalSessionsControllerProvider)) return null;
-      final instance = ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(paneId);
-      if (instance == null) return null;
-      if (instance.liveness.value == PaneLiveness.restored) return null;
-      return terminalTailLines(instance.terminal, lines: lines);
-    },
-  ),
 );
 
 /// Every tracked pane, as facts — read-only over the terminal layout's

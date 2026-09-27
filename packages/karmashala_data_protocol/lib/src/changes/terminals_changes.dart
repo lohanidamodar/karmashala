@@ -39,5 +39,8 @@ final class TerminalRemoved extends TerminalChange {
   final String sessionId;
 
   @override
-  Map<String, Object?> toJson() => {'change': 'terminalRemoved', 'id': sessionId};
+  Map<String, Object?> toJson() => {
+    'change': 'terminalRemoved',
+    'id': sessionId,
+  };
 }

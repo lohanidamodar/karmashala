@@ -4,11 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/explorer/application/project_working.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
-import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_agent_reporting/hooks.dart';
-import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/rows.dart';
 
@@ -19,22 +14,13 @@ import '../../support/test_machine.dart';
 
 /// **Whether a project's running mark turns.** "Running" is the row's record
 /// of what it started; "working" is the agent in a turn right now, and it comes
-/// from the one status registry — subscribed to, never polled, and narrowed so
-/// that a turn starting in one project wakes that project's header alone.
+/// from the server's statuses (slice 5c) — subscribed to, never polled, and
+/// narrowed so that a turn starting in one project wakes that project's header
+/// alone.
 void main() {
   late TestMachine db;
   late FakeDataServer server;
-  late AgentHookReceiver receiver;
-  late SessionStatusRegistry registry;
-  late List<WatchedSession> watched;
   late ProviderContainer container;
-
-  WatchedSession watch(String row) => WatchedSession(
-    key: AgentSessionKey(AgentIds.claudeCode, 'cli-$row'),
-    label: row,
-    openId: row,
-    imported: false,
-  );
 
   setUp(() async {
     db = TestMachine();
@@ -71,61 +57,45 @@ void main() {
       }
     }
 
-    final clock = FixedClock(testTime);
-    final reports = AgentHookReports();
-    receiver = AgentHookReceiver(
-      registry: AgentRegistry.builtIn,
-      reports: reports,
-      clock: clock,
-    );
-    watched = [watch('s1'), watch('s2'), watch('s3')];
-    registry = SessionStatusRegistry(
-      statusService: AgentStatusService(
-        registry: AgentRegistry.builtIn,
-        hookReports: reports,
-        clock: clock,
-      ),
-      agents: AgentRegistry.builtIn,
-      loadSessions: () => watched,
-      clock: clock,
-    );
+    for (final row in ['s1', 's2', 's3']) {
+      server.attention.statusOf(
+        row,
+        AgentActivityStatus.idle,
+        sessionId: 'cli-$row',
+        label: row,
+      );
+    }
     container = ProviderContainer(
       overrides: [
         await server.override(),
-        clockProvider.overrideWithValue(clock),
-        sessionStatusRegistryProvider.overrideWithValue(registry),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
   });
 
-  tearDown(() {
-    container.dispose();
-    registry.dispose();
-  });
+  tearDown(() => container.dispose());
 
-  void hook(String row, String event) {
-    receiver.handle(
-      agentId: AgentIds.claudeCode,
-      event: event,
-      body: '{"session_id":"cli-$row"}',
-    );
-    registry.hookReported(AgentSessionKey(AgentIds.claudeCode, 'cli-$row'));
-  }
+  /// The server's word on [row]: in a turn ([working]) or at rest.
+  void status(String row, {required bool working}) => server.attention.statusOf(
+    row,
+    working ? AgentActivityStatus.working : AgentActivityStatus.idle,
+    sessionId: 'cli-$row',
+    label: row,
+  );
 
   test(
     'a turn starting counts in its own project, and ending uncounts',
     () async {
-      await registry.cycle();
       final counts = container.listen(projectWorkingCountsProvider, (_, _) {});
       expect(counts.read(), isEmpty);
 
-      hook('s1', 'PreToolUse');
+      status('s1', working: true);
       expect(counts.read(), {'p1': 1});
-      hook('s2', 'PreToolUse');
-      hook('s3', 'PreToolUse');
+      status('s2', working: true);
+      status('s3', working: true);
       expect(counts.read(), {'p1': 2, 'p2': 1});
 
-      hook('s1', 'Stop');
+      status('s1', working: false);
       expect(counts.read(), {'p1': 1, 'p2': 1});
     },
   );
@@ -133,16 +103,13 @@ void main() {
   test(
     'a session already working when the Explorer opens is counted',
     () async {
-      await registry.cycle();
-      hook('s3', 'PreToolUse');
-      await registry.cycle();
+      status('s3', working: true);
 
       expect(container.read(projectWorkingCountsProvider), {'p2': 1});
     },
   );
 
   test('the summary carries it, and a turn wakes one project', () async {
-    await registry.cycle();
     final summaries = <String, List<ProjectSummary>>{'p1': [], 'p2': []};
     for (final id in summaries.keys) {
       container.listen(
@@ -154,7 +121,7 @@ void main() {
     expect(summaries['p1']!.single.working, 0);
     expect(summaries['p1']!.single.running, 2);
 
-    hook('s1', 'PreToolUse');
+    status('s1', working: true);
     await container.pump();
 
     expect(summaries['p1']!.last.working, 1);
@@ -162,14 +129,13 @@ void main() {
     expect(summaries['p2'], hasLength(1), reason: 'the other header slept');
   });
 
-  test('a cycle that reconfirms every status moves nothing', () async {
-    await registry.cycle();
-    hook('s1', 'PreToolUse');
+  test('the server saying the same again moves nothing', () async {
+    status('s1', working: true);
     var changes = 0;
     container.listen(workingSessionsProvider, (_, _) => changes++);
 
-    await registry.cycle();
-    await registry.cycle();
+    status('s1', working: true);
+    status('s2', working: false);
 
     expect(changes, 0);
     expect(container.read(workingSessionsProvider), {'s1'});
@@ -178,14 +144,13 @@ void main() {
   test(
     'a working session that stops being watched stops being counted',
     () async {
-      await registry.cycle();
       final counts = container.listen(projectWorkingCountsProvider, (_, _) {});
-      hook('s1', 'PreToolUse');
+      status('s1', working: true);
       expect(counts.read(), {'p1': 1});
 
-      // It ended, so the loader no longer offers it: no status moves, it goes.
-      watched = [watch('s2'), watch('s3')];
-      await registry.cycle();
+      // It ended, so the server no longer watches it: no status moves, it
+      // goes.
+      server.attention.forget('s1');
       await Future<void>.delayed(Duration.zero);
 
       expect(counts.read(), isEmpty);
@@ -193,7 +158,6 @@ void main() {
   );
 
   test('with nothing working it reads no table', () async {
-    await registry.cycle();
     container.read(projectWorkingCountsProvider);
     expect(container.exists(sessionProjectIdsProvider), isFalse);
   });

@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -188,16 +187,9 @@ void main() {
 
       await serverLearnsTheConversation(ref);
 
-      // What the inbox is offered: one watched session, and it is the row with
-      // the pane — not the read-only history the notification used to open.
-      // The app's own loader, so the pane's liveness is read the way the app
-      // reads it: a row is watched because its pane runs.
-      final watched = ref.read(watchedSessionLoaderProvider).load();
-      expect(watched, hasLength(1));
-      expect(watched.single.imported, isFalse);
-      expect(watched.single.openId, 's1');
-      expect(watched.single.key.sessionId, conversation);
-
+      // Which session the inbox names is the server's to watch (slice 5c,
+      // `server/test/attention/`); this app's half is the question the
+      // "not active" message came from.
       // And the question the "not active" message came from.
       expect(
         ref

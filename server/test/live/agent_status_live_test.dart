@@ -7,8 +7,11 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_host/data.dart' show HostDataLink;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
+import 'package:karmashala_notifications/attention.dart' show InboxItemKind;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
 import 'package:test/test.dart';
@@ -213,6 +216,45 @@ void main() {
       );
       expect(latest.source, AgentStatusSource.hook);
       expect(latest.detail, 'Stop');
+
+      // Slice 5c: the server decided what that meant for a person, with no
+      // app anywhere — a window that subscribes now is greeted with the
+      // status and an inbox holding the finished turn, and can open it.
+      final window = await HostDataLink.connect(host.socketPath);
+      expect(window, isNotNull);
+      addTearDown(() => window!.close());
+      final greeted = Completer<List<DataChange>>();
+      final changes = window!.changes.listen((batch) {
+        if (!greeted.isCompleted) greeted.complete(batch.changes);
+      });
+      addTearDown(changes.cancel);
+      await window.send(const DataSubscribe());
+      final greeting = await greeted.future.timeout(
+        const Duration(seconds: 10),
+      );
+      final greetedStatus = [
+        for (final change in greeting)
+          if (change case SessionStatusChanged(:final entry))
+            if (entry.openId == seededAgentSessionId) entry.report,
+      ];
+      expect(
+        greetedStatus.single.status,
+        AgentActivityStatus.idle,
+        reason: host.output,
+      );
+      final inbox = [
+        for (final change in greeting)
+          if (change case InboxChanged(:final snapshot)) snapshot.inbox,
+      ].single;
+      final finished = inbox.items.where(
+        (item) =>
+            item.session.openId == seededAgentSessionId &&
+            item.kind == InboxItemKind.finished,
+      );
+      expect(finished, hasLength(1), reason: '${inbox.toJson()}');
+      final opened = await window.send(InboxOpen(finished.single.id));
+      expect(opened.value.windows, 1);
+      expect(opened.value.stillListed, isFalse, reason: 'an event, looked at');
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );

@@ -8,7 +8,12 @@ import 'package:karmashala_environments/store.dart'
     show ExecutionEnvironmentDao;
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DecisionRecorded, kFlutterLogsStream;
+    show
+        DecisionAppend,
+        DecisionRecorded,
+        UsageLimitNotice,
+        UsageLimitNoticed,
+        kFlutterLogsStream;
 import 'package:karmashala_flutter_apps/flutter_apps.dart'
     show FlutterAppException;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
@@ -20,6 +25,9 @@ import 'package:path/path.dart' as p;
 import '../agents/server_agent_work.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_automations.dart';
+import '../automations/server_resume_runner.dart';
+import 'package:karmashala_session/events.dart'
+    show DecisionKind, DecisionOrigin, DecisionRecord;
 import '../automations/session_mcp_access.dart';
 import '../companion/daemon_companion.dart';
 import '../domain/session_registry.dart';
@@ -34,6 +42,10 @@ import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
 import '../hooks/hook_spools.dart';
 import '../mcp/tools/usage_tool_set.dart';
+import '../mcp/tools/inbox_tool_set.dart';
+import '../attention/daemon_attention.dart';
+import '../attention/delivery_watch.dart';
+import 'package:karmashala_notifications/attention.dart' show InboxItem;
 import '../mcp/tools/server_tool_schemas.dart';
 import '../browser/server_browser.dart';
 import '../flutter/server_flutter_work.dart';
@@ -344,6 +356,28 @@ Future<int> runServe(
     prompts: prompts,
     onLog: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  // Session status and attention (slice 5c): every watched session's status
+  // — the agents this server runs from its own reading, the rest from hooks
+  // and transcripts — what needs a person, and the inbox; decided here and
+  // told to every client, a desktop open or not. Phones hear it too.
+  final transcripts = TranscriptStores.over(database);
+  final attention = DaemonAttention(
+    database: database,
+    data: data,
+    agentStatus: status,
+    transcripts: transcripts.all,
+    onNewItems: companion.attentionFiled,
+    onApprovalRequested: companion.approvalRequested,
+    onStatusMoved: companion.sessionsMoved,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  data.attentionWork = attention.attention;
+  companion
+    ..statusOf = attention.status.reportForOpenId
+    ..attentionOf = attention.attentionOf
+    ..usageLimitOf = attention.usageLimitOf
+    // A phone reads a session's transcript from its agent's own record.
+    ..recordIndex = transcripts.all;
 
   // Agents' tools: the server runs every one that needs no desktop UI
   // itself (slice 2b); the rest are forwarded to the app.
@@ -481,6 +515,7 @@ Future<int> runServe(
   checkpoints.start(status.changes);
   mcpTools.tools.add(CheckpointToolSet(checkpoints));
   status.start();
+  attention.start();
   final recording = SessionStatusRecording(
     server.lifecycle,
     database,
@@ -490,18 +525,20 @@ Future<int> runServe(
   final companionServing = await _startCompanion(
     companion,
     server.lifecycle,
-    status,
     errSink,
   );
   // Title sync, attribution and adoption: the server's, over its own store
-  // and this machine's agent stores; the app only reports its panes.
+  // and this machine's agent stores, over the panes of its own terminals.
   final sessionSync = DaemonSessionSync(
     database: database,
     data: data,
     registry: registry,
+    // The panes are the server's own terminals (slice 5c), read off its own
+    // screens; no client reports them.
+    panes: terminals,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
-  server.panes = sessionSync;
+  terminals.onPanesChanged = sessionSync.panesChanged;
   sessionSync.start();
   // Git, worktrees, their cleanup and GitHub for every client (slice 3b); a
   // turn ending tells them where to read again.
@@ -524,6 +561,27 @@ Future<int> runServe(
     log: (message) => errSink.writeln('karmashala_host: $message'),
   )..attach();
   checkpoints.recorder.onTurnEnded = git.turnEnded;
+  // Every live session's delivery, read here (slice 5c): the pull request
+  // and its checks, on the server's own two-minute poll and when a turn ends
+  // in a checkout — news filed, readings told to every window, a phone's
+  // stage answered. Off for a test's server.
+  final delivery = DeliveryWatch(
+    database: database,
+    git: git.handle,
+    tell: data.announce,
+    news: attention.attention.deliveryRead,
+    lookingAt: () => attention.attention.lookingAt,
+    runs: attention.runs,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  data
+    ..addChangeListener(delivery.changed)
+    ..greeters.add(delivery.greeting);
+  companion.deliveryStageOf = delivery.stageOf;
+  if (hostEnvironment[kDeliveryPollVariable] != 'off' &&
+      hostEnvironment[kAgentWorkVariable] != 'off') {
+    delivery.start();
+  }
   final hookServer = await _openHookServer(
     paths,
     // The status first, so a watcher hears the status a hook moved no later
@@ -533,6 +591,7 @@ Future<int> runServe(
       // status moves; the hook server awaits its hold.
       final held = checkpoints.hook(hook);
       status.hook(hook);
+      attention.hook(hook);
       sessionSync.hook(hook);
       server.lifecycle.relayHook(hook);
       return held;
@@ -554,6 +613,7 @@ Future<int> runServe(
           onHook: (hook) {
             checkpoints.spooled(hook);
             status.hook(hook);
+            attention.hook(hook);
             sessionSync.hook(hook);
             server.lifecycle.relayHook(hook);
           },
@@ -587,7 +647,20 @@ Future<int> runServe(
     errSink: errSink,
     agentStatus: status,
     remote: ssh.runners,
+    usage: ServiceResumeUsage(
+      agentWork.usage.service,
+      environments: () => data.environments,
+    ),
+    // A usage limit is filed in the server's inbox, and what was done about
+    // it told to every window (slice 5c).
+    raise: attention.attention.raise,
+    noticeUsageLimit: (notice) => data.announce([UsageLimitNoticed(notice)]),
   );
+  // Event rules and usage limits follow every status the server keeps,
+  // app or no app.
+  final statusFollow = automations == null
+      ? null
+      : attention.status.statusChanges.listen(automations.observeStatus);
   // `checks_run` for a checkout on this machine or an SSH box is the
   // automations'.
   mcpTools.tools
@@ -611,6 +684,8 @@ Future<int> runServe(
     )
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
+    // The inbox is the server's (slice 5c), app or no app.
+    ..add(InboxToolSet(attention.attention))
     // The browser, the Flutter loop and builds are the server's (slice 3d).
     ..add(BrowserToolSet(browser))
     ..add(
@@ -679,7 +754,7 @@ Future<int> runServe(
   // The conversation index: every conversation a written row names is read
   // from its agent's store, and once per store, what the workspace already
   // had — not in the first moments either.
-  data.conversations.start(TranscriptStores.over(database));
+  data.conversations.start(transcripts);
   unawaited(
     Future<void>.delayed(agentScanDelay).then((_) async {
       if (stopping.isCompleted) return;
@@ -755,12 +830,15 @@ Future<int> runServe(
   tools.close();
   await companion.close();
   agentWork.stop();
+  delivery.stop();
   await git.stop();
   await files.close();
   await terminals.dispose();
   await ssh.close();
+  await attention.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
+  await statusFollow?.cancel();
   await automations?.close();
   // Its links and watchers, before the sessions it hosts end; then the
   // Chrome this server launched (never one it only attached to).
@@ -898,6 +976,9 @@ Future<DaemonAutomations?> _startAutomations({
   required IOSink errSink,
   DaemonAgentStatus? agentStatus,
   CommandRunnerFactory? remote,
+  ResumeUsage? usage,
+  void Function(InboxItem item)? raise,
+  void Function(UsageLimitNotice notice)? noticeUsageLimit,
 }) async {
   if (database == null || recording == null) return null;
   final automations = DaemonAutomations(
@@ -912,17 +993,37 @@ Future<DaemonAutomations?> _startAutomations({
     tell: data.announce,
     sessionWritten: (sessionId) => data.announceSessions([sessionId]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
+    // Scheduled resumes fire here (slice 5c): the agent's status, the
+    // account's usage, and the decision filed where every client hears it.
+    agentStatusOf: agentStatus?.statusOf,
+    usage: usage,
+    raise: raise,
+    noticeUsageLimit: noticeUsageLimit,
+    onDecision: (decision) => data.applyAsServer(
+      DecisionAppend(
+        DecisionRecord(
+          sessionId: decision.sessionId,
+          kind: DecisionKind.approvalGranted,
+          summary: decision.summary,
+          detail: decision.detail,
+          decidedBy: decision.scheduledBy,
+          origin: DecisionOrigin.scheduledResume,
+          originId: decision.resumeId,
+          recordedAt: DateTime.now().toUtc(),
+        ),
+      ),
+    ),
   );
   data.automationsWritten = automations.written;
   try {
-    server.automations = automations;
     await automations.start(
       recording.changes,
       agentStatus: agentStatus?.changes,
     );
+    // A session's checks asked for by a client (`checks.run`).
+    data.checksWork = automations;
     return automations;
   } on Object catch (error) {
-    server.automations = null;
     await automations.close();
     errSink.writeln('karmashala_host: automations did not start ($error)');
     return null;
@@ -934,14 +1035,10 @@ Future<DaemonAutomations?> _startAutomations({
 Future<bool> _startCompanion(
   DaemonCompanion companion,
   LifecycleFeed lifecycle,
-  DaemonAgentStatus? status,
   IOSink errSink,
 ) async {
   try {
-    await companion.start(
-      sessionEvents: lifecycle.events,
-      statusChanges: status?.changes,
-    );
+    await companion.start(sessionEvents: lifecycle.events);
     return true;
   } on Object catch (error) {
     errSink.writeln('karmashala_host: could not start the companion ($error)');

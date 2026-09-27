@@ -1,5 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart' show ImportedSession;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_remote/host.dart' show RemoteApiRefusal;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
@@ -66,6 +68,132 @@ void main() {
       expect(snapshot.status, ended.name);
     });
   }
+
+  group('what the server decides (slice 5c: always the server\'s)', () {
+    final imported = ImportedSession(
+      id: 'imp-1',
+      repositoryId: 'r1',
+      cli: AgentIds.codex,
+      externalId: 'conv-9',
+      environmentId: 'local',
+      filePath: '/store/conv-9.jsonl',
+      storeHome: '/store',
+      isSubagent: false,
+      title: 'Old history',
+      preview: 'hello',
+      createdAt: t0,
+    );
+    late List<String> typed;
+
+    SessionsAtRest served({
+      AgentActivityStatus agent = AgentActivityStatus.idle,
+      AgentWaitKind waiting = AgentWaitKind.unrecorded,
+    }) {
+      typed = [];
+      return SessionsAtRest(
+        sessions: SessionDao(database),
+        names: WorkspaceNames(database),
+        screens: _TypingScreens(typed),
+        hostName: 'droplet',
+        agentStatusOf: (sessionId) => AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: sessionId,
+          status: agent,
+          observedAt: t0,
+          source: AgentStatusSource.hook,
+          waiting: waiting,
+        ),
+        attentionOf: (id) => id == 'run' ? 'needs_approval' : null,
+        usageLimitOf: (id) => id == 'run' ? 'Resets 14:05.' : null,
+        agentIdOf: (_) => AgentIds.claudeCode,
+        imported: () => [imported],
+        clock: () => t0,
+      );
+    }
+
+    void row(String id) => SessionDao(database).insert(
+      Session(
+        id: id,
+        repositoryId: 'r1',
+        agentInstallationId: 'a1',
+        title: 'Fix the cart',
+        useWorktree: false,
+        status: SessionStatus.running,
+        createdAt: t0,
+      ),
+    );
+
+    test('a row carries the server\'s attention, a limit\'s words and its '
+        'agent\'s name', () {
+      row('run');
+      final snapshot = served().byId('run')!;
+      expect(snapshot.attention, 'needs_approval');
+      expect(snapshot.usageLimit, 'Resets 14:05.');
+      expect(snapshot.agentLabel, startsWith('Claude Code'));
+    });
+
+    test('imported history is listed, read-only, and found by id', () {
+      row('run');
+      final listed = served().list();
+      expect(listed.map((s) => s.sessionId), ['run', 'imp-1']);
+      final history = served().byId('imp-1')!;
+      expect(history.imported, isTrue);
+      expect(history.status, 'imported');
+      expect(history.attachments!.refusal, contains('imported history'));
+    });
+
+    test('a prompt is refused into imported history, and into an open '
+        'prompt, in words', () async {
+      row('run');
+      await expectLater(
+        served().sendPrompt('imp-1', 'hi'),
+        throwsA(
+          isA<RemoteApiRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('imported from the CLI'),
+          ),
+        ),
+      );
+      await expectLater(
+        served(
+          agent: AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.approval,
+        ).sendPrompt('run', 'hi'),
+        throwsA(
+          isA<RemoteApiRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('waiting on a prompt'),
+          ),
+        ),
+      );
+      expect(typed, isEmpty);
+
+      final atRest = served();
+      await atRest.sendPrompt('run', 'hi');
+      expect(typed, ['karmashala_run:hi']);
+    });
+
+    test('a prompt nobody here runs says why it cannot be answered', () {
+      expect(
+        served().notAnswerableHere('imp-1').message,
+        contains('answer it in its own terminal'),
+      );
+      expect(
+        served().notAnswerableHere('elsewhere').message,
+        contains('not running in this Karmashala server'),
+      );
+    });
+  });
+}
+
+class _TypingScreens extends _NoScreens {
+  _TypingScreens(this.typed);
+  final List<String> typed;
+  @override
+  Future<void> type(String hostSessionId, String text) async =>
+      typed.add('$hostSessionId:$text');
 }
 
 class _NoScreens implements CompanionScreens {

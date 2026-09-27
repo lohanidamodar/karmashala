@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataEnvelope, DataRefused, DataStreamEnvelope, DataStreamItems;
 
-import '../automations/automation_handler.dart';
 import '../companion/companion_handler.dart';
 import '../data/data_service.dart';
 import '../data/data_streams.dart';
@@ -20,7 +19,6 @@ import '../protocol/messages.dart';
 import '../protocol/wire.dart';
 import '../pty/pty.dart';
 import '../server/server_admin.dart';
-import '../sessions/client_panes.dart';
 import '../status/daemon_prompt_answers.dart';
 import '../transport/transport.dart';
 import 'lifecycle_feed.dart';
@@ -36,7 +34,6 @@ class HostServer {
     this.companion,
     this.build,
     this.mcpTools,
-    this.automations,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
        lifecycle = LifecycleFeed(registry, clock: clock ?? _utcNow);
@@ -45,8 +42,8 @@ class HostServer {
   final LifecycleFeed lifecycle;
   final String ptyLibrary;
 
-  /// The phone companion: pairing windows, the app's Remote access settings,
-  /// and the calls forwarded to the app.
+  /// The phone companion: pairing windows and where a desktop's embedded
+  /// relay listens.
   ///
   /// Injected rather than built here, because it needs a store and listeners
   /// and this class needs neither — and a `serve` that was started without a
@@ -57,13 +54,8 @@ class HostServer {
   /// Where agents' tool calls go to the app that runs them; null serves none.
   final McpToolRelay? mcpTools;
 
-  /// The daemon's automations and checks; null when there is no store. Set
-  /// after construction, because it needs this server's lifecycle feed.
-  AutomationHandler? automations;
-
   /// Answers the prompts of the agents this host holds; null when there is no
-  /// store to keep their status by. Set after construction, like
-  /// [automations].
+  /// store to keep their status by. Set after construction.
   DaemonPromptAnswers? prompts;
 
   /// Answers `serverCall` — devices, revoke, agents; null refuses each with
@@ -72,10 +64,6 @@ class HostServer {
 
   /// Answers every client's data requests; null refuses them (no store).
   DataService? data;
-
-  /// Takes each client's terminal panes as facts ([PaneFactsMessage]):
-  /// adoption and attribution decide what they mean. Null ignores them.
-  PaneFactsReceiver? panes;
 
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
@@ -166,8 +154,6 @@ class _ClientSession {
     _streams?.closeAll();
     await _lifecycleWatch?.cancel();
     _server.mcpTools?.detach(this);
-    _server.automations?.detach(this);
-    _server.panes?.detach(this);
     await _server.companion?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
@@ -333,16 +319,8 @@ class _ClientSession {
           localRelayUrl == null ? null : Uri.tryParse(localRelayUrl),
           _send,
         );
-      case CompanionResultMessage():
-        _server.companion?.answer(this, message);
       case CompanionNoticeMessage():
         await _server.companion?.notice(this, message);
-      case AutomationNoticeMessage():
-        _server.automations?.notice(this, message, _send);
-      case AutomationResultMessage():
-        _server.automations?.answer(this, message);
-      case ChecksRunMessage():
-        _onChecksRun(message);
       case PromptAnswerMessage():
         _onPromptAnswer(message);
       case ServerCallMessage():
@@ -353,8 +331,6 @@ class _ClientSession {
         _streams?.closeJson(envelope);
       case DataRequestMessage():
         _onDataRequest(message);
-      case PaneFactsMessage(:final panes):
-        _server.panes?.report(this, panes, _send);
       default:
         _send(
           ErrorMessage(
@@ -470,23 +446,6 @@ class _ClientSession {
       (batch) => _send(DataStreamItemsMessage(DataStreamEnvelope.items(batch))),
     );
     streams.open(envelope);
-  }
-
-  /// Not awaited: a test suite takes minutes, and this client's other frames
-  /// must not wait behind it.
-  void _onChecksRun(ChecksRunMessage message) {
-    final automations = _server.automations;
-    if (automations == null) {
-      _send(
-        ChecksRanMessage(
-          requestId: message.requestId,
-          outcome: ChecksRunOutcome.elsewhere,
-          message: 'this host runs no automations: it has no store',
-        ),
-      );
-      return;
-    }
-    unawaited(automations.runChecks(message).then(_send));
   }
 
   Future<void> _onPair(PairMessage message) async {

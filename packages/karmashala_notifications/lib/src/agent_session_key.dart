@@ -1,3 +1,5 @@
+import 'attention_json.dart';
+
 /// Identifies one agent session as the status pipeline does: the agent's
 /// registry id plus the CLI's own session id, never the workspace row id.
 class AgentSessionKey {
@@ -17,4 +19,14 @@ class AgentSessionKey {
 
   @override
   String toString() => '$agentId/$sessionId';
+
+  Map<String, Object?> toJson() => {'agentId': agentId, 'sessionId': sessionId};
+
+  static AgentSessionKey fromJson(Object? json) {
+    final map = attentionObject(json, 'session key');
+    return AgentSessionKey(
+      attentionString(map, 'agentId'),
+      attentionString(map, 'sessionId'),
+    );
+  }
 }

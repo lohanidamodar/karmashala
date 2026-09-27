@@ -428,8 +428,8 @@ class AppLifecycle {
 
     // 2. Watchers, so nothing new arrives while the rest closes.
     await _step('background watchers', watch, () async {
-      if (_container.exists(agentStatusWatcherProvider)) {
-        _container.read(agentStatusWatcherProvider).dispose();
+      if (_container.exists(attentionPresenterProvider)) {
+        _container.read(attentionPresenterProvider).dispose();
       }
     });
 

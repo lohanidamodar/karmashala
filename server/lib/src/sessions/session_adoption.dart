@@ -9,7 +9,7 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 
-import '../protocol/messages.dart' show PaneFacts;
+import 'pane_facts.dart';
 import 'session_sync_rows.dart';
 import 'store_paths.dart';
 

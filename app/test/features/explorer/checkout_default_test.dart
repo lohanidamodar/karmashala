@@ -148,7 +148,6 @@ void main() {
         autoImportRunnerProvider.overrideWithValue(
           (repos) async => const ImportSummary(),
         ),
-        deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
       ],
     );
     addTearDown(container.dispose);

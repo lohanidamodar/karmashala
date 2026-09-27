@@ -11,7 +11,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_observer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
-import 'package:karmashala/src/features/automations/application/scheduled_resume_runner.dart';
 import 'package:karmashala/src/features/automations/data/automations_data.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -197,16 +196,6 @@ class ResumeHarness {
       container.read(sessionLauncherProvider) as ResumingLauncher;
   ScheduledResumeController get controller =>
       container.read(scheduledResumeControllerProvider);
-
-  /// The server forwarded resume [id], due: this app fires it.
-  Future<void> fire(String id) async {
-    await settle();
-    final resume = dao.getById(id);
-    if (resume != null) {
-      await container.read(scheduledResumeFiringProvider).fire(resume);
-    }
-    await settle();
-  }
 
   void observe() =>
       container.listen(scheduledResumeObserverProvider, (_, _) {});

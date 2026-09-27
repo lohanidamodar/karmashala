@@ -19,8 +19,6 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
-import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
@@ -28,7 +26,6 @@ import 'package:karmashala_terminal_runtime/host_link.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/memory_server_config.dart';
-import 'fake_bindings.dart';
 
 void main() {
   late Directory home;
@@ -83,9 +80,7 @@ void main() {
         bindAddress: '127.0.0.1',
         interfaces: () async => [(name: 'lo', ip: '127.0.0.1')],
       );
-      final fake = FakeRemoteBindings()..addSession('s1');
       final link = HostCompanionLink(
-        bindings: () => fake.bindings,
         deviceById: (_) async => null,
       );
       container = ProviderContainer(
@@ -131,32 +126,6 @@ void main() {
 
       expect(pairing.payload.encode(), payload.encode());
       expect(host.pairings.single.relay, 'wss://relay.example.com');
-    });
-
-    test('attention news reaches the server', () {
-      controller.onInboxChanged(
-        AttentionInbox.empty,
-        AttentionInbox(
-          items: [
-            InboxItem(
-              session: const WatchedSession(
-                key: AgentSessionKey('claude-code', 'ext-s1'),
-                label: 'Fix the tests',
-                openId: 's1',
-                imported: false,
-              ),
-              kind: InboxItemKind.finished,
-              at: DateTime.utc(2026, 8, 31, 12),
-            ),
-          ],
-        ),
-      );
-
-      final told = [
-        for (final notice in host.companionNotices)
-          if (notice.kind == CompanionNoticeKind.attention) notice,
-      ];
-      expect(told.single.sessionId, 's1');
     });
 
     test('the embedded relay\'s URL is told to the server', () async {

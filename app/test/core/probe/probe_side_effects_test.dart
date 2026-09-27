@@ -28,7 +28,6 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:path/path.dart' as p;
 import '../../support/memory_server_config.dart';
 
-import '../../features/remote/fake_bindings.dart';
 import '../../features/system/fake_native_adapters.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -288,9 +287,7 @@ void main() {
       );
       addTearDown(relay.stop);
       host = FakeHostLifecycle();
-      final fake = FakeRemoteBindings();
       final link = HostCompanionLink(
-        bindings: () => fake.bindings,
         deviceById: (_) async => null,
       );
       final container = containerWith(

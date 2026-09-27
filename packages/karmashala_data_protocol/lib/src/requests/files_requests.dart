@@ -19,43 +19,41 @@ const int kFileChunkBytes = 1024 * 1024;
 /// for editing; this is the frame's bound with base64 room to spare.
 const int kFileWriteBytes = 8 * 1024 * 1024;
 
-DataRequest<Object?>? _filesRequestFromJson(
-  String kind,
-  _Arguments args,
-) => switch (kind) {
-  FilesHome.name => FilesHome(args.string('environmentId')),
-  FilesResolve.name => FilesResolve(args._path('path')),
-  FilesList.name => FilesList(args._path('path')),
-  FilesStatOf.name => FilesStatOf(args._path('path')),
-  FilesRead.name => FilesRead(
-    args._path('path'),
-    offset: args.optionalInt('offset') ?? 0,
-    length: args.optionalInt('length') ?? kFileChunkBytes,
-  ),
-  FilesWrite.name => FilesWrite(
-    args._path('path'),
-    args._bytes('bytes'),
-    expect: args.values['expect'] == null
-        ? const WriteExpectation.any()
-        : args.value('expect', WriteExpectation.fromJson),
-  ),
-  FilesMkdir.name => FilesMkdir(args._path('parent'), args.string('name')),
-  FilesTouch.name => FilesTouch(args._path('parent'), args.string('name')),
-  FilesRename.name => FilesRename(args._path('path'), args.string('name')),
-  FilesDelete.name => FilesDelete(
-    args._path('path'),
-    recursive: args.boolean('recursive', orElse: false),
-  ),
-  FilesCopy.name => FilesCopy(
-    args._path('source'),
-    args._path('toDirectory'),
-    fileName: args.optionalString('name'),
-  ),
-  FilesIndex.name => FilesIndex(args._path('root')),
-  FilesWatch.name => FilesWatch(args._paths('paths')),
-  FilesUnwatch.name => FilesUnwatch(args._paths('paths')),
-  _ => null,
-};
+DataRequest<Object?>? _filesRequestFromJson(String kind, _Arguments args) =>
+    switch (kind) {
+      FilesHome.name => FilesHome(args.string('environmentId')),
+      FilesResolve.name => FilesResolve(args._path('path')),
+      FilesList.name => FilesList(args._path('path')),
+      FilesStatOf.name => FilesStatOf(args._path('path')),
+      FilesRead.name => FilesRead(
+        args._path('path'),
+        offset: args.optionalInt('offset') ?? 0,
+        length: args.optionalInt('length') ?? kFileChunkBytes,
+      ),
+      FilesWrite.name => FilesWrite(
+        args._path('path'),
+        args._bytes('bytes'),
+        expect: args.values['expect'] == null
+            ? const WriteExpectation.any()
+            : args.value('expect', WriteExpectation.fromJson),
+      ),
+      FilesMkdir.name => FilesMkdir(args._path('parent'), args.string('name')),
+      FilesTouch.name => FilesTouch(args._path('parent'), args.string('name')),
+      FilesRename.name => FilesRename(args._path('path'), args.string('name')),
+      FilesDelete.name => FilesDelete(
+        args._path('path'),
+        recursive: args.boolean('recursive', orElse: false),
+      ),
+      FilesCopy.name => FilesCopy(
+        args._path('source'),
+        args._path('toDirectory'),
+        fileName: args.optionalString('name'),
+      ),
+      FilesIndex.name => FilesIndex(args._path('root')),
+      FilesWatch.name => FilesWatch(args._paths('paths')),
+      FilesUnwatch.name => FilesUnwatch(args._paths('paths')),
+      _ => null,
+    };
 
 extension on _Arguments {
   EnvironmentPath _path(String key) => value(key, environmentPathFromJson);
@@ -399,8 +397,7 @@ final class FilesWatch extends FilesWorkRequest<DataAck> with _AnswersAck {
   final List<EnvironmentPath> paths;
 
   @override
-  String get environmentId =>
-      paths.isEmpty ? '' : paths.first.environmentId;
+  String get environmentId => paths.isEmpty ? '' : paths.first.environmentId;
 
   @override
   String get kind => name;
@@ -420,8 +417,7 @@ final class FilesUnwatch extends FilesWorkRequest<DataAck> with _AnswersAck {
   final List<EnvironmentPath> paths;
 
   @override
-  String get environmentId =>
-      paths.isEmpty ? '' : paths.first.environmentId;
+  String get environmentId => paths.isEmpty ? '' : paths.first.environmentId;
 
   @override
   String get kind => name;

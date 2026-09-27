@@ -11,141 +11,139 @@ part of '../data_request.dart';
 // `unavailable` is an environment that did not answer, `failed` is git's (or
 // `gh`'s) own words.
 
-DataRequest<Object?>? _gitRequestFromJson(
-  String kind,
-  _Arguments args,
-) => switch (kind) {
-  GitStatusOf.name => GitStatusOf(args._checkout()),
-  GitChangesOf.name => GitChangesOf(args._checkout()),
-  GitFileDiffStats.name => GitFileDiffStats(args._checkout()),
-  GitDiff.name => GitDiff(
-    args._checkout(),
-    path: args.optionalString('path'),
-    staged: args.boolean('staged', orElse: false),
-    base: args.optionalString('base'),
-  ),
-  GitDiffUntracked.name => GitDiffUntracked(
-    args._checkout(),
-    args.string('path'),
-  ),
-  GitLog.name => GitLog(args._checkout(), limit: args.integer('limit')),
-  GitBranch.name => GitBranch(args._checkout()),
-  GitHead.name => GitHead(args._checkout()),
-  GitRevParse.name => GitRevParse(args._checkout(), args.string('rev')),
-  GitAheadBehind.name => GitAheadBehind(
-    args._checkout(),
-    base: args.string('base'),
-  ),
-  GitRemoteBranchesContaining.name => GitRemoteBranchesContaining(
-    args._checkout(),
-    args.string('rev'),
-  ),
-  GitOriginFacts.name => GitOriginFacts(args._checkout()),
-  GitMergeInProgress.name => GitMergeInProgress(args._checkout()),
-  GitBlobShas.name => GitBlobShas(args._checkout(), args.strings('paths')),
-  GitPresenceOf.name => GitPresenceOf(
-    args.objects('checkouts', environmentPathFromJson),
-  ),
-  GitDelivery.name => GitDelivery(
-    args._checkout(),
-    repository: args.values['repository'] == null
-        ? null
-        : args.value('repository', environmentPathFromJson),
-  ),
-  GitStage.name => GitStage(args._checkout(), args.strings('paths')),
-  GitUnstage.name => GitUnstage(args._checkout(), args.strings('paths')),
-  GitDiscard.name => GitDiscard(
-    args._checkout(),
-    tracked: args.strings('tracked', orEmpty: true),
-    untracked: args.strings('untracked', orEmpty: true),
-  ),
-  GitCommitStaged.name => GitCommitStaged(
-    args._checkout(),
-    args.string('message'),
-    all: args.boolean('all', orElse: false),
-  ),
-  GitFetch.name => GitFetch(args._checkout()),
-  GitPull.name => GitPull(
-    args._checkout(),
-    rebase: args.boolean('rebase', orElse: false),
-    merge: args.boolean('merge', orElse: false),
-  ),
-  GitPush.name => GitPush(
-    args._checkout(),
-    remote: args.optionalString('remote'),
-    branch: args.optionalString('branch'),
-  ),
-  GitMerge.name => GitMerge(
-    args._checkout(),
-    args.string('ref'),
-    commit: args.boolean('commit', orElse: false),
-  ),
-  GitAbortMerge.name => GitAbortMerge(args._checkout()),
-  GitMoveBranch.name => GitMoveBranch(
-    args._checkout(),
-    branch: args.string('branch'),
-    sha: args.string('sha'),
-  ),
-  WorktreesOf.name => WorktreesOf(args._checkout()),
-  WorktreeLabels.name => WorktreeLabels(args.strings('repositoryIds')),
-  WorktreeCreate.name => WorktreeCreate(
-    args._checkout(),
-    creationId: args.string('creationId'),
-    worktreeName: args.string('name'),
-    branch: args.string('branch'),
-    baseRef: args.optionalString('baseRef'),
-    launchesAgent: args.boolean('launchesAgent', orElse: false),
-  ),
-  WorktreeCreationCancel.name => WorktreeCreationCancel(
-    args.string('creationId'),
-  ),
-  WorktreeAgentSettled.name => WorktreeAgentSettled(
-    args.string('creationId'),
-    error: args.optionalString('error'),
-  ),
-  WorktreeRemove.name => WorktreeRemove(
-    args._checkout(),
-    worktree: args.value('worktree', environmentPathFromJson),
-    force: args.boolean('force', orElse: false),
-  ),
-  WorktreeCleanupPreview.name => const WorktreeCleanupPreview(),
-  WorktreeCleanupSweep.name => const WorktreeCleanupSweep(),
-  WorktreeCleanupLogRead.name => const WorktreeCleanupLogRead(),
-  ProjectFoldersCreate.name => ProjectFoldersCreate(
-    projectName: args.string('name'),
-    root: args.value('root', environmentPathFromJson),
-    gitUrl: args.optionalString('gitUrl'),
-    workspaceId: args.optionalString('workspaceId'),
-  ),
-  ProjectRescan.name => ProjectRescan(args.string('projectId')),
-  ProjectMove.name => ProjectMove(
-    args.string('projectId'),
-    projectName: args.optionalString('name'),
-    root: args.values['root'] == null
-        ? null
-        : args.value('root', environmentPathFromJson),
-    defaultRepositoryId: args.optionalString('defaultRepositoryId'),
-    clearDefaultRepository: args.boolean(
-      'clearDefaultRepository',
-      orElse: false,
-    ),
-  ),
-  GitHubOverviewOf.name => GitHubOverviewOf(args._checkout()),
-  GitHubPullRequest.name => GitHubPullRequest(
-    args._checkout(),
-    branch: args.string('branch'),
-  ),
-  GitHubMarkReady.name => GitHubMarkReady(
-    args._checkout(),
-    number: args.integer('number'),
-  ),
-  GitHubCreatePr.name => GitHubCreatePr(
-    args._checkout(),
-    title: args.string('title'),
-    body: args.optionalString('body') ?? '',
-  ),
-  _ => null,
-};
+DataRequest<Object?>? _gitRequestFromJson(String kind, _Arguments args) =>
+    switch (kind) {
+      GitStatusOf.name => GitStatusOf(args._checkout()),
+      GitChangesOf.name => GitChangesOf(args._checkout()),
+      GitFileDiffStats.name => GitFileDiffStats(args._checkout()),
+      GitDiff.name => GitDiff(
+        args._checkout(),
+        path: args.optionalString('path'),
+        staged: args.boolean('staged', orElse: false),
+        base: args.optionalString('base'),
+      ),
+      GitDiffUntracked.name => GitDiffUntracked(
+        args._checkout(),
+        args.string('path'),
+      ),
+      GitLog.name => GitLog(args._checkout(), limit: args.integer('limit')),
+      GitBranch.name => GitBranch(args._checkout()),
+      GitHead.name => GitHead(args._checkout()),
+      GitRevParse.name => GitRevParse(args._checkout(), args.string('rev')),
+      GitAheadBehind.name => GitAheadBehind(
+        args._checkout(),
+        base: args.string('base'),
+      ),
+      GitRemoteBranchesContaining.name => GitRemoteBranchesContaining(
+        args._checkout(),
+        args.string('rev'),
+      ),
+      GitOriginFacts.name => GitOriginFacts(args._checkout()),
+      GitMergeInProgress.name => GitMergeInProgress(args._checkout()),
+      GitBlobShas.name => GitBlobShas(args._checkout(), args.strings('paths')),
+      GitPresenceOf.name => GitPresenceOf(
+        args.objects('checkouts', environmentPathFromJson),
+      ),
+      GitDelivery.name => GitDelivery(
+        args._checkout(),
+        repository: args.values['repository'] == null
+            ? null
+            : args.value('repository', environmentPathFromJson),
+      ),
+      GitStage.name => GitStage(args._checkout(), args.strings('paths')),
+      GitUnstage.name => GitUnstage(args._checkout(), args.strings('paths')),
+      GitDiscard.name => GitDiscard(
+        args._checkout(),
+        tracked: args.strings('tracked', orEmpty: true),
+        untracked: args.strings('untracked', orEmpty: true),
+      ),
+      GitCommitStaged.name => GitCommitStaged(
+        args._checkout(),
+        args.string('message'),
+        all: args.boolean('all', orElse: false),
+      ),
+      GitFetch.name => GitFetch(args._checkout()),
+      GitPull.name => GitPull(
+        args._checkout(),
+        rebase: args.boolean('rebase', orElse: false),
+        merge: args.boolean('merge', orElse: false),
+      ),
+      GitPush.name => GitPush(
+        args._checkout(),
+        remote: args.optionalString('remote'),
+        branch: args.optionalString('branch'),
+      ),
+      GitMerge.name => GitMerge(
+        args._checkout(),
+        args.string('ref'),
+        commit: args.boolean('commit', orElse: false),
+      ),
+      GitAbortMerge.name => GitAbortMerge(args._checkout()),
+      GitMoveBranch.name => GitMoveBranch(
+        args._checkout(),
+        branch: args.string('branch'),
+        sha: args.string('sha'),
+      ),
+      WorktreesOf.name => WorktreesOf(args._checkout()),
+      WorktreeLabels.name => WorktreeLabels(args.strings('repositoryIds')),
+      WorktreeCreate.name => WorktreeCreate(
+        args._checkout(),
+        creationId: args.string('creationId'),
+        worktreeName: args.string('name'),
+        branch: args.string('branch'),
+        baseRef: args.optionalString('baseRef'),
+        launchesAgent: args.boolean('launchesAgent', orElse: false),
+      ),
+      WorktreeCreationCancel.name => WorktreeCreationCancel(
+        args.string('creationId'),
+      ),
+      WorktreeAgentSettled.name => WorktreeAgentSettled(
+        args.string('creationId'),
+        error: args.optionalString('error'),
+      ),
+      WorktreeRemove.name => WorktreeRemove(
+        args._checkout(),
+        worktree: args.value('worktree', environmentPathFromJson),
+        force: args.boolean('force', orElse: false),
+      ),
+      WorktreeCleanupPreview.name => const WorktreeCleanupPreview(),
+      WorktreeCleanupSweep.name => const WorktreeCleanupSweep(),
+      WorktreeCleanupLogRead.name => const WorktreeCleanupLogRead(),
+      ProjectFoldersCreate.name => ProjectFoldersCreate(
+        projectName: args.string('name'),
+        root: args.value('root', environmentPathFromJson),
+        gitUrl: args.optionalString('gitUrl'),
+        workspaceId: args.optionalString('workspaceId'),
+      ),
+      ProjectRescan.name => ProjectRescan(args.string('projectId')),
+      ProjectMove.name => ProjectMove(
+        args.string('projectId'),
+        projectName: args.optionalString('name'),
+        root: args.values['root'] == null
+            ? null
+            : args.value('root', environmentPathFromJson),
+        defaultRepositoryId: args.optionalString('defaultRepositoryId'),
+        clearDefaultRepository: args.boolean(
+          'clearDefaultRepository',
+          orElse: false,
+        ),
+      ),
+      GitHubOverviewOf.name => GitHubOverviewOf(args._checkout()),
+      GitHubPullRequest.name => GitHubPullRequest(
+        args._checkout(),
+        branch: args.string('branch'),
+      ),
+      GitHubMarkReady.name => GitHubMarkReady(
+        args._checkout(),
+        number: args.integer('number'),
+      ),
+      GitHubCreatePr.name => GitHubCreatePr(
+        args._checkout(),
+        title: args.string('title'),
+        body: args.optionalString('body') ?? '',
+      ),
+      _ => null,
+    };
 
 extension on _Arguments {
   CheckoutRef _checkout() => value('checkout', CheckoutRef.fromJson);
@@ -247,7 +245,8 @@ final class GitChangesOf extends CheckoutRequest<List<FileChange>> {
 
 /// Lines added and removed per file, one `git diff --numstat` for the whole
 /// listing. A path git never mentioned — an untracked one — is absent.
-final class GitFileDiffStats extends CheckoutRequest<Map<String, FileDiffStat>> {
+final class GitFileDiffStats
+    extends CheckoutRequest<Map<String, FileDiffStat>> {
   const GitFileDiffStats(super.checkout);
 
   static const String name = 'git.fileDiffStats';
@@ -510,7 +509,8 @@ final class GitPresenceOf extends GitWorkRequest<List<GitPresence>> {
   @override
   List<GitPresence> resultFromJson(Object? json) => _decode(kind, () {
     return [
-      for (final name in json! as List) GitPresence.values.byName(name as String),
+      for (final name in json! as List)
+        GitPresence.values.byName(name as String),
     ];
   });
 }
@@ -706,13 +706,16 @@ final class GitAbortMerge extends CheckoutRequest<bool> {
   Object? resultToJson(bool result) => result;
 
   @override
-  bool resultFromJson(Object? json) =>
-      json is bool ? json : _badAnswer(kind);
+  bool resultFromJson(Object? json) => json is bool ? json : _badAnswer(kind);
 }
 
 /// Moves [branch] back to [sha] (`update-ref`: no file moves).
 final class GitMoveBranch extends _CheckoutAck {
-  const GitMoveBranch(super.checkout, {required this.branch, required this.sha});
+  const GitMoveBranch(
+    super.checkout, {
+    required this.branch,
+    required this.sha,
+  });
 
   static const String name = 'git.moveBranch';
 
@@ -879,7 +882,11 @@ final class WorktreeAgentSettled extends GitWorkRequest<DataAck> {
 /// teardown first. [force] only for a removal a person confirmed over
 /// uncommitted changes. Answers what the teardown said, or null.
 final class WorktreeRemove extends CheckoutRequest<String?> {
-  const WorktreeRemove(super.checkout, {required this.worktree, this.force = false});
+  const WorktreeRemove(
+    super.checkout, {
+    required this.worktree,
+    this.force = false,
+  });
 
   static const String name = 'worktrees.remove';
 
@@ -1102,7 +1109,10 @@ final class GitHubPullRequest extends CheckoutRequest<PullRequestReading> {
   String get kind => name;
 
   @override
-  Map<String, Object?> argumentsToJson() => {..._checkoutJson, 'branch': branch};
+  Map<String, Object?> argumentsToJson() => {
+    ..._checkoutJson,
+    'branch': branch,
+  };
 
   @override
   Object? resultToJson(PullRequestReading result) => result.toJson();
@@ -1124,7 +1134,10 @@ final class GitHubMarkReady extends _CheckoutAck {
   String get kind => name;
 
   @override
-  Map<String, Object?> argumentsToJson() => {..._checkoutJson, 'number': number};
+  Map<String, Object?> argumentsToJson() => {
+    ..._checkoutJson,
+    'number': number,
+  };
 }
 
 /// Opens a pull request for the checked-out branch; answers its URL.

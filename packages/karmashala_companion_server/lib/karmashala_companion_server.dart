@@ -1,15 +1,12 @@
-/// The desk end of a phone's link. The session host runs the server and
-/// answers from the store and its screens; a connected desktop app answers
-/// what only it can, over calls the host forwards.
+/// The desk end of a phone's link. The server runs it and answers every call
+/// itself — from its store, its attention and its screens — whether or not a
+/// desktop is open (slice 5c: nothing is forwarded).
 library;
 
 export 'src/domain/agent_options.dart';
 export 'src/domain/attachment_rules.dart';
 export 'src/domain/companion_config.dart';
-export 'src/protocol/companion_call_dispatcher.dart';
-export 'src/protocol/companion_method.dart';
-export 'src/protocol/forwarded_bindings.dart';
-export 'src/service/companion_app_link.dart';
+export 'src/service/agent_records.dart';
 export 'src/service/companion_prompts.dart';
 export 'src/service/companion_screens.dart';
 export 'src/service/host_companion_bindings.dart';

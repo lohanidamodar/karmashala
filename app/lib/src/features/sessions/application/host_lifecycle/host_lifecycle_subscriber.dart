@@ -25,8 +25,6 @@ class HostLifecycleSubscriber {
     this.onLost,
     this.mcpTools,
     this.companion,
-    this.automations,
-    this.panes,
     this.retryDelays = kHostRedialDelays,
     this.idleRetry = const Duration(seconds: 30),
     AppLogger? logger,
@@ -65,18 +63,10 @@ class HostLifecycleSubscriber {
   /// runs none, and the host tells agents the app is not running.
   final HostMcpTools? mcpTools;
 
-  /// This app's half of the phone companion the host serves; told of every
-  /// link and every loss. Null leaves the host serving phones on its own.
+  /// This app's half of the phone companion the host serves — its embedded
+  /// relay and the pairing windows it opens; told of every link and every
+  /// loss. Null leaves the host serving phones on its own.
   final HostCompanionPeer? companion;
-
-  /// This app's half of the automations the host runs; told of every link and
-  /// every loss. Null leaves the host running them on its own.
-  final HostLinkPeer? automations;
-
-  /// This app's terminal panes, reported to the host as facts; told of every
-  /// link and every loss. Null reports none, and the host adopts nothing
-  /// started by hand in them.
-  final HostLinkPeer? panes;
 
   /// Waits before each dial after the link is lost, then [idleRetry] between
   /// dials; a pane starting on the host dials at once through [nudge].
@@ -197,8 +187,6 @@ class HostLifecycleSubscriber {
       feed.offerMcpTools(tools.catalogue());
     }
     companion?.attached(feed);
-    automations?.attached(feed);
-    panes?.attached(feed);
   }
 
   /// Runs one forwarded call and answers it; a failure is the text the agent
@@ -254,8 +242,6 @@ class HostLifecycleSubscriber {
     _agentStatuses = null;
     onAgentStatuses?.call(const []);
     companion?.detached();
-    automations?.detached();
-    panes?.detached();
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
@@ -293,20 +279,11 @@ class HostLifecycleSubscriber {
     _agentStatuses = null;
     if (_feed != null) {
       companion?.detached();
-      automations?.detached();
-      panes?.detached();
     }
     final feed = _feed;
     _feed = null;
     await feed?.close();
   }
-}
-
-/// Something of this app's that rides the host link: told when a link opens
-/// and when it is lost.
-abstract interface class HostLinkPeer {
-  void attached(HostLifecycleFeed feed);
-  void detached();
 }
 
 /// This app's half of the phone companion when the session host serves it.

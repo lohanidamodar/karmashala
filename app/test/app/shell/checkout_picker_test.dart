@@ -129,9 +129,6 @@ void main() {
         autoImportRunnerProvider.overrideWithValue(
           (repos) async => const ImportSummary(),
         ),
-        // A real poll timer outlives the widget tree and trips the pending-timer
-        // check; nothing here is testing the poll.
-        deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
         // These tests read a delivery future directly rather than through a
         // pump, so the real frame gate has no frame to wait for.
       ],
@@ -392,7 +389,6 @@ void main() {
         autoImportRunnerProvider.overrideWithValue(
           (repos) async => const ImportSummary(),
         ),
-        deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
       ],
     );
     addTearDown(container.dispose);

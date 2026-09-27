@@ -1,4 +1,5 @@
 import 'agent_session_key.dart';
+import 'attention_json.dart';
 import 'evidence_line.dart';
 import 'notification_policy.dart';
 import 'session_attention.dart';
@@ -160,6 +161,27 @@ class InboxItem {
 
   @override
   String toString() => 'InboxItem($id, seen: $seen)';
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'session': session.toJson(),
+    'kind': kind.name,
+    'at': at.toUtc().toIso8601String(),
+    if (seen) 'seen': true,
+    'detail': ?detail,
+  };
+
+  static InboxItem fromJson(Object? json) {
+    final map = attentionObject(json, 'inbox item');
+    return InboxItem(
+      id: attentionString(map, 'id'),
+      session: WatchedSession.fromJson(map['session']),
+      kind: attentionEnum(InboxItemKind.values, map, 'kind'),
+      at: attentionTime(map, 'at'),
+      seen: map['seen'] == true,
+      detail: map['detail'] as String?,
+    );
+  }
 }
 
 /// What the watcher observed in one poll, in the terms the inbox needs.
@@ -258,6 +280,20 @@ class AttentionInbox {
   final List<InboxItem> pending;
 
   static final empty = AttentionInbox();
+
+  /// Every item, newest first: the wire shape of a whole inbox.
+  List<Map<String, Object?>> toJson() => [
+    for (final item in items) item.toJson(),
+  ];
+
+  static AttentionInbox fromJson(Object? json) {
+    if (json is! List) {
+      throw const AttentionFormatException('an inbox is not a list');
+    }
+    return AttentionInbox(
+      items: [for (final item in json) InboxItem.fromJson(item)],
+    );
+  }
 
   bool get isEmpty => items.isEmpty;
 

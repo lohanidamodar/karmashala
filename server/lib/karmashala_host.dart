@@ -37,14 +37,13 @@ export 'src/mcp/mcp_handshake_file.dart';
 export 'src/mcp/mcp_rpc_handler.dart';
 export 'src/mcp/mcp_tool_relay.dart';
 export 'src/serve/session_store.dart';
-export 'src/automations/automation_app_relay.dart';
-export 'src/automations/automation_handler.dart';
 export 'src/automations/daemon_automations.dart';
+export 'src/automations/server_resume_runner.dart'
+    show ResumeUsage, ResumeDecision, formatResumeClock;
 export 'src/automations/hosted_agent_launcher.dart'
     show kSessionIdEnvironmentVariable;
 export 'src/automations/hosted_check_runner.dart' show kCheckSessionPrefix;
 export 'src/automations/session_mcp_access.dart';
-export 'src/companion/companion_app_relay.dart';
 export 'src/companion/companion_handler.dart';
 export 'src/companion/daemon_companion.dart';
 export 'src/companion/registry_screens.dart';

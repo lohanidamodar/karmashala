@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/automations/application/automation_event_router.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dry_run_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
@@ -179,11 +178,10 @@ void main() {
       findsOneWidget,
     );
 
-    expect(serverOf(container).automationRows.runsFor('ev1'), isEmpty);
     expect(
-      container.read(automationRateLimiterProvider).allows('ev1', now),
-      isTrue,
-      reason: 'rehearsing spends none of the rule\'s budget',
+      serverOf(container).automationRows.runsFor('ev1'),
+      isEmpty,
+      reason: 'a rehearsal writes no run and sends nothing',
     );
   });
 

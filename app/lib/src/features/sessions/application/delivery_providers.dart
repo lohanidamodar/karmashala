@@ -5,72 +5,17 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show PullRequestReading;
+    show ForgeReadingChanged, PullRequestReading;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/git.dart' show RemoteRepo;
 import 'package:karmashala_git/github.dart';
 import '../../git/data/git_data.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../notifications/application/delivery_attention.dart';
-import '../../notifications/application/notification_providers.dart';
+import '../../../core/data/data_providers.dart';
 import 'package:karmashala_session/delivery.dart';
+import 'observed_deliveries.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
-
-/// How often the pull request and its checks are re-read while the app is in
-/// front — two minutes, because each answer is a `gh` process. Zero for tests.
-final deliveryPollIntervalProvider = Provider<Duration>(
-  (ref) => const Duration(minutes: 2),
-);
-
-/// The shortest gap between two **focus-driven** re-reads: ten alt-tabs inside
-/// one second cost ten `gh` processes and ten git passes.
-const Duration kDeliveryFocusRefreshInterval = Duration(seconds: 30);
-
-/// Ticks when the remote half of delivery state should be re-read: one timer
-/// for the whole app, stopped while unfocused and rate-limited on regain.
-class DeliveryPollController extends Notifier<int> {
-  Timer? _timer;
-
-  /// When the last re-read was asked for, from whichever source; mounting
-  /// counts.
-  DateTime? _lastAsked;
-
-  @override
-  int build() {
-    final interval = ref.watch(deliveryPollIntervalProvider);
-    final clock = ref.watch(clockProvider);
-    _timer?.cancel();
-    _timer = interval <= Duration.zero
-        ? null
-        : Timer.periodic(interval, (_) {
-            if (ref.read(windowFocusedProvider)) _ask(clock.nowUtc());
-          });
-    ref.onDispose(() => _timer?.cancel());
-    ref.listen(windowFocusedProvider, (previous, next) {
-      if (!next || previous != false) return;
-      final now = clock.nowUtc();
-      final last = _lastAsked;
-      if (last != null &&
-          now.difference(last) < kDeliveryFocusRefreshInterval) {
-        return;
-      }
-      _ask(now);
-    });
-    _lastAsked = clock.nowUtc();
-    return 0;
-  }
-
-  void _ask(DateTime now) {
-    _lastAsked = now;
-    state++;
-  }
-}
-
-final deliveryPollProvider = NotifierProvider<DeliveryPollController, int>(
-  DeliveryPollController.new,
-);
 
 /// The **local** half of a checkout's delivery state, keyed by the checkout
 /// and not the session — read at the server, which measures a worktree
@@ -129,20 +74,31 @@ final worktreeDeliveryProvider = FutureProvider.autoDispose
 
 /// What the forge says about a checkout's branch — its pull request and
 /// checks, the merge settings and review threads, the base's protection when
-/// a merge is `BLOCKED` — the only part that costs network, read through
-/// `gh` at the server. A failure is [PullRequestReading.none].
+/// a merge is `BLOCKED` — as **the server's own delivery poll** last read it
+/// (slice 5c: every two minutes and whenever a turn ends there, app or no
+/// app). No timer here: a new reading arrives as `ForgeReadingChanged` and
+/// this reads it again. Only a checkout the server has not read yet is asked
+/// once (`github.pullRequest`), never polled. A failure is
+/// [PullRequestReading.none].
 final checkoutForgeProvider = FutureProvider.autoDispose
     .family<PullRequestReading, Checkout>((ref, checkout) async {
-      ref.watch(deliveryPollProvider);
+      final client = ref.watch(dataClientProvider);
+      final path = checkout.path;
+      final changes = client.attentionChanges.listen((change) {
+        if (change is ForgeReadingChanged && change.checkout == path) {
+          ref.invalidateSelf();
+        }
+      });
+      ref.onDispose(changes.cancel);
+      final told = client.forgeReadings[path];
+      if (told != null) return told;
       final local = await ref.watch(checkoutDeliveryProvider(checkout).future);
       final branch = local.branch;
       if (branch == null || local.hasRemote != true) {
         return PullRequestReading.none;
       }
       return await _orNull(
-            () => ref
-                .read(gitDataProvider)
-                .pullRequest(checkout.path, branch: branch),
+            () => ref.read(gitDataProvider).pullRequest(path, branch: branch),
           ) ??
           PullRequestReading.none;
     });
@@ -216,13 +172,14 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
             ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null,
       );
 
-      // Filed from readings the row already paid for. Deferred, because
-      // Riverpod forbids writing to another provider while one is building.
+      // Kept for the Explorer's sections, which read what rows already paid
+      // for. Deferred, because Riverpod forbids writing to another provider
+      // while one is building. What is news is the server's to file.
       unawaited(
         Future<void>.microtask(() {
           try {
             ref
-                .read(deliveryAttentionProvider.notifier)
+                .read(observedDeliveriesProvider.notifier)
                 .observe(sessionId, delivery);
           } catch (_) {}
         }),

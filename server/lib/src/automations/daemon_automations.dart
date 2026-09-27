@@ -15,7 +15,16 @@ import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_checkpoints/store.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show CheckpointRecorded, DataChange, VerificationRunChanged;
+    show
+        CheckpointRecorded,
+        ChecksRun,
+        DataChange,
+        DataRefused,
+        SessionChecksOutcome,
+        SessionChecksRun,
+        SessionStatusEntry,
+        UsageLimitNotice,
+        VerificationRunChanged;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/command_checks.dart';
@@ -24,28 +33,30 @@ import 'package:karmashala_verification/store.dart';
 import 'package:path/path.dart' as p;
 
 import '../domain/session_registry.dart';
+import '../data/attention_work.dart';
 import '../data/told_automations.dart';
 import '../domain/uuid.dart';
-import '../protocol/messages.dart';
-import 'automation_app_relay.dart';
-import 'automation_handler.dart';
 import 'daemon_automation_firing.dart';
 import 'daemon_base_checkpoint.dart';
 import 'daemon_checkout_facts.dart';
-import 'daemon_resume_firing.dart';
 import 'daemon_run_checks.dart';
 import 'first_run_prompt_watch.dart';
 import 'hosted_agent_launcher.dart';
 import 'hosted_check_runner.dart';
+import 'server_event_rules.dart';
+import 'server_resume_runner.dart';
+import 'server_usage_limits.dart';
 import 'session_mcp_access.dart';
+import '../domain/host_session.dart';
+import 'package:karmashala_notifications/attention.dart' show InboxItem;
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
-/// Automations and checks in the daemon: the one scheduler, the runs it
-/// starts in sessions it owns, their verdicts when those sessions end, and
-/// the checks after — every write told to every client ([tell]), and the app
-/// asked only for what it alone can do.
-class DaemonAutomations implements AutomationHandler {
+/// Automations and checks in the server: the one scheduler, the runs it
+/// starts in sessions it owns, their verdicts when those sessions end, the
+/// checks after, scheduled resumes and a client's `checks.run` — every write
+/// told to every client ([tell]). No app is asked for anything (slice 5c).
+class DaemonAutomations implements ChecksWork {
   DaemonAutomations({
     required AppDatabase database,
     required SessionRegistry registry,
@@ -63,6 +74,12 @@ class DaemonAutomations implements AutomationHandler {
     Duration firstRunPromptInterval = const Duration(seconds: 2),
     Duration firstRunPromptWithin = const Duration(minutes: 3),
     void Function(String message)? log,
+    HostedAgentStatus? Function(String sessionId)? agentStatusOf,
+    ResumeUsage? usage,
+    void Function(ResumeDecision decision)? onDecision,
+    UsageLimitSettings Function()? usageLimitSettings,
+    void Function(InboxItem item)? raise,
+    void Function(UsageLimitNotice notice)? noticeUsageLimit,
   }) : _db = database,
        _tell = tell,
        _log = log ?? _ignore {
@@ -106,6 +123,7 @@ class DaemonAutomations implements AutomationHandler {
     );
     checks = checkRunner;
     final preflight = UnattendedPreflight(facts: facts, checks: projectChecks);
+    late final HostedAgentLauncher launcher;
     final runner = AutomationRunner(
       automations: automations,
       preflight: preflight,
@@ -124,7 +142,7 @@ class DaemonAutomations implements AutomationHandler {
               newId: ids,
             ),
           ),
-      launcher: HostedAgentLauncher(
+      launcher: launcher = HostedAgentLauncher(
         registry: registry,
         sessions: sessions,
         mcp: mcp,
@@ -143,12 +161,26 @@ class DaemonAutomations implements AutomationHandler {
       newId: ids,
       onChanged: _changed,
     );
-    final resumeFiring = DaemonResumeFiring(
-      relay: relay,
+    final resumeFiring = ServerResumeRunner(
       resumes: resumes,
+      sessionOf: sessions.getById,
+      facts: facts,
+      preflight: preflight,
+      launcher: () => launcher,
+      runningOf: (sessionId) {
+        final session = registry.find(hostSessionIdOf(sessionId));
+        return session == null || session.lifecycle.hasEnded ? null : session;
+      },
+      close: (sessionId) async {
+        final id = hostSessionIdOf(sessionId);
+        if (registry.find(id) != null) await registry.close(id);
+      },
+      statusOf: agentStatusOf,
+      usage: usage,
+      onDecision: onDecision,
       now: now,
-      onChanged: (_) => _changed(),
     );
+    _resumes = resumeFiring;
     scheduler = AutomationScheduler(
       automations: automations,
       resumes: resumes,
@@ -156,7 +188,6 @@ class DaemonAutomations implements AutomationHandler {
       firing: DaemonAutomationFiring(
         local: runner,
         facts: facts,
-        relay: relay,
         automations: automations,
         now: now,
         newId: ids,
@@ -169,10 +200,42 @@ class DaemonAutomations implements AutomationHandler {
       onResumeChanged: (_) => _changed(),
     );
     resumeFiring.scheduler = scheduler;
+    HostSession? running(String sessionId) {
+      final session = registry.find(hostSessionIdOf(sessionId));
+      return session == null || session.lifecycle.hasEnded ? null : session;
+    }
+
+    eventRules = ServerEventRules(
+      automations: automations,
+      scheduler: scheduler,
+      preflight: preflight,
+      sessionOf: sessions.getById,
+      runningOf: running,
+      statusOf: (id) => agentStatusOf?.call(id)?.report,
+      now: now,
+      newId: ids,
+      log: _log,
+    );
+    usageLimits = ServerUsageLimits(
+      sessionOf: sessions.getById,
+      installationOf: rows.installation,
+      resumes: resumes,
+      preflight: preflight,
+      usage: usage,
+      settings:
+          usageLimitSettings ??
+          () => usageLimitSettingsFrom(database.readMetadata('settings.v1')),
+      raise: raise ?? (_) {},
+      notice: noticeUsageLimit ?? (_) {},
+      isLive: (id) => running(id) != null,
+      onArmed: _changed,
+      now: now,
+      newId: ids,
+      log: _log,
+    );
     final runChecks = DaemonRunChecks(
       checks: checkRunner,
       facts: facts,
-      relay: relay,
       automations: automations,
     );
     settler = AutomationRunSettler(
@@ -198,7 +261,6 @@ class DaemonAutomations implements AutomationHandler {
         return true;
       },
     );
-    relay.onConnected = () => unawaited(_reconcile());
   }
 
   final AppDatabase _db;
@@ -223,7 +285,23 @@ class DaemonAutomations implements AutomationHandler {
   /// A client wrote automation rows: re-arm, and start what can start.
   void written() => unawaited(_reconcile());
 
-  final AutomationAppRelay relay = AutomationAppRelay();
+  /// Event rules answered here (slice 5c): a turn finished or failed.
+  late final ServerEventRules eventRules;
+
+  /// Usage limits noticed here (slice 5c): filed, and a resume armed or
+  /// offered as Settings says.
+  late final ServerUsageLimits usageLimits;
+
+  /// One status move the server's attention keeps — every session's, not
+  /// only this server's own — for the event rules and the usage-limit watch.
+  void observeStatus(SessionStatusEntry entry) {
+    if (_stopped) return;
+    eventRules.observe(entry);
+    usageLimits.observe(entry);
+  }
+
+  /// Fires scheduled resumes at this server.
+  late final ServerResumeRunner _resumes;
   late final DaemonCheckoutFacts facts;
   late final AutomationScheduler scheduler;
   late final AutomationRunSettler settler;
@@ -256,6 +334,7 @@ class DaemonAutomations implements AutomationHandler {
     _statusChanges = statusChanges.listen(_onStatus);
     _agentStatuses = agentStatus?.listen(_onAgentStatus);
     settler.sweep(owns: _ownsSession);
+    _resumes.failInterrupted();
     await scheduler.start();
   }
 
@@ -263,7 +342,6 @@ class DaemonAutomations implements AutomationHandler {
     _stopped = true;
     firstRunPrompts.close();
     scheduler.stop();
-    relay.close();
     await _statusChanges?.cancel();
     await _agentStatuses?.cancel();
   }
@@ -316,57 +394,34 @@ class DaemonAutomations implements AutomationHandler {
     });
   }
 
+  /// `checks.run` from a client: [request]'s session's checks, run here as
+  /// one verification run — or why they could not run.
   @override
-  void notice(
-    Object owner,
-    AutomationNoticeMessage notice,
-    void Function(HostMessage) send,
-  ) {
-    switch (notice.kind) {
-      case AutomationNoticeKind.ready:
-        relay.adopt(owner, send);
+  Future<SessionChecksRun> run(ChecksRun request) async {
+    final session = _sessions.getById(request.sessionId);
+    if (session == null) {
+      throw DataRefused.notFound('no session ${request.sessionId}');
     }
+    final directory = _directoryOf(session);
+    if (!facts.runsChecksIn(directory)) {
+      return SessionChecksRun(
+        SessionChecksOutcome.refused,
+        message: _notRunHere(directory),
+      );
+    }
+    final result = await checks.runForSession(session, directory);
+    return result == null
+        ? const SessionChecksRun(SessionChecksOutcome.none)
+        : SessionChecksRun(
+            SessionChecksOutcome.ran,
+            verificationRunId: result.run.id,
+          );
   }
 
-  @override
-  void answer(Object owner, AutomationResultMessage result) =>
-      relay.answer(owner, result);
-
-  @override
-  void detach(Object owner) => relay.detach(owner);
-
-  @override
-  Future<ChecksRanMessage> runChecks(ChecksRunMessage request) async {
-    ChecksRanMessage answer(
-      ChecksRunOutcome outcome, {
-      String? runId,
-      String? message,
-    }) => ChecksRanMessage(
-      requestId: request.requestId,
-      outcome: outcome,
-      verificationRunId: runId,
-      message: message,
-    );
-    try {
-      final session = _sessions.getById(request.sessionId);
-      if (session == null) {
-        return answer(
-          ChecksRunOutcome.failed,
-          message: 'No session ${request.sessionId}.',
-        );
-      }
-      final directory = _directoryOf(session);
-      if (!facts.runsChecksIn(directory)) {
-        return answer(ChecksRunOutcome.elsewhere);
-      }
-      final result = await checks.runForSession(session, directory);
-      return result == null
-          ? answer(ChecksRunOutcome.none)
-          : answer(ChecksRunOutcome.ran, runId: result.run.id);
-    } on Object catch (error) {
-      return answer(ChecksRunOutcome.failed, message: '$error');
-    }
-  }
+  String _notRunHere(EnvironmentPath? directory) => directory == null
+      ? 'this session names no checkout to run its checks in'
+      : 'this checkout is on ${facts.describeEnvironment(directory)}, which '
+            'the Karmashala server cannot run commands in';
 
   /// Where [session]'s agent works: its worktree, its recorded directory, or
   /// its checkout.
@@ -375,8 +430,8 @@ class DaemonAutomations implements AutomationHandler {
       session.workingDirectory ??
       facts.repository(session.repositoryId)?.path;
 
-  /// `checks_run`, answered here for a checkout on this machine; null hands
-  /// the call on to the app, as every other tool.
+  /// `checks_run`, answered here — run, or refused in words; null for any
+  /// other tool.
   Future<Object?>? localTool(
     String tool,
     Map<String, dynamic> arguments,
@@ -386,9 +441,15 @@ class DaemonAutomations implements AutomationHandler {
     final sessionId = (arguments['sessionId'] as String?) ?? callerSessionId;
     if (sessionId == null) return null;
     final session = _sessions.getById(sessionId);
-    if (session == null) return null;
+    if (session == null) {
+      return Future.error(StateError('No session $sessionId.'));
+    }
     final directory = _directoryOf(session);
-    if (!facts.runsChecksIn(directory)) return null;
+    if (!facts.runsChecksIn(directory)) {
+      return Future.error(
+        StateError('Nothing was checked: ${_notRunHere(directory)}.'),
+      );
+    }
     return checks
         .runForSession(session, directory)
         .then<Object?>(sessionChecksReport);

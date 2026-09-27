@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
-import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
@@ -119,7 +118,6 @@ void main() {
     container.listen(attentionInboxProvider, (_, _) {});
     container.listen(sessionProjectIdsProvider, (_, _) {});
     container.listen(projectSummaryProvider('p1'), (_, _) {});
-    container.listen(openFollowUpsProvider, (_, _) {});
     container.listen(sessionsForSelectedRepositoryProvider, (_, _) {});
     container.listen(importedSessionsForSelectedRepositoryProvider, (_, _) {});
     // One per drawn row: the Explorer builds a card per session.
@@ -263,19 +261,6 @@ void main() {
             .title,
         'Renamed',
       );
-    });
-
-    test('the follow-up inbox relabels the session it is about', () async {
-      container.listen(openFollowUpsProvider, (_, _) {});
-      await container.pump();
-      expect(container.read(openFollowUpsProvider).single.label, 'Session 0');
-
-      unawaited(
-        container.read(sessionActionsProvider).renameNative('s0', 'Renamed'),
-      );
-      await container.pump();
-
-      expect(container.read(openFollowUpsProvider).single.label, 'Renamed');
     });
 
     test('the renamed session own row provider', () async {

@@ -10,9 +10,9 @@ import 'package:karmashala_git/repositories.dart';
 
 import 'daemon_agents.dart';
 
-/// What the session host knows about a checkout, from the shared store. The
-/// host starts agents and runs commands only in this machine's own
-/// environment; WSL and SSH checkouts are the app's.
+/// What the server knows about a checkout, from its store. It starts agents
+/// in this machine's own environment (and WSL's, on Windows); on an SSH box
+/// it runs commands over its own connection and starts no agent yet.
 class DaemonCheckoutFacts implements CheckoutFacts {
   DaemonCheckoutFacts(
     this.rows, {
@@ -66,6 +66,11 @@ class DaemonCheckoutFacts implements CheckoutFacts {
     return factory.forEnvironment(environment);
   }
 
+  /// Whether [path] is on an SSH box.
+  bool isSsh(EnvironmentPath? path) =>
+      path != null &&
+      rows.environment(path.environmentId)?.kind == EnvironmentKind.ssh;
+
   /// Whether [environment] is this machine's own.
   bool isHere(ExecutionEnvironment environment) => switch (environment.kind) {
     EnvironmentKind.localPosix => !_windows,
@@ -100,9 +105,11 @@ class DaemonCheckoutFacts implements CheckoutFacts {
     }
     return (
       reach: UnattendedReach.unreachable,
-      reason:
-          'The session host runs agents only on this machine itself, and '
-          '${environment.name} is not it; the Karmashala app starts those',
+      reason: environment.kind == EnvironmentKind.ssh
+          ? '${environment.name} is an SSH machine, and the Karmashala server '
+                'does not start agents there yet'
+          : 'The Karmashala server runs agents only on its own machine, and '
+                '${environment.name} is not reachable from it',
     );
   }
 }

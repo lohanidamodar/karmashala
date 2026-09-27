@@ -50,7 +50,8 @@ class HostedLaunch {
   /// The mode chosen, canonically; null is the agent's declared default.
   final String? permissionMode;
 
-  /// The opening message, when there is one.
+  /// The opening message, when there is one — for a resume too, typed on the
+  /// command line after the conversation's resume arguments.
   final String? prompt;
 
   /// Start in a worktree of its own, on a new branch.
@@ -171,7 +172,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
 
     final Session session;
     if (resuming != null) {
-      session = resuming.copyWith(status: SessionStatus.running);
+      // A resume may name the mode it runs under (a scheduled resume armed
+      // with one); the row records it, as the app's launcher did.
+      final mode = launch.permissionMode;
+      session = resuming.copyWith(
+        status: SessionStatus.running,
+        permissionMode: mode,
+      );
+      if (mode != null && mode != resuming.permissionMode) {
+        sessions.updatePermissionMode(id, mode);
+      }
       sessions.updateStatus(id, SessionStatus.running);
       onRowWritten?.call(id);
     } else {
@@ -217,7 +227,9 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
           sessionId: id,
           permissionMode: session.permissionMode,
           modelId: session.modelId,
-          prompt: resuming == null ? launch.prompt : null,
+          // A resume's opening message rides its command line too (a
+          // scheduled resume's), where the agent takes one there.
+          prompt: launch.prompt,
           resumeConversationId: resumeId,
           mcpUrl: access?.url,
           mcpConfigPath: access?.configPath,

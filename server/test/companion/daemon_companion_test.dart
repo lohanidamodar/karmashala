@@ -16,6 +16,7 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_notes/store.dart';
 import 'package:karmashala_remote/client.dart';
+import 'package:karmashala_remote/host.dart' show RemoteApiRefusal;
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -306,35 +307,6 @@ void main() {
       expect(notes.todos.single.body, 'Ship the fix');
     });
 
-    test(
-      'the app arriving and leaving mid-sweep fails the sweep quietly',
-      () async {
-        insertRow('s1');
-        final client = await dial();
-        // A request makes the phone live, so the app's arrival re-sweeps it.
-        await client.listSessions();
-
-        final app = Object();
-        final calls = <CompanionCallMessage>[];
-        await companion.adopt(app, null, (message) {
-          if (message is CompanionCallMessage) calls.add(message);
-        });
-        while (calls.isEmpty) {
-          await Future<void>.delayed(const Duration(milliseconds: 5));
-        }
-        expect(calls.single.method, CompanionMethod.listSessions.wire);
-
-        // Unanswered, then gone: the sweep's call fails. Escaping, that error
-        // is uncaught — which fails this test, and in the daemon ends the
-        // process with every session it holds.
-        await companion.detach(app);
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-
-        final after = await client.listSessions();
-        expect(after.single.sessionId, 's1', reason: 'from the store again');
-      },
-    );
-
     test('a push token is kept in the store, and clients are told the '
         'device without it', () async {
       final told = <DataChanges>[];
@@ -534,7 +506,7 @@ void main() {
           installationId: 'a1',
           permissionMode: agent.defaultMode,
         ),
-        refused(kCompanionAppNotRunning),
+        refused(kCompanionNotServedHere),
         reason: 'nothing can hand an agent its tools before MCP is up',
       );
       serveSessions();
@@ -841,172 +813,186 @@ void main() {
     );
   });
 
-  group('with the desktop app connected', () {
-    final app = Object();
-    late List<CompanionCallMessage> calls;
+  group('with a desktop attached (slice 5c: nothing is forwarded)', () {
+    final desktop = Object();
+    late List<HostMessage> sent;
 
     setUp(() async {
-      calls = [];
-      await companion.adopt(app, null, (message) {
-        if (message is CompanionCallMessage) calls.add(message);
-      });
+      sent = [];
+      await companion.adopt(desktop, null, sent.add);
     });
 
-    test(
-      'usage is the server\'s own: nothing is forwarded to the app',
-      () async {
-        final client = await dial();
-        final snapshot = await client.usage();
+    test('usage is the server\'s own', () async {
+      final client = await dial();
+      final snapshot = await client.usage();
 
-        expect(snapshot.accounts.single.windows.single.percent, 42);
-        expect(usage.asked, ['a1']);
-        expect(calls, isEmpty, reason: 'usage is read here, app or no app');
-      },
-    );
+      expect(snapshot.accounts.single.windows.single.percent, 42);
+      expect(usage.asked, ['a1']);
+      expect(sent, isEmpty, reason: 'nothing is asked of a desktop');
+    });
 
-    test('the session list is the app\'s', () async {
+    test('the session list is the server\'s, with its attention', () async {
+      insertRow('s1');
+      companion.attentionOf = (id) =>
+          id == 's1' ? kAttentionNeedsApproval : null;
+      companion.usageLimitOf = (id) =>
+          id == 's1' ? 'Codex hit its limit.' : null;
+      final client = await dial();
+
+      final sessions = await client.listSessions();
+
+      expect(sessions.single.sessionId, 's1');
+      expect(sessions.single.attention, kAttentionNeedsApproval);
+      expect(sessions.single.usageLimit, 'Codex hit its limit.');
+      expect(sent, isEmpty);
+    });
+
+    test('a desktop leaving changes no answer', () async {
       insertRow('s1');
       final client = await dial();
-      final listing = client.listSessions();
-      while (calls.isEmpty) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
-      final call = calls.first;
-      expect(call.method, CompanionMethod.listSessions.wire);
-      companion.answer(
-        app,
-        CompanionResultMessage.success(call.callId, {
-          'sessions': [
-            const RemoteSessionSnapshot(
-              sessionId: 's1',
-              title: 'Fix the cart',
-              status: 'running',
-              attention: kAttentionNeedsApproval,
-            ).toJson(),
-          ],
-        }),
-      );
-      // The stage of each row is asked of the app too.
-      while (calls.length < 2) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
-      companion.answer(
-        app,
-        CompanionResultMessage.success(calls[1].callId, {'stage': null}),
-      );
-
-      final sessions = await listing;
-      expect(sessions.single.attention, kAttentionNeedsApproval);
+      await companion.detach(desktop);
+      final after = await client.listSessions();
+      expect(after.single.sessionId, 's1');
     });
 
-    test('a phone\'s start reaches the app with the title typed', () async {
-      final client = await dial();
-      final starting = client.startSession(
-        requestId: 'start-app',
-        repositoryId: 'r1',
-        installationId: 'a1',
-        permissionMode: 'default',
-        title: 'phone 1c',
-        message: 'Reply with just PHONE-1C-O',
-      );
-      while (calls.isEmpty) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
-      final call = calls.single;
-      expect(call.method, CompanionMethod.startSession.wire);
-      expect(call.arguments['title'], 'phone 1c');
-      expect(call.arguments['message'], 'Reply with just PHONE-1C-O');
-      companion.answer(
-        app,
-        CompanionResultMessage.success(call.callId, {
-          'sessionId': 's9',
-          'title': 'phone 1c',
-        }),
-      );
-      expect((await starting).title, 'phone 1c');
-    });
-
-    test('an app refusal reaches the phone in the app\'s words', () async {
-      final client = await dial();
-      final listing = client.listProjects();
-      while (calls.isEmpty) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
-      companion.answer(
-        app,
-        CompanionResultMessage.failure(
-          calls.first.callId,
-          code: ErrorCode.badRequest.wire,
-          message: 'no projects here',
-        ),
-      );
-
+    test('a prompt in a session the server does not run is refused in words, '
+        'not handed to a desktop', () async {
+      insertRow('s1');
+      // The binding itself: the phone's own link refuses an approval nobody
+      // announced before it asks anyone.
       await expectLater(
-        listing,
+        companion.bindings.answerApproval('s1', 'approve'),
         throwsA(
-          isA<RemoteApiException>().having(
+          isA<RemoteApiRefusal>().having(
             (e) => e.message,
             'message',
-            'no projects here',
+            contains('not running in this Karmashala server'),
           ),
         ),
       );
+      await expectLater(
+        companion.bindings.approvalEvidenceFor('s1'),
+        throwsA(isA<RemoteApiRefusal>()),
+      );
+      expect(sent, isEmpty);
+    });
+  });
+
+  group('a phone reads the agent\'s own record (slice 5c)', () {
+    late File record;
+
+    setUp(() {
+      record = File('${home.path}/claude/conv-rec.jsonl')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          [
+            '{"type":"user","message":{"role":"user","content":"run the '
+                'tests"},"timestamp":"2026-09-25T12:00:00Z"}',
+            '{"type":"assistant","message":{"content":[{"type":"text",'
+                '"text":"All 42 pass."}]},"timestamp":"2026-09-25T12:00:05Z"}',
+          ].join('\n'),
+        );
+      SessionDao(database).insert(
+        Session(
+          id: 'rec',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'With a record',
+          useWorktree: false,
+          status: SessionStatus.running,
+          externalSessionId: 'conv-rec',
+          createdAt: t0,
+        ),
+      );
+      companion.recordIndex = () async => {'claudeCode/conv-rec': record.path};
+    });
+
+    test('a server-run agent session with a transcript file: the phone gets '
+        'its turns, not its screen', () async {
+      openHosted('karmashala_rec').emit(utf8.encode('SCREEN-ONLY-TEXT\r\n'));
+      await pumpEventQueue();
+      final client = await dial();
+
+      final page = await client.transcript('rec');
+
+      expect(page.messages.map((m) => '${m.role}:${m.text}'), [
+        'user:run the tests',
+        'agent:All 42 pass.',
+      ]);
+      expect(
+        page.messages.any((m) => m.text.contains('SCREEN-ONLY-TEXT')),
+        isFalse,
+        reason: 'the record, never the screen, when there is one',
+      );
     });
 
     test(
-      'news from the app returns before the app answers what it asks',
+      'a record that moves is read again; one that has not costs a stat',
       () async {
         final client = await dial();
-        // A phone that listed sessions, and so is swept for new ones.
-        final listing = client.listSessions();
-        while (calls.isEmpty) {
-          await Future<void>.delayed(const Duration(milliseconds: 5));
-        }
-        companion.answer(
-          app,
-          CompanionResultMessage.success(calls.first.callId, {'sessions': []}),
+        expect((await client.transcript('rec')).messages, hasLength(2));
+        record.writeAsStringSync(
+          '\n{"type":"user","message":{"role":"user","content":"and lint"},'
+          '"timestamp":"2026-09-25T12:01:00Z"}',
+          mode: FileMode.append,
         );
-        await listing;
-        calls.clear();
-
-        // The host server reads the app's next frame — the answer the re-sweep
-        // waits for — only once this returns; awaiting the sweep here is a
-        // link that never reads again.
-        await companion
-            .notice(
-              app,
-              const CompanionNoticeMessage(CompanionNoticeKind.sessionsMoved),
-            )
-            .timeout(const Duration(seconds: 2));
-
-        while (calls.isEmpty) {
-          await Future<void>.delayed(const Duration(milliseconds: 5));
-        }
-        expect(calls.first.method, CompanionMethod.listSessions.wire);
-        companion.answer(
-          app,
-          CompanionResultMessage.success(calls.first.callId, {'sessions': []}),
+        expect((await client.transcript('rec')).messages.last.text, 'and lint');
+        final state = await companion.bindings.readRecordState('rec');
+        expect(state.revision, isNotNull);
+        expect(
+          state.activity,
+          isNotNull,
+          reason: 'unmoved: answered from memory',
         );
       },
     );
 
-    test(
-      'the app leaving mid-call fails that call, and the host answers after',
-      () async {
-        insertRow('s1');
-        final client = await dial();
-        final listing = client.listSessions();
-        while (calls.isEmpty) {
-          await Future<void>.delayed(const Duration(milliseconds: 5));
-        }
+    test('a spawned session\'s lines lose who asked, as the desktop shows '
+        'them', () async {
+      insertRow('parent', title: 'Lead');
+      SessionDao(database).insert(
+        Session(
+          id: 'child',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Helper',
+          useWorktree: false,
+          status: SessionStatus.running,
+          externalSessionId: 'conv-child',
+          parentSessionId: 'parent',
+          createdAt: t0,
+        ),
+      );
+      final line = const SessionAttribution(
+        sessionId: 'parent',
+        title: 'Lead',
+      ).render('check the cart');
+      final child = File('${home.path}/claude/conv-child.jsonl')
+        ..writeAsStringSync(
+          '{"type":"user","message":{"role":"user","content":'
+          '${jsonEncode(line)}},"timestamp":"2026-09-25T12:00:00Z"}',
+        );
+      companion.recordIndex = () async => {'claudeCode/conv-child': child.path};
+      final page = await (await dial()).transcript('child');
+      expect(page.messages.single.text, 'check the cart');
+    });
 
-        await companion.detach(app);
+    test('a pane with no agent record (a plain shell) falls back to its '
+        'screen', () async {
+      openHosted(
+        'karmashala_local_p1',
+        argv: const ['/bin/sh'],
+      ).emit(utf8.encode('\$ echo hi\r\nhi\r\n'));
+      await pumpEventQueue();
+      final page = await (await dial()).transcript('karmashala_local_p1');
+      expect(page.messages.single.text, contains('echo hi'));
+    });
 
-        await expectLater(listing, throwsA(isA<RemoteApiException>()));
-        final after = await client.listSessions();
-        expect(after.single.sessionId, 's1', reason: 'from the store now');
-      },
-    );
+    test('the delivery stage is the server\'s own reading', () async {
+      companion.deliveryStageOf = (id) => id == 'rec' ? 'prOpen' : null;
+      final sessions = await (await dial()).listSessions();
+      expect(sessions.singleWhere((s) => s.sessionId == 'rec').stage, 'prOpen');
+    });
   });
 
   group('settings', () {

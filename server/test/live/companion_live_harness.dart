@@ -145,45 +145,26 @@ int companionPortOf(String greeting) {
   return int.parse(match.group(1)!);
 }
 
-/// The desktop app's side of the companion, over the same lifecycle link the
-/// app opens (`LocalHostLifecycleSource` → `HostLifecycleWatch`): the attach
-/// it sends on every link, the pairing it asks for, and the calls the host
-/// forwards to it.
+/// A desktop's side of the companion, over the same lifecycle link the app
+/// opens (`LocalHostLifecycleSource` → `HostLifecycleWatch`): the attach it
+/// sends on every link (where its embedded relay listens), the pairing it
+/// asks for, and the pairing dialog closing. Since slice 5c nothing is
+/// forwarded to it: every phone call is the server's.
 class AppLink {
   AppLink._(this.watch);
 
   final HostLifecycleWatch watch;
 
-  /// Calls nobody has taken yet, oldest first, and who waits for which method.
-  final _unanswered = <CompanionCallMessage>[];
-  final _waiting = <String, Completer<CompanionCallMessage>>{};
-
-  /// Methods answered the moment they arrive, as the app answers them without
-  /// anybody looking: the host asks the app's view of the sessions whenever it
-  /// re-sweeps phones.
-  final _standing = <String, Map<String, Object?>>{};
-
-  /// A link that is the app when [asApp]: it attaches as
-  /// `HostCompanionLink.attached` does. Otherwise it only watches — a `pair`
-  /// over SSH, which is not the app and must not be adopted as it.
+  /// A link that attaches as `HostCompanionLink.attached` does when [asApp].
+  /// Otherwise it only watches — a `pair` over SSH.
   static Future<AppLink> connect(
     String socketPath, {
     bool asApp = false,
   }) async {
     final watch = await HostLifecycleWatch.connect(socketPath);
     if (watch == null) throw StateError('no host at $socketPath');
-    final link = AppLink._(watch);
-    watch.companionCalls.listen(link._onCall);
     if (asApp) watch.attachCompanion();
-    return link;
-  }
-
-  void _onCall(CompanionCallMessage call) {
-    final standing = _standing[call.method];
-    if (standing != null) return answer(call.callId, standing);
-    final waiting = _waiting.remove(call.method);
-    if (waiting != null) return waiting.complete(call);
-    _unanswered.add(call);
+    return AppLink._(watch);
   }
 
   /// Opens a pairing window granting [capabilities], direct (no relay), as the
@@ -192,35 +173,6 @@ class AppLink {
     final window = await watch.pairCompanion(capabilities: capabilities.bits);
     return PairingPayload.decode(window.payload);
   }
-
-  /// Answers every call of [method], now and from now on, with [result].
-  void answerAlways(String method, Map<String, Object?> result) {
-    _standing[method] = result;
-    for (final call in _unanswered.where((c) => c.method == method).toList()) {
-      _unanswered.remove(call);
-      answer(call.callId, result);
-    }
-  }
-
-  /// The next forwarded call of [method].
-  Future<CompanionCallMessage> nextCall(
-    String method, {
-    Duration within = const Duration(seconds: 20),
-  }) {
-    final index = _unanswered.indexWhere((c) => c.method == method);
-    if (index >= 0) return Future.value(_unanswered.removeAt(index));
-    final waiting = _waiting[method] = Completer<CompanionCallMessage>();
-    return waiting.future.timeout(
-      within,
-      onTimeout: () {
-        _waiting.remove(method);
-        throw TimeoutException('the host forwarded no $method', within);
-      },
-    );
-  }
-
-  void answer(int callId, Map<String, Object?> result) =>
-      watch.answerCompanionCall(callId, result: result);
 
   /// News from the desktop, as `HostCompanionLink.notice` sends it.
   void notice(CompanionNoticeMessage notice) => watch.noticeCompanion(notice);

@@ -7,7 +7,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
+import 'package:karmashala/src/features/sessions/application/session_launch_refusal.dart';
 import 'package:karmashala/src/features/sessions/application/session_notice.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
@@ -207,7 +207,7 @@ void main() {
 
       // Exactly what `AppShell` does: watched, not read, or Riverpod pauses the
       // subscription and no pane ever stops.
-      h.container.listen(sessionLivenessReconcilerProvider, (_, _) {});
+      h.container.listen(refusedLaunchReporterProvider, (_, _) {});
 
       final session = await _launch(h.container, h.db);
       _writeToPane(
@@ -243,7 +243,7 @@ void main() {
       final h = await harness();
       addTearDown(h.container.dispose);
 
-      h.container.listen(sessionLivenessReconcilerProvider, (_, _) {});
+      h.container.listen(refusedLaunchReporterProvider, (_, _) {});
 
       final session = await _launch(h.container, h.db);
       _writeToPane(h.container, session.pane, 'Done. Bye!\r\n');

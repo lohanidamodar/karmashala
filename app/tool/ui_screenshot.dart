@@ -16,7 +16,7 @@ import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:agent_cli/process.dart' show localHostEnvironment;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
@@ -475,9 +475,7 @@ void main() {
       afterMount: (tester) async {
         const key = AgentSessionKey(AgentIds.claudeCode, 'cli-1');
         const other = AgentSessionKey(AgentIds.claudeCode, 'cli-2');
-        container
-            .read(attentionInboxProvider.notifier)
-            .apply(
+        FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
               InboxUpdate(
                 watched: {key, other},
                 waiting: const [

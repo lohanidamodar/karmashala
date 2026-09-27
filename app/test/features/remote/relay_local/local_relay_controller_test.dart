@@ -18,7 +18,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_data_server.dart';
 import '../../../support/fake_host_lifecycle.dart';
-import '../fake_bindings.dart';
 
 void main() {
   late FakeHostLifecycle host;
@@ -40,9 +39,7 @@ void main() {
       bindAddress: '127.0.0.1',
       interfaces: () async => [(name: 'lo', ip: '127.0.0.1')],
     );
-    final fake = FakeRemoteBindings();
     final link = HostCompanionLink(
-      bindings: () => fake.bindings,
       deviceById: (_) async => null,
     );
     container = ProviderContainer(

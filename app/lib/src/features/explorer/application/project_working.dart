@@ -4,7 +4,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../notifications/application/notification_providers.dart';
-import '../../notifications/application/session_status_registry.dart';
+import '../../notifications/application/session_statuses.dart';
 
 /// The workspace rows whose agent is in a turn right now, as the one status
 /// registry observes it. A subscription, never a poll: it moves when a status
@@ -16,7 +16,7 @@ class WorkingSessions extends Notifier<Set<String>> {
     final moves = registry.statusChanges.listen(_moved);
     // A session that stops being watched leaves without a last status, and
     // only the watch set's size says so.
-    final watched = registry.coverageReports.listen((_) => _prune(registry));
+    final watched = registry.removals.listen((_) => _prune(registry));
     ref.onDispose(() {
       unawaited(moves.cancel());
       unawaited(watched.cancel());
@@ -27,7 +27,7 @@ class WorkingSessions extends Notifier<Set<String>> {
     };
   }
 
-  static bool _isWorking(SessionStatusRegistry registry, String openId) =>
+  static bool _isWorking(SessionStatuses registry, String openId) =>
       registry.reportForOpenId(openId)?.status == AgentActivityStatus.working;
 
   void _moved(SessionStatusEntry entry) {
@@ -37,7 +37,7 @@ class WorkingSessions extends Notifier<Set<String>> {
     state = working ? {...state, id} : ({...state}..remove(id));
   }
 
-  void _prune(SessionStatusRegistry registry) {
+  void _prune(SessionStatuses registry) {
     if (state.isEmpty) return;
     final kept = {
       for (final id in state)

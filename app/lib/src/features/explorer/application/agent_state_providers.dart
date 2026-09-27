@@ -8,7 +8,7 @@ import '../../../core/util/clock_provider.dart';
 
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../notifications/application/session_status_registry.dart';
+import '../../notifications/application/session_statuses.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/session_last_active_providers.dart';
 import '../../sessions/application/session_providers.dart';
@@ -28,7 +28,7 @@ class LiveAgentStatuses extends Notifier<Map<String, AgentActivityStatus>> {
   Map<String, AgentActivityStatus> build() {
     final registry = ref.watch(sessionStatusRegistryProvider);
     final moves = registry.statusChanges.listen(_moved);
-    final watched = registry.coverageReports.listen((_) => _prune(registry));
+    final watched = registry.removals.listen((_) => _prune(registry));
     ref.onDispose(() {
       unawaited(moves.cancel());
       unawaited(watched.cancel());
@@ -63,7 +63,7 @@ class LiveAgentStatuses extends Notifier<Map<String, AgentActivityStatus>> {
   }
 
   /// A session that stops being watched leaves without a last status.
-  void _prune(SessionStatusRegistry registry) {
+  void _prune(SessionStatuses registry) {
     if (state.isEmpty) return;
     final kept = {
       for (final MapEntry(key: id, value: status) in state.entries)

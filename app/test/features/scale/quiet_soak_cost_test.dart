@@ -3,7 +3,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -275,7 +274,6 @@ void main() {
       container.listen(attentionInboxProvider, (_, _) {});
       container.listen(sessionProjectIdsProvider, (_, _) {});
       container.listen(projectSummaryProvider('p1'), (_, _) {});
-      container.listen(openFollowUpsProvider, (_, _) {});
       container.listen(sessionsForSelectedRepositoryProvider, (_, _) {});
       container.listen(
         importedSessionsForSelectedRepositoryProvider,
@@ -308,7 +306,6 @@ void main() {
           container.read(attentionInboxProvider);
           container.read(sessionProjectIdsProvider);
           container.read(projectSummaryProvider('p1'));
-          container.read(openFollowUpsProvider);
           container.read(sessionsForSelectedRepositoryProvider);
           container.read(importedSessionsForSelectedRepositoryProvider);
           for (var i = 0; i < count; i++) {

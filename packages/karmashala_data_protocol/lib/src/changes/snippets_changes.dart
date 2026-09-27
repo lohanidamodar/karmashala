@@ -2,16 +2,14 @@ part of '../data_change.dart';
 
 // Command snippets and terminal presets.
 
-DataChange? _snippetsChangeFromJson(
-  String name,
-  Map<String, Object?> json,
-) => switch (name) {
-  'snippetChanged' => SnippetChanged(CommandSnippet.fromJson(_row(json))),
-  'snippetRemoved' => SnippetRemoved(json['id']! as String),
-  'presetChanged' => PresetChanged(StoredPreset.fromJson(_row(json))),
-  'presetRemoved' => PresetRemoved(json['id']! as String),
-  _ => null,
-};
+DataChange? _snippetsChangeFromJson(String name, Map<String, Object?> json) =>
+    switch (name) {
+      'snippetChanged' => SnippetChanged(CommandSnippet.fromJson(_row(json))),
+      'snippetRemoved' => SnippetRemoved(json['id']! as String),
+      'presetChanged' => PresetChanged(StoredPreset.fromJson(_row(json))),
+      'presetRemoved' => PresetRemoved(json['id']! as String),
+      _ => null,
+    };
 
 /// A change to the snippets or the saved presets.
 sealed class SnippetsChange extends DataChange {

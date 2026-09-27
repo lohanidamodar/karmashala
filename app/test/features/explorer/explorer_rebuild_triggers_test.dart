@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
@@ -7,8 +8,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -240,34 +239,38 @@ void main() {
     expect(changed(before, after), 0);
   });
 
-  testWidgets(
-    'a status-registry cycle that finds nothing new rebuilds no card',
-    (tester) async {
-      final harness = await pump(tester);
-      final registry = harness.container.read(sessionStatusRegistryProvider);
-
-      // The first cycle is a first observation and may legitimately publish.
-      await registry.cycle();
-      await tester.pumpAndSettle();
-      final before = cardIdentities(tester);
-
-      // Ten more ticks with nothing changing underneath — the steady state the
-      // user is in while they type.
-      for (var i = 0; i < 10; i++) {
-        clock.now = clock.now.add(kStatusCycleInterval);
-        await registry.cycle();
-        await tester.pump();
-      }
-
-      final after = cardIdentities(tester);
-      // ignore: avoid_print
-      print(
-        'EXPLORER-TRIGGER registry-cycles cards=${before.length} '
-        'rebuilt=${changed(before, after)} cycles=${registry.cycles}',
+  testWidgets('the server saying every status again rebuilds no card', (
+    tester,
+  ) async {
+    await pump(tester);
+    // The first word is a first observation and may legitimately publish.
+    for (var i = 0; i < 7; i++) {
+      server.attention.statusOf(
+        'n$i',
+        AgentActivityStatus.idle,
+        sessionId: 'native-ext-$i',
       );
-      expect(changed(before, after), 0);
-    },
-  );
+    }
+    await tester.pumpAndSettle();
+    final before = cardIdentities(tester);
+
+    // Ten more rounds with nothing changing underneath — the steady state
+    // the user is in while they type (slice 5c: the server's cycle).
+    for (var i = 0; i < 10; i++) {
+      for (final entry in [...server.attention.statuses.values]) {
+        server.attention.status(entry);
+      }
+      await tester.pump();
+    }
+
+    final after = cardIdentities(tester);
+    // ignore: avoid_print
+    print(
+      'EXPLORER-TRIGGER status-rounds cards=${before.length} '
+      'rebuilt=${changed(before, after)}',
+    );
+    expect(changed(before, after), 0);
+  });
 
   testWidgets('a workspace mutation does rebuild every visible card', (
     tester,

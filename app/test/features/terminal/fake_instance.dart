@@ -5,7 +5,6 @@ import 'package:karmashala_core/paths.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
-import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart'
@@ -373,11 +372,6 @@ fakeTerminalOverrides({
     // Same seam and same reason as the line above — reading the setting would
     // drag a database into every terminal test.
     restoreLivePanesProvider.overrideWithValue(restoreLivePanes),
-    // The delivery strip polls `gh` on a periodic timer, which would outlive
-    // the widget tree and trip the pending-timer check in every test that
-    // renders a session. Same reason as the autosave above; tests that care
-    // about polling drive it explicitly.
-    deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
     // [instanceFactory] replaces the default rather than adding a second
     // override: Riverpod refuses the same provider twice in one container, so a
     // test that needs a pane to fail has to substitute here.

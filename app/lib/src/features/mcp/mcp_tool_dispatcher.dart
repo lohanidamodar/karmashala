@@ -2,8 +2,6 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../core/util/clock_provider.dart';
-import '../automations/application/project_check_tools.dart';
-import 'attention_tools.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_host/mcp_tools.dart';
 import 'package:karmashala_mcp/catalogue.dart';
@@ -64,7 +62,6 @@ class McpToolDispatcher implements HostMcpTools {
     'session_rename',
     'session_end',
     'open_new_session',
-    'checks_run',
   };
 
   @override
@@ -117,11 +114,6 @@ class McpToolDispatcher implements HostMcpTools {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      case final String name when AttentionControlTools.handles(name):
-        return AttentionControlTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
       case final String name when WorkspaceControlTools.handles(name):
         return WorkspaceControlTools(_container).call(name, args);
       case final String name when TerminalControlTools.handles(name):
@@ -130,11 +122,6 @@ class McpToolDispatcher implements HostMcpTools {
         return RecordingControlTools(_container).call(name, args);
       case final String name when SnippetControlTools.handles(name):
         return SnippetControlTools(_container).call(name, args);
-      case final String name when ProjectCheckTools.handles(name):
-        return ProjectCheckTools(
-          _container,
-          callerSessionId: callerSessionId,
-        ).call(name, args);
       default:
         throw ArgumentError('Unknown tool: $tool');
     }
@@ -153,7 +140,6 @@ class McpToolDispatcher implements HostMcpTools {
     ...recordingControlToolSchemas,
     ...snippetControlToolSchemas,
     ...workspaceControlToolSchemas,
-    ...attentionControlToolSchemas,
   ];
 }
 

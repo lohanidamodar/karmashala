@@ -411,10 +411,7 @@ void main() {
         prompts: prompts,
         clock: () => t0,
       );
-      await companion.start(
-        sessionEvents: events.stream,
-        statusChanges: status.changes,
-      );
+      await companion.start(sessionEvents: events.stream);
       agent = openAgent('karmashala_s1')
         ..emit(fixture('claude-code-permission-modal'));
       await pumpEventQueue();

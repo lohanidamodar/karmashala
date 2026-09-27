@@ -61,10 +61,7 @@ final class SessionEdit extends _SessionWrite {
   String get kind => name;
 
   @override
-  Map<String, Object?> argumentsToJson() => {
-    'id': id,
-    'patch': patch.toJson(),
-  };
+  Map<String, Object?> argumentsToJson() => {'id': id, 'patch': patch.toJson()};
 }
 
 /// Deletes a session and everything recorded against it — told as changes.
@@ -296,10 +293,7 @@ final class RelaysTo extends DataRequest<RelayPage> {
   String get kind => name;
 
   @override
-  Map<String, Object?> argumentsToJson() => {
-    'to': toSessionId,
-    'limit': limit,
-  };
+  Map<String, Object?> argumentsToJson() => {'to': toSessionId, 'limit': limit};
 
   @override
   Object? resultToJson(RelayPage result) => result.toJson();

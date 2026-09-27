@@ -686,8 +686,7 @@ void main() {
     // The whole-app cases above pin *when* the gate is open. These pin that the
     // stream actually consults it — that the pause is a pause of the read and
     // not merely of a boolean nobody reads. Real file, real timers, driven at
-    // an interval a test can wait for through the same seam
-    // `deliveryPollIntervalProvider` and `usageRefreshIntervalProvider` expose.
+    // an interval a test can wait for.
     late Directory dir;
     late File transcript;
 

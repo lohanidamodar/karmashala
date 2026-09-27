@@ -10,7 +10,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show GitDelivery;
+    show GitDelivery, PullRequestReading, pullRequestSnapshotFromJson;
 
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
@@ -140,9 +140,11 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
-          server.gitWork.serve(FakeCommandRunnerFactory(
-            fallback: FakeCommandRunner(responder: respond),
-          )),
+          server.gitWork.serve(
+            FakeCommandRunnerFactory(
+              fallback: FakeCommandRunner(responder: respond),
+            ),
+          ),
         ),
       ],
     );
@@ -392,46 +394,71 @@ void main() {
     expect(ghCalls.where((a) => a.contains('view')).length, 1);
   });
 
-  test('the two-minute poll costs one gh per checkout being looked at', () async {
-    // Written while hunting a periodic hitch, where this poll was the leading
-    // suspect: a `gh` process per checkout every two minutes, on a machine with
-    // seventeen repositories, would be a plausible once-a-minute stall.
-    //
-    // It is not, and the reason is which provider the tree reads. Every row in
-    // the Explorer watches `sessionLocalDeliveryProvider`, which never touches
-    // `gh`; only `sessionDeliveryProvider` does, and that one exists for the
-    // session whose strip is on screen. So a tick costs one `gh` per *watched*
-    // checkout — one, in practice — not one per session and not one per
-    // repository.
-    for (var i = 0; i < 5; i++) {
-      addSession('s$i');
-    }
-    final container = harness();
-
-    // What the Explorer draws: every row, none of them asking `gh`.
-    for (var i = 0; i < 5; i++) {
-      await container.read(sessionLocalDeliveryProvider('s$i').future);
-    }
-    expect(ghCalls, isEmpty, reason: 'a tree row must never start a gh');
-
-    // What the strip draws: one session, kept alive across the tick the way a
-    // widget watching it would.
-    final subscription = container.listen(
-      sessionDeliveryProvider('s0'),
-      (_, _) {},
+  group('the forge is the server\'s poll (slice 5c)', () {
+    PullRequestReading openReading(int number) => PullRequestReading(
+      pullRequest: pullRequestSnapshotFromJson({
+        'number': number,
+        'state': 'open',
+        'url': 'https://github.com/o/r/pull/$number',
+        'checks': <String, Object?>{},
+      }),
     );
-    addTearDown(subscription.close);
-    await container.read(sessionDeliveryProvider('s0').future);
-    final afterFirstRead = ghCalls.length;
 
-    container.read(deliveryPollProvider.notifier).state++;
-    await container.read(sessionDeliveryProvider('s0').future);
+    test('a reading the server polled answers the strip with no gh, and a '
+        'new one reaches it by itself', () async {
+      addSession('s0');
+      server.attention.forgeRead(worktree, openReading(7));
+      final container = harness();
+      // Told to this subscribed window as the server read it.
+      await pumpEventQueue();
+      expect(data.forgeReadings[worktree]?.pullRequest?.number, 7);
+      final subscription = container.listen(
+        sessionDeliveryProvider('s0'),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
 
-    expect(afterFirstRead, 1);
-    expect(
-      ghCalls.length - afterFirstRead,
-      1,
-      reason: 'one tick, one gh — not one per session sharing the checkout',
+      final first = await container.read(sessionDeliveryProvider('s0').future);
+      expect(first.pullRequest?.number, 7);
+      expect(ghCalls, isEmpty, reason: 'the server read the forge, not us');
+
+      server.attention.forgeRead(worktree, openReading(8));
+      await pumpEventQueue();
+      final second = await container.read(sessionDeliveryProvider('s0').future);
+      expect(second.pullRequest?.number, 8);
+      expect(ghCalls, isEmpty, reason: 'no timer, no re-ask');
+    });
+
+    test(
+      'a checkout the server has not read is asked once, never polled',
+      () async {
+        for (var i = 0; i < 5; i++) {
+          addSession('s$i');
+        }
+        final container = harness();
+
+        // What the Explorer draws: every row, none of them asking `gh`.
+        for (var i = 0; i < 5; i++) {
+          await container.read(sessionLocalDeliveryProvider('s$i').future);
+        }
+        expect(ghCalls, isEmpty, reason: 'a tree row must never start a gh');
+
+        final subscription = container.listen(
+          sessionDeliveryProvider('s0'),
+          (_, _) {},
+        );
+        addTearDown(subscription.close);
+        await container.read(sessionDeliveryProvider('s0').future);
+        expect(ghCalls.where((a) => a.contains('view')), hasLength(1));
+
+        await pumpEventQueue();
+        await container.read(sessionDeliveryProvider('s0').future);
+        expect(
+          ghCalls.where((a) => a.contains('view')),
+          hasLength(1),
+          reason: 'asked once, not polled',
+        );
+      },
     );
   });
 
@@ -462,24 +489,26 @@ void main() {
           ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
-            server.gitWork.serve(FakeCommandRunnerFactory(
-              fallback: FakeCommandRunner(
-                responder: (request) {
-                  if (request.arguments.contains('status')) {
-                    // The repository is asked second; give it its own branch.
-                    asked++;
-                    return CommandResult(
-                      exitCode: 0,
-                      stdout: asked == 1
-                          ? porcelainV2(branch: 'work', ahead: 0, behind: 0)
-                          : porcelainV2(branch: 'main', ahead: 0, behind: 0),
-                      stderr: '',
-                    );
-                  }
-                  return respond(request);
-                },
+            server.gitWork.serve(
+              FakeCommandRunnerFactory(
+                fallback: FakeCommandRunner(
+                  responder: (request) {
+                    if (request.arguments.contains('status')) {
+                      // The repository is asked second; give it its own branch.
+                      asked++;
+                      return CommandResult(
+                        exitCode: 0,
+                        stdout: asked == 1
+                            ? porcelainV2(branch: 'work', ahead: 0, behind: 0)
+                            : porcelainV2(branch: 'main', ahead: 0, behind: 0),
+                        stderr: '',
+                      );
+                    }
+                    return respond(request);
+                  },
+                ),
               ),
-            )),
+            ),
           ),
         ],
       );
@@ -520,16 +549,18 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
-          server.gitWork.serve(FakeCommandRunnerFactory(
-            fallback: FakeCommandRunner(
-              responder: (request) {
-                if (request.executable == 'gh') {
-                  throw CommandException('gh is not installed');
-                }
-                return respond(request);
-              },
+          server.gitWork.serve(
+            FakeCommandRunnerFactory(
+              fallback: FakeCommandRunner(
+                responder: (request) {
+                  if (request.executable == 'gh') {
+                    throw CommandException('gh is not installed');
+                  }
+                  return respond(request);
+                },
+              ),
             ),
-          )),
+          ),
         ),
       ],
     );
@@ -550,15 +581,17 @@ void main() {
           ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
-            server.gitWork.serve(FakeCommandRunnerFactory(
-              fallback: FakeCommandRunner(
-                responder: (_) => const CommandResult(
-                  exitCode: 128,
-                  stdout: '',
-                  stderr: 'fatal: not a git repository',
+            server.gitWork.serve(
+              FakeCommandRunnerFactory(
+                fallback: FakeCommandRunner(
+                  responder: (_) => const CommandResult(
+                    exitCode: 128,
+                    stdout: '',
+                    stderr: 'fatal: not a git repository',
+                  ),
                 ),
               ),
-            )),
+            ),
           ),
         ],
       );
@@ -572,5 +605,4 @@ void main() {
       expect(delivery.stage, DeliveryStage.working);
     },
   );
-
 }

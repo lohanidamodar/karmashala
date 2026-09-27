@@ -4,7 +4,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ChecksRun, DataRefused, SessionChecksOutcome;
+import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_session/session.dart'
@@ -37,6 +42,21 @@ class _NoCheckpoints implements RunBaseCheckpoint {
   }
 }
 
+/// The account's usage as a test sets it.
+class _Usage implements ResumeUsage {
+  AgentUsage? reading;
+
+  @override
+  Future<AgentUsage> fetch(AgentInstallation installation) async =>
+      reading ?? (throw UsageException('nothing read'));
+
+  @override
+  Duration dueIn(AgentInstallation installation) => Duration.zero;
+
+  @override
+  String? unreadableBecause(AgentInstallation installation) => null;
+}
+
 void main() {
   // 03:05 local on the day a nightly 03:00 automation is due.
   final due = DateTime(2026, 9, 25, 3);
@@ -50,7 +70,8 @@ void main() {
   late ManualAutomationTimer timer;
   late DaemonAutomations automations;
   late _NoCheckpoints checkpoints;
-  late List<HostMessage> toApp;
+  late _Usage usage;
+  late List<(String, String)> decisions;
   var announced = 0;
   var ids = 0;
 
@@ -60,7 +81,8 @@ void main() {
     now = due.add(const Duration(minutes: 5)).toUtc();
     ids = 0;
     announced = 0;
-    toApp = [];
+    usage = _Usage();
+    decisions = [];
     db = AppDatabase.memory();
     db.execute('PRAGMA foreign_keys = OFF;');
     data = Directory.systemTemp.createTempSync('daemon-automations');
@@ -132,6 +154,9 @@ void main() {
       checkpoints: checkpoints,
       hostEnvironment: const {'CLAUDECODE': '1', 'PATH': '/usr/bin'},
       firstRunPromptInterval: const Duration(milliseconds: 5),
+      usage: usage,
+      onDecision: (decision) =>
+          decisions.add((decision.sessionId, decision.summary)),
     );
     await automations.start(recording.changes);
     await pump();
@@ -428,96 +453,152 @@ void main() {
     });
   });
 
-  group('a checkout only the app can start in', () {
-    test('with no app it is missed, and says why', () async {
+  group('a checkout on an SSH box', () {
+    test('is missed, and says why in words: agents are not started there '
+        'yet', () async {
       nightly(repositoryId: 'r2');
       await startDaemon();
       final run = runs('auto-r2').single;
       expect(run.state, AutomationRunState.missed);
       expect(run.reason, contains('the build box'));
-      expect(run.reason, contains('app was not running'));
-      expect(launcher.started, isEmpty);
-    });
-
-    test('with the app connected it is forwarded to it', () async {
-      now = due.subtract(const Duration(minutes: 1)).toUtc();
-      nightly(repositoryId: 'r2');
-      await startDaemon();
-      final app = Object();
-      automations.notice(
-        app,
-        const AutomationNoticeMessage(AutomationNoticeKind.ready),
-        toApp.add,
-      );
-      now = due.add(const Duration(seconds: 5)).toUtc();
-      timer.fire();
-      await pump();
-
-      final call = toApp.whereType<AutomationCallMessage>().single;
-      expect(call.kind, AutomationCallKind.fireAutomation);
-      expect(call.id, 'auto-r2');
-      expect(call.scheduledFor, due.toUtc());
-      automations.answer(app, AutomationResultMessage.success(call.callId));
-      await pump();
-      // The app writes the run; the host records nothing of its own.
-      expect(runs('auto-r2'), isEmpty);
+      expect(run.reason, contains('does not start agents there yet'));
+      expect(run.reason, isNot(contains('app')));
       expect(launcher.started, isEmpty);
     });
   });
 
-  group('a scheduled resume', () {
-    void armResume() {
+  group('a scheduled resume, fired by the server', () {
+    void armResume({
+      String repositoryId = 'r1',
+      String status = 'completed',
+      bool liveWhenScheduled = false,
+      String? windowLabel,
+      String message = 'continue',
+      ScheduledResumeState state = ScheduledResumeState.pending,
+    }) {
       db.execute(
         'INSERT INTO sessions (id, repository_id, agent_installation_id, '
-        'title, use_worktree, status, created_at) '
-        "VALUES ('s1', 'r1', 'a1', 'Work', 0, 'completed', ?);",
-        [DateTime.utc(2026, 9, 24).toIso8601String()],
+        'title, use_worktree, status, created_at, external_session_id, '
+        'permission_mode) '
+        "VALUES ('s1', ?, 'a1', 'Work', 0, ?, ?, 'conv-1', "
+        "'mode=bypassPermissions');",
+        [repositoryId, status, DateTime.utc(2026, 9, 24).toIso8601String()],
       );
       ScheduledResumeDao(db).replaceFor(
         ScheduledResume(
           id: 'resume1',
           sessionId: 's1',
           fireAt: now.subtract(const Duration(minutes: 1)),
-          state: ScheduledResumeState.pending,
+          state: state,
           scheduledAt: now.subtract(const Duration(hours: 1)),
-          message: 'continue',
+          message: message,
+          // A mode that asks nobody: the unattended gate refuses one that
+          // would stop at a prompt.
+          permissionMode: 'mode=bypassPermissions',
+          liveWhenScheduled: liveWhenScheduled,
+          windowLabel: windowLabel,
+          resetsAt: windowLabel == null
+              ? null
+              : now.subtract(const Duration(minutes: 2)),
+          accountKey: windowLabel == null ? '' : 'claudeCode@local',
         ),
         now: now,
       );
     }
 
-    test('with no app it waits for one, and goes when one arrives', () async {
+    ScheduledResume resume() => ScheduledResumeDao(db).getById('resume1')!;
+
+    test('a session nobody runs is resumed as the server\'s own, the '
+        'message on its command line, and the decision filed', () async {
       armResume();
       await startDaemon();
-      final waiting = ScheduledResumeDao(db).getById('resume1')!;
-      expect(waiting.state, ScheduledResumeState.queued);
-      expect(waiting.reason, kResumeWaitingForApp);
-
-      automations.notice(
-        Object(),
-        const AutomationNoticeMessage(AutomationNoticeKind.ready),
-        toApp.add,
-      );
-      await pump();
-      final call = toApp.whereType<AutomationCallMessage>().single;
-      expect(call.kind, AutomationCallKind.fireResume);
-      expect(call.id, 'resume1');
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.done, reason: ended.reason);
+      expect(ended.reason, contains('Resumed, and sent "continue"'));
+      final spawn = launcher.started.single;
+      expect(spawn.argv, containsAllInOrder(['--resume', 'conv-1']));
+      expect(spawn.argv.last, 'continue');
+      expect(registry.find(hostSessionIdOf('s1')), isNotNull);
+      expect(SessionDao(db).getById('s1')!.status, SessionStatus.running);
+      expect(decisions.single.$1, 's1');
+      expect(decisions.single.$2, contains('sent "continue"'));
     });
 
-    test('an app that arrives too late for it records the miss', () async {
-      armResume();
-      await startDaemon();
-      now = now.add(const Duration(hours: 1));
-      automations.notice(
-        Object(),
-        const AutomationNoticeMessage(AutomationNoticeKind.ready),
-        toApp.add,
+    test('a session the server runs gets the message typed into it', () async {
+      armResume(status: 'running', liveWhenScheduled: true);
+      registry.open(
+        hostSessionIdOf('s1'),
+        const PtySpawnRequest(argv: ['claude'], workingDirectory: '/src/r1'),
       );
-      await pump();
-      expect(toApp.whereType<AutomationCallMessage>(), isEmpty);
-      final missed = ScheduledResumeDao(db).getById('resume1')!;
-      expect(missed.state, ScheduledResumeState.missed);
-      expect(missed.reason, contains('app was not running'));
+      await startDaemon();
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.done, reason: ended.reason);
+      expect(ended.reason, contains('already open, and sent "continue"'));
+      final typed = utf8.decode([
+        for (final write in launcher.handles.single.writes) ...write,
+      ]);
+      expect(typed, 'continue\r');
+      expect(launcher.started, hasLength(1), reason: 'nothing new started');
+    });
+
+    test('a session somebody resumed by hand before its time is let '
+        'alone', () async {
+      armResume(status: 'running');
+      registry.open(
+        hostSessionIdOf('s1'),
+        const PtySpawnRequest(argv: ['claude'], workingDirectory: '/src/r1'),
+      );
+      await startDaemon();
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.cancelled);
+      expect(ended.reason, contains('You resumed this session yourself'));
+      expect(launcher.handles.single.writes, isEmpty);
+    });
+
+    test('an SSH checkout is refused in words, nothing started', () async {
+      armResume(repositoryId: 'r2');
+      await startDaemon();
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.failed);
+      expect(ended.reason, contains('the build box'));
+      expect(ended.reason, contains('does not start agents there yet'));
+      expect(launcher.started, isEmpty);
+    });
+
+    test('an account still at its limit is looked at again later, never '
+        'resumed', () async {
+      armResume(windowLabel: '5-hour');
+      usage.reading = AgentUsage(
+        windows: [
+          UsageWindow(
+            label: '5-hour',
+            percent: 100,
+            resetsAt: now.add(const Duration(hours: 1)),
+          ),
+        ],
+        fetchedAt: now,
+      );
+      await startDaemon();
+      final waiting = resume();
+      expect(waiting.state, ScheduledResumeState.pending);
+      expect(waiting.reason, contains('Still limited: the 5-hour window'));
+      expect(waiting.attempts, 1);
+      expect(
+        waiting.fireAt.isAfter(now.add(const Duration(minutes: 59))),
+        isTrue,
+      );
+      expect(launcher.started, isEmpty);
+    });
+
+    test('a row a stopped server left firing is failed at start, never '
+        'tried twice', () async {
+      armResume(state: ScheduledResumeState.firing);
+      await startDaemon();
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.failed);
+      expect(ended.reason, contains('stopped while this was being resumed'));
+      expect(launcher.started, isEmpty);
     });
   });
 
@@ -559,33 +640,48 @@ void main() {
       expect(text, isNot(contains('exit 127')));
     });
 
-    test('checks_run for a checkout elsewhere is handed to the app', () async {
+    test('checks_run for a checkout it cannot reach is refused in words, '
+        'never handed on', () async {
       session('s2', 'r2');
       await startDaemon();
-      expect(automations.localTool('checks_run', const {}, 's2'), isNull);
+      await expectLater(
+        automations.localTool('checks_run', const {}, 's2')!,
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('the build box'),
+          ),
+        ),
+      );
       expect(automations.localTool('session_list', const {}, 's1'), isNull);
     });
 
-    test('the app asking by frame gets the verification run', () async {
+    test('a client asking checks.run on the data channel gets the '
+        'verification run', () async {
       session('s1', 'r1');
       await startDaemon();
-      final answer = automations.runChecks(
-        const ChecksRunMessage(requestId: 7, sessionId: 's1'),
-      );
+      final data = DataService(db)..checksWork = automations;
+      final link = data.open((_) {});
+      final answer = link.handleLater(const ChecksRun('s1'));
       await pump();
       launcher.handles.last.finish(0);
-      final ran = await answer;
-      expect(ran.requestId, 7);
-      expect(ran.outcome, ChecksRunOutcome.ran);
+      final ran = (await answer).value;
+      expect(ran.outcome, SessionChecksOutcome.ran);
       expect(
         VerificationDao(db).getRun(ran.verificationRunId!)!.verdict,
         VerificationVerdict.pass,
       );
 
-      final elsewhere = await automations.runChecks(
-        const ChecksRunMessage(requestId: 8, sessionId: 'nobody'),
+      session('s2', 'r2');
+      final elsewhere = (await link.handleLater(const ChecksRun('s2'))).value;
+      expect(elsewhere.outcome, SessionChecksOutcome.refused);
+      expect(elsewhere.message, contains('the build box'));
+
+      await expectLater(
+        link.handleLater(const ChecksRun('nobody')),
+        throwsA(isA<DataRefused>()),
       );
-      expect(elsewhere.outcome, ChecksRunOutcome.failed);
     });
   });
 }

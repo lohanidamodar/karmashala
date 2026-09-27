@@ -47,7 +47,9 @@ final class AutomationsSnapshot {
         (item as Map).cast<String, Object?>(),
     ];
     return AutomationsSnapshot(
-      automations: objects(json['automations']).map(automationFromJson).toList(),
+      automations: objects(
+        json['automations'],
+      ).map(automationFromJson).toList(),
       runs: objects(json['runs']).map(automationRunFromJson).toList(),
       checks: {
         for (final e in (json['checks'] as Map? ?? const {}).entries)

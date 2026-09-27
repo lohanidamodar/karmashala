@@ -10,6 +10,8 @@ import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
 import '../pty/pty.dart';
+import '../sessions/pane_facts.dart';
+import '../sessions/pane_source.dart';
 
 /// **Every local and WSL terminal, run by the server** (slice 5a). A client
 /// names a profile or an agent launch; the launch is built here, with this
@@ -17,8 +19,10 @@ import '../pty/pty.dart';
 /// server's own registry under the pane's session id
 /// (`terminalSessionId`) — so it keeps running with every client closed,
 /// and any client attaches to it by id. What each screen says about itself
-/// is read off the server's copy of it and told as [TerminalChanged].
-class ServerTerminals implements TerminalWork {
+/// is read off the server's copy of it and told as [TerminalChanged] — and,
+/// as [PaneFacts], read by adoption, attribution and worktree cleanup (slice
+/// 5c: no client reports its panes any more).
+class ServerTerminals implements TerminalWork, PaneSource {
   ServerTerminals({
     required this.registry,
     required List<ExecutionEnvironment> Function() environments,
@@ -56,6 +60,46 @@ class ServerTerminals implements TerminalWork {
   final _renamed = <String, String>{};
   final _dirty = <String>{};
   Timer? _flush;
+
+  /// Where each terminal was started, before its shell says (OSC 7).
+  final _launchDirectory = <String, String>{};
+
+  /// Terminals started to run an agent's session — launched, never adopted.
+  final _agentTerminals = <String>{};
+
+  /// Told whenever a terminal starts, moves (title, folder, a command) or
+  /// ends: the panes' facts are worth reading again.
+  void Function()? onPanesChanged;
+
+  @override
+  List<PaneFacts> get all => [
+    for (final record in _records.values) _factsOf(record),
+  ];
+
+  @override
+  List<String>? tailOf(String paneId, int lines) {
+    for (final record in _records.values) {
+      if (record.paneId != paneId) continue;
+      return registry.find(record.sessionId)?.tailText(lines);
+    }
+    return null;
+  }
+
+  PaneFacts _factsOf(TerminalRecord record) {
+    final session = registry.find(record.sessionId);
+    final facts = session?.facts;
+    final count = facts?.commandCount ?? 0;
+    return PaneFacts(
+      paneId: record.paneId,
+      live: session != null && !session.lifecycle.hasEnded,
+      workingDirectory:
+          facts?.workingDirectory ?? _launchDirectory[record.sessionId],
+      hostsLaunchedSession: _agentTerminals.contains(record.sessionId),
+      lastCommandId: count == 0 ? null : '${record.sessionId}#$count',
+      lastCommandLine: facts?.lastCommand,
+      lastCommandRunning: facts == null || !facts.lastCommandEnded,
+    );
+  }
 
   static DateTime _utcNow() => DateTime.now().toUtc();
 
@@ -169,6 +213,17 @@ class ServerTerminals implements TerminalWork {
       );
     }
     _renamed.remove(sessionId);
+    final directory = agent?.workingDirectory ?? request.workingDirectory;
+    if (directory != null) {
+      _launchDirectory[sessionId] = directory;
+    } else {
+      _launchDirectory.remove(sessionId);
+    }
+    if (agent != null) {
+      _agentTerminals.add(sessionId);
+    } else {
+      _agentTerminals.remove(sessionId);
+    }
     _track(
       session,
       paneId: request.paneId,
@@ -199,7 +254,9 @@ class ServerTerminals implements TerminalWork {
     _records.remove(sessionId);
     _renamed.remove(sessionId);
     _dirty.remove(sessionId);
+    _forgetPane(sessionId);
     _tell([TerminalRemoved(sessionId)]);
+    onPanesChanged?.call();
     return const DataAck();
   }
 
@@ -271,7 +328,13 @@ class ServerTerminals implements TerminalWork {
       }),
     );
     if (tell) _tell([TerminalChanged(record)]);
+    onPanesChanged?.call();
     return record;
+  }
+
+  void _forgetPane(String sessionId) {
+    _launchDirectory.remove(sessionId);
+    _agentTerminals.remove(sessionId);
   }
 
   /// [sessionId]'s record as its screen and a rename now say.
@@ -311,6 +374,7 @@ class ServerTerminals implements TerminalWork {
     }
     _dirty.clear();
     if (changes.isNotEmpty) _tell(changes);
+    onPanesChanged?.call();
   }
 
   /// Drops the records of sessions the registry let go of (its own bound on
@@ -324,6 +388,7 @@ class ServerTerminals implements TerminalWork {
     for (final sessionId in gone) {
       _records.remove(sessionId);
       _renamed.remove(sessionId);
+      _forgetPane(sessionId);
     }
     _tell([for (final sessionId in gone) TerminalRemoved(sessionId)]);
   }

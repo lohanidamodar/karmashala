@@ -1,3 +1,4 @@
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/status_bar_items.dart';
@@ -106,9 +107,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  void queue({bool approval = false}) => container
-      .read(attentionInboxProvider.notifier)
-      .apply(
+  void queue({bool approval = false}) => FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
         InboxUpdate(
           watched: {key},
           waiting: approval

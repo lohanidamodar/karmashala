@@ -2413,6 +2413,190 @@
       }
     },
     {
+      "name": "inbox_list",
+      "description": "Everything waiting on somebody: agents asking for approval, turns that failed, turns that finished unread, and pull requests that went red, were sent back, or are ready to merge. Each item carries the source's own detail, so the prompt a blocked agent is waiting on is here too. This is where an agent orchestrating other agents finds out what to do next. Unseen items only unless includeSeen is set.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "includeSeen": {
+            "type": "boolean",
+            "description": "Include items already looked at. Default false."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "unseen": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "needsApproval",
+                    "failed",
+                    "finished",
+                    "checksFailed",
+                    "changesRequested",
+                    "readyToMerge"
+                  ]
+                },
+                "stillTrue": {
+                  "type": "boolean",
+                  "description": "Whether this describes a condition that holds right now, rather than an event that has already happened."
+                },
+                "label": {
+                  "type": "string"
+                },
+                "sessionId": {
+                  "type": "string"
+                },
+                "imported": {
+                  "type": "boolean"
+                },
+                "agentId": {
+                  "type": "string"
+                },
+                "seen": {
+                  "type": "boolean"
+                },
+                "detail": {
+                  "type": "string",
+                  "description": "The source's own words about this item — the prompt a blocked agent is waiting on. Absent when it quoted none."
+                },
+                "noticedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "label",
+                "sessionId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "unseen",
+          "total",
+          "items"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "inbox_open",
+      "description": "Bring an inbox item's session to the front of Karmashala and mark the item seen. An item for a past event leaves the inbox when you look at it; one for a question that is still open stays, because reading a question does not answer it — the result says which happened. Use this to show a person what you are talking about; to act on the session yourself, use session_transcript and session_answer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Item id, from inbox_list."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "opened": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "seen": {
+            "type": "boolean"
+          },
+          "stillListed": {
+            "type": "boolean",
+            "description": "Whether the item survived being looked at. An event does not; a question you have read but not answered does."
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "stillListed"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "inbox_dismiss",
+      "description": "Take an item off the inbox without opening it. DESTRUCTIVE for an event — a turn that failed, a build that went red — because the thing it recorded has already happened and nothing re-files it. An item for a condition that is still true comes back on the next poll, and the result says which of the two this was.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Item id, from inbox_list."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dismissed": {
+            "type": "boolean"
+          },
+          "mayReturn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "dismissed",
+          "mayReturn"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "browser_connect",
       "description": "Attach to a Chrome/Edge that is already listening on a debugging port — the window the developer is actually looking at, with their session and logins. If nothing is listening, a separate browser is launched on a throwaway profile. Optional: url (where to end up), port (default 9222), targetId (a specific tab from browser_tabs). browser_navigate connects on its own, so this is only needed to attach without navigating.",
       "inputSchema": {
@@ -4277,190 +4461,6 @@
         "openWorldHint": false,
         "movesAttentionHint": true
       }
-    },
-    {
-      "name": "inbox_list",
-      "description": "Everything waiting on somebody: agents asking for approval, turns that failed, turns that finished unread, and pull requests that went red, were sent back, or are ready to merge. Each item carries the source's own detail, so the prompt a blocked agent is waiting on is here too. This is where an agent orchestrating other agents finds out what to do next. Unseen items only unless includeSeen is set.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "includeSeen": {
-            "type": "boolean",
-            "description": "Include items already looked at. Default false."
-          }
-        }
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "unseen": {
-            "type": "number"
-          },
-          "total": {
-            "type": "number"
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "needsApproval",
-                    "failed",
-                    "finished",
-                    "checksFailed",
-                    "changesRequested",
-                    "readyToMerge"
-                  ]
-                },
-                "stillTrue": {
-                  "type": "boolean",
-                  "description": "Whether this describes a condition that holds right now, rather than an event that has already happened."
-                },
-                "label": {
-                  "type": "string"
-                },
-                "sessionId": {
-                  "type": "string"
-                },
-                "imported": {
-                  "type": "boolean"
-                },
-                "agentId": {
-                  "type": "string"
-                },
-                "seen": {
-                  "type": "boolean"
-                },
-                "detail": {
-                  "type": "string",
-                  "description": "The source's own words about this item — the prompt a blocked agent is waiting on. Absent when it quoted none."
-                },
-                "noticedAt": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "id",
-                "kind",
-                "label",
-                "sessionId"
-              ]
-            }
-          }
-        },
-        "required": [
-          "unseen",
-          "total",
-          "items"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
-    },
-    {
-      "name": "inbox_open",
-      "description": "Bring an inbox item's session to the front of Karmashala and mark the item seen. An item for a past event leaves the inbox when you look at it; one for a question that is still open stays, because reading a question does not answer it — the result says which happened. Use this to show a person what you are talking about; to act on the session yourself, use session_transcript and session_answer.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Item id, from inbox_list."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "opened": {
-            "type": "string"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "seen": {
-            "type": "boolean"
-          },
-          "stillListed": {
-            "type": "boolean",
-            "description": "Whether the item survived being looked at. An event does not; a question you have read but not answered does."
-          },
-          "note": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "sessionId",
-          "stillListed"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": true
-      }
-    },
-    {
-      "name": "inbox_dismiss",
-      "description": "Take an item off the inbox without opening it. DESTRUCTIVE for an event — a turn that failed, a build that went red — because the thing it recorded has already happened and nothing re-files it. An item for a condition that is still true comes back on the next poll, and the result says which of the two this was.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Item id, from inbox_list."
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "dismissed": {
-            "type": "boolean"
-          },
-          "mayReturn": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "dismissed",
-          "mayReturn"
-        ]
-      },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "movesAttentionHint": false
-      }
     }
   ],
   "listings": {
@@ -4651,6 +4651,18 @@
     "get_usage": {
       "category": "sessions",
       "summary": "An agent's usage against its limit, where the agent reports one."
+    },
+    "inbox_list": {
+      "category": "records",
+      "summary": "What is waiting on somebody: approvals, failures, unread turns, PRs."
+    },
+    "inbox_open": {
+      "category": "records",
+      "summary": "Bring an inbox item's session to the front and mark the item seen."
+    },
+    "inbox_dismiss": {
+      "category": "records",
+      "summary": "Take an item off the inbox without opening it."
     },
     "browser_connect": {
       "category": "browser",
@@ -4859,18 +4871,6 @@
     "select_checkout": {
       "category": "workspace",
       "summary": "Point the Explorer, diff view and side panel at a checkout."
-    },
-    "inbox_list": {
-      "category": "records",
-      "summary": "What is waiting on somebody: approvals, failures, unread turns, PRs."
-    },
-    "inbox_open": {
-      "category": "records",
-      "summary": "Bring an inbox item's session to the front and mark the item seen."
-    },
-    "inbox_dismiss": {
-      "category": "records",
-      "summary": "Take an item off the inbox without opening it."
     }
   }
 }

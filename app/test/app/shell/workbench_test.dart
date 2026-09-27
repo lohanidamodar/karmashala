@@ -2,15 +2,15 @@ import 'package:karmashala/src/app/shell/shell_shortcuts.dart'
     show shellCommandLabel;
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_agent_reporting/hooks.dart';
-import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala/src/features/notifications/application/agent_status_watcher.dart';
+import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AttentionNews;
+import 'package:karmashala/src/features/notifications/application/attention_presenter.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
@@ -1106,46 +1106,51 @@ void main() {
         openId: 's1',
         imported: false,
       );
-      final tail = container.read(paneTailProvider);
-      var attention = <SessionAttention>[];
       final notified = <PendingNotification>[];
-      final registry = SessionStatusRegistry(
-        statusService: AgentStatusService(
-          registry: AgentRegistry.builtIn,
-          hookReports: AgentHookReports(),
-          clock: FixedClock(testTime),
-        ),
-        agents: AgentRegistry.builtIn,
-        loadSessions: () => const [watched],
-        clock: FixedClock(testTime),
-        readTail: (session) => tail(session.openId),
-      );
-      addTearDown(registry.dispose);
-      final watcher = AgentStatusWatcher(
-        registry: registry,
+      // The toast is this window's to judge; the news is the server's.
+      final presenter = AttentionPresenter(
+        news: container.read(dataClientProvider).attentionChanges,
         readSettings: () => const NotificationSettings(),
         isWindowFocused: () => container.read(windowFocusedProvider),
         visibleSessionIds: () => const {},
-        onAttention: (next) => attention = next,
         onNotify: notified.add,
-        // Wired exactly as `agentStatusWatcherProvider` wires it, so the count
-        // asserted below is the one the status bar and the rail badge read.
-        onInbox: container.read(attentionInboxProvider.notifier).apply,
+      )..start();
+      addTearDown(presenter.dispose);
+
+      // What the server tells once it reads the prompt off the session's
+      // screen (slice 5c): the status, the news, and the inbox.
+      server.attention.statusOf(
+        's1',
+        AgentActivityStatus.awaitingApproval,
+        label: 'Session',
+        agentId: AgentIds.claudeCode,
       );
-      addTearDown(watcher.dispose);
-
-      final terminal = container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(paneId)!
-          .terminal;
-      terminal.write('  esc to interrupt  \r\n');
-      await watcher.poll();
-      expect(watcher.lastStatusOf(watched.key), AgentActivityStatus.working);
-
-      // Cleared first: the tail is the bottom of the screen, and leaving the
-      // working marker up there would be two answers at once.
-      terminal.write('\x1b[2J\x1b[H  Enter to confirm  \r\n');
-      await watcher.poll();
+      server.attention.news(
+        const AttentionNews(
+          session: watched,
+          reason: NotificationReason.needsInput,
+          from: AgentActivityStatus.working,
+          to: AgentActivityStatus.awaitingApproval,
+          source: AgentStatusSource.terminalGrid,
+        ),
+      );
+      server.attention.setInbox(
+        AttentionInbox(
+          items: [
+            InboxItem(
+              session: watched,
+              kind: InboxItemKind.needsApproval,
+              at: testTime,
+            ),
+          ],
+        ),
+        waiting: const [
+          SessionAttention(session: watched, kind: AttentionKind.needsInput),
+        ],
+      );
+      await pump(tester);
+      final attention = container.read(sessionAttentionProvider);
+      final registry = container.read(sessionStatusRegistryProvider);
 
       expect(attention.single.kind, AttentionKind.needsInput);
       expect(attention.single.menuLabel, 'Session — needs approval');

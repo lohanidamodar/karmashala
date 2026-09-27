@@ -3,14 +3,12 @@ part of '../data_change.dart';
 // Paired devices. A device's key, generation and push token are secrets:
 // never in a change (`pairedDeviceToJson`).
 
-DataChange? _pairingsChangeFromJson(
-  String name,
-  Map<String, Object?> json,
-) => switch (name) {
-  'deviceChanged' => DeviceChanged(pairedDeviceFromJson(_row(json))),
-  'deviceRemoved' => DeviceRemoved(json['id']! as String),
-  _ => null,
-};
+DataChange? _pairingsChangeFromJson(String name, Map<String, Object?> json) =>
+    switch (name) {
+      'deviceChanged' => DeviceChanged(pairedDeviceFromJson(_row(json))),
+      'deviceRemoved' => DeviceRemoved(json['id']! as String),
+      _ => null,
+    };
 
 /// A change to the paired devices.
 sealed class PairingsChange extends DataChange {

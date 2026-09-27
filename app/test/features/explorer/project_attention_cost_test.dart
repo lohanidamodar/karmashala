@@ -1,5 +1,5 @@
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
@@ -79,9 +79,7 @@ void main() {
           openId: 's0',
           imported: false,
         );
-        container
-            .read(attentionInboxProvider.notifier)
-            .apply(
+        FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
               InboxUpdate(
                 watched: {watched.key},
                 waiting: [

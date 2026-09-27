@@ -1,9 +1,9 @@
+import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
@@ -298,9 +298,7 @@ void main() {
       session(id: 's1', title: 'Ship the parser', status: SessionStatus.idle),
     );
     await pump(tester);
-    container
-        .read(attentionInboxProvider.notifier)
-        .apply(
+    FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
           InboxUpdate(
             news: [
               (

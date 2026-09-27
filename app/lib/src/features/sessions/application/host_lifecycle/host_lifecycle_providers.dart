@@ -11,18 +11,13 @@ import 'package:karmashala_terminal_runtime/instances.dart'
 import 'package:riverpod/riverpod.dart';
 
 import '../../../agents/application/agent_hook_intake.dart';
-import '../../../automations/application/host_automations.dart';
-import '../../../cli_detection/application/cli_detection_providers.dart'
-    show paneFactsReporterProvider;
 import '../../../agents/application/agent_hook_sweep.dart';
-import '../../../environments/application/environment_providers.dart';
-import '../../../workspaces/data/workspace_data.dart';
 import '../../../mcp/mcp_tool_dispatcher.dart';
 import '../../../remote/application/host_companion_providers.dart';
 import '../../../terminal/application/local_host_providers.dart';
 import '../../../terminal/application/local_host_startup.dart';
 import '../../../terminal/application/terminal_sessions_controller.dart';
-import '../session_liveness_reconciler.dart' show panesThatStartedRunning;
+import '../session_launch_refusal.dart' show panesThatStartedRunning;
 import '../session_decision_providers.dart';
 import '../session_providers.dart';
 import 'host_agent_statuses.dart';
@@ -36,22 +31,6 @@ import 'local_host_lifecycle_source.dart';
 final hostLifecycleSourceProvider = Provider<HostLifecycleSource?>((ref) {
   final access = ref.watch(localHostSessionAccessProvider);
   return access == null ? null : LocalHostLifecycleSource(access.socketPath);
-});
-
-/// Whether a row runs on this machine, under this machine's host: its
-/// checkout from the workspace copy, the environment's kind from the
-/// environments table (read here until environments move, slice 1d).
-final sessionRunsOnThisMachineProvider = Provider<bool Function(Session)>((
-  ref,
-) {
-  final workspace = ref.watch(workspaceDataProvider);
-  final environments = ref.watch(environmentsDataProvider);
-  return (session) => runsOnThisMachine(
-    session,
-    environmentOfRepository: (id) =>
-        workspace.repository(id)?.path.environmentId,
-    kindOf: (id) => environments.getById(id)?.kind,
-  );
 });
 
 /// The subscriber to this machine's host, or null without a source. **Watched
@@ -106,10 +85,6 @@ hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
     mcpTools: ref.read(mcpToolDispatcherProvider),
     // The host serves the phone companion; this app answers what only it can.
     companion: ref.read(hostCompanionLinkProvider),
-    // The host runs automations; this app answers what only it can.
-    automations: ref.read(hostAutomationsLinkProvider),
-    // The server adopts and attributes; this app reports its panes.
-    panes: ref.read(paneFactsReporterProvider),
   );
   // A pane starting on the host may have just started the host itself: the
   // launch's start failed, or the host went away since.

@@ -4,7 +4,6 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -453,87 +452,34 @@ void main() {
     );
   });
 
-  group('with the app back', () {
-    test('the app hanging up mid-call does not take the host down', () async {
-      final client = await dial(phone);
-      // A request makes the phone live, so the app's arrival re-sweeps it.
-      await client.listSessions();
-
-      final app = await AppLink.connect(host.socketPath, asApp: true);
-      final sweep = await app.nextCall(CompanionMethod.listSessions.wire);
-      expect(sweep.method, CompanionMethod.listSessions.wire);
-      // Gone without answering, as an app that quits mid-sweep is.
-      await app.close();
-
-      final sessions = await client.listSessions();
-      expect(
-        sessions.map((s) => s.sessionId),
-        contains(seededSessionId),
-        reason: 'the host is still here, answering from the store',
-      );
-      expect(host.output, isNot(contains('Unhandled exception')));
-    });
-
+  group('with a desktop attached (slice 5c: nothing is forwarded)', () {
     test(
-      'what the host cannot answer is the app\'s, news from it included',
+      'a desktop coming and going changes nothing a phone is told',
       () async {
-        final app = await AppLink.connect(host.socketPath, asApp: true);
-        addTearDown(app.close);
-        // The app's own view, whenever the host re-sweeps phones.
-        app
-          ..answerAlways(CompanionMethod.listSessions.wire, {'sessions': []})
-          ..answerAlways(CompanionMethod.sessionById.wire, {'session': null})
-          ..answerAlways(CompanionMethod.deliveryStage.wire, {'stage': null});
         final client = await dial(phone);
+        final before = (await client.listSessions())
+            .map((s) => s.sessionId)
+            .toSet();
+        expect(before, contains(seededSessionId));
 
-        // The attach frame and the phone's call travel on two sockets; until
-        // the attach lands the host answers "not running", so ask again until
-        // a call is held open for the app instead.
-        late Future<List<RemoteWorkspaceProject>> listing;
-        for (var attempt = 0; ; attempt++) {
-          listing = client.listWorkspace();
-          final refused = await listing
-              .then<bool>(
-                (_) => false,
-                onError: (Object e) =>
-                    e is RemoteApiException &&
-                        e.message == kCompanionAppNotRunning &&
-                        attempt < 20
-                    ? true
-                    : throw e,
-              )
-              .timeout(const Duration(seconds: 1), onTimeout: () => false);
-          if (!refused) break;
-          await Future<void>.delayed(const Duration(milliseconds: 200));
-        }
-        Future<void> answerWorkspace(String name) async {
-          final call = await app.nextCall(CompanionMethod.listWorkspace.wire);
-          app.answer(call.callId, {
-            'projects': [
-              RemoteWorkspaceProject(
-                projectId: 'app-$name',
-                name: name,
-              ).toJson(),
-            ],
-          });
-        }
-
-        await answerWorkspace('From the app');
-        final projects = await listing;
-        expect(projects.single.projectId, 'app-From the app');
-        expect(projects.single.name, 'From the app');
-
-        // A phone that has listed sessions is swept for new ones. Sessions
-        // then move on the desktop, as it says on every change: the host
-        // re-sweeps by asking this same link for its list, and must go on
-        // reading this link's frames while it waits for that answer.
-        expect(await client.listSessions(), isEmpty, reason: 'the app\'s view');
-        app.notice(
-          const CompanionNoticeMessage(CompanionNoticeKind.sessionsMoved),
+        final desktop = await AppLink.connect(host.socketPath, asApp: true);
+        final withDesktop = (await client.listSessions())
+            .map((s) => s.sessionId)
+            .toSet();
+        expect(
+          withDesktop,
+          before,
+          reason: 'the server answers, not a desktop',
         );
-        final again = client.listWorkspace();
-        await answerWorkspace('Still the app');
-        expect((await again).single.name, 'Still the app');
+        final workspace = await client.listWorkspace();
+        expect(workspace, isA<List<RemoteWorkspaceProject>>());
+
+        await desktop.close();
+        final after = (await client.listSessions())
+            .map((s) => s.sessionId)
+            .toSet();
+        expect(after, before);
+        expect(host.output, isNot(contains('Unhandled exception')));
       },
     );
   });

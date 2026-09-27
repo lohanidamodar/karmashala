@@ -1,5 +1,5 @@
-/// The notification settings at rest, in the store's own metadata row. It
-/// takes an `AppDatabase`; its provider stays in the app.
+/// The notification settings at rest, a client preference the server keeps.
+/// It takes the preference's read and write; its provider stays in the app.
 library;
 
 export 'src/notification_settings_repository.dart';

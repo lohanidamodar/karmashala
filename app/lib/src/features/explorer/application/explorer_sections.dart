@@ -8,7 +8,7 @@ import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/github.dart';
-import '../../notifications/application/delivery_attention.dart';
+import '../../sessions/application/observed_deliveries.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
 import '../../sessions/application/delivery_providers.dart';
@@ -272,11 +272,16 @@ final visibleSectionCandidatesProvider =
 final explorerSectionFactsProvider = Provider.autoDispose<List<SectionFacts>>((
   ref,
 ) {
-  if (ref.watch(anySectionExpandedProvider)) ref.watch(deliveryPollProvider);
+  // A reading some card paid for becoming warm is what an open section waits
+  // for (there is no delivery heartbeat any more: the server polls the forge
+  // and a new reading arrives by itself).
+  if (ref.watch(anySectionExpandedProvider)) {
+    ref.watch(checkoutReadingsProvider);
+  }
   final candidates = ref.watch(visibleSectionCandidatesProvider);
   // One read of each ambient map, outside the loop: reading whole-app state
   // per candidate would turn a fold into a quadratic one.
-  final observed = ref.watch(deliveryAttentionProvider);
+  final observed = ref.watch(observedDeliveriesProvider);
   final waiting = <String>{
     for (final attention in ref.watch(sessionAttentionProvider))
       if (attention.kind == AttentionKind.needsInput) attention.session.openId,

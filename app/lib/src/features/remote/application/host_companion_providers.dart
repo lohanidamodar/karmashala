@@ -7,7 +7,6 @@ import 'package:riverpod/riverpod.dart';
 import '../../terminal/application/local_host_providers.dart';
 import 'host_companion_link.dart';
 import 'remote_access_controller.dart';
-import 'remote_bindings.dart';
 import 'remote_providers.dart';
 
 /// Whether this app has a link to this machine's server's companion: whenever
@@ -17,12 +16,11 @@ final companionAtHostProvider = Provider<bool>(
   (ref) => ref.watch(localHostSessionAccessProvider) != null,
 );
 
-/// This app's half of the companion the host serves: it answers the calls the
-/// host forwards with the same bindings this app's own server would use.
+/// This app's half of the companion the server serves: its embedded relay,
+/// pairing and the server's config. Every phone call is the server's.
 final hostCompanionLinkProvider = Provider<HostCompanionLink>((ref) {
   late final HostCompanionLink link;
   link = HostCompanionLink(
-    bindings: () => ref.read(remoteHostBindingsProvider),
     deviceById: (deviceId) =>
         ref.read(pairedDevicesDataProvider).fresh(deviceId),
     // Maybe a new host: what it serves by is read again, and the agent CLIs

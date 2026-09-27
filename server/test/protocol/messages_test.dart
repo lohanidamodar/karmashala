@@ -17,7 +17,36 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 8, 14, 0, 30);
 
   test('the protocol version is pinned; changing it is a deliberate act', () {
-    expect(kProtocolVersion, 25);
+    expect(kProtocolVersion, 27);
+  });
+
+  test('protocol 27 retired the forwarded companion calls, the automations '
+      'frames and the pane facts: their codes are no frame any more', () {
+    // 0x21–0x22 companion call/result; 0x25, 0x27–0x2a automations and
+    // checks; 0x36–0x37 pane facts (slice 5c).
+    for (final code in [0x21, 0x22, 0x25, 0x27, 0x28, 0x29, 0x2a, 0x36, 0x37]) {
+      expect(
+        MessageType.fromCode(code),
+        isNull,
+        reason: '0x${code.toRadixString(16)}',
+      );
+      expect(
+        () =>
+            FrameParser().add(Uint8List.fromList([code, 0, 0, 0, 0, 0, 0, 0])),
+        throwsA(isA<FrameFormatException>()),
+      );
+    }
+    // What stays: where a desktop's embedded relay listens, the pairing
+    // dialog closing, a pairing window ending — and the frozen stop frames.
+    expect(MessageType.companionAttach.code, 0x20);
+    expect(MessageType.companionNotice.code, 0x23);
+    expect(MessageType.companionEvent.code, 0x24);
+    expect(MessageType.stopCheck.code, 0xf0);
+    expect(MessageType.stopCheckAnswer.code, 0xf1);
+    final notice = roundTrip(
+      const CompanionNoticeMessage(CompanionNoticeKind.pairingCancelled),
+    );
+    expect(notice.kind, CompanionNoticeKind.pairingCancelled);
   });
 
   group('client to host', () {

@@ -3,19 +3,17 @@ part of '../data_request.dart';
 // Paired devices (phones and other clients). Every device travels without
 // its key, generation or push token (`pairedDeviceToJson`).
 
-DataRequest<Object?>? _pairingsRequestFromJson(
-  String kind,
-  _Arguments args,
-) => switch (kind) {
-  DevicesList.name => const DevicesList(),
-  DeviceRename.name => DeviceRename(args.string('id'), args.string('name')),
-  DeviceGrant.name => DeviceGrant(
-    args.string('id'),
-    CapabilitySet(args.integer('capabilities')),
-  ),
-  DeviceRevoke.name => DeviceRevoke(args.string('id')),
-  _ => null,
-};
+DataRequest<Object?>? _pairingsRequestFromJson(String kind, _Arguments args) =>
+    switch (kind) {
+      DevicesList.name => const DevicesList(),
+      DeviceRename.name => DeviceRename(args.string('id'), args.string('name')),
+      DeviceGrant.name => DeviceGrant(
+        args.string('id'),
+        CapabilitySet(args.integer('capabilities')),
+      ),
+      DeviceRevoke.name => DeviceRevoke(args.string('id')),
+      _ => null,
+    };
 
 /// A paired-devices request: the list, or a change a person makes to one.
 sealed class PairingsRequest<R> extends DataRequest<R> {

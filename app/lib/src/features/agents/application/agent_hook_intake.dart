@@ -2,7 +2,6 @@ import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_outcome_writer.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'agent_status_providers.dart';
@@ -60,8 +59,8 @@ AgentStatusReport applyAgentHookCallback(
         observedAt: observedAt,
       );
   // A session the user started by hand in one of our own panes is the
-  // server's to adopt: it receives every hook, and this app reports its panes
-  // (`PaneFactsReporter`).
+  // server's to adopt: it receives every hook and reads its own terminals'
+  // screens (slice 5c). The session's status is the server's too.
   // A launched pane whose CLI has moved to a conversation we never named — a
   // `/clear`, a fork, a resume that minted a fresh id. Left alone, the row goes
   // on reading a transcript that stopped and the session looks finished.
@@ -96,17 +95,6 @@ AgentStatusReport applyAgentHookCallback(
     );
   } on Object catch (error) {
     logger?.warning('Recording an agent working directory failed: $error');
-  }
-  // The status pipeline's *primary* input: a hook is authoritative and already
-  // in memory, so folding it in here beats a poll five seconds later.
-  try {
-    reportAgentHook(
-      container,
-      agentId: report.agentId,
-      sessionId: report.sessionId,
-    );
-  } on Object catch (error) {
-    logger?.warning('Applying a hook report to the registry failed: $error');
   }
   // The durable half, and the only thing that writes an *ending* onto a session
   // row. Almost every callback carries none, so this is usually a null check.

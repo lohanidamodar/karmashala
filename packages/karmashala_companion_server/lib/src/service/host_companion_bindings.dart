@@ -3,41 +3,39 @@ import 'dart:async';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 
-import '../protocol/forwarded_bindings.dart';
 import '../store/companion_attachment_store.dart';
-import 'companion_app_link.dart';
 import 'companion_prompts.dart';
 import 'hosted_session_control.dart';
 import 'hosted_workspace.dart';
 import 'sessions_at_rest.dart';
 
-/// The companion bindings the session host serves a phone with — one binding
-/// per row of the table in docs/daemon-architecture.md, Phase 4:
+/// What a phone is told when the server was composed without the part a call
+/// needs — a server with no store, or one still starting. Never "open the
+/// app": since slice 5c no call depends on a desktop being open.
+const String kCompanionNotServedHere =
+    'this Karmashala server cannot do that right now; try again in a moment';
+
+/// The refusal for [kCompanionNotServedHere]. `badRequest`, because nothing
+/// was withheld from this phone.
+const RemoteApiRefusal companionNotServedHere = RemoteApiRefusal(
+  ErrorCode.badRequest,
+  kCompanionNotServedHere,
+);
+
+/// The companion bindings the server serves a phone with (slice 5c: **always
+/// the server's**, whether or not a desktop is open — nothing is forwarded):
 ///
-/// - **Always the host's**: `notes.get` and push registration, which are the
-///   store and nothing else.
-/// - **The app's while it is connected, the host's while it is not**: the
-///   session list, a session's transcript and typing into it. The app's view
-///   is richer — attention, titles it tracks, imported history, the agent's own
-///   record — so it answers when it can; closed, the host answers from its rows
-///   and its screens rather than refusing.
-/// - **The host's for a session it holds, else the app's**: approvals,
-///   questions, menus and the evidence for them — read off the host's own
-///   screen by the agent's own rules and typed into the PTY it holds
-///   ([hosted], for the sessions [holds] names), whether or not the app is
-///   open. A session the host does not hold is the app's, or refused.
-/// - **The app's while it is connected, the host's while it is not** — for a
-///   phone driving a machine with no desktop: the workspace and adding a
-///   project ([workspace]), starting and resuming sessions and a session's
-///   model or mode ([control]) and attachments ([attachments]). The app's answers are the launcher's, its composer's and
-///   its Settings', so it keeps them while it is there. A host composed
-///   without one of these refuses it with no app: "the Karmashala app is not
-///   running".
-/// - **The server's alone**: usage ([usage]), read by the server on its own
-///   schedule from the credentials on its machine (slice 2a).
+/// - Sessions, their attention and what their agents are doing
+///   ([atRest]): the store's rows, the imported history, the server's own
+///   status and inbox, and the screens of the sessions it runs.
+/// - Prompts ([hosted], for the sessions [holds] names): approvals,
+///   questions and menus read off the server's own screen and typed into the
+///   PTY it holds. A session it does not run is refused in words.
+/// - The workspace and adding a project ([workspace]), starting and resuming
+///   sessions and a session's model or mode ([control]), attachments
+///   ([attachments]), usage ([usage]), notes and push registration.
 RemoteHostBindings hostCompanionBindings({
   required String hostName,
-  required CompanionAppLink app,
   required SessionsAtRest atRest,
   CompanionPrompts? hosted,
   bool Function(String sessionId)? holds,
@@ -45,6 +43,7 @@ RemoteHostBindings hostCompanionBindings({
   HostedSessionControl? control,
   Future<RemoteUsageSnapshot> Function()? usage,
   CompanionAttachmentStore? attachments,
+  String? Function(String sessionId)? deliveryStageOf,
   required Future<RemoteNotesSnapshot> Function() notes,
   required Future<void> Function(
     String deviceId,
@@ -54,25 +53,14 @@ RemoteHostBindings hostCompanionBindings({
   )
   registerPush,
 }) {
-  final forwarded = ForwardedBindings(app);
-
-  /// Forwarded, or [companionAppNotRunning] when there is nobody to forward to.
-  Future<T> appOnly<T>(Future<T> Function() call) {
-    if (!app.connected) return Future.error(companionAppNotRunning);
-    return call();
-  }
-
-  /// Forwarded while the app is connected, else the host's own answer from
-  /// [here] — or [companionAppNotRunning] when the host was composed without
-  /// one ([here] is null).
-  Future<T> appOrHost<T, S extends Object>(
+  /// [here]'s answer, or [companionNotServedHere] when the server was composed
+  /// without it.
+  Future<T> served<T, S extends Object>(
     S? here,
-    Future<T> Function(S here) host,
-    Future<T> Function() forward,
+    FutureOr<T> Function(S here) answer,
   ) {
-    if (app.connected) return forward();
-    if (here == null) return Future.error(companionAppNotRunning);
-    return Future.sync(() => host(here));
+    if (here == null) return Future.error(companionNotServedHere);
+    return Future.sync(() => answer(here));
   }
 
   /// A store refusal, in words the wire can carry.
@@ -84,123 +72,67 @@ RemoteHostBindings hostCompanionBindings({
     }
   }
 
-  /// The host's own answer for a session it holds, else the app's.
-  Future<T> hostedOr<T>(
+  /// The server's answer for a session it runs; anything else is refused in
+  /// words — imported history, or a session no server here runs.
+  Future<T> prompted<T>(
     String sessionId,
     Future<T> Function(CompanionPrompts prompts) here,
-    Future<T> Function() forward,
   ) {
     final prompts = hosted;
     if (prompts != null && (holds?.call(sessionId) ?? false)) {
       return here(prompts);
     }
-    return appOnly(forward);
+    return Future.error(atRest.notAnswerableHere(sessionId));
   }
 
   return RemoteHostBindings(
     hostName: hostName,
-    listSessions: () =>
-        app.connected ? forwarded.listSessions() : atRest.list(),
-    sessionById: (sessionId) => app.connected
-        ? forwarded.sessionById(sessionId)
-        : atRest.byId(sessionId),
-    // "Could not tell" is a first-class answer, and the host cannot.
-    deliveryStageFor: (sessionId) async =>
-        app.connected ? forwarded.deliveryStage(sessionId) : null,
-    transcriptFor: (sessionId) async => app.connected
-        ? forwarded.transcript(sessionId)
-        : atRest.transcript(sessionId),
-    readRecordState: (sessionId) async => app.connected
-        ? forwarded.recordState(sessionId)
-        : atRest.recordState(sessionId),
-    sendPrompt: (sessionId, text, {attachment}) => app.connected
-        ? forwarded.sendPrompt(sessionId, text, attachment: attachment)
-        : atRest.sendPrompt(sessionId, text, attachment: attachment),
-    answerApproval: (sessionId, decision) => hostedOr(
+    listSessions: atRest.list,
+    sessionById: atRest.byId,
+    // The server's own delivery reading, as its poll last took it; "could
+    // not tell" (null) for a session it has not read — a phone is never made
+    // to wait on git or the forge.
+    deliveryStageFor: (sessionId) async => deliveryStageOf?.call(sessionId),
+    transcriptFor: atRest.transcript,
+    readRecordState: atRest.recordState,
+    sendPrompt: atRest.sendPrompt,
+    answerApproval: (sessionId, decision) => prompted(
       sessionId,
       (prompts) => prompts.answerApproval(sessionId, decision),
-      () => forwarded.answerApproval(sessionId, decision),
     ),
-    approvalEvidenceFor: (sessionId) => hostedOr(
-      sessionId,
-      (prompts) => prompts.approvalEvidence(sessionId),
-      () => forwarded.approvalEvidence(sessionId),
-    ),
-    answerQuestion: (request) => hostedOr(
+    approvalEvidenceFor: (sessionId) =>
+        prompted(sessionId, (prompts) => prompts.approvalEvidence(sessionId)),
+    answerQuestion: (request) => prompted(
       request.sessionId,
       (prompts) => prompts.answerQuestion(request),
-      () => forwarded.answerQuestion(request),
     ),
-    answerMenu: (request) => hostedOr(
-      request.sessionId,
-      (prompts) => prompts.answerMenu(request),
-      () => forwarded.answerMenu(request),
-    ),
-    // The server reads usage itself (slice 2a), the app open or not.
-    usage: () => usage == null ? Future.error(companionAppNotRunning) : usage(),
+    answerMenu: (request) =>
+        prompted(request.sessionId, (prompts) => prompts.answerMenu(request)),
+    usage: () => usage == null ? Future.error(companionNotServedHere) : usage(),
     notes: notes,
     registerPush: registerPush,
-    listWorkspace: () => appOrHost(
-      workspace,
-      (here) async => here.listWorkspace(),
-      forwarded.listWorkspace,
-    ),
-    listProjects: () => appOrHost(
-      workspace,
-      (here) async => here.listProjects(),
-      forwarded.listProjects,
-    ),
-    addProject: (name, path) => appOrHost(
-      workspace,
-      (here) => here.addProject(name, path),
-      () => forwarded.addProject(name, path),
-    ),
-    startSession: (request) => appOrHost(
-      control,
-      (here) => here.start(request),
-      () => forwarded.startSession(request),
-    ),
-    resumeSession: (sessionId) => appOrHost(
-      control,
-      (here) => here.resume(sessionId),
-      () => forwarded.resumeSession(sessionId),
-    ),
-    sessionOptions: (sessionId) => appOrHost(
-      control,
-      (here) => here.options(sessionId),
-      () => forwarded.sessionOptions(sessionId),
-    ),
-    configureSession: (sessionId, {model, permission}) => appOrHost(
+    listWorkspace: () => served(workspace, (here) => here.listWorkspace()),
+    listProjects: () => served(workspace, (here) => here.listProjects()),
+    addProject: (name, path) =>
+        served(workspace, (here) => here.addProject(name, path)),
+    startSession: (request) => served(control, (here) => here.start(request)),
+    resumeSession: (sessionId) =>
+        served(control, (here) => here.resume(sessionId)),
+    sessionOptions: (sessionId) =>
+        served(control, (here) => here.options(sessionId)),
+    configureSession: (sessionId, {model, permission}) => served(
       control,
       (here) => here.configure(sessionId, model: model, permission: permission),
-      () => forwarded.configureSession(
-        sessionId,
-        model: model,
-        permission: permission,
-      ),
     ),
-    // An upload is staged by whoever will commit it: the app's composer while
-    // it is connected, the host's own store while it is not. A prompt that
-    // names it goes the same way ([sendPrompt] above).
-    beginAttachment: (deviceId, request) => appOrHost(
+    beginAttachment: (deviceId, request) => served(
       attachments,
       (store) => staged(() => store.begin(deviceId, request)),
-      () => forwarded.beginAttachment(deviceId, request),
     ),
-    writeAttachmentChunk: (deviceId, uploadId, seq, data) => appOrHost(
+    writeAttachmentChunk: (deviceId, uploadId, seq, data) => served(
       attachments,
       (store) => staged(() => store.write(deviceId, uploadId, seq, data)),
-      () => forwarded.writeAttachmentChunk(deviceId, uploadId, seq, data),
     ),
-    // Told, not awaited: it runs as a phone's link is torn down, which must not
-    // wait on the app. Both stores are asked: the bytes are in whichever was
-    // serving when they were sent, and dropping nothing is harmless.
-    discardAttachment: (deviceId) async {
-      await attachments?.discard(deviceId);
-      if (!app.connected) return;
-      unawaited(
-        forwarded.discardAttachment(deviceId).then((_) {}, onError: (_) {}),
-      );
-    },
+    // Told, not awaited: it runs as a phone's link is torn down.
+    discardAttachment: (deviceId) async => attachments?.discard(deviceId),
   );
 }

@@ -16,8 +16,8 @@ import '../data/data_service.dart';
 import '../domain/host_session.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
-import '../protocol/messages.dart';
-import 'client_panes.dart';
+import '../protocol/messages.dart' show AgentHookEvent;
+import 'pane_source.dart';
 import 'directory_attribution.dart';
 import 'launched_attribution.dart';
 import 'session_adoption.dart';
@@ -38,13 +38,14 @@ const Duration kSessionSyncInterval = Duration(seconds: 10);
 ///
 /// Runs on its own timer: cheap `wantsStoreSweep` checks first, then at most
 /// one store scan per pass, on a worker isolate. Takes every agent hook the
-/// server receives ([hook]) and every client's terminal panes as facts
-/// ([report]/[detach] — the host server's [PaneFactsReceiver]).
-class DaemonSessionSync implements PaneFactsReceiver {
+/// server receives ([hook]) and reads the server's own terminal panes as
+/// facts ([panes], told of a change through [panesChanged]).
+class DaemonSessionSync {
   DaemonSessionSync({
     required AppDatabase database,
     required DataService data,
     required this.registry,
+    this.panes = const NoPanes(),
     Future<List<CliStore>> Function()? locateStores,
     StoreScan? scan,
     this.agents = AgentRegistry.builtIn,
@@ -73,14 +74,16 @@ class DaemonSessionSync implements PaneFactsReceiver {
       locateStores: locate,
       readTail: _tailOf,
     );
-    panes.onChanged = adoption.observePanes;
+    adoption.observePanes(panes.all);
   }
 
   final SessionRegistry registry;
   final AgentRegistry agents;
   final Duration interval;
   final SessionSyncRows rows;
-  final ClientPanes panes = ClientPanes();
+
+  /// The server's terminal panes, as facts.
+  final PaneSource panes;
   late final SessionAdoption adoption;
   late final TitleSync titles;
   late final LaunchedAttribution launched;
@@ -133,18 +136,13 @@ class DaemonSessionSync implements PaneFactsReceiver {
     rows.close();
   }
 
-  @override
-  void report(
-    Object client,
-    List<PaneFacts> panes,
-    void Function(HostMessage message) send,
-  ) {
+  /// The server's panes moved (a terminal started, ran a command, moved
+  /// folder or ended): what each pane's shell ran is noticed now. All in
+  /// memory.
+  void panesChanged() {
     if (_closed) return;
-    this.panes.report(client, panes, send);
+    adoption.observePanes(panes.all);
   }
-
-  @override
-  void detach(Object client) => panes.detach(client);
 
   /// One hook the server received: a conversation of an agent in a pane it
   /// may not know about — a session a person started by hand. Synchronous
@@ -182,7 +180,8 @@ class DaemonSessionSync implements PaneFactsReceiver {
     passes++;
     var wrote = 0;
     try {
-      _tails = panes.takeTails();
+      adoption.observePanes(panes.all);
+      _tails = _readTails();
       adoption.armFromScreens(_tails);
       if (directories.wantsStoreSweep) wrote += await directories.attribute();
       if (_closed) return wrote;
@@ -209,28 +208,31 @@ class DaemonSessionSync implements PaneFactsReceiver {
       _log?.call('session sync: a pass failed ($error)');
     } finally {
       _tails = const {};
-      if (!_closed) _askForTails();
     }
     return wrote;
   }
 
-  /// The panes whose bottom rows the next pass reads: those a screen could
-  /// arm, and those of rows waiting for directory attribution that this
-  /// server does not hold the screen of.
-  void _askForTails() {
-    final ids = <String>{...adoption.screenCandidates};
-    var lines = ids.isEmpty ? 0 : adoption.screenLines;
+  /// The bottom rows this pass reads, read off the server's own screens:
+  /// those of panes a screen could arm, and those of rows waiting for
+  /// directory attribution that no session of their own holds.
+  Map<String, List<String>> _readTails() {
+    final wanted = <String, int>{
+      for (final paneId in adoption.screenCandidates)
+        paneId: adoption.screenLines,
+    };
     for (final row in directories.waitingRows()) {
       final paneId = row.paneId;
       if (paneId == null || _hosted(row) != null) continue;
-      ids.add(paneId);
-      lines = math.max(lines, directories.tailLines);
+      wanted[paneId] = math.max(wanted[paneId] ?? 0, directories.tailLines);
     }
-    panes.want(ids, lines);
+    return {
+      for (final MapEntry(key: paneId, value: lines) in wanted.entries)
+        if (lines > 0) paneId: ?panes.tailOf(paneId, lines),
+    };
   }
 
-  /// The screen [row] runs on: the server's own for a row it hosts, else the
-  /// tail a client sent for the row's pane this pass.
+  /// The screen [row] runs on: its own session's for a row the server hosts,
+  /// else the pane's it runs in, read this pass.
   List<String> _tailOf(Session row, int lines) {
     final hosted = _hosted(row);
     if (hosted != null) return hosted.tailText(lines);
@@ -242,8 +244,8 @@ class DaemonSessionSync implements PaneFactsReceiver {
 
   HostSession? _hosted(Session row) => registry.find(hostSessionIdOf(row.id));
 
-  /// Whether [row]'s agent runs now: a host session of it runs here, or a
-  /// client reports its pane live and running what it launched.
+  /// Whether [row]'s agent runs now: a host session of it runs here, or its
+  /// pane is live and running what it launched.
   bool _runsNow(Session row) {
     final hosted = _hosted(row);
     if (hosted != null && !hosted.lifecycle.hasEnded) return true;

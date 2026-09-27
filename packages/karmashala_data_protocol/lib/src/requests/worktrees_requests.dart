@@ -2,43 +2,43 @@ part of '../data_request.dart';
 
 // The git side tables: worktree setup and its runs, review threads.
 
-DataRequest<Object?>? _worktreesRequestFromJson(
-  String kind,
-  _Arguments args,
-) => switch (kind) {
-  WorktreesList.name => const WorktreesList(),
-  WorktreeSetupSave.name => WorktreeSetupSave(
-    args.string('repositoryId'),
-    args.value('setup', worktreeSetupFromJson),
-  ),
-  WorktreeSetupClear.name => WorktreeSetupClear(args.string('repositoryId')),
-  WorktreeSetupRecord.name => WorktreeSetupRecord(
-    args.value('report', setupReportFromJson),
-  ),
-  ReviewThreadOpen.name => ReviewThreadOpen(
-    id: args.string('id'),
-    repositoryId: args.string('repositoryId'),
-    anchor: args.value('anchor', reviewAnchorFromJson),
-    author: args.string('author'),
-    authorKind: ReviewAuthorKind.fromName(args.string('authorKind')),
-    body: args.string('body'),
-    status: args.optionalString('status') == null
-        ? null
-        : ReviewThreadStatus.fromName(args.optionalString('status')),
-    sessionId: args.optionalString('sessionId'),
-  ),
-  ReviewThreadReply.name => ReviewThreadReply(
-    threadId: args.string('threadId'),
-    author: args.string('author'),
-    authorKind: ReviewAuthorKind.fromName(args.string('authorKind')),
-    body: args.string('body'),
-  ),
-  ReviewThreadSetStatus.name => ReviewThreadSetStatus(
-    args.string('threadId'),
-    ReviewThreadStatus.fromName(args.string('status')),
-  ),
-  _ => null,
-};
+DataRequest<Object?>? _worktreesRequestFromJson(String kind, _Arguments args) =>
+    switch (kind) {
+      WorktreesList.name => const WorktreesList(),
+      WorktreeSetupSave.name => WorktreeSetupSave(
+        args.string('repositoryId'),
+        args.value('setup', worktreeSetupFromJson),
+      ),
+      WorktreeSetupClear.name => WorktreeSetupClear(
+        args.string('repositoryId'),
+      ),
+      WorktreeSetupRecord.name => WorktreeSetupRecord(
+        args.value('report', setupReportFromJson),
+      ),
+      ReviewThreadOpen.name => ReviewThreadOpen(
+        id: args.string('id'),
+        repositoryId: args.string('repositoryId'),
+        anchor: args.value('anchor', reviewAnchorFromJson),
+        author: args.string('author'),
+        authorKind: ReviewAuthorKind.fromName(args.string('authorKind')),
+        body: args.string('body'),
+        status: args.optionalString('status') == null
+            ? null
+            : ReviewThreadStatus.fromName(args.optionalString('status')),
+        sessionId: args.optionalString('sessionId'),
+      ),
+      ReviewThreadReply.name => ReviewThreadReply(
+        threadId: args.string('threadId'),
+        author: args.string('author'),
+        authorKind: ReviewAuthorKind.fromName(args.string('authorKind')),
+        body: args.string('body'),
+      ),
+      ReviewThreadSetStatus.name => ReviewThreadSetStatus(
+        args.string('threadId'),
+        ReviewThreadStatus.fromName(args.string('status')),
+      ),
+      _ => null,
+    };
 
 /// A request of the git side tables.
 sealed class WorktreesRequest<R> extends DataRequest<R> {

@@ -19,7 +19,7 @@ import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
-import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/notifications/application/session_statuses.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/watch_set_section.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
@@ -429,7 +429,7 @@ void main() {
     /// which no cycle has produced in a widget test.
     ProviderContainer prepared(
       Override data, {
-      SessionStatusCoverage? coverage,
+      WatchCoverage? coverage,
     }) {
       final container = ProviderContainer(
         overrides: [
@@ -532,7 +532,7 @@ void main() {
         build: () => app(
           prepared(
             data,
-            coverage: const SessionStatusCoverage(
+            coverage: const WatchCoverage(
               tracked: 900,
               hookAnswered: 10,
               probeCandidates: 890,

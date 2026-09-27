@@ -1,14 +1,5 @@
 import 'package:karmashala_host/lifecycle_client.dart'
-    show
-        AutomationCallMessage,
-        AutomationNoticeKind,
-        ChecksRanMessage,
-        CompanionCallMessage,
-        CompanionEventMessage,
-        CompanionNoticeMessage,
-        PaneFacts,
-        PaneTailsWantedMessage,
-        PairedMessage;
+    show CompanionEventMessage, CompanionNoticeMessage, PairedMessage;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
@@ -26,52 +17,26 @@ class HostLifecycleFeed {
     Stream<HostMcpCall>? mcpCalls,
     void Function(List<Map<String, Object?>> tools)? offerMcpTools,
     void Function(int callId, {Object? result, String? error})? answerMcpCall,
-    Stream<CompanionCallMessage>? companionCalls,
     Stream<CompanionEventMessage>? companionEvents,
     void Function({String? localRelayUrl})? attachCompanion,
-    CompanionAnswer? answerCompanionCall,
     void Function(CompanionNoticeMessage notice)? noticeCompanion,
     CompanionPair? pairCompanion,
-    Stream<AutomationCallMessage>? automationCalls,
-    void Function(AutomationNoticeKind kind)? noticeAutomations,
-    void Function(int callId, {String? error})? answerAutomationCall,
-    Future<ChecksRanMessage> Function(String sessionId)? runChecks,
     this.statusSnapshot = const [],
     Stream<HostAgentStatusChange>? agentStatuses,
     Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)?
     answerPrompt,
     ServerCall? serverCall,
-    void Function(List<PaneFacts> panes)? reportPanes,
-    Stream<PaneTailsWantedMessage>? paneTailsWanted,
   }) : hooks = hooks ?? const Stream.empty(),
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
        mcpCalls = mcpCalls ?? const Stream.empty(),
        offerMcpTools = offerMcpTools ?? _noOffer,
        answerMcpCall = answerMcpCall ?? _noAnswer,
-       companionCalls = companionCalls ?? const Stream.empty(),
        companionEvents = companionEvents ?? const Stream.empty(),
        attachCompanion = attachCompanion ?? _noAttach,
        serverCall = serverCall ?? _noServerCalls,
-       answerCompanionCall = answerCompanionCall ?? _noCompanionAnswer,
        noticeCompanion = noticeCompanion ?? _noNotice,
-       pairCompanion = pairCompanion ?? _noPairing,
-       automationCalls = automationCalls ?? const Stream.empty(),
-       noticeAutomations = noticeAutomations ?? _noAutomationNotice,
-       answerAutomationCall = answerAutomationCall ?? _noAutomationAnswer,
-       runChecks = runChecks ?? _noChecks,
-       reportPanes = reportPanes ?? _noPanes,
-       paneTailsWanted = paneTailsWanted ?? const Stream.empty();
-
-  static void _noPanes(List<PaneFacts> panes) {}
-
-  /// Tells the server every terminal pane this app has now, as facts: the
-  /// server adopts a session a person started by hand in one, and reads the
-  /// resume line an agent printed there.
-  final void Function(List<PaneFacts> panes) reportPanes;
-
-  /// The panes whose bottom rows the server wants with the next report.
-  final Stream<PaneTailsWantedMessage> paneTailsWanted;
+       pairCompanion = pairCompanion ?? _noPairing;
 
   static Future<SessionApprovalAnswer> _noAnswers(PromptAnswerRequest r) =>
       Future.error(const SessionPromptRefusal('this host answers no prompts'));
@@ -89,24 +54,6 @@ class HostLifecycleFeed {
   final Future<SessionApprovalAnswer> Function(PromptAnswerRequest request)
   answerPrompt;
 
-  static void _noAutomationNotice(AutomationNoticeKind kind) {}
-  static void _noAutomationAnswer(int callId, {String? error}) {}
-  static Future<ChecksRanMessage> _noChecks(String sessionId) =>
-      Future.error(StateError('this host runs no checks'));
-
-  /// Automation calls the host forwards, once this app has said it is the
-  /// app.
-  final Stream<AutomationCallMessage> automationCalls;
-
-  /// "I am the app".
-  final void Function(AutomationNoticeKind kind) noticeAutomations;
-
-  /// How one forwarded automation call ended.
-  final void Function(int callId, {String? error}) answerAutomationCall;
-
-  /// Runs a session's project checks in sessions the host owns.
-  final Future<ChecksRanMessage> Function(String sessionId) runChecks;
-
   static void _noOffer(List<Map<String, Object?>> tools) {}
   static void _noAnswer(int callId, {Object? result, String? error}) {}
   static void _noAttach({String? localRelayUrl}) {}
@@ -114,12 +61,6 @@ class HostLifecycleFeed {
     String method, [
     Map<String, Object?> arguments = const {},
   ]) => Future.error(StateError('this host answers no server calls'));
-  static void _noCompanionAnswer(
-    int callId, {
-    Map<String, Object?>? result,
-    String? code,
-    String? message,
-  }) {}
   static void _noNotice(CompanionNoticeMessage notice) {}
   static Future<PairedMessage> _noPairing({
     required int capabilities,
@@ -149,25 +90,20 @@ class HostLifecycleFeed {
   final void Function(int callId, {Object? result, String? error})
   answerMcpCall;
 
-  /// Companion calls the host forwards, once this app has attached.
-  final Stream<CompanionCallMessage> companionCalls;
-
-  /// What the host's companion tells this app.
+  /// What the host's companion tells this app: a pairing window ended.
   final Stream<CompanionEventMessage> companionEvents;
 
-  /// Makes this app the one the host forwards companion calls to, its
-  /// embedded relay at `localRelayUrl` (null: none). How phones are served
-  /// is the server's own config — [serverCall] `server.config.set`.
+  /// Tells the host this app's embedded relay listens at `localRelayUrl`
+  /// (null: none) while this link is open. How phones are served is the
+  /// server's own config — [serverCall] `server.config.set`.
   final void Function({String? localRelayUrl}) attachCompanion;
 
   /// Asks the server one administrative question (`ServerMethod`): its config,
   /// its agent CLIs. Throws with the server's reason when it refuses.
   final ServerCall serverCall;
 
-  /// How one forwarded companion call ended.
-  final CompanionAnswer answerCompanionCall;
-
-  /// News from the desktop for the host's companion.
+  /// News from the desktop for the host's companion: the pairing dialog
+  /// closed.
   final void Function(CompanionNoticeMessage notice) noticeCompanion;
 
   /// Opens a pairing window at the host.
@@ -185,16 +121,6 @@ typedef HostMcpCall = ({
   Map<String, dynamic> arguments,
   String? callerSessionId,
 });
-
-/// How a forwarded companion call ended: [result], or the companion error
-/// [code] and [message] the phone is refused with.
-typedef CompanionAnswer =
-    void Function(
-      int callId, {
-      Map<String, Object?>? result,
-      String? code,
-      String? message,
-    });
 
 /// One administrative question to the server, and its answer.
 typedef ServerCall =

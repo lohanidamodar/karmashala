@@ -60,7 +60,10 @@ void main() {
 
       await pumpEventQueue();
       expect(
-        NotificationSettingsRepository(server.store).load().onlyWhenUnfocused,
+        NotificationSettingsRepository(
+          read: server.store.read,
+          write: server.store.write,
+        ).load().onlyWhenUnfocused,
         isFalse,
       );
     });

@@ -1,40 +1,32 @@
-import '../../workspaces/data/workspace_data.dart';
-import 'dart:async';
-
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show InboxChanged;
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/persistence.dart';
+import 'package:karmashala_notifications/policy.dart';
+import 'package:karmashala_notifications/toasts.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_providers.dart';
 import '../../../core/probe/probe_mode.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../agents/application/agent_providers.dart';
-import '../../agents/application/agent_status_providers.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../sessions/application/host_lifecycle/host_agent_statuses.dart';
-import '../../sessions/application/host_lifecycle/host_lifecycle_providers.dart';
-import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../../terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_notifications/toasts.dart';
-import 'package:karmashala_notifications/persistence.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../data/desktop_notification_presenter.dart';
-import 'package:karmashala_notifications/watched.dart';
-import 'package:karmashala_notifications/policy.dart';
-import 'package:karmashala_notifications/attention.dart';
-import 'agent_status_watcher.dart';
-import 'attention_inbox.dart';
+import 'attention_presenter.dart';
 import 'notification_dispatcher.dart';
-import 'session_status_registry.dart';
-import 'watched_session_loader.dart';
+import 'session_statuses.dart';
 
 final notificationSettingsRepositoryProvider =
-    Provider<NotificationSettingsRepository>(
-      (ref) =>
-          NotificationSettingsRepository(ref.watch(appPreferencesProvider)),
-    );
+    Provider<NotificationSettingsRepository>((ref) {
+      final preferences = ref.watch(appPreferencesProvider);
+      return NotificationSettingsRepository(
+        read: preferences.read,
+        write: preferences.write,
+      );
+    });
 
 /// Holds [NotificationSettings], persisting every change.
 class NotificationSettingsController extends Notifier<NotificationSettings> {
@@ -79,10 +71,18 @@ final windowFocusedProvider = NotifierProvider<WindowFocusController, bool>(
   WindowFocusController.new,
 );
 
-/// Sessions currently waiting on the user. Ambient state, refreshed every poll.
+/// Sessions waiting on the user now, as the server says (needs approval,
+/// failed) — the tray's list.
 class SessionAttentionController extends Notifier<List<SessionAttention>> {
   @override
-  List<SessionAttention> build() => const [];
+  List<SessionAttention> build() {
+    final client = ref.watch(dataClientProvider);
+    final changes = client.attentionChanges.listen((change) {
+      if (change case InboxChanged(:final snapshot)) set(snapshot.waiting);
+    });
+    ref.onDispose(changes.cancel);
+    return List.unmodifiable(client.attention.waiting);
+  }
 
   void set(List<SessionAttention> next) {
     if (!_same(state, next)) state = List.unmodifiable(next);
@@ -147,109 +147,33 @@ final notificationDispatcherProvider = Provider<NotificationDispatcher>((ref) {
   return dispatcher;
 });
 
-final Provider<WatchedSessionLoader>
-watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
-  (ref) => WatchedSessionLoader(
-    sessionDao: ref.watch(sessionsDataProvider),
-    importedSessionDao: ref.watch(importedSessionsProvider),
-    installationDao: ref.watch(agentInstallationsDataProvider),
-    hookReports: ref.watch(agentHookReportsProvider),
-    clock: ref.watch(clockProvider),
-    // Asked through `exists`, never built: building the controller starts the
-    // scrollback autosave timer. No controller means no pane of ours is live.
-    isPaneLive: (paneId) =>
-        ref.exists(terminalSessionsControllerProvider) &&
-        (ref
-                .read(terminalSessionsControllerProvider.notifier)
-                .instanceFor(paneId)
-                ?.liveness
-                .value
-                .isLive ??
-            false),
-    isRunningOnHost: ref.watch(sessionRunningOnHostProvider),
-    transcriptPathFor: (sessionId) => ref.exists(sessionStatusRegistryProvider)
-        ? ref
-              .read(sessionStatusRegistryProvider)
-              .transcriptPathForOpenId(sessionId)
-        : null,
-  ),
-);
-
-/// The one status registry — everything that shows or reacts to a status reads
-/// it. Cycled only by `AgentStatusWatcher.start()`; reading starts nothing.
-///
-/// A session this machine's host holds is rendered from the host's own status
-/// ([hostAgentStatusesProvider]); only panes no host holds — the in-app PTY
-/// path, imported sessions — are computed here.
-final Provider<SessionStatusRegistry>
-sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
-  final hostStatuses = ref.watch(hostAgentStatusesProvider);
-  final registry = SessionStatusRegistry(
-    statusService: ref.watch(agentStatusServiceProvider),
-    agents: ref.watch(agentRegistryProvider),
-    loadSessions: () => ref.read(watchedSessionLoaderProvider).load(),
-    clock: ref.watch(clockProvider),
-    // The pane's own screen, for the sessions that have one.
-    readTail: (session) {
-      if (session.imported) return const [];
-      return sessionTerminalTailForPane(
-        ref,
-        session.paneId,
-        agentId: session.key.agentId,
+/// Every session's status as the server keeps it — everything that shows or
+/// reacts to a status reads this copy. It computes nothing (slice 5c).
+final Provider<SessionStatuses> sessionStatusRegistryProvider =
+    Provider<SessionStatuses>((ref) {
+      final statuses = SessionStatuses(
+        ref.watch(dataClientProvider),
+        clock: ref.watch(clockProvider),
       );
-    },
-    // One store scan for every session still missing a transcript path, on the
-    // registry's own slow interval — not one per badge per tick.
-    resolveTranscripts: () =>
-        ref.read(sessionTranscriptLocatorProvider).index(),
-    visibleSessionIds: () => visibleAgentSessionIds(ref.container),
-    heldByHost: (session) =>
-        ref.read(hostLifecycleSubscriberProvider)?.knows(session.openId) ??
-        false,
-    hostStatusFor: (session) => hostStatuses.of(session.openId),
-    // The panes ride this cycle rather than a ticker of their own: the server
-    // adopts what a person starts by hand in one, and keeps titles and
-    // conversation ids itself (slice 2b). Sent only when a pane changed.
-    onCycle: (_) async => ref.read(paneFactsReporterProvider).report(),
-  );
-  final moves = hostStatuses.changes.listen(registry.hostStatusMoved);
-  ref.onDispose(() {
-    unawaited(moves.cancel());
-    registry.dispose();
-  });
-  return registry;
-});
+      ref.onDispose(statuses.dispose);
+      return statuses;
+    });
 
-/// The always-on watcher. Started by `SystemIntegrationService`, which owns the
-/// rest of the desktop integration.
-final agentStatusWatcherProvider = Provider<AgentStatusWatcher>((ref) {
-  final watcher = AgentStatusWatcher(
-    registry: ref.watch(sessionStatusRegistryProvider),
+/// Turns the server's agent news into toasts, judged against this window's
+/// own focus, what it shows and the person's settings. Started by
+/// `SystemIntegrationService`, which owns the rest of the desktop
+/// integration.
+final attentionPresenterProvider = Provider<AttentionPresenter>((ref) {
+  final presenter = AttentionPresenter(
+    news: ref.watch(dataClientProvider).attentionChanges,
     readSettings: () => ref.read(notificationSettingsControllerProvider),
     isWindowFocused: () => ref.read(windowFocusedProvider),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
-    onAttention: (attention) =>
-        ref.read(sessionAttentionProvider.notifier).set(attention),
-    onInbox: (update) =>
-        ref.read(attentionInboxProvider.notifier).apply(update),
     onNotify: (event) => ref.read(notificationDispatcherProvider).add(event),
   );
-  ref.onDispose(watcher.dispose);
-  return watcher;
+  ref.onDispose(presenter.dispose);
+  return presenter;
 });
-
-/// Hands one hook callback to the status registry — the primary status path.
-/// Reading the registry starts nothing, so this cannot block the calling agent.
-void reportAgentHook(
-  ProviderContainer container, {
-  required String agentId,
-  required String sessionId,
-}) {
-  if (sessionId.isEmpty) return;
-  container
-      .read(sessionStatusRegistryProvider)
-      .hookReported(AgentSessionKey(agentId, sessionId));
-}
 
 /// The session ids currently rendered, under every key the status pipeline
 /// might hold them: the workspace row id and the CLI's own session id.

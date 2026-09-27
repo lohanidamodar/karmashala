@@ -1,4 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
+import 'attention_json.dart';
 import 'notification_policy.dart';
 import 'watched_session.dart';
 
@@ -44,4 +45,17 @@ class SessionAttention {
 
   @override
   String toString() => 'SessionAttention($session, ${kind.name})';
+
+  Map<String, Object?> toJson() => {
+    'session': session.toJson(),
+    'kind': kind.name,
+  };
+
+  static SessionAttention fromJson(Object? json) {
+    final map = attentionObject(json, 'session attention');
+    return SessionAttention(
+      session: WatchedSession.fromJson(map['session']),
+      kind: attentionEnum(AttentionKind.values, map, 'kind'),
+    );
+  }
 }

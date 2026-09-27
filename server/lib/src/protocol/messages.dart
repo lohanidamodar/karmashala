@@ -8,18 +8,18 @@ import 'wire.dart';
 
 part 'hook_messages.dart';
 part 'lifecycle_messages.dart';
-part 'automation_messages.dart';
 part 'companion_messages.dart';
 part 'mcp_messages.dart';
 part 'status_messages.dart';
 part 'server_messages.dart';
 part 'data_messages.dart';
-part 'pane_messages.dart';
 part 'stop_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 25;
+/// 27: slice 5c (status, attention, the companion and automations at the
+/// server; 0x21–0x22, 0x25, 0x27–0x2a and 0x36–0x37 retired).
+const int kProtocolVersion = 27;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -894,15 +894,8 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.mcpCall => McpCallMessage.decode(frame),
   MessageType.mcpResult => McpResultMessage.decode(frame),
   MessageType.companionAttach => CompanionAttachMessage.decode(frame),
-  MessageType.companionCall => CompanionCallMessage.decode(frame),
-  MessageType.companionResult => CompanionResultMessage.decode(frame),
   MessageType.companionNotice => CompanionNoticeMessage.decode(frame),
   MessageType.companionEvent => CompanionEventMessage.decode(frame),
-  MessageType.automationNotice => AutomationNoticeMessage.decode(frame),
-  MessageType.automationCall => AutomationCallMessage.decode(frame),
-  MessageType.automationResult => AutomationResultMessage.decode(frame),
-  MessageType.checksRun => ChecksRunMessage.decode(frame),
-  MessageType.checksRan => ChecksRanMessage.decode(frame),
   MessageType.agentStatus => AgentStatusMessage.decode(frame),
   MessageType.promptAnswer => PromptAnswerMessage.decode(frame),
   MessageType.promptAnswered => PromptAnsweredMessage.decode(frame),
@@ -914,8 +907,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.dataStreamOpen => DataStreamOpenMessage.decode(frame),
   MessageType.dataStreamItems => DataStreamItemsMessage.decode(frame),
   MessageType.dataStreamClose => DataStreamCloseMessage.decode(frame),
-  MessageType.paneFacts => PaneFactsMessage.decode(frame),
-  MessageType.paneTailsWanted => PaneTailsWantedMessage.decode(frame),
   MessageType.stopCheck => StopCheckMessage.decode(frame),
   MessageType.stopCheckAnswer => StopCheckAnswerMessage.decode(frame),
 };

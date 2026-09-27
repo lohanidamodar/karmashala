@@ -67,6 +67,8 @@ import 'flutter_values.dart';
 import 'browser_values.dart';
 import 'terminal_values.dart';
 import 'env_values.dart';
+import 'attention_values.dart';
+import 'package:karmashala_notifications/attention.dart' show InboxItem;
 
 part 'requests/subscription_requests.dart';
 part 'requests/sessions_requests.dart';
@@ -89,6 +91,7 @@ part 'requests/browser_requests.dart';
 part 'requests/files_requests.dart';
 part 'requests/terminals_requests.dart';
 part 'requests/env_requests.dart';
+part 'requests/attention_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -280,6 +283,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _filesRequestFromJson(kind, args) ??
     _terminalsRequestFromJson(kind, args) ??
     _envRequestFromJson(kind, args) ??
+    _attentionRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.

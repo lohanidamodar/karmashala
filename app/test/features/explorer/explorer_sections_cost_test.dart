@@ -464,12 +464,11 @@ void main() {
               'the surviving header is still folded shut',
         );
         expect(
-          result.container.exists(deliveryPollProvider),
+          result.container.exists(checkoutReadingsProvider),
           isFalse,
           reason:
-              "the Explorer being open must not start the app's delivery "
-              'heartbeat — the filter needs to know what is empty, not to '
-              'keep asking',
+              'a folded Explorer must not follow readings arriving — the '
+              'filter needs to know what is empty, not to keep asking',
         );
       });
     }

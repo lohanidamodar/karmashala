@@ -14,6 +14,7 @@ import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
 import 'agent_work.dart';
+import 'attention_work.dart';
 import 'automations_handler.dart';
 import 'conversations_handler.dart';
 import 'evidence_handler.dart';
@@ -119,6 +120,14 @@ class DataService {
   /// The server's terminals (slice 5a: every local and WSL pane's PTY), set
   /// by `serve`; without them that work is refused `unavailable`.
   TerminalWork? terminalWork;
+
+  /// The server's session status and attention inbox (slice 5c), set by
+  /// `serve`; without them that work is refused `unavailable`.
+  AttentionWork? attentionWork;
+
+  /// A session's project checks run for a client (`checks.run`, slice 5c),
+  /// set by `serve` once automations run; else refused `unavailable`.
+  ChecksWork? checksWork;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -171,6 +180,10 @@ class DataService {
   /// server's own links and a phone's companion never subscribe. What the
   /// server's SSH asks a person goes only where somebody can answer.
   bool get hasSubscribers => _links.any((link) => link._subscribed);
+
+  /// How many clients are subscribed now — the windows a cue to show
+  /// something (`inbox.open`) reaches.
+  int get subscriberCount => _links.where((link) => link._subscribed).length;
 
   /// One client link. [deliver] gets the changes other links make once the
   /// client has sent [DataSubscribe].
@@ -371,9 +384,16 @@ class DataService {
         BrowserWorkRequest() ||
         FilesWorkRequest() ||
         TerminalWorkRequest() ||
+        ChecksWorkRequest() ||
         EnvVaultRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
+        final AttentionRequest r =>
+          (attentionWork ??
+                  (throw const DataRefused.unavailable(
+                    'this server keeps no session status',
+                  )))
+              .handle(r, origin),
         final AutomationsRequest r => _automations.handle(r, changes),
         final CheckpointsRequest r => _evidence.handleCheckpoints(r, changes),
         // Runs git, so answered when done: `DataSession.handleLater`.
@@ -524,6 +544,7 @@ class DataSession implements FileWatchLink {
       request is BrowserWorkRequest ||
       request is FilesWorkRequest ||
       request is TerminalWorkRequest ||
+      request is ChecksWorkRequest ||
       request is EnvVaultRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
@@ -608,6 +629,15 @@ class DataSession implements FileWatchLink {
       final result = await work.handle(asked, this);
       return DataReply(result as R, _service._revision);
     }
+    if (request case final ChecksRun asked) {
+      final work =
+          _service.checksWork ??
+          (throw const DataRefused.unavailable(
+            'this server runs no project checks',
+          ));
+      final result = await work.run(asked);
+      return DataReply(result as R, _service._revision);
+    }
     return handle(request);
   }
 
@@ -648,6 +678,7 @@ class DataSession implements FileWatchLink {
   void close() {
     _service._links.remove(this);
     _service.filesWork?.linkClosed(this);
+    _service.attentionWork?.linkClosed(this);
   }
 
   /// A change for this link alone — a path it watches moved — at the
@@ -667,6 +698,7 @@ class DataSession implements FileWatchLink {
       ...?_service.flutterWork?.greeting(),
       ...?_service.browserWork?.greeting(),
       ...?_service.terminalWork?.greeting(),
+      ...?_service.attentionWork?.greeting(),
       for (final greeter in _service.greeters) ...greeter(),
     ];
     if (greeting.isNotEmpty) {

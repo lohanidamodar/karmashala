@@ -1,14 +1,17 @@
 part of 'messages.dart';
 
-// The companion in the daemon (protocol 4): the host serves paired phones, and
-// forwards to the connected app what only the app can answer. JSON inside a
-// length-prefixed string, like the lifecycle feed and the MCP relay.
+// The companion in the daemon (protocol 4). Since protocol 27 (slice 5c) the
+// server answers every phone call itself, app or no app: nothing is
+// forwarded (`companionCall` 0x21 and `companionResult` 0x22 are retired).
+// What stays on the desktop's link is where its embedded relay listens, the
+// pairing window it opened, and that window closing. JSON inside a
+// length-prefixed string, like the lifecycle feed.
 
-/// client → host: this connection is the desktop app, which the host
-/// forwards companion calls to, and its embedded relay listens at
-/// [localRelayUrl] (null: it runs none). Sent on every link and again when the
-/// embedded relay moves. How phones are served is not here: that is the
-/// server's `server.json`, changed with `server.config.set`.
+/// client → host: this desktop's embedded relay listens at [localRelayUrl]
+/// (null: it runs none). Sent on every link and again when the embedded relay
+/// moves; the relay closes with the desktop, so the server serves through it
+/// only while this link is open. How phones are served is not here: that is
+/// the server's `server.json`, changed with `server.config.set`.
 class CompanionAttachMessage extends HostMessage {
   const CompanionAttachMessage({this.localRelayUrl});
 
@@ -32,150 +35,25 @@ class CompanionAttachMessage extends HostMessage {
   }
 }
 
-/// host → client: answer [method] (a `CompanionMethod` wire name) with
-/// [arguments], for a phone that asked, and reply to [callId].
-class CompanionCallMessage extends HostMessage {
-  const CompanionCallMessage({
-    required this.callId,
-    required this.method,
-    required this.arguments,
-  });
-
-  final int callId;
-  final String method;
-  final Map<String, Object?> arguments;
-
-  @override
-  Frame toFrame() => Frame(
-    MessageType.companionCall,
-    0,
-    (WireWriter()..str(
-          jsonEncode({
-            'callId': callId,
-            'method': method,
-            'arguments': arguments,
-          }),
-        ))
-        .take(),
-  );
-
-  static CompanionCallMessage decode(Frame frame) {
-    final map = _object(
-      _decodeJson(WireReader(frame.payload).str()),
-      'companion call',
-    );
-    return CompanionCallMessage(
-      callId: _required<int>(map, 'callId'),
-      method: _required<String>(map, 'method'),
-      arguments: _object(map['arguments'], 'arguments'),
-    );
-  }
-}
-
-/// client → host: how [callId] ended — [result] when it did, else the
-/// companion error [code] (an `ErrorCode` wire word) and [message] the phone is
-/// shown.
-class CompanionResultMessage extends HostMessage {
-  const CompanionResultMessage.success(
-    this.callId,
-    Map<String, Object?> this.result,
-  ) : code = null,
-      message = null;
-
-  const CompanionResultMessage.failure(
-    this.callId, {
-    required String this.code,
-    required String this.message,
-  }) : result = null;
-
-  final int callId;
-  final Map<String, Object?>? result;
-  final String? code;
-  final String? message;
-
-  bool get ok => code == null;
-
-  @override
-  Frame toFrame() => Frame(
-    MessageType.companionResult,
-    0,
-    (WireWriter()..str(
-          jsonEncode({
-            'callId': callId,
-            'ok': ok,
-            if (ok) 'result': result else ...{'code': code, 'message': message},
-          }),
-        ))
-        .take(),
-  );
-
-  static CompanionResultMessage decode(Frame frame) {
-    final map = _object(
-      _decodeJson(WireReader(frame.payload).str()),
-      'companion result',
-    );
-    final callId = _required<int>(map, 'callId');
-    return _required<bool>(map, 'ok')
-        ? CompanionResultMessage.success(
-            callId,
-            _object(map['result'], 'result'),
-          )
-        : CompanionResultMessage.failure(
-            callId,
-            code: _required<String>(map, 'code'),
-            message: _required<String>(map, 'message'),
-          );
-  }
-}
-
-/// What the app tells the host's companion about the desktop.
+/// What a desktop tells the host's companion. Attention, approvals and
+/// session lists are the server's own since slice 5c; only the pairing
+/// dialog is the desktop's.
 enum CompanionNoticeKind {
-  /// Something about sessions moved: every live phone re-reads its
-  /// subscriptions.
-  sessionsMoved,
-
-  /// [CompanionNoticeMessage.sessionId] started waiting for approval.
-  approvalRequested,
-
-  /// A new inbox item worth a push for phones with no live link.
-  attention,
-
   /// The pairing dialog closed: the window's secret dies with it.
   pairingCancelled,
 }
 
-/// client → host: one [CompanionNoticeKind], with the fields it needs.
+/// client → host: one [CompanionNoticeKind].
 class CompanionNoticeMessage extends HostMessage {
-  const CompanionNoticeMessage(
-    this.kind, {
-    this.sessionId,
-    this.title,
-    this.attention,
-    this.detail,
-  });
+  const CompanionNoticeMessage(this.kind);
 
   final CompanionNoticeKind kind;
-  final String? sessionId;
-
-  /// For [CompanionNoticeKind.attention]: the push's title and kind word.
-  final String? title;
-  final String? attention;
-  final String? detail;
 
   @override
   Frame toFrame() => Frame(
     MessageType.companionNotice,
     0,
-    (WireWriter()..str(
-          jsonEncode({
-            'kind': kind.name,
-            'sessionId': ?sessionId,
-            'title': ?title,
-            'attention': ?attention,
-            'detail': ?detail,
-          }),
-        ))
-        .take(),
+    (WireWriter()..str(jsonEncode({'kind': kind.name}))).take(),
   );
 
   static CompanionNoticeMessage decode(Frame frame) {
@@ -186,13 +64,7 @@ class CompanionNoticeMessage extends HostMessage {
     final name = _required<String>(map, 'kind');
     final kind = CompanionNoticeKind.values.where((k) => k.name == name);
     if (kind.isEmpty) throw WireFormatException('unknown notice "$name"');
-    return CompanionNoticeMessage(
-      kind.single,
-      sessionId: _optional<String>(map, 'sessionId'),
-      title: _optional<String>(map, 'title'),
-      attention: _optional<String>(map, 'attention'),
-      detail: _optional<String>(map, 'detail'),
-    );
+    return CompanionNoticeMessage(kind.single);
   }
 }
 

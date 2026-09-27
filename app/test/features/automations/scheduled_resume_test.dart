@@ -4,14 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala_session/launch.dart';
 
 import 'scheduled_resume_harness.dart';
 
-/// Scheduled resumes over fakes: armed through the server, fired here when the
-/// server forwards one that came due (its scheduling rules are the server's,
-/// tested in `karmashala_automations`). Nothing waits: the clock is moved and
-/// readiness is an emitted report.
+/// Scheduled resumes over fakes: armed through the server and kept honest
+/// here until they come due. Firing one is the server's (slice 5c:
+/// `server/test/automations/`); its scheduling rules are
+/// `karmashala_automations`'. Nothing waits: the clock is moved and readiness
+/// is an emitted report.
 void main() {
   late ResumeHarness h;
 
@@ -45,12 +45,6 @@ void main() {
       notify: notify,
     ),
   );
-
-  /// Moves the clock to just past the row's moment; the server forwards it.
-  Future<void> comeDue(ScheduledResume resume) async {
-    h.clock.now = resume.fireAt.add(const Duration(seconds: 1));
-    await h.fire(resume.id);
-  }
 
   group('arming', () {
     test('a resume waits for the reset plus the margin, and persists', () {
@@ -120,220 +114,6 @@ void main() {
     });
   });
 
-  group('firing', () {
-    test('usage is re-read, and the session resumed with the message as its '
-        'opening prompt — handed to the CLI once, never typed', () async {
-      final resume = arm(notify: true);
-      h.usage.answer = h.reading(
-        percent: 2,
-        resetsIn: const Duration(hours: 5),
-      );
-
-      await comeDue(resume);
-      expect(h.usage.calls, hasLength(1));
-      final request = h.launcher.requests.single;
-      expect(request.purpose, SessionPurpose.existingSession);
-      expect(request.resumeExternalSessionId, 'conv-s1');
-      expect(request.firstMessage, 'continue');
-      // Nothing is typed at a TUI that is still starting.
-      expect(h.typedInto('s1'), isEmpty);
-
-      final done = h.dao.getById(resume.id)!;
-      expect(done.state, ScheduledResumeState.done);
-      expect(done.reason, contains('sent "continue"'));
-
-      await h.settle();
-      final decisions = h.server.decisionRows.forSession('s1');
-      expect(decisions.single.summary, contains('sent "continue"'));
-      expect(decisions.single.decidedBy, 'the user');
-      expect(h.presenter.shown.single.title, 'Session resumed');
-    });
-
-    test('an empty message resumes and says nothing', () async {
-      final resume = arm(message: '');
-      h.usage.answer = h.reading(percent: 2);
-      await comeDue(resume);
-      expect(h.launcher.requests.single.firstMessage, isNull);
-      expect(h.typedInto('s1'), isEmpty);
-      expect(h.dao.getById(resume.id)!.state, ScheduledResumeState.done);
-    });
-
-    test('a session already open is only told', () async {
-      h.attachPane('s1');
-      final resume = arm();
-      expect(resume.liveWhenScheduled, isTrue);
-      h.usage.answer = h.reading(percent: 2);
-      h.statuses['s1'] = h.report('s1');
-
-      await comeDue(resume);
-      expect(h.launcher.requests, isEmpty);
-      expect(h.typedInto('s1'), startsWith('continue'));
-      expect(h.typedInto('s1'), endsWith('\r'));
-      expect('continue'.allMatches(h.typedInto('s1')), hasLength(1));
-      expect(h.dao.getById(resume.id)!.reason, contains('already open'));
-    });
-
-    test(
-      'an open session in a mode that asks is restarted in the armed one',
-      () async {
-        h.server.sessionRows.updatePermissionMode('s1', null);
-        h.attachPane('s1');
-        const armed = 'approval=never;sandbox=danger-full-access';
-        final resume = h.controller.schedule(
-          ResumeRequest.atReset(
-            sessionId: 's1',
-            window: fiveHour(),
-            permissionMode: armed,
-          ),
-        );
-        h.usage.answer = h.reading(percent: 2);
-        h.statuses['s1'] = h.report('s1');
-
-        await comeDue(resume);
-        final request = h.launcher.requests.single;
-        expect(request.firstMessage, 'continue');
-        expect(request.permissionOverride?.canonical, armed);
-        expect(h.server.sessionRows.getById('s1')!.permissionMode, armed);
-        expect(h.dao.getById(resume.id)!.state, ScheduledResumeState.done);
-      },
-    );
-
-    test('an open prompt is never typed into', () async {
-      h.attachPane('s1');
-      final resume = arm();
-      h.usage.answer = h.reading(percent: 2);
-      h.statuses['s1'] = h.report(
-        's1',
-        status: AgentActivityStatus.awaitingApproval,
-        waiting: AgentWaitKind.approval,
-      );
-      await comeDue(resume);
-      expect(h.typedInto('s1'), isEmpty);
-      final failed = h.dao.getById(resume.id)!;
-      expect(failed.state, ScheduledResumeState.failed);
-      // A failure is announced whether or not the box was ticked.
-      expect(h.presenter.shown.single.title, 'Scheduled resume failed');
-    });
-
-    test(
-      'a launch that is refused fails the row in the launcher\'s words',
-      () async {
-        final resume = arm();
-        h.usage.answer = h.reading(percent: 2);
-        h.launcher.failure = StateError('another process holds it');
-        await comeDue(resume);
-        final failed = h.dao.getById(resume.id)!;
-        expect(failed.state, ScheduledResumeState.failed);
-        expect(failed.reason, contains('another process holds it'));
-      },
-    );
-
-    test('a resume resumed by hand in the meantime is cancelled', () async {
-      final resume = arm();
-      h.attachPane('s1');
-      h.usage.answer = h.reading(percent: 2);
-      await comeDue(resume);
-      expect(h.typedInto('s1'), isEmpty);
-      final cancelled = h.dao.getById(resume.id)!;
-      expect(cancelled.state, ScheduledResumeState.cancelled);
-      expect(cancelled.reason, contains('resumed this session yourself'));
-    });
-
-    test('a time the user chose is not checked against usage', () async {
-      final resume = h.controller.schedule(
-        ResumeRequest(
-          sessionId: 's1',
-          fireAt: h.now.add(const Duration(hours: 2)),
-        ),
-      );
-      await comeDue(resume);
-      expect(h.usage.calls, isEmpty);
-      expect(h.launcher.requests, hasLength(1));
-    });
-
-    test(
-      'a gate that lapsed since arming fails the fire, in its words',
-      () async {
-        final resume = arm();
-        h.server.sessionRows.updatePermissionMode('s1', null);
-        await comeDue(resume);
-        expect(h.launcher.requests, isEmpty);
-        final failed = h.dao.getById(resume.id)!;
-        expect(failed.state, ScheduledResumeState.failed);
-        expect(failed.reason, contains('stops and asks'));
-      },
-    );
-  });
-
-  group('still limited', () {
-    test(
-      'the row moves to the new reset, after one ask of the server',
-      () async {
-        final resume = arm();
-        h.usage.answer = h.reading(resetsIn: const Duration(hours: 2));
-        await comeDue(resume);
-
-        expect(h.launcher.requests, isEmpty);
-        final moved = h.live('s1')!;
-        expect(moved.state, ScheduledResumeState.pending);
-        expect(moved.attempts, 1);
-        expect(moved.reason, contains('Still limited'));
-        expect(
-          moved.fireAt,
-          DateTime.utc(2026, 9, 17, 14).add(kResumeResetMargin),
-        );
-        expect(h.usage.calls, hasLength(1));
-      },
-    );
-
-    test('with no reset named it backs off, and keeps waiting rather than '
-        'giving up', () async {
-      var resume = arm();
-      for (var attempt = 1; attempt < 9; attempt++) {
-        h.clock.now = resume.fireAt.add(const Duration(seconds: 1));
-        h.usage.answer = AgentUsage(
-          windows: [
-            UsageWindow(
-              label: '5-hour',
-              percent: 100,
-              resetsAt: h.now.subtract(const Duration(minutes: 1)),
-              span: kUsageFiveHourWindow,
-            ),
-          ],
-          fetchedAt: h.now,
-        );
-        await h.fire(resume.id);
-        resume = h.live('s1')!;
-        expect(resume.attempts, attempt);
-        final doubled = kResumeRetryBase * (1 << (attempt - 1));
-        expect(
-          resume.fireAt,
-          h.now.add(
-            doubled > kResumeRetryCeiling ? kResumeRetryCeiling : doubled,
-          ),
-        );
-      }
-      // Past where it used to give up, and still waiting: a limit that is
-      // reached again is the case this row was armed for.
-      expect(resume.attempts, greaterThan(kResumeMaxStaleReadings));
-      expect(resume.state, ScheduledResumeState.pending);
-      expect(resume.reason, contains('Still limited'));
-      expect(h.launcher.requests, isEmpty);
-      // And the wait never grows past the ceiling, so it is still looking.
-      expect(
-        resume.fireAt.difference(h.now),
-        lessThanOrEqualTo(kResumeRetryCeiling),
-      );
-    });
-
-    test('usage that cannot be re-read does not strand the resume', () async {
-      final resume = arm();
-      h.usage.failure = UsageException('the network is down');
-      await comeDue(resume);
-      expect(h.launcher.requests, hasLength(1));
-    });
-  });
-
   group('between arming and firing', () {
     test('a session that carries on by itself lets the resume go', () async {
       h.attachPane('s1');
@@ -360,8 +140,7 @@ void main() {
       h.usage.serverRead(h.server.installationRows.getById('a1')!);
       await h.settle();
       expect(h.dao.getById(resume.id)!.reason, contains('reset early'));
-      await h.fire(resume.id);
-      expect(h.launcher.requests, hasLength(1));
+      expect(h.dao.getById(resume.id)!.fireAt, h.now);
     });
 
     test('a switched account is looked at again at once', () async {
@@ -375,10 +154,6 @@ void main() {
       h.clock.advance(const Duration(minutes: 10));
       h.usage.answer = h.reading(percent: 4, email: 'other@example.com');
       h.usage.serverRead(h.server.installationRows.getById('a1')!);
-      await h.settle();
-      await h.fire(resume.id);
-      expect(h.launcher.requests, hasLength(1));
-      h.reports.add(h.report('s1'));
       await h.settle();
       expect(h.dao.getById(resume.id)!.reason, contains('account'));
     });

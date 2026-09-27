@@ -3,3 +3,4 @@
 library;
 
 export 'src/domain/automation_event.dart';
+export 'src/domain/automation_event_rules.dart';

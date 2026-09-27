@@ -20,14 +20,10 @@ class HostLifecycleWatch {
   final _events = StreamController<LifecycleEvent>();
   final _hooks = StreamController<AgentHookEvent>();
   final _mcpCalls = StreamController<McpCallMessage>();
-  final _companionCalls = StreamController<CompanionCallMessage>();
   final _companionEvents = StreamController<CompanionEventMessage>();
-  final _automationCalls = StreamController<AutomationCallMessage>();
 
   final _agentStatuses = StreamController<AgentStatusMessage>();
-  final _paneTailsWanted = StreamController<PaneTailsWantedMessage>();
   final _pairings = <int, Completer<PairedMessage>>{};
-  final _checks = <int, Completer<ChecksRanMessage>>{};
   final _prompts = <int, Completer<PromptAnsweredMessage>>{};
   final _serverCalls = <int, Completer<Map<String, Object?>>>{};
   var _lastRequestId = 2;
@@ -90,16 +86,12 @@ class HostLifecycleWatch {
         : McpResultMessage.failure(callId, error),
   );
 
-  /// Each companion call the host forwards, once this client has said it is
-  /// the app with [attachCompanion]; answer each with [answerCompanionCall].
-  Stream<CompanionCallMessage> get companionCalls => _companionCalls.stream;
-
-  /// What the host's companion tells this client: device rows moved, a
-  /// pairing window this client opened ended.
+  /// What the host's companion tells this client: a pairing window this
+  /// client opened ended.
   Stream<CompanionEventMessage> get companionEvents => _companionEvents.stream;
 
-  /// Makes this client the app the host forwards companion calls to, with its
-  /// embedded relay at [localRelayUrl] (null: none). How phones are served is
+  /// Tells the host this client's embedded relay listens at [localRelayUrl]
+  /// (null: none), for as long as this link is open. How phones are served is
   /// the server's config: [serverCall] `server.config.set` changes it.
   void attachCompanion({String? localRelayUrl}) =>
       _write(CompanionAttachMessage(localRelayUrl: localRelayUrl));
@@ -128,54 +120,9 @@ class HostLifecycleWatch {
     return answer.future;
   }
 
-  /// How the companion call [callId] ended: [result], or the companion error
-  /// [code] and [message] the phone is refused with.
-  void answerCompanionCall(
-    int callId, {
-    Map<String, Object?>? result,
-    String? code,
-    String? message,
-  }) => _write(
-    code == null
-        ? CompanionResultMessage.success(callId, result ?? const {})
-        : CompanionResultMessage.failure(
-            callId,
-            code: code,
-            message: message ?? code,
-          ),
-  );
-
-  /// News from the desktop for the host's companion.
+  /// News from the desktop for the host's companion: its pairing dialog
+  /// closed.
   void noticeCompanion(CompanionNoticeMessage notice) => _write(notice);
-
-  /// Each automation call the host forwards, once this client has said it is
-  /// the app with [noticeAutomations]; answer each with
-  /// [answerAutomationCall].
-  Stream<AutomationCallMessage> get automationCalls => _automationCalls.stream;
-
-  /// "I am the app" ([AutomationNoticeKind.ready]).
-  void noticeAutomations(AutomationNoticeKind kind) =>
-      _write(AutomationNoticeMessage(kind));
-
-  /// How the automation call [callId] ended: done, or [error].
-  void answerAutomationCall(int callId, {String? error}) => _write(
-    error == null
-        ? AutomationResultMessage.success(callId)
-        : AutomationResultMessage.failure(callId, error),
-  );
-
-  /// Runs [sessionId]'s project checks in sessions the host owns.
-  Future<ChecksRanMessage> runChecks(String sessionId) {
-    if (_done.isCompleted) {
-      return Future.error(
-        const HostLifecycleWatchRefused('the host link is closed'),
-      );
-    }
-    final requestId = ++_lastRequestId;
-    final answer = _checks[requestId] = Completer<ChecksRanMessage>();
-    _write(ChecksRunMessage(requestId: requestId, sessionId: sessionId));
-    return answer.future;
-  }
 
   /// Opens a pairing window at the host. Its end arrives on [companionEvents]
   /// under the answer's `requestId`. Throws [HostLifecycleWatchRefused] with
@@ -214,14 +161,6 @@ class HostLifecycleWatch {
       // The link went down between the check and the write.
     }
   }
-
-  /// Tells the server every terminal pane this client has now, as facts —
-  /// the whole list, each time it changes.
-  void reportPanes(List<PaneFacts> panes) => _write(PaneFactsMessage(panes));
-
-  /// Each time the server wants some panes' bottom rows with the next
-  /// [reportPanes]. Buffered like [events].
-  Stream<PaneTailsWantedMessage> get paneTailsWanted => _paneTailsWanted.stream;
 
   /// Completes when the link ends, from either side.
   Future<void> get done => _done.future;
@@ -348,10 +287,6 @@ class HostLifecycleWatch {
       if (!_mcpCalls.isClosed) _mcpCalls.add(message);
       return;
     }
-    if (message is CompanionCallMessage) {
-      if (!_companionCalls.isClosed) _companionCalls.add(message);
-      return;
-    }
     if (message is CompanionEventMessage) {
       if (!_companionEvents.isClosed) _companionEvents.add(message);
       return;
@@ -360,21 +295,8 @@ class HostLifecycleWatch {
       _pairings.remove(message.requestId)?.complete(message);
       return;
     }
-    if (message is AutomationCallMessage) {
-      if (!_automationCalls.isClosed) _automationCalls.add(message);
-      return;
-    }
-
-    if (message is ChecksRanMessage) {
-      _checks.remove(message.requestId)?.complete(message);
-      return;
-    }
     if (message is AgentStatusMessage) {
       if (!_agentStatuses.isClosed) _agentStatuses.add(message);
-      return;
-    }
-    if (message is PaneTailsWantedMessage) {
-      if (!_paneTailsWanted.isClosed) _paneTailsWanted.add(message);
       return;
     }
     if (message is PromptAnsweredMessage) {
@@ -422,24 +344,15 @@ class HostLifecycleWatch {
     if (!_events.isClosed) unawaited(_events.close());
     if (!_hooks.isClosed) unawaited(_hooks.close());
     if (!_mcpCalls.isClosed) unawaited(_mcpCalls.close());
-    if (!_companionCalls.isClosed) unawaited(_companionCalls.close());
     if (!_companionEvents.isClosed) unawaited(_companionEvents.close());
-    if (!_automationCalls.isClosed) unawaited(_automationCalls.close());
 
     if (!_agentStatuses.isClosed) unawaited(_agentStatuses.close());
-    if (!_paneTailsWanted.isClosed) unawaited(_paneTailsWanted.close());
     for (final pairing in _pairings.values) {
       pairing.completeError(
         const HostLifecycleWatchRefused('the host link closed'),
       );
     }
     _pairings.clear();
-    for (final checks in _checks.values) {
-      checks.completeError(
-        const HostLifecycleWatchRefused('the host link closed'),
-      );
-    }
-    _checks.clear();
     for (final prompt in _prompts.values) {
       prompt.completeError(
         const HostLifecycleWatchRefused('the host link closed'),

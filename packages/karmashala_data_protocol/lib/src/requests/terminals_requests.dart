@@ -11,31 +11,29 @@ part of '../data_request.dart';
 // (unknown, an SSH box — slice 5d —, WSL off Windows) or a session it does not
 // hold, `failed` for a process that would not start.
 
-DataRequest<Object?>? _terminalsRequestFromJson(
-  String kind,
-  _Arguments args,
-) => switch (kind) {
-  TerminalsProfiles.name => const TerminalsProfiles(),
-  TerminalOpen.name => TerminalOpen(
-    paneId: args.string('paneId'),
-    environmentId: args.optionalString('environmentId'),
-    workingDirectory: args.optionalString('workingDirectory'),
-    profileId: args.optionalString('profileId'),
-    agentLaunch: args.values['agentLaunch'] == null
-        ? null
-        : args.value('agentLaunch', agentLaunchFromWire),
-    columns: args.integer('columns'),
-    rows: args.integer('rows'),
-    shellIntegration: args.boolean('shellIntegration', orElse: false),
-  ),
-  TerminalsList.name => const TerminalsList(),
-  TerminalClose.name => TerminalClose(args.string('sessionId')),
-  TerminalRename.name => TerminalRename(
-    args.string('sessionId'),
-    args.string('title'),
-  ),
-  _ => null,
-};
+DataRequest<Object?>? _terminalsRequestFromJson(String kind, _Arguments args) =>
+    switch (kind) {
+      TerminalsProfiles.name => const TerminalsProfiles(),
+      TerminalOpen.name => TerminalOpen(
+        paneId: args.string('paneId'),
+        environmentId: args.optionalString('environmentId'),
+        workingDirectory: args.optionalString('workingDirectory'),
+        profileId: args.optionalString('profileId'),
+        agentLaunch: args.values['agentLaunch'] == null
+            ? null
+            : args.value('agentLaunch', agentLaunchFromWire),
+        columns: args.integer('columns'),
+        rows: args.integer('rows'),
+        shellIntegration: args.boolean('shellIntegration', orElse: false),
+      ),
+      TerminalsList.name => const TerminalsList(),
+      TerminalClose.name => TerminalClose(args.string('sessionId')),
+      TerminalRename.name => TerminalRename(
+        args.string('sessionId'),
+        args.string('title'),
+      ),
+      _ => null,
+    };
 
 /// Terminals the server runs; answered when done.
 sealed class TerminalWorkRequest<R> extends DataRequest<R> {
@@ -149,7 +147,9 @@ final class TerminalsList extends TerminalWorkRequest<List<TerminalRecord>> {
   @override
   List<TerminalRecord> resultFromJson(Object? json) => _decode(
     kind,
-    () => [for (final item in _objects(json, kind)) TerminalRecord.fromJson(item)],
+    () => [
+      for (final item in _objects(json, kind)) TerminalRecord.fromJson(item),
+    ],
   );
 }
 

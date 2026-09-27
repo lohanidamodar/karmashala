@@ -8,17 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
-import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_agent_statuses.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_subscriber.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/relayed_agent_hook.dart';
-import 'package:karmashala/src/features/sessions/application/session_liveness_reconciler.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
-import 'package:karmashala/src/features/sessions/application/session_wait.dart';
-import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -191,14 +186,6 @@ void main() {
     test('a row the host still runs is running, never unknown', () async {
       row('s1');
       host.snapshot = [hostFacts('s1', HostSessionState.running)];
-      // The launch pass leaves this machine's rows to the feed.
-      final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
-      final sessions = container.read(sessionsDataProvider);
-      expect(
-        markSessionsLostOnLaunch(sessions, where: (s) => !onThisMachine(s)),
-        0,
-      );
-      await sessions.settled();
       expect(statusOf('s1'), SessionStatus.running);
 
       await startWatching();
@@ -238,16 +225,6 @@ void main() {
       row('remote', repositoryId: 'r-ssh');
       await startWatching();
       expect(statusOf('remote'), SessionStatus.running);
-
-      // And the launch pass still speaks for it, as before.
-      final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
-      final sessions = container.read(sessionsDataProvider);
-      expect(
-        markSessionsLostOnLaunch(sessions, where: (s) => !onThisMachine(s)),
-        1,
-      );
-      await sessions.settled();
-      expect(statusOf('remote'), SessionStatus.unknown);
     });
   });
 
@@ -528,216 +505,6 @@ void main() {
         evidence: evidence,
       ),
     );
-
-    test('is what the app renders for a session the host holds', () async {
-      row('s1');
-      host.snapshot = [hostFacts('s1', HostSessionState.running)];
-      host.statusSnapshot = [
-        said(
-          's1',
-          AgentActivityStatus.awaitingApproval,
-          waiting: AgentWaitKind.approval,
-          evidence: const ['Do you want to proceed?'],
-        ),
-      ];
-      await startWatching();
-      final registry = container.read(sessionStatusRegistryProvider);
-      await registry.cycle();
-
-      final report = registry.reportForOpenId('s1')!;
-      expect(report.hasOpenPrompt, isTrue);
-      expect(report.evidence, ['Do you want to proceed?']);
-      expect(report.sessionId, 'cli-s1', reason: 'keyed as the registry keys');
-
-      // A frame moves it at once, out of turn, as a hook used to.
-      final moved = registry.hookChanges.first;
-      host.statusLink.add((
-        sessionId: 's1',
-        status: said('s1', AgentActivityStatus.idle),
-      ));
-      await _settle();
-      expect((await moved).report.status, AgentActivityStatus.idle);
-
-      // A hook the host relayed still runs the intake, but the status is the
-      // host's word: it computed its own from the same hook.
-      host.hookLink.add(
-        RelayedAgentHook(
-          agentId: AgentIds.claudeCode,
-          event: 'UserPromptSubmit',
-          body: jsonEncode({'session_id': 'cli-s1'}),
-          receivedAt: _at(3),
-          paneSessionId: 's1',
-        ),
-      );
-      await _settle();
-      expect(registry.reportForOpenId('s1')!.status, AgentActivityStatus.idle);
-    });
-
-    test('a status that moved while the app was closed is what the reopened '
-        'app renders', () async {
-      row('s1');
-      host.snapshot = [hostFacts('s1', HostSessionState.running)];
-      host.statusSnapshot = [
-        said(
-          's1',
-          AgentActivityStatus.awaitingApproval,
-          waiting: AgentWaitKind.approval,
-          evidence: const ['Yes, I trust this folder'],
-        ),
-      ];
-      await startWatching();
-      await container.read(sessionStatusRegistryProvider).cycle();
-      expect(
-        container
-            .read(sessionStatusRegistryProvider)
-            .reportForOpenId('s1')!
-            .status,
-        AgentActivityStatus.awaitingApproval,
-      );
-
-      // The app quits. The host answers the question, the agent replies and
-      // stops; nobody is watching, so all of it is in the next snapshot.
-      container.dispose();
-      final idle = HostedAgentStatus(
-        sessionId: 's1',
-        report: AgentStatusReport(
-          agentId: AgentIds.claudeCode,
-          sessionId: 'cli-s1',
-          status: AgentActivityStatus.idle,
-          source: AgentStatusSource.hook,
-          observedAt: _at(9),
-        ),
-      );
-      host
-        ..statusSnapshot = [idle]
-        ..hookSnapshot = [
-          for (final (i, event) in [
-            'SessionStart',
-            'UserPromptSubmit',
-            'Stop',
-          ].indexed)
-            RelayedAgentHook(
-              agentId: AgentIds.claudeCode,
-              event: event,
-              body: jsonEncode({
-                'session_id': 'cli-s1',
-                'hook_event_name': event,
-              }),
-              receivedAt: _at(6 + i),
-              paneSessionId: 's1',
-            ),
-        ];
-
-      // The app opens again.
-      container = ProviderContainer(
-        overrides: [
-          dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(machine: db),
-          clockProvider.overrideWithValue(FixedClock(testTime)),
-          hostLifecycleSourceProvider.overrideWithValue(host),
-        ],
-      );
-      await startWatching();
-      final registry = container.read(sessionStatusRegistryProvider);
-      await registry.cycle();
-      await _settle();
-
-      expect(container.read(hostAgentStatusesProvider).of('s1'), isNotNull);
-      final report = registry.reportForOpenId('s1')!;
-      expect(report.status, AgentActivityStatus.idle);
-      expect(report.source, AgentStatusSource.hook);
-    });
-
-    // Found live: the app reopened on an agent that had answered and stopped
-    // while it was closed, and `session_wait` read `unknown` with no evidence
-    // although the host's snapshot said idle. The row joins the watch set
-    // only once the host says it runs it, which lands while the registry's
-    // first cycle is still on its disk work (store scans, adoption, the CLI
-    // store sync); the host's word needs none of that and waited behind it.
-    test('a reopened app renders the host\'s snapshot at once, while the '
-        'registry\'s first cycle is still on its disk work', () async {
-      // The app launches Claude Code with the row id as its session id.
-      dao.insert(session(id: 's1', status: SessionStatus.running));
-      dao.updateExternalSessionId('s1', 's1');
-      host
-        ..snapshot = [hostFacts('s1', HostSessionState.running)]
-        ..statusSnapshot = [
-          HostedAgentStatus(
-            sessionId: 's1',
-            report: AgentStatusReport(
-              agentId: AgentIds.claudeCode,
-              sessionId: 's1',
-              status: AgentActivityStatus.idle,
-              source: AgentStatusSource.hook,
-              observedAt: _at(-30),
-              detail: 'Stop',
-            ),
-          ),
-        ]
-        // The host keeps the latest hook per pane: the Stop.
-        ..hookSnapshot = [
-          RelayedAgentHook(
-            agentId: AgentIds.claudeCode,
-            event: 'Stop',
-            body: jsonEncode({
-              'session_id': 's1',
-              'hook_event_name': 'Stop',
-              'stop_hook_active': false,
-            }),
-            receivedAt: _at(-30),
-            paneSessionId: 's1',
-          ),
-        ];
-      final app = ProviderContainer(
-        overrides: [
-          dataClientProvider.overrideWithValue(data),
-          ...fakeTerminalOverrides(machine: db),
-          clockProvider.overrideWithValue(FixedClock(testTime)),
-          hostLifecycleSourceProvider.overrideWithValue(host),
-        ],
-      );
-      addTearDown(app.dispose);
-
-      // The registry starts cycling before the host link is up and before
-      // the session's pane has reattached: nothing says the row runs yet.
-      host.listening = false;
-      app.listen(hostLifecycleSubscriberProvider, (_, _) {});
-      final registry = app.read(sessionStatusRegistryProvider)..start();
-      await _settle();
-      expect(registry.reportForOpenId('s1'), isNull);
-
-      // The link comes up with the host's snapshot; the pane reattaches.
-      host.listening = true;
-      app.read(hostLifecycleSubscriberProvider)!.nudge();
-      await _settle();
-      expect(app.read(hostLifecycleSubscriberProvider)!.isWatching, isTrue);
-      app
-          .read(terminalSessionsControllerProvider.notifier)
-          .openTab(TerminalProfile.powerShell);
-      dao.updatePaneId(
-        's1',
-        app
-            .read(terminalSessionsControllerProvider)
-            .tabs
-            .last
-            .layout
-            .panes
-            .first,
-      );
-
-      final outcome = await app
-          .read(sessionWaitProvider)
-          .wait('s1', bound: const Duration(seconds: 2));
-      expect(
-        outcome.state,
-        SessionWaitState.idle,
-        reason:
-            '${outcome.agentStatus.name}/${outcome.source.name}, '
-            '${outcome.evidenceAge?.inSeconds}s old',
-      );
-      expect(outcome.agentStatus, AgentActivityStatus.idle);
-      expect(outcome.source, AgentStatusSource.hook);
-    });
 
     test('a link lost leaves none of it standing', () async {
       row('s1');

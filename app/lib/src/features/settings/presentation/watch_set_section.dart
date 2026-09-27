@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../notifications/application/session_status_registry.dart';
+import '../../notifications/application/session_statuses.dart';
 import 'settings_row.dart';
 import 'settings_catalog.dart';
 import 'settings_section.dart';
@@ -12,7 +12,7 @@ import 'settings_section.dart';
 /// measured it — `null` until one has run. Edge-triggered, so the row does not
 /// repaint every 1.2-second cycle.
 final sessionStatusCoverageProvider =
-    StreamProvider.autoDispose<SessionStatusCoverage?>(
+    StreamProvider.autoDispose<WatchCoverage?>(
       (ref) => ref.watch(sessionStatusRegistryProvider).coverageReports,
     );
 
@@ -74,7 +74,7 @@ class WatchSetSection extends ConsumerWidget {
 
   /// `neverProbed` is phrased as *queued*: read as a loss, someone would
   /// "fix" a healthy rotation.
-  static String _probeHelp(SessionStatusCoverage coverage) {
+  static String _probeHelp(WatchCoverage coverage) {
     if (coverage.probeCandidates == 0) {
       return 'Every watched session reports its own status, so nothing has to '
           'be read from disk.';

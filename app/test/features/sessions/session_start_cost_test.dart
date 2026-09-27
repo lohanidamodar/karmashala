@@ -3,7 +3,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
-import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -614,7 +613,6 @@ class _StartWorkspace {
     container.listen(attentionInboxProvider, (_, _) => notifications++);
     container.listen(sessionProjectIdsProvider, (_, _) => notifications++);
     container.listen(projectSummaryProvider('p1'), (_, _) => notifications++);
-    container.listen(openFollowUpsProvider, (_, _) => notifications++);
     container.listen(
       sessionsForSelectedRepositoryProvider,
       (_, _) => notifications++,

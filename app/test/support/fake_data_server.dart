@@ -51,7 +51,15 @@ import 'package:karmashala_session/delivery.dart' show SessionDelivery;
 import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:agent_cli/descriptors.dart'
+    show
+        AgentActivityStatus,
+        AgentStatusReport,
+        AgentStatusSource,
+        AgentWaitKind;
 import 'package:agent_cli/discovery.dart';
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/watched.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
@@ -71,6 +79,7 @@ import 'fake_command_runner.dart';
 
 part 'fake_evidence.dart';
 part 'fake_terminals_work.dart';
+part 'fake_attention.dart';
 part 'fake_hosts.dart';
 part 'fake_sessions.dart';
 part 'fake_pairings.dart';
@@ -241,6 +250,7 @@ class FakeDataServer {
 
   /// The server's Flutter apps, hosted runs and browser — scripted.
   late final runs = FakeRunsWork._(this);
+
   /// A machine's files — listings, reads and saves, copies, Quick Open's
   /// index, watches — over real file spaces a test points at temp folders.
   final filesWork = FakeFilesWork._();
@@ -250,6 +260,10 @@ class FakeDataServer {
 
   /// The server's terminals: profiles, starts, records — nothing spawned.
   late final terminals = FakeTerminalsWork._(this);
+
+  /// The server's session status and attention inbox (slice 5c): seeded by
+  /// a test, told to every window.
+  late final attention = FakeAttention._(this);
 
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
@@ -380,6 +394,20 @@ class FakeDataServer {
           terminals.records[terminal.sessionId] = terminal;
         case TerminalRemoved(:final sessionId):
           terminals.records.remove(sessionId);
+        case SessionStatusChanged(:final entry):
+          attention.statuses[entry.openId] = entry;
+        case SessionStatusRemoved(:final openId):
+          attention.statuses.remove(openId);
+        case WatchCoverageChanged(:final coverage):
+          attention.coverage = coverage;
+        case InboxChanged(:final snapshot):
+          attention.inbox = snapshot.inbox;
+          attention.waiting = snapshot.waiting;
+        case ForgeReadingChanged(:final checkout, :final reading):
+          attention.forgeReadings[checkout] = reading;
+        case AttentionNewsTold() || InboxOpenWanted() || UsageLimitNoticed():
+          // Nothing kept: told as it is.
+          break;
       }
     }
     _tell(null, changes);
@@ -487,6 +515,10 @@ class FakeDataServer {
     for (final link in _links) {
       if (link != origin && link._subscribed) link._changes.add(batch);
     }
+    // The server files what a follow-up says in its inbox (slice 5c).
+    if (changes.any((change) => change is FollowUpChanged)) {
+      attention._syncFollowUps();
+    }
   }
 
   DataReply<R> _handle<R>(FakeDataLink origin, DataRequest<R> request) {
@@ -499,6 +531,16 @@ class FakeDataServer {
     }
     if (request case final TerminalWorkRequest<Object?> work) {
       return DataReply(terminals._handle(work) as R, revision, const []);
+    }
+    if (request case final AttentionRequest<Object?> work) {
+      return DataReply(
+        attention._handle(work, origin) as R,
+        revision,
+        const [],
+      );
+    }
+    if (request case final ChecksRun work) {
+      return DataReply(attention._checks(work) as R, revision, const []);
     }
     if (request case final FlutterWorkRequest<Object?> work) {
       return DataReply(runs._flutter(work) as R, revision, const []);
@@ -639,6 +681,8 @@ class FakeDataServer {
       BrowserWorkRequest() ||
       SshWorkRequest() ||
       TerminalWorkRequest() ||
+      AttentionRequest() ||
+      ChecksWorkRequest() ||
       EnvVaultRequest() => throw StateError('answered above'),
       GitWorkRequest() ||
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
@@ -923,6 +967,8 @@ class FakeDataServer {
 
   DataAck _subscribe(FakeDataLink origin) {
     origin._subscribed = true;
+    // What the server keeps now, told to this window alone as it joins.
+    origin.tell(attention._greeting());
     return const DataAck();
   }
 
@@ -1198,6 +1244,7 @@ class FakeDataLink implements DataEndpoint {
   void _drop() {
     _server._links.remove(this);
     _server.filesWork._closed(this);
+    _server.attention._closed(this);
     if (!_done.isCompleted) _done.complete();
   }
 

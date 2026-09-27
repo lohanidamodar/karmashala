@@ -149,10 +149,10 @@ void main() {
         name: 'Releases',
         rule: BranchGlobRule('release/*'),
       );
-      // Opened, because the delivery heartbeat below is what a section with
-      // rows *on screen* rides — see [explorerSectionFactsProvider]. A folded
-      // section is refreshed by `deliveryAttentionProvider` instead, which is
-      // what every strip reading in the app actually writes to.
+      // Opened, because a reading arriving (`checkoutReadingsProvider`) is
+      // what a section with rows *on screen* waits for — see
+      // [explorerSectionFactsProvider]. A folded section is refreshed by
+      // `observedDeliveriesProvider`, what every strip reading writes to.
       sections.setCollapsed(releases.id, false);
       await container.pump();
 
@@ -166,18 +166,18 @@ void main() {
         reason: 'a section must never be the thing that starts git',
       );
 
-      // Now a row asks, the way a drawn session card does, and the app's own
-      // delivery heartbeat comes round — which is the only thing a section
-      // waits for.
+      // Now a row asks, the way a drawn session card does; its reading
+      // arriving is the only thing a section waits for.
       container.listen(
         checkoutDeliveryProvider(const Checkout(repoPath)),
         (_, _) {},
       );
+      await container.read(
+        checkoutDeliveryProvider(const Checkout(repoPath)).future,
+      );
       await container.pump();
       final measured = git.requests.length;
       expect(measured, greaterThan(0), reason: 'the card really did ask');
-      container.read(deliveryPollProvider.notifier).state++;
-      await container.pump();
 
       // Only `r0`: both sessions are on `release/1.4`, but `f0` also failed
       // and "Ended in failure" is seeded above this section, so it took it.
@@ -227,8 +227,9 @@ void main() {
         checkoutDeliveryProvider(const Checkout(repoPath)),
         (_, _) {},
       );
-      await container.pump();
-      container.read(deliveryPollProvider.notifier).state++;
+      await container.read(
+        checkoutDeliveryProvider(const Checkout(repoPath)).future,
+      );
       await container.pump();
 
       // "Ended in failure" is seeded above the new section, so it claims f0.
@@ -289,7 +290,9 @@ void main() {
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
-            server.gitWork.serve(FakeCommandRunnerFactory(fallback: FakeCommandRunner())),
+            server.gitWork.serve(
+              FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+            ),
           ),
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),
@@ -383,7 +386,9 @@ void main() {
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
-            server.gitWork.serve(FakeCommandRunnerFactory(fallback: FakeCommandRunner())),
+            server.gitWork.serve(
+              FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+            ),
           ),
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),

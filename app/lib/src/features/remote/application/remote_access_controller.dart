@@ -8,8 +8,6 @@ library;
 
 import 'dart:async';
 
-import 'package:karmashala_host/lifecycle_client.dart'
-    show CompanionNoticeKind, CompanionNoticeMessage;
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
@@ -17,10 +15,6 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import '../../../core/probe/probe_mode.dart';
 import '../../notes/application/notes_providers.dart';
-import '../../notifications/application/attention_inbox.dart';
-import '../../notifications/application/notification_providers.dart';
-import 'package:karmashala_notifications/attention.dart';
-import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/settings.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -248,73 +242,6 @@ class RemoteAccessController {
     _chain = _chain.then((_) => _stopLocalRelay()).catchError((Object _) {});
     return _chain;
   }
-
-  /// Where the desktop's news goes: the server's companion, over the link.
-  _CompanionNews? get _news {
-    final host = _host;
-    return host == null ? null : _HostNews(host);
-  }
-
-  void onSessionsMoved() => _news?.sessionsMoved();
-
-  void onAttention(
-    List<SessionAttention>? previous,
-    List<SessionAttention> next,
-  ) {
-    final news = _news;
-    if (news == null) return;
-    news.sessionsMoved();
-    final before = {
-      for (final attention in previous ?? const <SessionAttention>[])
-        if (attention.kind == AttentionKind.needsInput)
-          attention.session.openId,
-    };
-    for (final attention in next) {
-      if (attention.kind != AttentionKind.needsInput) continue;
-      if (attention.session.imported) continue;
-      if (before.contains(attention.session.openId)) continue;
-      news.approvalRequested(attention.session.openId);
-    }
-  }
-
-  /// New attention-inbox items become sealed pushes for paired phones with no
-  /// live link; connected phones already heard it as `session.changed`.
-  void onInboxChanged(AttentionInbox? previous, AttentionInbox next) {
-    final news = _news;
-    if (news == null) return;
-    final before = {
-      for (final item in previous?.items ?? const <InboxItem>[]) item.id,
-    };
-    var limitFiled = false;
-    for (final item in next.items) {
-      if (before.contains(item.id)) continue;
-      if (item.session.imported) continue;
-      final kind = switch (item.kind) {
-        InboxItemKind.finished => 'finished',
-        InboxItemKind.needsApproval => 'needs_approval',
-        InboxItemKind.failed => 'failed',
-        InboxItemKind.usageLimit => kAttentionUsageLimit,
-        // Delivery news and follow-ups stay on the desktop in v1: what a
-        // session left behind is to sit down with, not a buzz in a pocket.
-        InboxItemKind.checksFailed ||
-        InboxItemKind.changesRequested ||
-        InboxItemKind.readyToMerge ||
-        InboxItemKind.followUp => null,
-      };
-      if (kind == null) continue;
-      if (item.kind == InboxItemKind.usageLimit) limitFiled = true;
-      news.attention(
-        sessionId: item.session.openId,
-        title: item.session.label,
-        kind: kind,
-        // "Codex hit its 5-hour limit. Resets 14:05." — the reset is the news.
-        detail: item.kind == InboxItemKind.usageLimit ? item.detail : null,
-      );
-    }
-    // A limit is carried on the session's snapshot, which nothing else moves
-    // when it is filed; a connected phone hears it from this sweep.
-    if (limitFiled) news.sessionsMoved();
-  }
 }
 
 bool _sameUris(List<Uri> a, List<Uri> b) {
@@ -325,67 +252,10 @@ bool _sameUris(List<Uri> a, List<Uri> b) {
   return true;
 }
 
-/// The desktop's news for phones, whichever server carries it.
-abstract interface class _CompanionNews {
-  void sessionsMoved();
-  void approvalRequested(String sessionId);
-  void attention({
-    required String sessionId,
-    required String title,
-    required String kind,
-    String? detail,
-  });
-}
-
-/// The session host's server, told over the lifecycle link.
-class _HostNews implements _CompanionNews {
-  _HostNews(this._host);
-  final HostCompanionLink _host;
-
-  @override
-  void sessionsMoved() => _host.notice(
-    const CompanionNoticeMessage(CompanionNoticeKind.sessionsMoved),
-  );
-
-  @override
-  void approvalRequested(String sessionId) => _host.notice(
-    CompanionNoticeMessage(
-      CompanionNoticeKind.approvalRequested,
-      sessionId: sessionId,
-    ),
-  );
-
-  @override
-  void attention({
-    required String sessionId,
-    required String title,
-    required String kind,
-    String? detail,
-  }) => _host.notice(
-    CompanionNoticeMessage(
-      CompanionNoticeKind.attention,
-      sessionId: sessionId,
-      title: title,
-      attention: kind,
-      detail: detail,
-    ),
-  );
-}
-
 /// The one controller. Read it once at bootstrap so an enabled setting starts
 /// the service; the settings section reads it to toggle, pair and revoke.
 final remoteAccessControllerProvider = Provider<RemoteAccessController>((ref) {
   final controller = RemoteAccessController(ref);
-  // The desktop's own change signals, fanned out to every connected phone.
-  ref.listen(sessionsRevisionProvider, (_, _) => controller.onSessionsMoved());
-  ref.listen(
-    sessionAttentionProvider,
-    (previous, next) => controller.onAttention(previous, next),
-  );
-  ref.listen(
-    attentionInboxProvider,
-    (previous, next) => controller.onInboxChanged(previous, next),
-  );
   // The host answers `notes.get` itself, by its config's switch, which this
   // keeps in step with the app's.
   ref.listen(notesEnabledProvider, (_, _) => unawaited(controller.sync()));

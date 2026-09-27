@@ -20,6 +20,14 @@ class ScreenFacts {
   String? lastCommand;
   int? lastCommandExitCode;
 
+  /// How many commands the shell has said it runs (OSC 133 `C`): the id of
+  /// the newest block, so a command run twice is two blocks.
+  int commandCount = 0;
+
+  /// Whether the newest command has ended (OSC 133 `D`, with or without a
+  /// code). True before any command: nothing runs.
+  bool lastCommandEnded = true;
+
   /// Told after each fact moves, in the same turn as the bytes that moved it.
   void Function()? onChanged;
 
@@ -53,11 +61,17 @@ class ScreenFacts {
         if (command == null || command.isEmpty) return;
         lastCommand = command;
         lastCommandExitCode = null;
+        commandCount++;
+        lastCommandEnded = false;
         onChanged?.call();
       case 'D':
         final code = args.length > 1 ? int.tryParse(args[1]) : null;
-        if (lastCommand == null || code == lastCommandExitCode) return;
+        if (lastCommand == null ||
+            (lastCommandEnded && code == lastCommandExitCode)) {
+          return;
+        }
         lastCommandExitCode = code;
+        lastCommandEnded = true;
         onChanged?.call();
     }
   }
@@ -74,9 +88,7 @@ class ScreenFacts {
     final text = StringBuffer();
     for (var row = fromRow; row <= toRow && row < lines.length; row++) {
       final line = lines[row];
-      text.write(
-        row == fromRow ? line.getText(fromColumn) : line.getText(),
-      );
+      text.write(row == fromRow ? line.getText(fromColumn) : line.getText());
     }
     return text.toString().trim();
   }

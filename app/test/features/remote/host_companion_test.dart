@@ -1,7 +1,8 @@
 /// Where this machine has a session host, the host serves the phones: this app
 /// runs no companion server, writes its Remote access settings into the
-/// server's config through the host, tells it where the app's embedded relay
-/// is, and answers the calls the host forwards with its own bindings.
+/// server's config through the host, and tells it where the app's embedded
+/// relay is. Every phone call is the server's own (slice 5c): nothing is
+/// forwarded here.
 library;
 
 import 'dart:typed_data';
@@ -13,8 +14,6 @@ import 'package:karmashala/src/features/remote/application/host_companion_provid
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_source.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_settings.dart';
-import 'package:karmashala_companion_server/karmashala_companion_server.dart'
-    show CompanionMethod;
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_host/server_config.dart';
 import 'package:karmashala_remote/pairing.dart';
@@ -23,10 +22,8 @@ import 'package:karmashala_remote/remote.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fake_host_lifecycle.dart';
 import '../../support/memory_server_config.dart';
-import 'fake_bindings.dart';
 
 void main() {
-  late FakeRemoteBindings fake;
   late FakeHostLifecycle host;
   late HostCompanionLink link;
   late Map<String, PairedDevice> recorded;
@@ -41,11 +38,9 @@ void main() {
   );
 
   setUp(() {
-    fake = FakeRemoteBindings()..addSession('s1', title: 'Fix the cart');
     host = FakeHostLifecycle();
     recorded = {};
     link = HostCompanionLink(
-      bindings: () => fake.bindings,
       deviceById: (id) async => recorded[id],
     );
   });
@@ -55,8 +50,6 @@ void main() {
     link.attached(feed);
     return feed;
   }
-
-  Future<void> settle() => Future<void>.delayed(Duration.zero);
 
   group('the link', () {
     test(
@@ -95,44 +88,6 @@ void main() {
       });
       expect(answer['asked'], ServerMethod.configSet);
       expect(host.serverCalls.single.method, ServerMethod.configSet);
-    });
-
-    test('answers a forwarded call with this app\'s bindings', () async {
-      await attach();
-
-      host.companionCallLink.add(
-        CompanionCallMessage(
-          callId: 7,
-          method: CompanionMethod.listSessions.wire,
-          arguments: const {},
-        ),
-      );
-      await settle();
-      await settle();
-
-      final answer = host.companionAnswers.single;
-      expect(answer.callId, 7);
-      expect(answer.code, isNull);
-      final rows = answer.result!['sessions']! as List;
-      expect((rows.single as Map)['title'], 'Fix the cart');
-    });
-
-    test('a refusal travels as the phone\'s error code', () async {
-      await attach();
-
-      host.companionCallLink.add(
-        const CompanionCallMessage(
-          callId: 8,
-          method: 'sessions.get',
-          arguments: {},
-        ),
-      );
-      await settle();
-      await settle();
-
-      final answer = host.companionAnswers.single;
-      expect(answer.code, ErrorCode.badRequest.wire);
-      expect(answer.message, 'missing sessionId');
     });
 
     test('pairs through the host and reads the stored phone back', () async {
@@ -296,15 +251,6 @@ void main() {
       expect(data.deviceRows.getById('pixel')!.revoked, isTrue);
       expect(data.deviceRows.applied, ['devices.revoke']);
       expect(host.companionNotices, hasLength(notices));
-    });
-
-    test('the desktop\'s news goes to the host', () async {
-      controller.onSessionsMoved();
-
-      expect(
-        host.companionNotices.single.kind,
-        CompanionNoticeKind.sessionsMoved,
-      );
     });
 
     test('pairing asks the host, and only with remote access on', () async {

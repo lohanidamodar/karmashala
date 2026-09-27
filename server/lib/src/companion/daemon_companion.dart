@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart'
-    show AgentActivityStatus, AgentRegistry;
+    show AgentRegistry, AgentStatusReport;
+import 'package:karmashala_notifications/attention.dart'
+    show InboxItem, InboxItemKind;
 import 'package:agent_cli/discovery.dart' show SystemClock;
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart'
     show CliStoreLocator, ConversationPresence, ConversationStoreIndex;
 import 'package:agent_cli/usage.dart' show AgentUsageService, UsageSample;
-import 'package:karmashala_agent_status/karmashala_agent_status.dart'
-    show HostedAgentStatus;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_companion_server/store.dart';
@@ -23,7 +23,6 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/push.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart' show Session;
-import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:path/path.dart' as p;
@@ -36,7 +35,6 @@ import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
 import '../protocol/messages.dart';
 import '../status/daemon_prompt_answers.dart';
-import 'companion_app_relay.dart';
 import 'companion_handler.dart';
 import 'daemon_session_control.dart';
 import 'daemon_worktrees.dart';
@@ -44,16 +42,17 @@ import 'registry_screens.dart';
 import 'package:karmashala_session_engine/store.dart';
 
 /// The phone companion, served by the daemon: the one companion server on a
-/// machine with a session host, running whether or not the desktop app is.
+/// machine, running whether or not a desktop is.
 ///
 /// It runs `RemoteHostService` — pairing, sealed channels, the LAN listener and
 /// beacon, relay listeners, push — on the shared store's paired devices, with
-/// the bindings `hostCompanionBindings` composes: the store and this host's own
-/// screens while no app is connected, and calls forwarded to the app while one
-/// is. How it serves is the server's own config (`server.json`, [config]),
-/// which the desktop's Remote access settings write through
-/// `server.config.set` and [reconfigure] applies at once; the only thing an
-/// app adds is where its embedded relay listens, while it is connected.
+/// the bindings `hostCompanionBindings` composes: every call answered here,
+/// from the store, the server's attention and its own screens (slice 5c:
+/// nothing is forwarded to a desktop). How it serves is the server's own
+/// config (`server.json`, [config]), which the desktop's Remote access
+/// settings write through `server.config.set` and [reconfigure] applies at
+/// once; the only thing a desktop adds is where its embedded relay listens,
+/// while its link is open.
 class DaemonCompanion implements CompanionHandler {
   DaemonCompanion({
     required this.database,
@@ -127,9 +126,58 @@ class DaemonCompanion implements CompanionHandler {
   CompanionConfig get ownConfig => _own;
   CompanionConfig _own;
 
-  /// Where the connected app's embedded relay listens, or null — none, or no
-  /// app. Never kept: it closes with the app.
+  /// Where a connected desktop's embedded relay listens, or null — none, or
+  /// no desktop. Never kept: it closes with the desktop.
   Uri? _localRelay;
+
+  /// The link that told [_localRelay], so its hang-up drops it.
+  Object? _relayOwner;
+
+  /// What the server's attention says of a session (slice 5c), set by
+  /// `serve` once it is built: its agent's status, what it asks of a person,
+  /// and a usage limit's words while unseen. Until then a phone's list reads
+  /// the prompts' own status.
+  AgentStatusReport? Function(String sessionId)? statusOf;
+  String? Function(String sessionId)? attentionOf;
+  String? Function(String sessionId)? usageLimitOf;
+
+  /// Every agent record on this machine, `agentId/conversationId` → path
+  /// (the conversation index's walk), set by `serve`: a phone's
+  /// transcript is read from the agent's own record through it. Unset, every
+  /// transcript is the screen's.
+  Future<Map<String, String>> Function()? recordIndex;
+
+  /// The server's own delivery reading of a session (`DeliveryWatch`), as a
+  /// stage name; unset or unread, "could not tell".
+  String? Function(String sessionId)? deliveryStageOf;
+
+  final AgentRecords _records = AgentRecords();
+
+  /// Where [sessionId]'s agent keeps its record here: imported history names
+  /// its file; a row names its agent and conversation, found in the index.
+  Future<AgentRecordLocation?> _recordOf(String sessionId) async {
+    final imported = ImportedSessionDao(database).getById(sessionId);
+    if (imported != null) {
+      return (path: imported.filePath, agentId: imported.cli);
+    }
+    final row = _sessions.getById(sessionId);
+    final conversation = row?.externalSessionId;
+    if (row == null || conversation == null || conversation.isEmpty) {
+      return null;
+    }
+    final agentId = _rows.installation(row.agentInstallationId)?.agentId;
+    final index = recordIndex;
+    if (agentId == null || index == null) return null;
+    final Map<String, String> paths;
+    try {
+      paths = await index();
+    } on Object {
+      return null;
+    }
+    final path = paths['$agentId/$conversation'];
+    return path == null ? null : (path: path, agentId: agentId);
+  }
+
   final Duration transcriptPollInterval;
   final CompanionScreens screens;
 
@@ -169,12 +217,8 @@ class DaemonCompanion implements CompanionHandler {
   DaemonSessionControl? _control;
   late final _ControlSlot _controlSlot = _ControlSlot(() => _control);
 
-  /// The desktop app companion calls are forwarded to, while one is connected.
-  final CompanionAppRelay app = CompanionAppRelay();
-
   late final RemoteHostBindings bindings = hostCompanionBindings(
     hostName: hostName,
-    app: app,
     hosted: prompts == null ? null : CompanionPrompts(prompts!.answers),
     holds: prompts?.holds,
     workspace: HostedWorkspace(
@@ -185,12 +229,23 @@ class DaemonCompanion implements CompanionHandler {
     control: _controlSlot,
     usage: _usageSnapshot,
     attachments: attachments,
+    deliveryStageOf: (sessionId) => deliveryStageOf?.call(sessionId),
     atRest: SessionsAtRest(
       sessions: _sessions,
       names: WorkspaceNames(database),
       screens: screens,
       hostName: hostName,
-      agentStatusOf: (sessionId) => prompts?.statusOf(sessionId),
+      agentStatusOf: (sessionId) =>
+          statusOf?.call(sessionId) ?? prompts?.statusOf(sessionId),
+      attentionOf: (sessionId) => attentionOf == null
+          ? remoteAttentionOf(prompts?.statusOf(sessionId))
+          : attentionOf!(sessionId),
+      usageLimitOf: (sessionId) => usageLimitOf?.call(sessionId),
+      agentIdOf: (installationId) =>
+          _rows.installation(installationId)?.agentId,
+      imported: ImportedSessionDao(database).getAll,
+      recordOf: _recordOf,
+      records: _records,
       attachments: attachments,
       attachmentSupportOf: attachments == null ? null : _attachmentSupport,
       clock: _now,
@@ -217,7 +272,6 @@ class DaemonCompanion implements CompanionHandler {
   RemoteHostService? _service;
   Future<void> _chain = Future<void>.value();
   StreamSubscription<LifecycleEvent>? _events;
-  StreamSubscription<HostedAgentStatus>? _statuses;
 
   /// The running server, or null while remote access is off.
   RemoteHostService? get service => _service;
@@ -404,17 +458,13 @@ class DaemonCompanion implements CompanionHandler {
   }
 
   /// Serves by the server's config, following [sessionEvents] — the host's
-  /// lifecycle feed — and [statusChanges], what the agents it holds are
-  /// doing. Throws when the LAN listener cannot bind at all.
-  Future<void> start({
-    required Stream<LifecycleEvent> sessionEvents,
-    Stream<HostedAgentStatus>? statusChanges,
-  }) async {
-    app.onChanged = (_) => _sessionsMoved();
+  /// lifecycle feed. What the agents are doing reaches phones through the
+  /// server's attention ([sessionsMoved], [approvalRequested],
+  /// [attentionFiled]). Throws when the LAN listener cannot bind at all.
+  Future<void> start({required Stream<LifecycleEvent> sessionEvents}) async {
     // The one moment provably no upload is in flight.
     await attachments?.sweep();
     _events = sessionEvents.listen(_onLifecycle);
-    _statuses = statusChanges?.listen(_onStatus);
     await _serialised(() => _apply(_served()));
   }
 
@@ -499,7 +549,7 @@ class DaemonCompanion implements CompanionHandler {
     Uri? localRelay,
     void Function(HostMessage) send,
   ) {
-    app.adopt(owner, send);
+    _relayOwner = owner;
     return _serialised(() {
       _localRelay = localRelay;
       return _apply(_served());
@@ -507,39 +557,10 @@ class DaemonCompanion implements CompanionHandler {
   }
 
   @override
-  void answer(Object owner, CompanionResultMessage result) =>
-      app.answer(owner, result);
-
-  @override
   Future<void> notice(Object owner, CompanionNoticeMessage notice) async {
     final service = _service;
     if (service == null) return;
-    // The two fan-outs that ask the app — its session list, its approval
-    // evidence — are not awaited: the app answers on the very link this
-    // notice came in on, whose next frame is read only once this returns.
     switch (notice.kind) {
-      case CompanionNoticeKind.sessionsMoved:
-        _sessionsMoved();
-      case CompanionNoticeKind.approvalRequested:
-        final sessionId = notice.sessionId;
-        if (sessionId == null) return;
-        unawaited(
-          service
-              .notifyApprovalRequested(sessionId)
-              .catchError(
-                (Object error) => onLog?.call('approval news failed: $error'),
-              ),
-        );
-      case CompanionNoticeKind.attention:
-        final sessionId = notice.sessionId;
-        final kind = notice.attention;
-        if (sessionId == null || kind == null) return;
-        await service.pushAttentionNews(
-          sessionId: sessionId,
-          title: notice.title ?? '',
-          kind: kind,
-          detail: notice.detail,
-        );
       case CompanionNoticeKind.pairingCancelled:
         await service.cancelPairing();
     }
@@ -547,10 +568,9 @@ class DaemonCompanion implements CompanionHandler {
 
   @override
   Future<void> detach(Object owner) async {
-    final wasApp = app.isApp(owner);
-    app.detach(owner);
-    if (!wasApp) return;
-    // The app's embedded relay closed with it; nothing waits there any more.
+    if (!identical(_relayOwner, owner)) return;
+    _relayOwner = null;
+    // The desktop's embedded relay closed with it; nothing waits there.
     await _serialised(() {
       _localRelay = null;
       return _apply(_served());
@@ -560,11 +580,69 @@ class DaemonCompanion implements CompanionHandler {
   Future<void> close() async {
     await _events?.cancel();
     _events = null;
-    await _statuses?.cancel();
-    _statuses = null;
-    app.onChanged = null;
-    app.close();
     await _serialised(_stopService);
+  }
+
+  /// Something a phone's list shows moved — a status, who is waiting: live
+  /// phones read their subscriptions again.
+  void sessionsMoved() => _sessionsMoved();
+
+  /// Row [sessionId]'s agent started waiting on a person: news for every
+  /// live phone, which the phone turns into its approval card.
+  void approvalRequested(String sessionId) {
+    final service = _service;
+    if (service == null) return;
+    unawaited(
+      service
+          .notifyApprovalRequested(sessionId)
+          .catchError(
+            (Object error) => onLog?.call('approval news failed: $error'),
+          ),
+    );
+  }
+
+  /// Items new to the server's inbox: sealed pushes for paired phones with no
+  /// live link (a connected phone hears it as `session.changed`). Delivery
+  /// news and follow-ups stay on the desktop: what a session left behind is
+  /// to sit down with, not a buzz in a pocket.
+  void attentionFiled(List<InboxItem> items) {
+    final service = _service;
+    if (service == null) return;
+    var limitFiled = false;
+    for (final item in items) {
+      if (item.session.imported) continue;
+      final kind = switch (item.kind) {
+        InboxItemKind.finished => 'finished',
+        InboxItemKind.needsApproval => kAttentionNeedsApproval,
+        InboxItemKind.failed => 'failed',
+        InboxItemKind.usageLimit => kAttentionUsageLimit,
+        InboxItemKind.checksFailed ||
+        InboxItemKind.changesRequested ||
+        InboxItemKind.readyToMerge ||
+        InboxItemKind.followUp => null,
+      };
+      if (kind == null) continue;
+      if (item.kind == InboxItemKind.usageLimit) limitFiled = true;
+      unawaited(
+        service
+            .pushAttentionNews(
+              sessionId: item.session.openId,
+              title: item.session.label,
+              kind: kind,
+              // "Codex hit its 5-hour limit. Resets 14:05." — the reset is
+              // the news.
+              detail: item.kind == InboxItemKind.usageLimit
+                  ? item.detail
+                  : null,
+            )
+            .catchError(
+              (Object error) => onLog?.call('attention push failed: $error'),
+            ),
+      );
+    }
+    // A limit is carried on the session's snapshot, which nothing else moves
+    // when it is filed; a connected phone hears it from this.
+    if (limitFiled) _sessionsMoved();
   }
 
   Future<void> _serialised(Future<void> Function() step) {
@@ -628,68 +706,13 @@ class DaemonCompanion implements CompanionHandler {
     if (service != null) unawaited(service.notifySessionsChanged());
   }
 
-  /// A session this host runs started or ended: live phones re-read, and —
-  /// with no app to file an inbox item — a phone with no live link is pushed
-  /// the ending, as the app's inbox would have.
+  /// A session this host runs started or ended: live phones re-read. What it
+  /// means for a person — a finished turn, a failure — is the attention's to
+  /// file and push ([attentionFiled]).
   void _onLifecycle(LifecycleEvent event) {
     // After the status recording, which listens on the same synchronous feed
     // and writes the row this change is read from.
-    scheduleMicrotask(() {
-      _sessionsMoved();
-      if (event.kind == LifecycleEventKind.exited && !app.connected) {
-        unawaited(_pushEnding(event));
-      }
-    });
-  }
-
-  /// An agent this host holds moved: live phones re-read their lists, and —
-  /// with no app to announce it — a prompt opening is news, as the app's
-  /// `approvalRequested` notice would have made it.
-  void _onStatus(HostedAgentStatus status) {
-    final wasWaiting = _waiting.contains(status.sessionId);
-    final waiting =
-        status.report.status == AgentActivityStatus.awaitingApproval;
-    if (waiting) {
-      _waiting.add(status.sessionId);
-    } else {
-      _waiting.remove(status.sessionId);
-    }
-    if (app.connected) return;
-    _sessionsMoved();
-    final service = _service;
-    if (service == null || !waiting || wasWaiting) return;
-    unawaited(
-      service
-          .notifyApprovalRequested(status.sessionId)
-          .catchError(
-            (Object error) => onLog?.call('approval news failed: $error'),
-          ),
-    );
-  }
-
-  /// Rows whose agent is waiting on a person now, so each wait is news once.
-  final _waiting = <String>{};
-
-  Future<void> _pushEnding(LifecycleEvent event) async {
-    final service = _service;
-    final code = event.exitCode;
-    // Ended by request, or with no code to judge by: nothing to announce.
-    if (service == null || event.endedByClose || code == null) return;
-    final rows = _sessions.getAll();
-    final rowId = sessionIdForHostId(event.sessionId, [
-      for (final row in rows) row.id,
-    ]);
-    final row = rowId == null
-        ? null
-        : rows.firstWhere((candidate) => candidate.id == rowId);
-    await service.pushAttentionNews(
-      sessionId: rowId ?? event.sessionId,
-      title:
-          row?.title ??
-          screens.find(event.sessionId)?.command ??
-          event.sessionId,
-      kind: code == 0 ? 'finished' : 'failed',
-    );
+    scheduleMicrotask(_sessionsMoved);
   }
 
   /// The relay a pairing names, or null when it names none this host can
@@ -707,7 +730,7 @@ class DaemonCompanion implements CompanionHandler {
 
 /// The sessions a phone starts, resumes and reconfigures, held for the
 /// bindings before [DaemonCompanion.serveSessions] has what a launch needs:
-/// until then each call says the app is not running, as with no host control.
+/// until then each call says the server cannot do it yet.
 class _ControlSlot implements HostedSessionControl {
   _ControlSlot(this._control);
 
@@ -715,7 +738,7 @@ class _ControlSlot implements HostedSessionControl {
 
   HostedSessionControl get _here {
     final control = _control();
-    if (control == null) throw companionAppNotRunning;
+    if (control == null) throw companionNotServedHere;
     return control;
   }
 

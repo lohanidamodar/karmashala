@@ -251,6 +251,31 @@ class DataClient {
   /// ended, or was forgotten.
   Stream<TerminalChange> get terminalChanges => _terminalChanges.stream;
 
+  /// Every session's status the server keeps (slice 5c), by the workspace
+  /// row it opens under — greeted whole on subscribe, then kept by each
+  /// change.
+  final sessionStatuses = <String, SessionStatusEntry>{};
+
+  /// How much of the watch set the server's last cycle reached; null until
+  /// it has said.
+  WatchCoverage? watchCoverage;
+
+  /// The server's inbox and who is waiting, as last told.
+  AttentionSnapshot attention = AttentionSnapshot.empty;
+
+  /// What the forge says about each checkout's branch, as the server's own
+  /// delivery poll last read it (slice 5c), by checkout directory — greeted
+  /// whole on subscribe, then kept by each `ForgeReadingChanged`.
+  final forgeReadings = <EnvironmentPath, PullRequestReading>{};
+
+  final _attentionChanges = StreamController<AttentionChange>.broadcast(
+    sync: true,
+  );
+
+  /// A status, the watch set's reach, the inbox, agent news or a cue to show
+  /// a session — each as the server tells it, after the copy above has it.
+  Stream<AttentionChange> get attentionChanges => _attentionChanges.stream;
+
   /// The key [knownHosts] keeps a trusted key under.
   static String knownHostKey(String host, int port) => '$host:$port';
 
@@ -859,11 +884,42 @@ class DataClient {
         case EnvVariablesChanged(:final variables):
           envVariables = variables;
           if (!_envChanges.isClosed) _envChanges.add(variables);
+        case final AttentionChange change:
+          _applyAttention(change);
       }
     }
   }
 
+  void _applyAttention(AttentionChange change) {
+    switch (change) {
+      case SessionStatusChanged(:final entry):
+        sessionStatuses[entry.openId] = entry;
+      case SessionStatusRemoved(:final openId):
+        sessionStatuses.remove(openId);
+      case WatchCoverageChanged(:final coverage):
+        watchCoverage = coverage;
+      case InboxChanged(:final snapshot):
+        attention = snapshot;
+      case ForgeReadingChanged(:final checkout, :final reading):
+        forgeReadings[checkout] = reading;
+      case AttentionNewsTold() || InboxOpenWanted() || UsageLimitNoticed():
+        break;
+    }
+    if (!_attentionChanges.isClosed) _attentionChanges.add(change);
+  }
+
+  /// A new link is greeted with every status the server keeps now: what
+  /// this copy held from the last one is let go first, each told removed.
+  void _forgetStatuses() {
+    for (final openId in sessionStatuses.keys.toList()) {
+      _applyAttention(SessionStatusRemoved(openId));
+    }
+    // Greeted again whole; a reading the new link does not repeat is gone.
+    forgeReadings.clear();
+  }
+
   Future<void> _attach(DataEndpoint endpoint) async {
+    _forgetStatuses();
     unawaited(_changesSubscription?.cancel());
     _changesSubscription = endpoint.changes.listen(_onChanges);
     await endpoint.send(const DataSubscribe());
@@ -1007,6 +1063,7 @@ class DataClient {
     unawaited(_runsChanges.close());
     unawaited(_fileChanges.close());
     unawaited(_terminalChanges.close());
+    unawaited(_attentionChanges.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());

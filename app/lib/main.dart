@@ -32,8 +32,6 @@ import 'src/features/devices/application/device_bindings.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'src/features/environments/data/environments_data.dart';
 import 'src/features/mcp/launcher_control_server.dart';
-import 'src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
-import 'src/features/sessions/application/session_liveness_reconciler.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/terminal/application/local_host_providers.dart';
 import 'src/features/terminal/application/terminal_layout_providers.dart';
@@ -41,7 +39,6 @@ import 'package:karmashala_terminal_runtime/persistence.dart'
     show TerminalLayoutStore;
 import 'src/features/system/system_integration_service.dart';
 import 'src/features/verification/application/verification_providers.dart';
-import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 
 /// Application entry point. Logging and the uncaught-error handlers first, so
 /// whatever the bootstrap does next is on record if it fails.
@@ -172,18 +169,6 @@ Future<void> _bootstrap(AppLogger logger) async {
   // The supervisor keeps the server up; the data link follows it back.
   final supervisor = container.read(localHostSupervisorProvider);
   if (supervisor != null) superviseDataLink(data, supervisor);
-
-  // Before any pane exists: a row still claiming to run from a previous run is
-  // one we lost sight of — unless this machine's host feed will say otherwise.
-  final followsLocalHost = container.read(hostLifecycleSourceProvider) != null;
-  final onThisMachine = container.read(sessionRunsOnThisMachineProvider);
-  final lost = markSessionsLostOnLaunch(
-    container.read(sessionsDataProvider),
-    where: followsLocalHost ? (session) => !onThisMachine(session) : null,
-  );
-  if (lost > 0) {
-    logger.info('$lost session(s) were still marked live from a previous run.');
-  }
 
   // The persisted diagnostics preferences: debug mode's root level, the buffer
   // bound, and whether the file is written at all.

@@ -14,13 +14,12 @@ import '../../sessions/application/session_status_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'automation_providers.dart';
 import 'scheduled_resume_providers.dart';
-import 'scheduled_resume_runner.dart';
+import 'resume_announcer.dart';
 
 /// Keeps waiting resumes honest between arming and firing: a session its user
 /// carried on with is let go, and a reading that moves the reset moves the
 /// row. Listens only — it never asks for usage. Must be watched (Riverpod 3).
 class ScheduledResumeObserver extends Notifier<int> {
-  bool _swept = false;
   bool _disposed = false;
 
   @override
@@ -84,26 +83,9 @@ class ScheduledResumeObserver extends Notifier<int> {
       if (resume.state != ScheduledResumeState.firing) resume,
   ];
 
+  /// Lets go of what a person carried on with. A row left `firing` is the
+  /// server's (slice 5c: it fires resumes itself), never failed from here.
   void _sweep() {
-    final dao = ref.read(resumesDataProvider);
-    if (!_swept) {
-      _swept = true;
-      // Only a process that died mid-resume leaves one here at boot.
-      for (final resume in dao.inState(ScheduledResumeState.firing)) {
-        final failed = _controller.end(
-          resume,
-          ScheduledResumeState.failed,
-          'Karmashala stopped while this was being resumed. It was not tried '
-          'again, because a second try could send the message twice.',
-        );
-        ref
-            .read(resumeAnnouncerProvider)
-            .announce(
-              failed,
-              ref.read(sessionsDataProvider).getById(resume.sessionId),
-            );
-      }
-    }
     final launcher = ref.read(sessionLauncherProvider);
     for (final resume in _waiting()) {
       final session = ref.read(sessionsDataProvider).getById(resume.sessionId);

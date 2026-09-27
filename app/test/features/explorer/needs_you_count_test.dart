@@ -7,9 +7,6 @@ import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/session_row_attention.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala_agent_reporting/hooks.dart';
-import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -23,13 +20,12 @@ import '../../support/test_machine.dart';
 /// **The Agents entry's count is the app's own "needs you".** It counts the
 /// sessions the rest of the app already calls waiting — the needs-approval
 /// items the attention inbox files (`NotificationReason.needsInput`, the status
-/// the app labels "Needs you") — and a registry status that says the same
-/// before the watcher's next pass. It invents no model of its own.
+/// the app labels "Needs you") — and a status the server says the same in
+/// before it files the item. It invents no model of its own. The server's
+/// status and inbox are seeded as it would tell them (slice 5c).
 void main() {
   late TestMachine db;
   late FakeDataServer server;
-  late AgentHookReceiver receiver;
-  late SessionStatusRegistry registry;
   late List<WatchedSession> watched;
   late ProviderContainer container;
 
@@ -75,79 +71,79 @@ void main() {
       }
     }
 
-    final clock = FixedClock(testTime);
-    final reports = AgentHookReports();
-    receiver = AgentHookReceiver(
-      registry: AgentRegistry.builtIn,
-      reports: reports,
-      clock: clock,
-    );
     watched = [
       for (final id in ['s1', 's2', 's3', 's4']) watch(id),
     ];
-    registry = SessionStatusRegistry(
-      statusService: AgentStatusService(
-        registry: AgentRegistry.builtIn,
-        hookReports: reports,
-        clock: clock,
-      ),
-      agents: AgentRegistry.builtIn,
-      loadSessions: () => watched,
-      clock: clock,
-    );
+    for (final session in watched) {
+      server.attention.statusOf(
+        session.openId,
+        AgentActivityStatus.idle,
+        sessionId: 'cli-${session.openId}',
+        label: session.label,
+      );
+    }
     container = ProviderContainer(
       overrides: [
         await server.override(),
-        clockProvider.overrideWithValue(clock),
-        sessionStatusRegistryProvider.overrideWithValue(registry),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
   });
 
-  tearDown(() {
-    container.dispose();
-    registry.dispose();
-  });
+  tearDown(() => container.dispose());
 
-  void hook(String row, String event, {String extra = ''}) {
-    receiver.handle(
-      agentId: AgentIds.claudeCode,
-      event: event,
-      body: '{"session_id":"cli-$row"$extra}',
-    );
-    registry.hookReported(AgentSessionKey(AgentIds.claudeCode, 'cli-$row'));
-  }
-
-  void askPermission(String row) => hook(
+  void say(String row, AgentActivityStatus status) => server.attention.statusOf(
     row,
-    'Notification',
-    extra: ',"notification_type":"permission_prompt"',
+    status,
+    sessionId: 'cli-$row',
+    label: 'Chat $row',
   );
+
+  /// The server's word, as each hook would have moved it.
+  void working(String row) => say(row, AgentActivityStatus.working);
+  void stopped(String row) => say(row, AgentActivityStatus.idle);
+  void askPermission(String row) =>
+      say(row, AgentActivityStatus.awaitingApproval);
+
+  /// Everything the server said once more — a cycle that finds nothing new.
+  void again() {
+    for (final entry in [...server.attention.statuses.values]) {
+      server.attention.status(entry);
+    }
+  }
 
   AttentionInboxController inbox() =>
       container.read(attentionInboxProvider.notifier);
 
-  /// One watcher pass, in the inbox's own terms.
+  /// One pass of the server's watcher, in the inbox's own terms: what it
+  /// files, told to this app whole.
   void file({
     List<String> waiting = const [],
     List<(String, NotificationReason)> news = const [],
-  }) => inbox().apply(
-    InboxUpdate(
-      waiting: [
-        for (final id in waiting)
-          SessionAttention(session: watch(id), kind: AttentionKind.needsInput),
-      ],
-      watched: {for (final s in watched) s.key},
-      news: [
-        for (final (id, reason) in news) (session: watch(id), reason: reason),
-      ],
-    ),
-  );
+  }) {
+    final attention = [
+      for (final id in waiting)
+        SessionAttention(session: watch(id), kind: AttentionKind.needsInput),
+    ];
+    server.attention.setInbox(
+      server.attention.inbox.apply(
+        InboxUpdate(
+          waiting: attention,
+          watched: {for (final s in watched) s.key},
+          news: [
+            for (final (id, reason) in news)
+              (session: watch(id), reason: reason),
+          ],
+        ),
+        testTime,
+      ),
+      waiting: attention,
+    );
+  }
 
   test(
     'counts exactly the sessions the Explorer marks as needing you',
     () async {
-      await registry.cycle();
       final count = container.listen(needsYouCountProvider, (_, _) {});
       expect(count.read(), 0);
 
@@ -171,7 +167,6 @@ void main() {
 
   test('an unread finished turn is news, not a session blocked on you — the '
       'status bar counts it and this does not', () async {
-    await registry.cycle();
     file(news: [('s2', NotificationReason.finished)]);
 
     expect(container.read(attentionCountProvider), 1);
@@ -184,7 +179,6 @@ void main() {
   });
 
   test('one session with two items is one session waiting', () async {
-    await registry.cycle();
     file(waiting: ['s1'], news: [('s1', NotificationReason.needsInput)]);
     file(waiting: ['s1'], news: [('s1', NotificationReason.finished)]);
 
@@ -193,7 +187,6 @@ void main() {
 
   test('a question looked at but not answered still counts: the inbox keeps '
       'it, because looking does not answer it', () async {
-    await registry.cycle();
     file(waiting: ['s4']);
     inbox().markAllSeen();
 
@@ -209,14 +202,16 @@ void main() {
     expect(container.read(needsYouCountProvider), 0);
   });
 
-  test('the registry saying waiting counts before the watcher files it, and '
+  test('the server saying waiting counts before it files the item, and '
       'stops counting when the turn moves on', () async {
-    await registry.cycle();
     final count = container.listen(needsYouCountProvider, (_, _) {});
 
     askPermission('s2');
     expect(
-      registry.reportForOpenId('s2')?.status,
+      container
+          .read(sessionStatusRegistryProvider)
+          .reportForOpenId('s2')
+          ?.status,
       AgentActivityStatus.awaitingApproval,
     );
     expect(count.read(), 1);
@@ -225,16 +220,15 @@ void main() {
     file(waiting: ['s2']);
     expect(count.read(), 1);
 
-    hook('s2', 'PreToolUse');
+    working('s2');
     file();
     expect(count.read(), 0);
   });
 
   test('the page\'s Needs you group is exactly as long as the count', () async {
-    await registry.cycle();
     askPermission('s3');
     file(waiting: ['s1']);
-    hook('s2', 'PreToolUse');
+    working('s2');
 
     final groups = container.read(agentStateGroupsProvider);
     final waiting = groups.firstWhere((g) => g.state == AgentState.needsYou);
@@ -246,17 +240,16 @@ void main() {
     );
   });
 
-  test('a cycle that reconfirms every status moves nothing', () async {
-    await registry.cycle();
-    hook('s1', 'PreToolUse');
+  test('the server saying every status again moves nothing', () async {
+    working('s1');
     askPermission('s2');
     var moves = 0;
     container.listen(liveAgentStatusesProvider, (_, _) => moves++);
     var counts = 0;
     container.listen(needsYouCountProvider, (_, _) => counts++);
 
-    await registry.cycle();
-    await registry.cycle();
+    again();
+    again();
 
     expect(moves, 0);
     expect(counts, 0);
@@ -269,13 +262,12 @@ void main() {
   test(
     'a turn starting in a session nobody is waiting on wakes no count',
     () async {
-      await registry.cycle();
       askPermission('s1');
       var counts = 0;
       container.listen(needsYouCountProvider, (_, _) => counts++);
 
-      hook('s3', 'PreToolUse');
-      hook('s3', 'Stop');
+      working('s3');
+      stopped('s3');
 
       expect(counts, 0);
     },
@@ -284,12 +276,11 @@ void main() {
   test(
     'a waiting session that stops being watched stops being counted',
     () async {
-      await registry.cycle();
       askPermission('s1');
       expect(container.read(needsYouCountProvider), 1);
 
       watched = [watch('s2'), watch('s3'), watch('s4')];
-      await registry.cycle();
+      server.attention.forget('s1');
       await Future<void>.delayed(Duration.zero);
 
       expect(container.read(needsYouCountProvider), 0);
