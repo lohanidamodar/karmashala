@@ -216,6 +216,13 @@ class DataClient {
   /// by another client — what a view of rows not copied reads again on.
   Stream<EvidenceChange> get evidenceChanges => _evidenceChanges.stream;
 
+  final _gitChanges = StreamController<GitChange>.broadcast(sync: true);
+
+  /// What the server's git work moved — a checkout touched, a worktree
+  /// creation's stage, a cleanup sweep — here or by another client. Nothing
+  /// of it is copied: a view that shows it asks again.
+  Stream<GitChange> get gitChanges => _gitChanges.stream;
+
   /// The key [knownHosts] keeps a trusted key under.
   static String knownHostKey(String host, int port) => '$host:$port';
 
@@ -757,6 +764,8 @@ class DataClient {
             sshConnections[hostId] = state;
           }
           if (!_sshChanges.isClosed) _sshChanges.add(change);
+        case final GitChange change:
+          if (!_gitChanges.isClosed) _gitChanges.add(change);
       }
     }
   }
@@ -900,6 +909,7 @@ class DataClient {
     unawaited(_usageRecorded.close());
     unawaited(_evidenceChanges.close());
     unawaited(_sshChanges.close());
+    unawaited(_gitChanges.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());

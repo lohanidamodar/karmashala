@@ -4,6 +4,7 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../data/git_data.dart';
 import 'changes_providers.dart';
 
 /// One file's diff, named in full. A diff tab carries its own checkout rather
@@ -57,11 +58,12 @@ DiffTarget? diffTargetOf(String paneId) {
 /// Against `HEAD`, so the tab measures what the sidebar's `+N −M` measures: a
 /// staged change is absent from a bare `git diff` and the row promised it.
 final diffForTargetProvider = FutureProvider.autoDispose
-    .family<String, DiffTarget>(
-      (ref, target) async => ref
-          .read(changesServiceProvider)
-          .diffForFile(target.checkout, target.path, base: 'HEAD'),
-    );
+    .family<String, DiffTarget>((ref, target) async {
+      ref.watchCheckout(target.checkout);
+      return ref
+          .read(gitDataProvider)
+          .diffForFile(target.checkout, target.path, base: 'HEAD');
+    });
 
 /// The file the diff tab on screen is showing, or null when the active tab is
 /// not a diff. Derived rather than stored: a stored selection and the tab strip

@@ -1,10 +1,7 @@
-/// Staging, discarding and committing from the Changes pane, down to the git
-/// each button runs. The service is real over a fake runner, so a case that
-/// passes has proved the argv — the difference between `restore --staged` and
-/// `reset`, or between rewinding a file and deleting one, is the whole point.
+/// Staging, discarding and committing from the Changes pane, down to the
+/// request each button sends the server. What git each request runs is the
+/// server's, and proved there (`server/test/git/`, `GitService`'s own tests).
 library;
-
-import 'dart:io' show ProcessException;
 
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
@@ -12,13 +9,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
-import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/git.dart';
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 
@@ -26,18 +21,27 @@ void main() {
   const checkout = EnvironmentPath(environmentId: 'windows', path: r'C:\app');
   late FakeDataServer server;
   late DataClient client;
-  late FakeCommandRunner runner;
 
-  /// Every git command the pane ran, as argv after `-C <path>`.
-  List<List<String>> ran() => [
-    for (final request in runner.requests)
-      if (request.executable == 'git') request.arguments.sublist(2),
+  /// Every write the pane asked the server for, in order.
+  List<CheckoutRequest<Object?>> ran() => [
+    for (final request in server.gitWork.asked)
+      if (request is CheckoutRequest<Object?> &&
+          request.checkout.directory == checkout &&
+          const {
+            GitStage.name,
+            GitUnstage.name,
+            GitDiscard.name,
+            GitCommitStaged.name,
+            GitFetch.name,
+            GitPull.name,
+            GitPush.name,
+          }.contains(request.kind))
+        request,
   ];
 
   setUp(() async {
     server = FakeDataServer()..environmentRows.upsert(windowsEnv());
     client = await server.connect();
-    runner = FakeCommandRunner();
   });
 
   Future<void> pump(
@@ -62,12 +66,6 @@ void main() {
           recentCommitsProvider.overrideWith((ref) async => const []),
           workingTreeStatusProvider.overrideWith((ref) async => status),
           viewedCheckoutProvider.overrideWithValue(checkout),
-          changesServiceProvider.overrideWithValue(
-            ChangesService(
-              runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-              environmentDao: EnvironmentsData(client),
-            ),
-          ),
         ],
         child: const MaterialApp(
           home: Scaffold(body: ChangesView(repositoryName: 'app')),
@@ -114,7 +112,7 @@ void main() {
     await tester.tap(find.byTooltip('Stage').first);
     await tester.pumpAndSettle();
 
-    expect(ran().single, ['add', '--', 'lib/main.dart']);
+    expect((ran().single as GitStage).paths, ['lib/main.dart']);
   });
 
   testWidgets('unstaging restores the index, leaving the file alone', (
@@ -125,7 +123,7 @@ void main() {
     await tester.tap(find.byTooltip('Unstage').first);
     await tester.pumpAndSettle();
 
-    expect(ran().single, ['restore', '--staged', '--', 'lib/new.dart']);
+    expect((ran().single as GitUnstage).paths, ['lib/new.dart']);
   });
 
   testWidgets('discard asks first, and says an untracked file is deleted', (
@@ -147,9 +145,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // An untracked file is cleaned, not restored — and the restore that runs
-    // beside it is given no paths, so it never runs at all.
-    expect(ran().single, ['clean', '-f', '-d', '--', 'scratch.txt']);
+    // An untracked file is deleted, not rewound.
+    final discard = ran().single as GitDiscard;
+    expect(discard.untracked, ['scratch.txt']);
+    expect(discard.tracked, isEmpty);
   });
 
   testWidgets('a tracked discard rewinds the index and the working tree', (
@@ -167,13 +166,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(ran().single, [
-      'restore',
-      '--staged',
-      '--worktree',
-      '--',
-      'lib/main.dart',
-    ]);
+    final discard = ran().single as GitDiscard;
+    expect(discard.tracked, ['lib/main.dart']);
+    expect(discard.untracked, isEmpty);
   });
 
   testWidgets('with something staged, Commit commits what is staged', (
@@ -185,7 +180,9 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Commit'));
     await tester.pumpAndSettle();
 
-    expect(ran().single, ['commit', '-m', 'a real message']);
+    final commit = ran().single as GitCommitStaged;
+    expect(commit.message, 'a real message');
+    expect(commit.all, isFalse);
   });
 
   testWidgets('with nothing staged, the button says so and stages first', (
@@ -198,10 +195,9 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Commit all'));
     await tester.pumpAndSettle();
 
-    expect(ran(), [
-      ['add', '-A'],
-      ['commit', '-m', 'everything'],
-    ]);
+    final commit = ran().single as GitCommitStaged;
+    expect(commit.message, 'everything');
+    expect(commit.all, isTrue);
   });
 
   testWidgets('an empty message is refused before git is asked', (
@@ -218,10 +214,9 @@ void main() {
   });
 
   testWidgets('what git refused is what the pane says', (tester) async {
-    runner.responder = (_) => const CommandResult(
-      exitCode: 1,
-      stdout: '',
-      stderr: 'error: failed to push some refs to origin\n',
+    server.gitWork.refusals[GitPush.name] = const DataRefused(
+      DataRefusalCode.failed,
+      'git push failed: error: failed to push some refs to origin',
     );
     await pump(tester, files: const [modified]);
 
@@ -248,19 +243,17 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Publish'));
     await tester.pumpAndSettle();
 
-    expect(ran().single, ['push', '-u', 'origin', 'work']);
+    final push = ran().single as GitPush;
+    expect((push.remote, push.branch), ('origin', 'work'));
   });
 
-  /// A push is read by gitleaks first, over the commits it would send.
+  /// A push is scanned for secrets at the server; the pane says how it went.
   group('the secret scan before a push', () {
-    const finding =
-        '[{"RuleID":"github-pat","StartLine":3,"File":"lib/env.dart",'
-        '"Commit":"f43e2ea61b8100b3","Secret":"REDACTED"}]';
-
     testWidgets('a finding stops the push, and says where', (tester) async {
-      runner.responder = (request) => request.executable == 'gitleaks'
-          ? const CommandResult(exitCode: 1, stdout: finding, stderr: '')
-          : const CommandResult(exitCode: 0, stdout: '', stderr: '');
+      server.gitWork.refusals[GitPush.name] = const DataRefused.invalid(
+        'Not pushed: gitleaks found a possible secret in commits no remote '
+        'has yet — lib/env.dart:3 (github-pat, f43e2ea).',
+      );
       await pump(tester, files: const [modified]);
 
       await tester.tap(find.byTooltip('Push'));
@@ -268,32 +261,20 @@ void main() {
 
       expect(find.textContaining('Not pushed'), findsOneWidget);
       expect(find.textContaining('lib/env.dart:3'), findsOneWidget);
-      expect(ran().where((argv) => argv.first == 'push'), isEmpty);
-      final scan = runner.requests.singleWhere(
-        (r) => r.executable == 'gitleaks',
-      );
-      expect(scan.arguments, contains('--redact'));
-      expect(scan.arguments, contains('--log-opts=HEAD --not --remotes'));
     });
 
     testWidgets('without gitleaks it pushes, and says it did not scan', (
       tester,
     ) async {
-      runner.responder = (request) {
-        if (request.executable == 'gitleaks') {
-          throw CommandException(
-            'Failed to run "gitleaks"',
-            cause: const ProcessException('gitleaks', [], 'not found', 2),
-          );
-        }
-        return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-      };
+      server.gitWork.pushNote =
+          'Not scanned for secrets: gitleaks is not installed.';
       await pump(tester, files: const [modified]);
 
       await tester.tap(find.byTooltip('Push'));
       await tester.pumpAndSettle();
 
-      expect(ran().single, ['push']);
+      final push = ran().single as GitPush;
+      expect((push.remote, push.branch), (null, null));
       expect(find.textContaining('gitleaks is not installed'), findsOneWidget);
     });
 
@@ -303,7 +284,7 @@ void main() {
       await tester.tap(find.byTooltip('Push'));
       await tester.pumpAndSettle();
 
-      expect(ran().single, ['push']);
+      expect(ran().single, isA<GitPush>());
       expect(find.textContaining('found no secrets'), findsOneWidget);
     });
   });
@@ -326,6 +307,7 @@ void main() {
     await tester.tap(find.byTooltip('Pull 3'));
     await tester.pumpAndSettle();
 
-    expect(ran().single, ['pull', '--ff-only']);
+    final pull = ran().single as GitPull;
+    expect((pull.rebase, pull.merge), (false, false));
   });
 }

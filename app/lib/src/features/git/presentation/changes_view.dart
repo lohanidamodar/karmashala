@@ -1,3 +1,4 @@
+import '../data/git_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -222,7 +223,7 @@ class _AbortMergeButton extends ConsumerWidget {
     if (confirmed != true) return;
 
     final restored = await ref
-        .read(changesServiceProvider)
+        .read(gitDataProvider)
         .abortMerge(checkout);
     // Only on the half that rewrote files; an abort that found nothing to undo
     // changed no file.

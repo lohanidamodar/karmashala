@@ -5,7 +5,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -89,8 +88,6 @@ branch refs/heads/feature/login
           FakeCommandRunnerFactory(fallback: git),
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
-        probeGateProvider.overrideWithValue(headlessProbeGate),
-        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     server = LauncherControlServer(container);

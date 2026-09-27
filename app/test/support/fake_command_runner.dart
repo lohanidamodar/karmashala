@@ -139,6 +139,9 @@ class FakeCommandRunnerFactory implements CommandRunnerFactory {
   final Map<String, FakeCommandRunner> _byEnvironmentId;
   final FakeCommandRunner _fallback;
 
+  /// The runner every environment without its own gets.
+  FakeCommandRunner get fallback => _fallback;
+
   /// A fake hands out a runner for an SSH environment too, so a resolver asking
   /// this factory must not refuse one.
   @override

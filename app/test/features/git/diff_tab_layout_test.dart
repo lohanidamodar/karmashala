@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/git/presentation/diff_line_tile.dart';
 import 'package:karmashala/src/features/git/presentation/diff_tab_view.dart';
@@ -43,9 +42,6 @@ void main() {
       dataClientProvider.overrideWithValue(harness.client),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('t-')),
-      changesServiceProvider.overrideWithValue(
-        harness.container.read(changesServiceProvider),
-      ),
       diffForTargetProvider(_target).overrideWith((ref) async => _diff),
     ],
     child: MaterialApp(

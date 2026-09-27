@@ -33,11 +33,7 @@ class GitHubView extends ConsumerWidget {
               tooltip: 'Refresh',
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.arrowsClockwise),
-              onPressed: () {
-                ref.invalidate(githubRepositoryProvider);
-                ref.invalidate(githubPullRequestsProvider);
-                ref.invalidate(githubIssuesProvider);
-              },
+              onPressed: () => ref.invalidate(githubOverviewProvider),
             ),
           ],
         ),

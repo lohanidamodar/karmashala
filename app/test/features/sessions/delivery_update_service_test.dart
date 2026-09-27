@@ -147,9 +147,9 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(
+          server.gitWork.serve(FakeCommandRunnerFactory(
             fallback: FakeCommandRunner(responder: respond),
-          ),
+          )),
         ),
       ],
     );

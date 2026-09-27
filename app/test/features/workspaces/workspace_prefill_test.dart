@@ -8,7 +8,6 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
 import '../../support/fake_data_server.dart';
@@ -29,9 +28,6 @@ void main() {
         await server.override(),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('new-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        repositoryDiscoveryServiceProvider.overrideWithValue(
-          FakeRepositoryDiscoveryService(),
-        ),
         autoImportRunnerProvider.overrideWithValue(
           (_) async => const ImportSummary(),
         ),

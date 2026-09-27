@@ -1,9 +1,9 @@
+import '../../git/data/git_data.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../checkpoints/data/checkpoints_data.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
-import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'automation_providers.dart';
@@ -35,7 +35,7 @@ class AutomationUndo {
       return const RunCommits(baseSha: null, commits: [], published: 0);
     }
 
-    final changes = _ref.read(changesServiceProvider);
+    final changes = _ref.read(gitDataProvider);
     List<GitCommit> log;
     try {
       log = await changes.log(repository.path, limit: 200);
@@ -118,7 +118,7 @@ class AutomationUndo {
         'moved.',
       );
     }
-    final changes = _ref.read(changesServiceProvider);
+    final changes = _ref.read(gitDataProvider);
     final branch = await changes.currentBranch(repository.path);
     if (branch == null || branch.isEmpty) {
       throw StateError(

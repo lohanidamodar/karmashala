@@ -21,7 +21,27 @@ import 'package:karmashala_git/git.dart'
         compareSetupRuns,
         defaultReviewStatus,
         reviewBodyOf;
+import 'package:karmashala_git/cleanup.dart';
+import 'package:karmashala_git/git.dart'
+    show
+        AheadBehind,
+        FileChange,
+        FileDiffStat,
+        GitCommit,
+        GitPresence,
+        GitWorktree,
+        RepositoryOrigin,
+        GitException,
+        GitService,
+        NotAGitRepository,
+        RemoteRepo,
+        WorkingTreeStatus,
+        WorktreeCreationRecord;
+import 'package:karmashala_git/github.dart'
+    show BranchProtection, GitHubService, MergeStateStatus, kUnknownForgePolicy;
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_git/worktrees.dart' show WorktreeService;
+import 'package:karmashala_session/delivery.dart' show SessionDelivery;
 import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -40,6 +60,8 @@ import 'package:karmashala_companion_server/karmashala_companion_server.dart'
 import 'package:karmashala_remote/remote.dart'
     show PairedDevice, pairedDeviceNameOf, pairedDeviceWithoutSecrets;
 
+import 'fake_command_runner.dart';
+
 part 'fake_evidence.dart';
 part 'fake_hosts.dart';
 part 'fake_sessions.dart';
@@ -49,6 +71,7 @@ part 'fake_automations.dart';
 part 'fake_conversations.dart';
 part 'fake_agent_work.dart';
 part 'fake_ssh_work.dart';
+part 'fake_git_work.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -200,6 +223,9 @@ class FakeDataServer {
   /// The server's own SSH: test connections, disconnects and the answers a
   /// window gives its questions — scripted.
   late final sshWork = FakeSshWork._(this);
+  /// The git the server does — reads and writes of a checkout, worktrees,
+  /// their cleanup, a project's folders, GitHub — scripted.
+  late final gitWork = FakeGitWork._(this);
 
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
@@ -312,6 +338,8 @@ class FakeDataServer {
           break;
         case SshChange():
           // Nothing kept: told as it is.
+        case GitChange():
+          // Nothing kept: it says what to read again.
           break;
       }
     }
@@ -557,6 +585,7 @@ class FakeDataServer {
       UsageHistory() => _handleHosts(request, changes),
       AgentWorkRequest() ||
       SshWorkRequest() => throw StateError('answered above'),
+      GitWorkRequest() => throw StateError('answered in FakeDataLink.send'),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));
@@ -1078,6 +1107,13 @@ class FakeDataLink implements DataEndpoint {
     await _server.hold?.future;
     if (_done.isCompleted) {
       throw const DataRefused.unavailable('the link closed');
+    }
+    if (request case final GitWorkRequest<Object?> git) {
+      // Answered when done, as the server does; what it moved is told to
+      // every link, this one too. Counted in `gitWork.asked`, apart from
+      // the data requests a copy's cost is measured by.
+      final value = await _server.gitWork._handle(git);
+      return DataReply(value as R, _server.revision, const []);
     }
     return _server._handle(this, request);
   }

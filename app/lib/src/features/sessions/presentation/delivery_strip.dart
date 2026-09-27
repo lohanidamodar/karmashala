@@ -12,7 +12,7 @@ import '../../automations/application/automation_check_runner.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../git/application/remote_links.dart';
-import '../../github/application/github_providers.dart';
+import '../../git/data/git_data.dart';
 import '../../github/presentation/pull_request_context_dialog.dart';
 import '../../git/presentation/remote_link.dart';
 import 'package:karmashala_git/github.dart';
@@ -113,7 +113,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     if (number == null || directory == null) return;
     try {
       await ref
-          .read(gitHubReviewServiceProvider)
+          .read(gitDataProvider)
           .markPullRequestReady(directory, number: number);
       _reread();
       messenger.showSnackBar(
@@ -138,7 +138,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     final directory = _directory();
     if (directory == null) return;
     ref.invalidate(checkoutDeliveryProvider(Checkout(directory)));
-    ref.invalidate(checkoutPullRequestProvider(Checkout(directory)));
+    ref.invalidate(checkoutForgeProvider(Checkout(directory)));
   }
 
   Future<void> _archive() => _run(() async {

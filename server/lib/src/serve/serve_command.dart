@@ -18,6 +18,7 @@ import '../automations/daemon_automations.dart';
 import '../automations/session_mcp_access.dart';
 import '../companion/daemon_companion.dart';
 import '../domain/session_registry.dart';
+import '../git/server_git.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
 import '../mcp/tools/usage_tool_set.dart';
@@ -408,6 +409,27 @@ Future<int> runServe(
     sessionSync.hook(hook);
   };
   sessionSync.start();
+  // Git, worktrees, their cleanup and GitHub for every client (slice 3b); a
+  // turn ending tells them where to read again.
+  final git = ServerGit(
+    database: database,
+    data: data,
+    // Git for the clients runs wherever a checkout lives: this machine, WSL
+    // from Windows, and an SSH box over the server's own connection.
+    reach: reach,
+    worktrees: worktrees,
+    // A project added or rescanned by a client imports the CLI history of
+    // its new checkouts, as an agent's does.
+    folders: folders,
+    hostsSession: (id) => registry.find(hostSessionIdOf(id)) != null,
+    livePaneDirectories: () => [
+      for (final pane in sessionSync.panes.all)
+        if (pane.live) ?pane.workingDirectory,
+    ],
+    onItsOwn: hostEnvironment[kWorktreeCleanupVariable] != 'off',
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  )..attach();
+  checkpoints.recorder.onTurnEnded = git.turnEnded;
   final hookServer = await _openHookServer(
     paths,
     // The status first, so a watcher hears the status a hook moved no later
@@ -599,6 +621,7 @@ Future<int> runServe(
   tools.close();
   await companion.close();
   agentWork.stop();
+  await git.stop();
   await ssh.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.

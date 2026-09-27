@@ -1,8 +1,7 @@
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/data/data_client.dart';
-import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/application/changes_service.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -11,42 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/fake_command_runner.dart';
-import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
-
-/// A `.git` directory with, or without, the file `git merge` leaves behind.
-///
-/// Counted, because the whole argument for reading it is that it is not a
-/// process and does not run on a timer.
-class _GitDirWith implements GitFiles {
-  _GitDirWith({required this.mergeHead});
-
-  final bool mergeHead;
-  int stats = 0;
-
-  @override
-  Future<PathEntry> typeOf(String path) async {
-    stats++;
-    if (path.endsWith('MERGE_HEAD')) {
-      return mergeHead ? PathEntry.file : PathEntry.none;
-    }
-    return path.endsWith('.git') ? PathEntry.directory : PathEntry.none;
-  }
-
-  @override
-  Future<String?> readString(String path) async => null;
-
-  @override
-  Future<bool> exists(String path) async => false;
-
-  @override
-  Future<void> createDirectory(String path) async {}
-
-  @override
-  Future<void> writeString(String path, String contents) async {}
-}
 
 /// `git merge --abort`, reachable by hand — **and only when there is a merge**.
 ///
@@ -79,45 +44,30 @@ void main() {
   );
 
   late FakeDataServer server;
-  late DataClient client;
-  late FakeCommandRunner runner;
 
-  /// Answers `merge --abort` with [aborted] and every read with nothing.
-  ChangesService serviceThatAborts({
-    required bool aborted,
-    GitFiles files = noGitFiles,
-  }) {
-    runner = FakeCommandRunner(
-      responder: (req) => req.arguments.contains('--abort')
-          ? CommandResult(
-              exitCode: aborted ? 0 : 128,
-              stdout: '',
-              stderr: aborted ? '' : 'fatal: There is no merge to abort',
-            )
-          : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
-    );
-    return ChangesService(
-      runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: EnvironmentsData(client),
-      files: files,
-    );
+  /// Whether the server says a merge is half done, and whether an abort
+  /// brings the tree back.
+  void serverSays({bool? mergeHead, bool aborted = true}) {
+    server.gitWork.mergesInProgress[Checkout(repo)] = mergeHead;
+    server.gitWork.abortRestores = aborted;
   }
+
+  List<String> asked() => server.gitWork.kinds;
 
   setUp(() async {
     server = FakeDataServer()..environmentRows.upsert(windowsEnv());
-    client = await server.connect();
   });
 
   /// [changes] of null is the listing failing — a folder that is not a
   /// repository, a checkout this host cannot reach, a real `fatal:`.
   Future<void> pump(
-    WidgetTester tester,
-    ChangesService service, {
+    WidgetTester tester, {
     List<FileChange>? changes = const [],
   }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          await server.override(),
           repoWorktreesProvider.overrideWith(
             (ref) async => const <GitWorktree>[],
           ),
@@ -135,7 +85,6 @@ void main() {
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
           ),
-          changesServiceProvider.overrideWithValue(service),
         ],
         child: const MaterialApp(
           home: Scaffold(body: ChangesView(repositoryName: 'app')),
@@ -149,17 +98,11 @@ void main() {
     testWidgets('a dirty tree that is not a merge does not offer to undo one', (
       tester,
     ) async {
-      final files = _GitDirWith(mergeHead: false);
-      await pump(
-        tester,
-        serviceThatAborts(aborted: true, files: files),
-        changes: [ordinary],
-      );
+      serverSays(mergeHead: false);
+      await pump(tester, changes: [ordinary]);
       expect(find.byTooltip('Abort merge'), findsNothing);
-      // Two stats and no process: `MERGE_HEAD`, then `.git` itself to tell an
-      // absent file from a filesystem that did not answer.
-      expect(files.stats, 2);
-      expect(runner.requests, isEmpty);
+      // One question, answered from the server's stat of `MERGE_HEAD`.
+      expect(asked(), [GitMergeInProgress.name]);
     });
 
     testWidgets('a clean tree is not a merge, and costs no read to know', (
@@ -167,26 +110,22 @@ void main() {
     ) async {
       // A merge that stopped left its work in the index and resolving one with
       // `git add` leaves it staged, so an empty listing settles it.
-      final files = _GitDirWith(mergeHead: true);
-      await pump(tester, serviceThatAborts(aborted: true, files: files));
+      serverSays(mergeHead: true);
+      await pump(tester);
       expect(find.byTooltip('Abort merge'), findsNothing);
-      expect(files.stats, 0);
+      expect(asked(), isEmpty);
     });
 
     testWidgets('a conflicted row is a merge, and costs no file read at all', (
       tester,
     ) async {
-      final files = _GitDirWith(mergeHead: false);
-      await pump(
-        tester,
-        serviceThatAborts(aborted: true, files: files),
-        changes: [conflicted],
-      );
+      serverSays(mergeHead: false);
+      await pump(tester, changes: [conflicted]);
       expect(find.byTooltip('Abort merge'), findsOneWidget);
       expect(
-        files.stats,
-        0,
-        reason: 'the listing already answered; nothing needs to touch a disk',
+        asked(),
+        isEmpty,
+        reason: 'the listing already answered; nothing needs asking',
       );
     });
 
@@ -196,12 +135,8 @@ void main() {
       // The state the listing cannot see: `git add` on every conflict clears
       // the `u` records, and `.git/MERGE_HEAD` is still there because nothing
       // has been committed.
-      final files = _GitDirWith(mergeHead: true);
-      await pump(
-        tester,
-        serviceThatAborts(aborted: true, files: files),
-        changes: [ordinary],
-      );
+      serverSays(mergeHead: true);
+      await pump(tester, changes: [ordinary]);
       expect(find.byTooltip('Abort merge'), findsOneWidget);
     });
 
@@ -211,21 +146,17 @@ void main() {
       // The pane beside this already shows git's own words for the trouble.
       // What this must not do is inherit the listing's retry: that backoff
       // timer outlives the pane, and the framework fails the test for it.
-      await pump(tester, serviceThatAborts(aborted: true), changes: null);
+      await pump(tester, changes: null);
       expect(find.byTooltip('Abort merge'), findsNothing);
     });
 
     testWidgets(
       'a filesystem this host cannot read hides it rather than guessing',
       (tester) async {
-        // `noGitFiles` answers `PathEntry.none` for everything, which is what a
-        // dead share and an absent `.git` both look like. A button that destroys
-        // work appears on evidence, never on a shrug.
-        await pump(
-          tester,
-          serviceThatAborts(aborted: true),
-          changes: [ordinary],
-        );
+        // The server answers null for a filesystem it cannot see. A button
+        // that destroys work appears on evidence, never on a shrug.
+        serverSays(mergeHead: null);
+        await pump(tester, changes: [ordinary]);
         expect(find.byTooltip('Abort merge'), findsNothing);
       },
     );
@@ -234,8 +165,7 @@ void main() {
   testWidgets(
     'the confirm says what is discarded, and cancelling runs nothing',
     (tester) async {
-      final service = serviceThatAborts(aborted: true);
-      await pump(tester, service, changes: [conflicted]);
+      await pump(tester, changes: [conflicted]);
 
       await tester.tap(find.byTooltip('Abort merge'));
       await tester.pumpAndSettle();
@@ -249,26 +179,21 @@ void main() {
 
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(runner.requests, isEmpty);
+      expect(asked(), isEmpty);
     },
   );
 
-  testWidgets('confirming runs git merge --abort and says the tree is back', (
+  testWidgets('confirming asks the server to abort and says the tree is back', (
     tester,
   ) async {
-    await pump(tester, serviceThatAborts(aborted: true), changes: [conflicted]);
+    await pump(tester, changes: [conflicted]);
 
     await tester.tap(find.byTooltip('Abort merge'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abort merge').last);
     await tester.pumpAndSettle();
 
-    expect(runner.requests.single.arguments, [
-      '-C',
-      r'C:\app',
-      'merge',
-      '--abort',
-    ]);
+    expect(asked(), [GitAbortMerge.name]);
     expect(find.textContaining('Merge aborted'), findsOneWidget);
   });
 
@@ -277,11 +202,8 @@ void main() {
     (tester) async {
       // The reading was taken a moment ago and is not a promise about what git
       // will find, so the outcome still states which of the two happened.
-      await pump(
-        tester,
-        serviceThatAborts(aborted: false),
-        changes: [conflicted],
-      );
+      serverSays(aborted: false);
+      await pump(tester, changes: [conflicted]);
 
       await tester.tap(find.byTooltip('Abort merge'));
       await tester.pumpAndSettle();
@@ -298,7 +220,7 @@ void main() {
   ) async {
     // It used to draw as "changed (unrecognised git status)" — git's shrug
     // borrowed for a status git names exactly.
-    await pump(tester, serviceThatAborts(aborted: true), changes: [conflicted]);
+    await pump(tester, changes: [conflicted]);
     expect(find.byTooltip('conflicted — both modified'), findsOneWidget);
   });
 }

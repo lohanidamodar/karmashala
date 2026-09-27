@@ -6,6 +6,7 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -40,13 +41,14 @@ const _projects = 1000;
 
 /// Every repository is on `main`, and every read is kept: the branch on a
 /// project's line is a file read, so what is counted is files.
-class _EveryHead extends NoGitFiles {
+class _EveryHead {
   final reads = <String>[];
 
-  @override
-  Future<String?> readString(String path) async {
-    reads.add(path);
-    return path.endsWith('/.git/HEAD') ? 'ref: refs/heads/main\n' : null;
+  /// The server's answer to `git.head`, kept.
+  Object? answer(GitWorkRequest<Object?> request) {
+    if (request is! GitHead) return FakeGitWork.unhandled;
+    reads.add(request.checkout.directory!.path);
+    return 'main';
   }
 }
 
@@ -90,7 +92,10 @@ void main() {
     return db;
   }
 
-  Future<({ProviderContainer container, CountingMachine db})> pump(
+  Future<
+    ({ProviderContainer container, CountingMachine db, FakeDataServer server})
+  >
+  pump(
     WidgetTester tester,
   ) async {
     // Wide, because the test font is a square per glyph and the branch is
@@ -101,6 +106,7 @@ void main() {
     final server = FakeDataServer();
     final db = seed(server);
     files = _EveryHead();
+    server.gitWork.answer = files.answer;
     git = FakeCommandRunner(
       responder: (request) {
         if (request.arguments.contains('status')) {
@@ -113,9 +119,10 @@ void main() {
         return const CommandResult(exitCode: 0, stdout: '', stderr: '');
       },
     );
+    server.gitWork.runner = git;
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(machine: db, gitFiles: files),
+        ...fakeTerminalOverrides(machine: db),
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
@@ -144,7 +151,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    return (container: container, db: db);
+    return (container: container, db: db, server: server);
   }
 
   Map<String, int> cards(WidgetTester tester) => {
@@ -284,17 +291,20 @@ void main() {
     final before = cards(tester);
     harness.db.reset();
     files.reads.clear();
-    // A second arrival: the working tree moved under the open cards.
-    harness.db.server.sessionRows.updateStatus('p0002-s0', SessionStatus.idle);
-    harness.container
-        .read(sessionsRevisionProvider.notifier)
-        .changed(const SessionChange.statusChanged('p0002-s0'));
+    // A second arrival: a turn ended there, and the server says so.
+    harness.server.gitWork.touch(
+      const EnvironmentPath(
+        environmentId: 'windows',
+        path: '/Users/me/Documents/projects/client-0002/workspace-0002',
+      ),
+      cause: CheckoutTouchCause.turnEnded,
+    );
     await tester.pumpAndSettle();
 
     expect(treeChanges, 1, reason: 'a reading is not a change of shape');
-    expect(files.reads, [
-      '/Users/me/Documents/projects/client-0002/workspace-0002/.git/HEAD',
-    ], reason: 'the one HEAD the reading is about, and no other row\'s');
+    expect(files.reads.toSet(), {
+      '/Users/me/Documents/projects/client-0002/workspace-0002',
+    }, reason: 'the one HEAD the reading is about, and no other row\'s');
     expect(
       rebuilt(before, cards(tester)).where((name) => name != 'Project 0002'),
       isEmpty,

@@ -30,7 +30,7 @@ class WorktreeRequest {
 }
 
 /// A worktree on its own, not only as a side effect of starting a session.
-/// Through [WorktreeService.createForSession], so it gets the setup too.
+/// Made by the server, setup and all ([WorktreesClient.createForSession]).
 Future<void> showWorktreeCreateDialog(
   BuildContext context,
   WidgetRef ref,

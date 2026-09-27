@@ -10,7 +10,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter/material.dart';
@@ -223,9 +222,6 @@ void main() {
             ),
             agentSessionStatusProvider.overrideWith(
               (ref, id) => const Stream<AgentStatusReport>.empty(),
-            ),
-            repositoryDiscoveryServiceProvider.overrideWithValue(
-              FakeRepositoryDiscoveryService(),
             ),
           ],
           child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),

@@ -8,17 +8,14 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:karmashala/src/features/repositories/application/repository_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,7 +40,6 @@ void main() {
   late FakeDataServer server;
   late Override data;
   late FakeCommandRunner git;
-  late FakeRepositoryDiscoveryService discovery;
 
   EnvironmentPath at(String path) =>
       EnvironmentPath(environmentId: 'windows', path: path);
@@ -119,7 +115,6 @@ void main() {
     server.projectRows.insert(project(id: 'p1', name: 'Demo', path: hubPath));
     server.installationRows.insert(agentInstallation());
     git = FakeCommandRunner(responder: respond);
-    discovery = FakeRepositoryDiscoveryService();
   });
 
   ProviderContainer makeContainer() {
@@ -129,22 +124,16 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: git),
+          server.gitWork.serve(FakeCommandRunnerFactory(fallback: git)),
         ),
         autoImportRunnerProvider.overrideWithValue(
           (repos) async => const ImportSummary(),
-        ),
-        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
-        checkoutPresenceProbeProvider.overrideWithValue(
-          FakeCheckoutPresenceProbe(),
         ),
         // A real poll timer outlives the widget tree and trips the pending-timer
         // check; nothing here is testing the poll.
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
         // These tests read a delivery future directly rather than through a
         // pump, so the real frame gate has no frame to wait for.
-        probeGateProvider.overrideWithValue(headlessProbeGate),
-        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     addTearDown(container.dispose);
@@ -359,7 +348,7 @@ void main() {
       expect(container.read(selectedRepositoryIdProvider), 'relay');
 
       // A rescan rebuilds every provider the line reads; the pick survives it.
-      discovery.result = const [];
+      server.gitWork.found = const [];
       await container
           .read(projectsControllerProvider.notifier)
           .rediscover('p1');
@@ -398,14 +387,10 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: git),
+          server.gitWork.serve(FakeCommandRunnerFactory(fallback: git)),
         ),
         autoImportRunnerProvider.overrideWithValue(
           (repos) async => const ImportSummary(),
-        ),
-        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
-        checkoutPresenceProbeProvider.overrideWithValue(
-          FakeCheckoutPresenceProbe(),
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
       ],
@@ -449,7 +434,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PopupMenuItem<Repository>), findsNothing);
 
-    discovery.result = [
+    server.gitWork.found = [
       DiscoveredRepository(name: 'demo', path: at(hubPath)),
       DiscoveredRepository(name: 'app', path: at(appPath)),
       DiscoveredRepository(name: 'wt-relay', path: at(relayPath)),

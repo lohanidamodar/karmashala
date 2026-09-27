@@ -49,6 +49,10 @@ class ServerCheckpointRecorder {
   final void Function(String message) _log;
 
   final _turns = TurnBoundaryTracker();
+
+  /// Told of every turn that ends, whatever the checkpoint settings — the
+  /// moment a session's checkout may read differently (slice 3b).
+  void Function(String sessionId)? onTurnEnded;
   final Map<String, Future<void>> _queues = {};
 
   /// The turn in progress per session, which all of its checkpoints carry.
@@ -102,6 +106,7 @@ class ServerCheckpointRecorder {
     try {
       final edge = _turns.observe(sessionId, status);
       if (edge == null) return;
+      if (edge == TurnEdge.ended) onTurnEnded?.call(sessionId);
       // Here rather than inside the capture, because a capture is queued and a
       // hold can give up while it waits: reset at the moment the turn begins
       // and no hold of *this* turn can be forgotten, and none of the last

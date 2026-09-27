@@ -183,7 +183,7 @@ void main() {
           ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(clock),
           commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: _SlowRunner(responder: respond)),
+            server.gitWork.serve(FakeCommandRunnerFactory(fallback: _SlowRunner(responder: respond))),
           ),
           sessionContinuationProvider.overrideWith((ref, _) => noContinuation),
         ],

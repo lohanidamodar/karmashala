@@ -47,12 +47,16 @@ class WorktreeSetupData {
     ..._client.worktreeRuns.values,
   ]..sort(compareSetupRuns)).take(limit).toList();
 
-  /// When [worktree] was made, by its setup record — null when none names it.
-  DateTime? createdAt(EnvironmentPath worktree) {
+  /// The pane [worktree]'s setup command is running in at the server, or
+  /// null when none is running.
+  String? runningSetupPane(EnvironmentPath worktree) {
     for (final run in _client.worktreeRuns.values) {
-      if (run.environmentId == worktree.environmentId &&
+      final command = run.command;
+      if (command != null &&
+          command.result.isPending &&
+          run.environmentId == worktree.environmentId &&
           samePath(run.worktreePath, worktree.path)) {
-        return run.ranAt;
+        return command.paneId;
       }
     }
     return null;

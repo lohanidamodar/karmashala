@@ -1,5 +1,10 @@
+import 'package:karmashala_git/cleanup.dart' show WorktreeCleanupLog;
 import 'package:karmashala_git/git.dart'
-    show ReviewThread, WorktreeSetup, WorktreeSetupReport;
+    show
+        ReviewThread,
+        WorktreeCreationRecord,
+        WorktreeSetup,
+        WorktreeSetupReport;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
@@ -32,6 +37,7 @@ import 'package:karmashala_verification/verification.dart'
         verificationRunToJson;
 
 import 'agent_work_values.dart';
+import 'git_values.dart';
 import 'session_values.dart';
 import 'ssh_values.dart';
 import 'worktree_values.dart';
@@ -42,6 +48,7 @@ part 'changes/worktrees_changes.dart';
 part 'changes/snippets_changes.dart';
 part 'changes/pairings_changes.dart';
 part 'changes/ssh_changes.dart';
+part 'changes/git_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -573,7 +580,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _worktreesChangeFromJson(name, json) ??
     _snippetsChangeFromJson(name, json) ??
     _pairingsChangeFromJson(name, json) ??
-    _sshChangeFromJson(name, json);
+    _sshChangeFromJson(name, json) ??
+    _gitChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

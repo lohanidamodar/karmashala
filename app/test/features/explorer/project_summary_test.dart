@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -104,11 +103,10 @@ void main() {
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: git),
+            server.gitWork.serve(FakeCommandRunnerFactory(fallback: git)),
           ),
           // No disk: see [NoGitFiles] for why real file I/O in a fake-async
           // test reorders a build against an invalidation.
-          gitFilesProvider.overrideWithValue(noGitFiles),
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => const <SystemTerminal>[],
           ),

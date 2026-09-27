@@ -1,9 +1,9 @@
+import '../../git/data/git_data.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'session_launcher.dart';
@@ -133,7 +133,7 @@ class SessionArchiveService {
     }
 
     try {
-      final changes = await _ref.read(changesServiceProvider).changes(worktree);
+      final changes = await _ref.read(gitDataProvider).changes(worktree);
       if (changes.isNotEmpty && !discardUncommitted) {
         return ArchiveOutcome.refused(
           ArchiveRefusal.uncommittedChanges,

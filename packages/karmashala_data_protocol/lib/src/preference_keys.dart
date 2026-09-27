@@ -16,6 +16,10 @@ abstract final class PreferenceKeys {
     // Which (agent, environment) pairs the server's detection has searched
     // (slice 2a): the server's own record.
     'agents_probed',
+    // What worktree cleanup removed and when it last swept (slice 3b): the
+    // server's own record. Its setting stays a client preference.
+    WorktreeCleanupKeys.log,
+    WorktreeCleanupKeys.lastSweep,
   };
 
   /// Domains whose keys their own store writes (worktree setup) — not a
@@ -42,6 +46,14 @@ abstract final class PreferenceKeys {
       utf8.encode(value).length > maxValueBytes
       ? 'a preference is at most $maxValueBytes bytes'
       : null;
+}
+
+/// Worktree cleanup's keys: the setting a person writes, and the log and last
+/// sweep the server keeps.
+abstract final class WorktreeCleanupKeys {
+  static const String settings = 'worktree_cleanup.settings.v1';
+  static const String log = 'worktree_cleanup.log.v1';
+  static const String lastSweep = 'worktree_cleanup.last_sweep.v1';
 }
 
 /// A client's preferences as its code reads them: at once, from the copy the

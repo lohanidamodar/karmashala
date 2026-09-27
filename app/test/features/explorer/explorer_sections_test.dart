@@ -10,13 +10,11 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
-import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter/material.dart';
-import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -91,13 +89,11 @@ void main() {
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: git),
+          server.gitWork.serve(FakeCommandRunnerFactory(fallback: git)),
         ),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
         ),
-        probeGateProvider.overrideWithValue(headlessProbeGate),
-        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     addTearDown(container.dispose);
@@ -293,7 +289,7 @@ void main() {
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+            server.gitWork.serve(FakeCommandRunnerFactory(fallback: FakeCommandRunner())),
           ),
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),
@@ -387,7 +383,7 @@ void main() {
           await server.override(),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+            server.gitWork.serve(FakeCommandRunnerFactory(fallback: FakeCommandRunner())),
           ),
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),

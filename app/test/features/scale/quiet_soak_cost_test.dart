@@ -3,7 +3,6 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/follow_ups/application/follow_up_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
@@ -263,8 +262,6 @@ void main() {
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: git),
           ),
-          probeGateProvider.overrideWithValue(headlessProbeGate),
-          gitFilesProvider.overrideWithValue(noGitFiles),
         ],
       );
       addTearDown(container.dispose);

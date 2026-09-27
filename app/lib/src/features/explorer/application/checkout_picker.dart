@@ -1,9 +1,9 @@
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
+import '../../git/data/git_data.dart';
 import 'package:karmashala_git/git.dart';
 import '../../projects/application/projects_controller.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -117,6 +117,7 @@ final selectedCheckoutWorktreesProvider =
       ref.watchSessionKinds(const {SessionChangeKind.workspace});
       final selected = ref.watch(selectedCheckoutProvider);
       if (selected == null) return const [];
+      ref.watchCheckout(selected.path);
       final listed = await ref
           .read(worktreeServiceProvider)
           .list(selected.path);
@@ -126,128 +127,21 @@ final selectedCheckoutWorktreesProvider =
       ];
     });
 
-/// Whether a checkout is a linked worktree, the branch it has out, and which
-/// recorded repository it is a worktree *of*.
-class CheckoutLabel {
-  const CheckoutLabel({
-    required this.isWorktree,
-    this.branch,
-    this.ownerRepositoryId,
-  });
-
-  final bool isWorktree;
-
-  /// Null when detached or unreported.
-  final String? branch;
-
-  /// The `repositories` row holding this family's **main** worktree. Only
-  /// `git worktree list` knows it: a worktree is a *sibling* of its main
-  /// checkout more often than a child, so containment cannot work it out.
-  final String? ownerRepositoryId;
-
-  @override
-  bool operator ==(Object other) =>
-      other is CheckoutLabel &&
-      other.isWorktree == isWorktree &&
-      other.branch == branch &&
-      other.ownerRepositoryId == ownerRepositoryId;
-
-  @override
-  int get hashCode => Object.hash(isWorktree, branch, ownerRepositoryId);
-
-  @override
-  String toString() =>
-      'CheckoutLabel(worktree: $isWorktree, branch: $branch, '
-      'owner: $ownerRepositoryId)';
-}
-
-/// Worktree-or-not and branch for every checkout in [projectId] — one `git
-/// worktree list` per repository *family*, grouped by `familyKey` before git is
-/// asked. Rows with no key (SSH) fall back to the sequential pass.
+/// Worktree-or-not and branch for every checkout in [projectId] — asked of
+/// the server, which lists each repository *family* once. Read again when a
+/// worktree of any of them comes or goes.
 final checkoutLabelsProvider = FutureProvider.autoDispose
     .family<Map<String, CheckoutLabel>, String>((ref, projectId) async {
       final repositories = ref
           .read(workspaceDataProvider)
           .repositoriesOf(projectId);
-      final worktrees = ref.read(worktreeServiceProvider);
-      final changes = ref.read(changesServiceProvider);
-
-      // Keyed by [Checkout]: git reports forward slashes where the table holds
-      // backslashes, and both spell one directory.
-      final byPath = <Checkout, String>{
-        for (final repository in repositories)
-          Checkout(repository.path): repository.id,
-      };
-      final family =
-          <Checkout, ({String? branch, bool isMain, String? owner})>{};
-
-      /// Files a listing into [family], or does nothing when git could not
-      /// answer — that row keeps its plain name.
-      void record(List<GitWorktree>? listed) {
-        if (listed == null || listed.isEmpty) return;
-        // `git worktree list` prints the main worktree first, always.
-        final owner = byPath[Checkout(listed.first.path)];
-        for (var i = 0; i < listed.length; i++) {
-          family.putIfAbsent(
-            Checkout(listed[i].path),
-            () => (
-              branch: listed[i].branch,
-              isMain: i == 0,
-              owner: i == 0 ? null : owner,
-            ),
-          );
-        }
+      for (final repository in repositories) {
+        ref.watchCheckout(repository.path);
       }
-
-      Future<List<GitWorktree>?> listOrNull(EnvironmentPath path) async {
-        try {
-          return await worktrees.list(path);
-        } catch (_) {
-          return null;
-        }
-      }
-
-      // No process yet: this is a `typeOf` per row, and for a worktree one
-      // further read of the pointer file beside it.
-      final keys = await Future.wait([
-        for (final repository in repositories)
-          changes.familyKey(repository.path).catchError((_) => null),
+      if (repositories.isEmpty) return const {};
+      return ref.read(gitDataProvider).labels([
+        for (final repository in repositories) repository.id,
       ]);
-
-      final representatives = <String, EnvironmentPath>{};
-      final unkeyed = <Repository>[];
-      for (var i = 0; i < repositories.length; i++) {
-        final key = keys[i];
-        if (key == null) {
-          unkeyed.add(repositories[i]);
-          continue;
-        }
-        representatives.putIfAbsent(key, () => repositories[i].path);
-      }
-
-      // One process per family, all at once.
-      for (final listed in await Future.wait([
-        for (final path in representatives.values) listOrNull(path),
-      ])) {
-        record(listed);
-      }
-
-      // And the rows nothing could be read about: in order, skipping whatever
-      // is already covered.
-      for (final repository in unkeyed) {
-        if (family.containsKey(Checkout(repository.path))) continue;
-        record(await listOrNull(repository.path));
-      }
-
-      return {
-        for (final repository in repositories)
-          if (family[Checkout(repository.path)] case final entry?)
-            repository.id: CheckoutLabel(
-              isWorktree: !entry.isMain,
-              branch: entry.branch,
-              ownerRepositoryId: entry.owner,
-            ),
-      };
     });
 
 /// Points the repository-scoped surfaces at a checkout the user picked, and

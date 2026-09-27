@@ -55,7 +55,8 @@ CommandResult Function(CommandRequest) _busyGit({
     return ok(args.contains('--staged') ? _staged : _unstaged);
   }
   if (args.contains('--abbrev-ref')) return ok('main');
-  if (args.contains('rev-list')) return ok(commits);
+  // How far the branch is past its base, as `--left-right` counts it.
+  if (args.contains('rev-list')) return ok('0\t$commits');
   if (args.contains('log')) return ok('abc1234def\x1fMe\x1fthe merge');
   return ok('');
 };

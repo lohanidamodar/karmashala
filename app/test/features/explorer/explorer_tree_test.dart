@@ -8,7 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -18,9 +17,10 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:karmashala/src/features/repositories/application/repository_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ProjectRescan;
 
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
@@ -55,7 +55,6 @@ void main() {
   /// The host runner the reveal helper shells out on: its requests are the
   /// `explorer.exe <path>` calls a successful reveal makes.
   late FakeCommandRunner revealHost;
-  late FakeRepositoryDiscoveryService discovery;
 
   /// The directory `git -C <dir> …` was pointed at.
   String dirOf(CommandRequest request) =>
@@ -80,7 +79,6 @@ void main() {
     server.installationRows.insert(agentInstallation());
     git = FakeCommandRunner(responder: _defaultGit);
     revealHost = FakeCommandRunner();
-    discovery = FakeRepositoryDiscoveryService();
   });
 
   void addSession(
@@ -124,16 +122,13 @@ void main() {
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
           commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: git),
+            server.gitWork.serve(FakeCommandRunnerFactory(fallback: git)),
           ),
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => const <SystemTerminal>[],
           ),
           autoImportRunnerProvider.overrideWithValue(
             (_) async => const ImportSummary(),
-          ),
-          checkoutPresenceProbeProvider.overrideWithValue(
-            FakeCheckoutPresenceProbe(),
           ),
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),
@@ -150,7 +145,6 @@ void main() {
             ),
           ),
           // A rescan must never walk the real filesystem from a widget test.
-          repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         ],
         child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),
       ),
@@ -445,7 +439,7 @@ void main() {
       // "not scanned yet" — is gone, so the project menu is now the only way a
       // repository created after the import reaches the workspace, and it has
       // to report what it did.
-      discovery.result = [
+      server.gitWork.found = [
         DiscoveredRepository(name: 'hub', path: at(r'C:\hub')),
         DiscoveredRepository(name: 'app', path: at(r'C:\hub\projects\app')),
         DiscoveredRepository(name: 'lib', path: at(r'C:\hub\projects\lib')),
@@ -460,7 +454,7 @@ void main() {
       await tester.tap(find.text('Rescan for repositories'));
       await tester.pumpAndSettle();
 
-      expect(discovery.calls, isNotEmpty);
+      expect(server.gitWork.asked.whereType<ProjectRescan>(), isNotEmpty);
       // Three of the four were already recorded, so one is news.
       expect(find.text('Found 1 repository.'), findsOneWidget);
     });

@@ -86,7 +86,7 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: runner),
+          server.gitWork.serve(FakeCommandRunnerFactory(fallback: runner)),
         ),
         hostCommandRunnerProvider.overrideWithValue(runner),
         attentionCountProvider.overrideWithValue(attention),

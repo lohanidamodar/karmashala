@@ -1,33 +1,10 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../terminal/application/pane_exit_signal.dart';
 import 'package:karmashala_git/git.dart';
 import '../data/worktree_setup_data.dart';
-import 'git_providers.dart';
 
 export '../data/worktree_setup_data.dart'
     show WorktreeSetupData, worktreeSetupDataProvider;
-
-/// Turns "running in a pane" into a verdict. Must be *watched*: Riverpod pauses
-/// a provider's subscriptions while nothing listens, and this then hears none.
-class WorktreeSetupExitObserver extends Notifier<void> {
-  @override
-  void build() {
-    ref.listen(paneExitProvider, (_, exit) {
-      if (exit == null) return;
-      // Nearly every exit belongs to something else; `noteExit` is a map lookup
-      // that answers null for those and writes nothing.
-      ref
-          .read(worktreeSetupServiceProvider)
-          .noteExit(exit.paneId, exit.exitCode);
-    });
-  }
-}
-
-final worktreeSetupExitObserverProvider =
-    NotifierProvider<WorktreeSetupExitObserver, void>(
-      WorktreeSetupExitObserver.new,
-    );
 
 /// Re-reads [ref]'s provider whenever a setup or a verdict changed, here or at
 /// another client — nothing polls (§19).

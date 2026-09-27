@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/explorer/application/session_selection.d
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -47,7 +46,6 @@ void main() {
   late TestMachine db;
   late FakeDataServer server;
   late DataClient data;
-  late FakeRepositoryDiscoveryService discovery;
 
   setUp(() async {
     db = TestMachine();
@@ -58,7 +56,6 @@ void main() {
       repository(id: 'r1', name: 'hub', path: r'C:\hub'),
     );
     server.installationRows.insert(agentInstallation());
-    discovery = FakeRepositoryDiscoveryService();
     data = await server.connect();
   });
 
@@ -95,7 +92,7 @@ void main() {
       );
 
   Widget host() {
-    final container = _container(db, data, discovery);
+    final container = _container(db, data);
     addTearDown(container.dispose);
     return UncontrolledProviderScope(
       container: container,
@@ -111,7 +108,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final container = _container(db, data, discovery);
+    final container = _container(db, data);
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -553,7 +550,6 @@ void main() {
 ProviderContainer _container(
   TestMachine db,
   DataClient data,
-  FakeRepositoryDiscoveryService discovery,
 ) => ProviderContainer(
   overrides: [
     ...fakeTerminalOverrides(machine: db),
@@ -570,6 +566,5 @@ ProviderContainer _container(
     agentSessionStatusProvider.overrideWith(
       (ref, id) => const Stream<AgentStatusReport>.empty(),
     ),
-    repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
   ],
 );

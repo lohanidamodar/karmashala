@@ -9,13 +9,12 @@ import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
-import '../application/worktree_cleanup_policy.dart';
+import 'package:karmashala_git/cleanup.dart';
 import '../application/worktree_cleanup_providers.dart';
-import '../application/worktree_cleanup_service.dart';
-import '../data/worktree_cleanup_store.dart';
 
 /// Settings → Worktree setup → Automatic cleanup: the policy, a dry run, and
-/// the log of what was removed. Nothing here runs git until a button is pressed.
+/// the log of what was removed. The server sweeps, on its own schedule;
+/// nothing here asks it to until a button is pressed.
 class WorktreeCleanupSection extends ConsumerStatefulWidget {
   const WorktreeCleanupSection({super.key});
 
@@ -79,15 +78,17 @@ class _WorktreeCleanupSectionState
       ),
     );
     if (confirmed != true) return;
-    await _run(() => _controller.sweep(automatic: false));
+    await _run(_controller.sweep);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settings = ref.watch(worktreeCleanupSettingsProvider);
-    final log = ref.watch(worktreeCleanupLogProvider);
-    final last = ref.watch(worktreeCleanupLastSweepProvider);
+    final cleanup =
+        ref.watch(worktreeCleanupLogProvider).value ?? WorktreeCleanupLog.empty;
+    final log = cleanup.entries;
+    final last = cleanup.lastSweep;
     ref.watch(projectsControllerProvider);
     final projects = ref.watch(workspaceDataProvider).projects;
     final now = ref.watch(clockProvider).nowUtc();

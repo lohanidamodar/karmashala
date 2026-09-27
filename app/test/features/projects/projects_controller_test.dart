@@ -6,17 +6,17 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ProjectFoldersCreate;
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 void main() {
-  late FakeRepositoryDiscoveryService discovery;
   late ProviderContainer container;
   late FakeDataServer server;
 
@@ -28,13 +28,12 @@ void main() {
     server.environmentRows.upsert(
       localHostEnvironment(FixedClock(testTime).nowUtc()),
     );
-    discovery = FakeRepositoryDiscoveryService(
-      result: [DiscoveredRepository(name: 'app', path: root(r'C:\ws\app'))],
-    );
+    server.gitWork.found = [
+      DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
+    ];
     container = ProviderContainer(
       overrides: [
         await server.override(),
-        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         autoImportRunnerProvider.overrideWithValue(
@@ -58,7 +57,10 @@ void main() {
 
     final projects = container.read(projectsControllerProvider);
     expect(projects.single.name, 'Workspace');
-    expect(discovery.calls.single.path, r'C:\ws');
+    expect(
+      server.gitWork.asked.whereType<ProjectFoldersCreate>().single.root.path,
+      r'C:\ws',
+    );
   });
 
   /// **A folder is somewhere to run, whether or not it is a clone.**

@@ -18,7 +18,6 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
@@ -38,7 +37,6 @@ import 'package:karmashala/src/features/sessions/application/session_chat_source
 import 'package:path/path.dart' as ph;
 
 import '../terminal/fake_instance.dart';
-import '../../support/fakes.dart';
 import '../../support/sync_bindings.dart';
 import '../../support/temp_directory.dart';
 
@@ -68,7 +66,6 @@ void main() {
   late Override data;
   late _FixedLocator locator;
   late ProviderContainer container;
-  late FakeRepositoryDiscoveryService discovery;
   final now = DateTime.utc(2026, 8, 31, 10);
 
   setUp(() async {
@@ -83,14 +80,12 @@ void main() {
         createdAt: now,
       ),
     );
-    discovery = FakeRepositoryDiscoveryService();
     locator = _FixedLocator();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         data,
         sessionTranscriptLocatorProvider.overrideWithValue(locator),
-        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         autoImportRunnerProvider.overrideWithValue(
           (_) async => const ImportSummary(),
         ),
@@ -186,7 +181,6 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         data,
-        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         autoImportRunnerProvider.overrideWithValue(
           (_) => gate.future.then((_) => const ImportSummary()),
         ),
@@ -721,7 +715,6 @@ void main() {
             ...fakeTerminalOverrides(machine: db),
             data,
             sessionTranscriptLocatorProvider.overrideWithValue(locator),
-            repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
             autoImportRunnerProvider.overrideWithValue(
               (_) async => const ImportSummary(),
             ),
@@ -1746,7 +1739,6 @@ void main() {
           ...fakeTerminalOverrides(machine: db),
           data,
           sessionTranscriptLocatorProvider.overrideWithValue(locator),
-          repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
           autoImportRunnerProvider.overrideWithValue(
             (_) async => const ImportSummary(),
           ),

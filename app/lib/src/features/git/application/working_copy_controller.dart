@@ -10,9 +10,8 @@ import 'package:flutter/foundation.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../github/application/github_providers.dart';
+import '../data/git_data.dart';
 import 'changes_providers.dart';
-import 'changes_service.dart';
 
 /// What the pane is doing, and what it has to say about the last thing it did.
 @immutable
@@ -53,13 +52,12 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
   void dismiss() => state = const WorkingCopyState();
 
   Future<void> stage(List<String> paths) =>
-      _run('Staging', (repo, changes) => changes.stage(repo, paths: paths));
+      _run('Staging', (repo, git) => git.stage(repo, paths: paths));
 
-  Future<void> stageAll() =>
-      _run('Staging', (repo, changes) => changes.stage(repo));
+  Future<void> stageAll() => _run('Staging', (repo, git) => git.stage(repo));
 
   Future<void> unstage(List<String> paths) =>
-      _run('Unstaging', (repo, changes) => changes.unstage(repo, paths));
+      _run('Unstaging', (repo, git) => git.unstage(repo, paths));
 
   /// Throws the changes to [entries] away. The caller has confirmed it; this
   /// only decides which of the two acts each file needs, because an untracked
@@ -75,8 +73,7 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
     ];
     return _run(
       'Discarding',
-      (repo, changes) =>
-          changes.discard(repo, tracked: tracked, untracked: untracked),
+      (repo, git) => git.discard(repo, tracked: tracked, untracked: untracked),
       note: entries.length == 1
           ? 'Discarded ${entries.single.path}.'
           : 'Discarded ${entries.length} files.',
@@ -90,61 +87,50 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
       state = const WorkingCopyState(error: 'A commit needs a message.');
       return Future<void>.value();
     }
-    return _run('Committing', (repo, changes) async {
-      if (all) await changes.stage(repo);
-      await changes.commit(repo, trimmed);
-    }, note: 'Committed.');
+    return _run(
+      'Committing',
+      (repo, git) => git.commit(repo, trimmed, all: all),
+      note: 'Committed.',
+    );
   }
 
-  Future<void> fetch() => _run(
-    'Fetching',
-    (repo, changes) => changes.fetch(repo),
-    note: 'Fetched.',
-  );
+  Future<void> fetch() =>
+      _run('Fetching', (repo, git) => git.fetch(repo), note: 'Fetched.');
 
   Future<void> pull({bool rebase = false, bool merge = false}) => _run(
     'Pulling',
-    (repo, changes) => changes.pull(repo, rebase: rebase, merge: merge),
+    (repo, git) => git.pull(repo, rebase: rebase, merge: merge),
     note: 'Pulled.',
   );
 
-  Future<void> push() => _scannedPush(
+  /// Pushes, after the server's gitleaks scan of what it would send: a
+  /// finding stops it; the note says how the scan went.
+  Future<void> push() => _pushed(
     'Pushing',
-    (repo, changes) => changes.push(repo),
+    (repo, git) => git.push(repo),
     note: 'Pushed.',
   );
 
   /// Pushes a branch that has no upstream yet, and gives it one.
   Future<void> publish({required String branch, String remote = 'origin'}) =>
-      _scannedPush(
+      _pushed(
         'Publishing',
-        (repo, changes) => changes.push(repo, remote: remote, branch: branch),
+        (repo, git) => git.push(repo, remote: remote, branch: branch),
         note: 'Published to $remote/$branch.',
       );
 
-  /// [push], after gitleaks has read the commits it would send. A finding
-  /// stops it; no gitleaks, or a scan that could not finish, lets it go and
-  /// the note says the push was not checked — the tool is optional.
-  Future<void> _scannedPush(
+  Future<void> _pushed(
     String busy,
-    Future<void> Function(EnvironmentPath repo, ChangesService changes) push, {
+    Future<String> Function(EnvironmentPath repo, GitData git) push, {
     required String note,
   }) async {
     var scanned = '';
-    await _run(busy, (repo, changes) async {
-      switch (await changes.scanOutgoingSecrets(repo)) {
-        case SecretScanFound(:final findings):
-          throw GitException(secretPushRefusal(findings));
-        case SecretScanUnavailable():
-          scanned = ' Not scanned for secrets: gitleaks is not installed.';
-        case SecretScanFailed(:final reason):
-          scanned = ' Not scanned for secrets: $reason.';
-        case SecretScanClean():
-          scanned = ' gitleaks found no secrets.';
-      }
-      await push(repo, changes);
+    await _run(busy, (repo, git) async {
+      scanned = await push(repo, git);
     }, note: note);
-    if (state.note == note) state = state.copyWith(note: '$note$scanned');
+    if (state.note == note && scanned.isNotEmpty) {
+      state = state.copyWith(note: '$note $scanned');
+    }
   }
 
   /// Opens a pull request for the checked-out branch through `gh`, and answers
@@ -162,7 +148,7 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
     state = const WorkingCopyState(busy: 'Opening a pull request');
     try {
       final url = await ref
-          .read(gitHubReviewServiceProvider)
+          .read(gitDataProvider)
           .createPullRequest(repo, title: title, body: body);
       state = WorkingCopyState(
         note: url.isEmpty ? 'Pull request opened.' : url,
@@ -174,12 +160,11 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
     }
   }
 
-  /// Runs one verb: refuses while another is in flight or with nothing in
-  /// view, keeps git's own sentence when it fails, and re-reads the listing
-  /// either way — a half-done stage still changed the index.
+  /// Runs one verb at the server: refuses while another is in flight or with
+  /// nothing in view, and keeps git's own sentence when it fails.
   Future<void> _run(
     String busy,
-    Future<void> Function(EnvironmentPath repo, ChangesService changes) body, {
+    Future<void> Function(EnvironmentPath repo, GitData git) body, {
     String? note,
   }) async {
     if (state.isBusy) return;
@@ -188,26 +173,18 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
     state = WorkingCopyState(busy: busy);
     String? failure;
     try {
-      await body(repo, ref.read(changesServiceProvider));
+      await body(repo, ref.read(gitDataProvider));
     } on GitException catch (error) {
       failure = _sentence(error.message);
     } on Object catch (error) {
       failure = _sentence('$error');
     }
-    _reread();
+    // What reads the checkout reads again when the server says it touched
+    // it — the same word every other client gets.
     state = WorkingCopyState(
       error: failure,
       note: failure == null ? note : null,
     );
-  }
-
-  /// Everything that reads the working copy, after it has been written to.
-  void _reread() {
-    ref.invalidate(repositoryChangesProvider);
-    ref.invalidate(repositoryFileDiffStatsProvider);
-    ref.invalidate(workingTreeStatusProvider);
-    ref.invalidate(recentCommitsProvider);
-    ref.invalidate(currentBranchProvider);
   }
 
   /// git's failures arrive as `git commit failed: <what git said>`; the part
@@ -233,18 +210,3 @@ final workingCopyControllerProvider =
     NotifierProvider<WorkingCopyController, WorkingCopyState>(
       WorkingCopyController.new,
     );
-
-/// Why a push was stopped, in one line: what was found and the two ways on.
-String secretPushRefusal(List<SecretFinding> findings) {
-  const shown = 3;
-  final listed = findings.take(shown).map((f) => f.label).join(', ');
-  final more = findings.length > shown
-      ? ' and ${findings.length - shown} more'
-      : '';
-  final count = findings.length == 1
-      ? 'a possible secret'
-      : '${findings.length} possible secrets';
-  return 'Not pushed: gitleaks found $count in commits no remote has yet — '
-      '$listed$more. Take it out of those commits, or add its fingerprint to '
-      '.gitleaksignore if it is not a secret.';
-}

@@ -1,4 +1,3 @@
-import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/stream.dart';
@@ -8,12 +7,13 @@ import 'package:karmashala/src/features/sessions/application/session_engine.dart
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/git/application/git_providers.dart';
+import 'package:karmashala/src/features/git/data/git_data.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
-import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 import '../../support/fake_data_server.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
@@ -104,10 +104,7 @@ void main() {
     final engine = SessionEngine(
       sessions: SessionsData(client),
       records: SessionRecordsData(client),
-      worktreeService: WorktreeService(
-        runnerFactory: FakeCommandRunnerFactory(),
-        environmentOf: worktreeEnvironmentOf(EnvironmentsData(client)),
-      ),
+      worktreeService: WorktreesClient(GitData(client), WorktreeCreations()),
       resolveProtocol: (agentId) {
         resolved.add(agentId);
         return FakeChatProtocol(agentId: agentId);

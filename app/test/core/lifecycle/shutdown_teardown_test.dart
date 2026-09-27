@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -12,15 +11,15 @@ import 'package:karmashala/src/features/ssh/application/ssh_providers.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/git/application/git_providers.dart';
+import 'package:karmashala/src/features/git/data/git_data.dart';
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
-import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 /// What quitting has to end, beyond the components the lifecycle owner builds
 /// itself.
@@ -54,10 +53,7 @@ void main() {
   SessionEngine buildEngine(ChatProtocolResolver resolver) => SessionEngine(
     sessions: sessions,
     records: records,
-    worktreeService: WorktreeService(
-      runnerFactory: FakeCommandRunnerFactory(),
-      environmentOf: worktreeEnvironmentOf(EnvironmentsData(client)),
-    ),
+    worktreeService: WorktreesClient(GitData(client), WorktreeCreations()),
     resolveProtocol: resolver,
     clock: FixedClock(testTime),
     ids: SequentialIdGenerator(),

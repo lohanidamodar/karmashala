@@ -18,6 +18,7 @@ import 'automations_handler.dart';
 import 'conversations_handler.dart';
 import 'evidence_handler.dart';
 import 'filing_lookup.dart';
+import 'git_work.dart';
 import 'hosts_handler.dart';
 import 'notes_handler.dart';
 import 'pairings_handler.dart';
@@ -87,6 +88,10 @@ class DataService {
   /// The server's own SSH (a test connection, a disconnect, a prompt's
   /// answer), set by `serve`; without it that work is refused `unavailable`.
   SshWork? sshWork;
+  /// The server's git work (reads and writes of a checkout, worktrees and
+  /// their cleanup, GitHub), set by `serve`; without it that work is refused
+  /// `unavailable`.
+  GitWork? gitWork;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -320,7 +325,9 @@ class DataService {
               )),
         // Reads disks and endpoints, so answered when done:
         // `DataSession.handleLater`.
-        AgentWorkRequest() || SshWorkRequest() => throw DataRefused.invalid(
+        AgentWorkRequest() ||
+        SshWorkRequest() ||
+        GitWorkRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
         final AutomationsRequest r => _automations.handle(r, changes),
@@ -467,7 +474,8 @@ class DataSession {
       request is ConversationsCatchUp ||
       request is CheckpointWorkRequest ||
       request is AgentWorkRequest ||
-      request is SshWorkRequest;
+      request is SshWorkRequest ||
+      request is GitWorkRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
@@ -498,6 +506,13 @@ class DataSession {
       final work =
           _service.sshWork ??
           (throw const DataRefused.unavailable('this server reaches no SSH'));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final GitWorkRequest<Object?> asked) {
+      final work =
+          _service.gitWork ??
+          (throw const DataRefused.unavailable('this server does no git work'));
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }

@@ -20,11 +20,12 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_git/git.dart' show GitPresence;
+import 'package:karmashala_git/repositories.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
-import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -117,16 +118,19 @@ void main() {
   }
 
   ProviderContainer containerFor({String? selected, String? plainFolder}) {
+    // The dialog asks the server whether the destination is under git before
+    // it offers a worktree; a plain folder answers "not a repository".
+    if (plainFolder != null) {
+      server.gitWork.presences[Checkout(
+        EnvironmentPath(environmentId: 'windows', path: plainFolder),
+      )] = GitPresence.notARepository;
+    }
+    // The picker classifies worktrees from `git worktree list`, at the server.
+    server.gitWork.runner = FakeCommandRunner(responder: worktrees);
     final container = ProviderContainer(
       overrides: [
-        // The dialog asks whether the destination is under git before it offers
-        // a worktree, and [PlainFolders] is the only disk that can answer
-        // "not a repository" rather than "could not look".
         dataClientProvider.overrideWithValue(data),
-        ...fakeTerminalOverrides(
-          machine: db,
-          gitFiles: plainFolder == null ? null : PlainFolders({plainFolder}),
-        ),
+        ...fakeTerminalOverrides(machine: db),
         // Nothing here may shell out: the picker classifies worktrees from
         // `git worktree list`, and a real one would run against paths that do
         // not exist on the machine running the suite.

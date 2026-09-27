@@ -16,15 +16,26 @@ import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_verification/verification.dart';
+import 'package:karmashala_git/cleanup.dart'
+    show WorktreeCleanupLog, WorktreeCleanupReport;
 import 'package:karmashala_git/git.dart'
     show
+        AheadBehind,
+        FileChange,
+        FileDiffStat,
+        GitCommit,
+        GitPresence,
+        GitWorktree,
+        RepositoryOrigin,
         ReviewAnchor,
         ReviewAuthorKind,
         ReviewThread,
         ReviewThreadStatus,
+        WorkingTreeStatus,
         WorktreeSetup,
         WorktreeSetupReport;
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_session/delivery.dart' show SessionDelivery;
 import 'package:karmashala_snippets/karmashala_snippets.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -38,6 +49,7 @@ import 'package:karmashala_session/transcript.dart';
 import 'agent_work_values.dart';
 import 'automation_values.dart';
 import 'environment_values.dart';
+import 'git_values.dart';
 import 'refusal.dart';
 import 'session_values.dart';
 import 'ssh_values.dart';
@@ -59,6 +71,7 @@ part 'requests/pairings_requests.dart';
 part 'requests/conversations_requests.dart';
 part 'requests/agent_work_requests.dart';
 part 'requests/ssh_requests.dart';
+part 'requests/git_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -244,6 +257,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _conversationsRequestFromJson(kind, args) ??
     _agentWorkRequestFromJson(kind, args) ??
     _sshRequestFromJson(kind, args) ??
+    _gitRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.

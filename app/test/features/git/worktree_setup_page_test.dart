@@ -12,6 +12,7 @@ import 'package:karmashala/src/features/settings/presentation/settings_nav.dart'
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -181,6 +182,43 @@ void main() {
     expect(find.textContaining('set up'), findsOneWidget);
     expect(find.textContaining('needs attention'), findsNothing);
     expect(find.text('Copied with `cp -a`.'), findsNothing);
+  });
+
+  testWidgets('a setup the server is running is a tab away: Show output '
+      'opens a pane on its session', (tester) async {
+    configure();
+    server.worktreeRows.record(
+      WorktreeSetupReport(
+        repositoryId: 'r1',
+        worktreePath: worktree.path,
+        environmentId: 'wsl:Ubuntu',
+        ranAt: testTime,
+        copies: const [],
+        command: const WorktreeCommandVerdict(
+          result: WorktreeCommandResult.running,
+          reason: 'Running in its own pane.',
+          command: ['flutter', 'pub', 'get'],
+          paneId: 'setup-p1',
+        ),
+      ),
+    );
+    await pumpPage(tester);
+
+    await tester.tap(find.text('Show output'));
+    await tester.pumpAndSettle();
+
+    // The pane is named for the server's session, so it attaches to it.
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    expect(controller.instanceFor('setup-p1'), isNotNull);
+    expect(
+      container
+          .read(terminalSessionsControllerProvider)
+          .tabs
+          .expand((tab) => tab.layout.panes),
+      contains('setup-p1'),
+    );
   });
 
   testWidgets('a setup that ran while the page is open appears on it', (

@@ -6,6 +6,7 @@ import '../../../core/data/data_providers.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:karmashala_git/git.dart';
+import '../data/git_data.dart';
 import 'changes_providers.dart';
 
 /// Opening, answering and triaging review threads, kept at the server (which
@@ -149,9 +150,7 @@ class ReviewThreadService {
         .repository(repositoryId);
     if (repository == null) return const {};
     try {
-      return await _ref
-          .read(changesServiceProvider)
-          .blobShas(repository.path, paths);
+      return await _ref.read(gitDataProvider).blobShas(repository.path, paths);
     } on Object {
       return const {};
     }
@@ -173,6 +172,9 @@ final reviewThreadsByRepositoryProvider = FutureProvider.autoDispose
           .changes
           .listen((_) => ref.invalidateSelf());
       ref.onDispose(listening.cancel);
+      // An anchor moves with the file under it.
+      final checkout = ref.read(workspaceDataProvider).repository(repositoryId);
+      if (checkout != null) ref.watchCheckout(checkout.path);
       return ref.read(reviewThreadServiceProvider).indexFor(repositoryId);
     });
 

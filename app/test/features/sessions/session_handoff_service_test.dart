@@ -309,7 +309,7 @@ Future<Harness> harness({
       ),
       settingsControllerProvider.overrideWith(() => _StaticSettings(settings)),
       commandRunnerFactoryProvider.overrideWithValue(
-        FakeCommandRunnerFactory(fallback: git),
+        server.gitWork.serve(FakeCommandRunnerFactory(fallback: git)),
       ),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       sessionTranscriptLocatorProvider.overrideWithValue(

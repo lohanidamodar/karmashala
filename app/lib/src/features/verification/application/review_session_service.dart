@@ -1,3 +1,4 @@
+import '../../git/data/git_data.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -5,7 +6,6 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -313,7 +313,7 @@ class ReviewSessionService {
 
   Future<String?> _branchOf(EnvironmentPath directory) async {
     try {
-      return await _ref.read(changesServiceProvider).currentBranch(directory);
+      return await _ref.read(gitDataProvider).currentBranch(directory);
     } on Object {
       return null;
     }
@@ -325,7 +325,7 @@ class ReviewSessionService {
         .repository(session.repositoryId);
     if (repo == null) return null;
     try {
-      return await _ref.read(changesServiceProvider).currentBranch(repo.path);
+      return await _ref.read(gitDataProvider).currentBranch(repo.path);
     } on Object {
       return null;
     }
@@ -334,7 +334,7 @@ class ReviewSessionService {
   Future<int?> _commitsAhead(EnvironmentPath directory, String base) async {
     try {
       return await _ref
-          .read(changesServiceProvider)
+          .read(gitDataProvider)
           .commitsAhead(directory, base: base);
     } on Object {
       return null;
@@ -344,7 +344,7 @@ class ReviewSessionService {
   Future<List<HandoffChange>?> _changesIn(EnvironmentPath directory) async {
     try {
       final changes = await _ref
-          .read(changesServiceProvider)
+          .read(gitDataProvider)
           .changes(directory);
       return [
         for (final change in changes)
@@ -362,7 +362,7 @@ class ReviewSessionService {
 
   /// Both diffs — an agent that ran `git add` has an empty unstaged one.
   Future<String?> _diffIn(EnvironmentPath directory) async {
-    final changes = _ref.read(changesServiceProvider);
+    final changes = _ref.read(gitDataProvider);
     try {
       final unstaged = await changes.diff(directory);
       var staged = '';

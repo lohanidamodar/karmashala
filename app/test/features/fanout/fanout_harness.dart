@@ -152,7 +152,7 @@ Harness harness({
       // Nothing here may shell out: git is faked, and the host runner is faked
       // so no path can reach a real terminal.
       commandRunnerFactoryProvider.overrideWithValue(
-        FakeCommandRunnerFactory(fallback: runner),
+        server.gitWork.serve(FakeCommandRunnerFactory(fallback: runner)),
       ),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
     ],

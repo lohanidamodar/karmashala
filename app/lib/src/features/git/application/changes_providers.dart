@@ -1,35 +1,12 @@
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../app/shell/quick_open/repo_file_index.dart';
-import '../../../core/process/command_runner_providers.dart';
-import '../../editor/application/code_editor_providers.dart';
-import '../../environments/application/environment_providers.dart';
-import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../projects/application/projects_controller.dart';
 import 'package:karmashala_git/git.dart';
-import 'changes_service.dart';
+import '../data/git_data.dart';
 import 'git_providers.dart';
-
-/// The filesystem `ChangesService.originFacts` and `GitPresenceReader` read
-/// `.git` through; a provider only so a test can count reads without a disk.
-final gitFilesProvider = Provider<GitFiles>((ref) => const HostGitFiles());
-
-final changesServiceProvider = Provider<ChangesService>(
-  (ref) => ChangesService(
-    runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environmentDao: ref.watch(environmentsDataProvider),
-    files: ref.watch(gitFilesProvider),
-    // The watcher sees a merge's in-place rewrites only where it is recursive
-    // and the root is watched at all.
-    onWorkingTreeChanged: (repo) {
-      final root = ref.read(editorActionsProvider).windowsPathFor(repo);
-      if (root != null) ref.read(repoFileIndexProvider).touch(root);
-    },
-  ),
-);
 
 /// The repository whose changes are being reviewed, or `null`.
 class SelectedRepositoryController extends Notifier<String?> {
@@ -144,17 +121,9 @@ final viewedCheckoutProvider = Provider.autoDispose<EnvironmentPath?>((ref) {
 /// not the repository row: the Repository and Changes panes diverge the moment
 /// the picker moves.
 final checkoutGitPresenceProvider = FutureProvider.autoDispose
-    .family<GitPresence, EnvironmentPath>((ref, checkout) async {
-      final env = ref
-          .read(environmentResolverProvider)
-          .resolveFor(checkout)
-          .environment;
-      // No environment row is not a statement about the folder.
-      if (env == null) return GitPresence.unknown;
-      return GitPresenceReader(
-        files: ref.watch(gitFilesProvider),
-        hostPathOf: hostPathMapperFor(env),
-      ).read(checkout.path);
+    .family<GitPresence, EnvironmentPath>((ref, checkout) {
+      ref.watchCheckout(checkout);
+      return ref.read(gitDataProvider).presenceOf(checkout);
     });
 
 /// Throws [NotAGitRepository] when the filesystem already said [checkout] is not
@@ -183,9 +152,10 @@ final repositoryChangesProvider = FutureProvider.autoDispose<List<FileChange>>((
 ) async {
   final path = ref.watch(viewedCheckoutProvider);
   if (path == null) return const [];
-  final changes = ref.read(changesServiceProvider);
+  ref.watchCheckout(path);
+  final git = ref.read(gitDataProvider);
   await _requireRepository(ref, path);
-  return changes.changes(path);
+  return git.changes(path);
 }, retry: _retryOnlyRealFailures);
 
 /// Lines added and removed per file in the checkout being viewed. One `git
@@ -195,9 +165,10 @@ final repositoryFileDiffStatsProvider =
     FutureProvider.autoDispose<Map<String, FileDiffStat>>((ref) async {
       final path = ref.watch(viewedCheckoutProvider);
       if (path == null) return const {};
-      final changes = ref.read(changesServiceProvider);
+      ref.watchCheckout(path);
+      final git = ref.read(gitDataProvider);
       await _requireRepository(ref, path);
-      return changes.fileDiffStats(path);
+      return git.fileDiffStats(path);
     }, retry: _retryOnlyRealFailures);
 
 /// Whether there is a merge to abort in the checkout being viewed. A conflicted
@@ -219,7 +190,7 @@ final mergeInProgressProvider = FutureProvider.autoDispose<bool>((ref) async {
   if (changes.any((c) => c.type == FileChangeType.conflicted)) return true;
   final path = ref.read(viewedCheckoutProvider);
   if (path == null) return false;
-  return await ref.read(changesServiceProvider).mergeInProgress(path) ?? false;
+  return await ref.read(gitDataProvider).mergeInProgress(path) ?? false;
 });
 
 /// The branch of the checkout being viewed, its upstream, and how far apart
@@ -233,8 +204,10 @@ final workingTreeStatusProvider = FutureProvider.autoDispose<WorkingTreeStatus>(
   (ref) async {
     final path = ref.watch(viewedCheckoutProvider);
     if (path == null) return WorkingTreeStatus.unknown;
+    ref.watchCheckout(path);
+    final git = ref.read(gitDataProvider);
     await _requireRepository(ref, path);
-    return ref.read(changesServiceProvider).statusWithBranch(path);
+    return git.statusWithBranch(path);
   },
   retry: _retryOnlyRealFailures,
 );
@@ -245,11 +218,12 @@ final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
   if (id == null) return null;
   final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return null;
-  final changes = ref.read(changesServiceProvider);
+  ref.watchCheckout(repo.path);
+  final git = ref.read(gitDataProvider);
   // A folder with no git in it is not a *detached* checkout, which is what this
   // provider's null means.
   await _requireRepository(ref, repo.path);
-  return changes.currentBranch(repo.path);
+  return git.currentBranch(repo.path);
 }, retry: _retryOnlyRealFailures);
 
 /// The `origin` remote URL of the selected repository.
@@ -258,11 +232,11 @@ final repoRemoteUrlProvider = FutureProvider.autoDispose<String?>((ref) async {
   if (id == null) return null;
   final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return null;
-  final changes = ref.read(changesServiceProvider);
+  final git = ref.read(gitDataProvider);
   // Likewise: null here is "a clone with no `origin`", not a folder that was
   // never cloned.
   await _requireRepository(ref, repo.path);
-  return changes.remoteUrl(repo.path);
+  return git.remoteUrl(repo.path);
 }, retry: _retryOnlyRealFailures);
 
 /// Recent commits on the branch the viewed checkout has out — follows the
@@ -272,9 +246,10 @@ final recentCommitsProvider = FutureProvider.autoDispose<List<GitCommit>>((
 ) async {
   final path = ref.watch(viewedCheckoutProvider);
   if (path == null) return const [];
-  final changes = ref.read(changesServiceProvider);
+  ref.watchCheckout(path);
+  final git = ref.read(gitDataProvider);
   await _requireRepository(ref, path);
-  return changes.log(path, limit: 8);
+  return git.log(path, limit: 8);
 }, retry: _retryOnlyRealFailures);
 
 /// The worktrees of the *selected* checkout, not the viewed one: asking the
@@ -286,6 +261,7 @@ final repoWorktreesProvider = FutureProvider.autoDispose<List<GitWorktree>>((
   if (id == null) return const [];
   final repo = ref.read(workspaceDataProvider).repository(id);
   if (repo == null) return const [];
+  ref.watchCheckout(repo.path);
   final worktrees = ref.read(worktreeServiceProvider);
   // Empty here is "one working tree and no others", drawn as `none`. A folder
   // that is not a repository has neither.

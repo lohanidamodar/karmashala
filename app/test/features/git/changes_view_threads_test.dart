@@ -2,11 +2,10 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
-import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala_git/git.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/git/presentation/diff_line_tile.dart';
 import 'package:karmashala/src/features/git/presentation/diff_view.dart';
@@ -18,7 +17,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'review_thread_harness.dart';
@@ -53,16 +51,6 @@ void main() {
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(
             SequentialIdGenerator('scope-thread-'),
-          ),
-          changesServiceProvider.overrideWithValue(
-            ChangesService(
-              runnerFactory: FakeCommandRunnerFactory(
-                fallback: FakeCommandRunner(
-                  responder: (request) => _hashObject(request, harness.shas),
-                ),
-              ),
-              environmentDao: EnvironmentsData(harness.client),
-            ),
           ),
           repositoryChangesProvider.overrideWith(
             (ref) async => const [
@@ -209,6 +197,11 @@ void main() {
     ReviewThreadHarness harness, {
     required String? sidebar,
   }) async {
+    harness.server.gitWork.diffs[(
+      Checkout(_fixtureCheckout),
+      'lib/a.dart',
+      false,
+    )] = diff;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -216,23 +209,6 @@ void main() {
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(
             SequentialIdGenerator('scope-thread-'),
-          ),
-          changesServiceProvider.overrideWithValue(
-            ChangesService(
-              runnerFactory: FakeCommandRunnerFactory(
-                fallback: FakeCommandRunner(
-                  responder: (request) =>
-                      request.arguments.contains('hash-object')
-                      ? _hashObject(request, harness.shas)
-                      : const CommandResult(
-                          exitCode: 0,
-                          stdout: diff,
-                          stderr: '',
-                        ),
-                ),
-              ),
-              environmentDao: EnvironmentsData(harness.client),
-            ),
           ),
           selectedRepositoryIdProvider.overrideWith(() => _Sidebar(sidebar)),
         ],
@@ -405,22 +381,6 @@ class _RecordingActions extends SessionActions {
   @override
   Future<void> continueSession(String sessionId, String text) async =>
       _sent.add(text);
-}
-
-CommandResult _hashObject(CommandRequest request, Map<String, String> shas) {
-  if (!request.arguments.contains('hash-object')) {
-    return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-  }
-  final paths = request.arguments.sublist(request.arguments.indexOf('--') + 1);
-  final out = <String>[];
-  for (final path in paths) {
-    final sha = shas[path];
-    if (sha == null) {
-      return const CommandResult(exitCode: 128, stdout: '', stderr: 'fatal');
-    }
-    out.add(sha);
-  }
-  return CommandResult(exitCode: 0, stdout: '${out.join('\n')}\n', stderr: '');
 }
 
 /// The Changes panel needs a selected repository to have anything to read.

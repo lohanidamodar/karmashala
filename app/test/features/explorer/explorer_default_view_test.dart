@@ -93,7 +93,7 @@ void main() {
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(),
+          server.gitWork.serve(FakeCommandRunnerFactory()),
         ),
       ],
     );

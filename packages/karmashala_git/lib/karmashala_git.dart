@@ -5,6 +5,7 @@
 /// `repositories.dart` for a smaller surface.
 library;
 
+export 'cleanup.dart';
 export 'git.dart';
 export 'github.dart';
 export 'pull_request_context.dart';

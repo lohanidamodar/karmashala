@@ -1,56 +1,25 @@
+import 'dart:convert';
+
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/git/application/worktree_cleanup_policy.dart';
-import 'package:karmashala/src/features/git/application/worktree_cleanup_providers.dart';
-import 'package:karmashala/src/features/git/application/worktree_cleanup_service.dart';
-import 'package:karmashala/src/features/git/data/worktree_cleanup_store.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
-import 'package:karmashala_core/util.dart';
-import 'package:karmashala_git/git.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/cleanup.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// A service whose preview is scripted: the page is under test, not git.
-class _CannedService extends WorktreeCleanupService {
-  _CannedService(this.report, Clock clock)
-    : super(
-        projects: () => const [],
-        repositoriesOf: (_) => const [],
-        presenceOf: (_) async => GitPresence.unknown,
-        familyKeyOf: (_) async => null,
-        environmentKind: (_) => null,
-        gitFor: (_) => throw StateError('no git'),
-        removeIfClean: (_, _) => throw StateError('no removal'),
-        sessions: () => const [],
-        isLive: (_) => false,
-        liveTerminalDirectories: () => const [],
-        lastEventAt: (_) async => null,
-        createdAt: (_) => null,
-        clock: clock,
-      );
-
-  final WorktreeCleanupReport report;
-  int previews = 0;
-
-  @override
-  Future<WorktreeCleanupReport> preview(
-    WorktreeCleanupSettings settings,
-  ) async {
-    previews++;
-    return report;
-  }
-}
-
+/// The cleanup section: the setting is a preference this page writes; the
+/// preview and the sweep are the server's, scripted here — the page is under
+/// test, not the rules (`server/test/git/`).
 void main() {
   late FakeDataServer server;
   late ProviderContainer container;
-  late _CannedService service;
 
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
   WorktreeFacts facts(String branch) => WorktreeFacts(
@@ -69,8 +38,7 @@ void main() {
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     final clock = FixedClock(testTime);
-    service = _CannedService(
-      WorktreeCleanupReport(
+    server.gitWork.cleanupReport = WorktreeCleanupReport(
         at: testTime,
         dryRun: true,
         verdicts: [
@@ -91,16 +59,13 @@ void main() {
             ],
           ),
         ],
-      ),
-      clock,
-    );
+      );
     final data = await server.override();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(),
         data,
         clockProvider.overrideWithValue(clock),
-        worktreeCleanupServiceProvider.overrideWithValue(service),
       ],
     );
   });
@@ -125,8 +90,12 @@ void main() {
 
   Finder cleanupNow() => find.byKey(const ValueKey('worktree-cleanup-now'));
 
-  WorktreeCleanupSettings stored() =>
-      WorktreeCleanupStore(server.store).settings();
+  WorktreeCleanupSettings stored() => WorktreeCleanupSettings.fromJson(
+    switch (server.preferences[WorktreeCleanupKeys.settings]) {
+      final String raw => jsonDecode(raw),
+      null => null,
+    },
+  );
 
   testWidgets('off by default, with the squash-merge caveat on the page', (
     tester,
@@ -188,7 +157,10 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('worktree-cleanup-preview')));
       await tester.pumpAndSettle();
 
-      expect(service.previews, 1);
+      expect(
+        server.gitWork.asked.whereType<WorktreeCleanupPreview>(),
+        hasLength(1),
+      );
       expect(find.textContaining('cleanup is off'), findsOneWidget);
       expect(find.text('Would remove (1)'), findsOneWidget);
       expect(find.text('Kept (1)'), findsOneWidget);

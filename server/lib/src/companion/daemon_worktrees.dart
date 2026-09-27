@@ -12,19 +12,25 @@ import '../automations/daemon_checkout_facts.dart';
 import '../domain/session_registry.dart';
 import '../pty/pty.dart';
 
-/// The host session id prefix of a worktree's setup or teardown command.
-/// Never `karmashala_…`, so none is ever read as a session row's process.
-const String kWorktreeSetupSessionPrefix = 'karmashala-setup-';
+/// The pane id prefix of a worktree's setup or teardown command. Its host
+/// session is named the way a desktop pane's is (`karmashala_local_<pane>`,
+/// `hostSessionIdFor`), so a client opens a pane on it — attaching, never
+/// starting another — and no session row is ever read into it.
+const String kWorktreeSetupPanePrefix = 'setup-';
 
-/// The app's worktree creation, run by the session host for a session a phone
-/// starts in a worktree of its own: the same staged creation, the same setup
-/// setting and verdict table (recorded through [record], which tells every
-/// client) — with a repository's setup command run as a
-/// session this host owns (watchable from any client) where the app would
-/// open a pane. [environmentOf] widens where it makes them (the agent tools
-/// reach WSL from a Windows server, and an SSH box through [runners]); by
-/// default only this machine's own environment. A setup command on an SSH box
-/// is not run: the server has no session there to run it in, and says so.
+/// The host session a setup pane [paneId] runs in.
+String worktreeSetupHostSessionId(String paneId) => 'karmashala_local_$paneId';
+
+/// Worktree creation and removal as the server does them — for a client's
+/// `worktrees.create`, an agent's tool and a session a phone starts in a
+/// worktree of its own: the staged creation, the setup setting and verdict
+/// table (recorded through [record], which tells every client) — with a
+/// repository's setup and teardown commands run as sessions this host owns
+/// (watchable from any client). A command is run only in this machine's own
+/// environment; elsewhere (WSL, an SSH box) its verdict says no pane could be
+/// opened for it. [environmentOf] widens where git runs (WSL from a Windows
+/// server, an SSH box through [runners]); by default only this machine's own
+/// environment.
 WorktreeService daemonWorktrees({
   required AppDatabase database,
   required SessionRegistry registry,
@@ -33,6 +39,7 @@ WorktreeService daemonWorktrees({
   required void Function(WorktreeSetupReport report) record,
   WorktreeEnvironmentOf? environmentOf,
   CommandRunnerFactory runners = const CommandRunnerFactory(),
+  WorktreeCreations? creations,
 }) {
   final rows = CheckoutRows(database);
   final setups = WorktreeSetupDao(database);
@@ -53,10 +60,12 @@ WorktreeService daemonWorktrees({
     },
     record: record,
     openPane: (command) {
-      if (command.environment.kind == EnvironmentKind.ssh) return null;
-      final id = '$kWorktreeSetupSessionPrefix${newId()}';
+      // A PTY is spawned here, on this machine: a command for another
+      // environment is not run in the wrong place.
+      if (!facts.isHere(command.environment)) return null;
+      final paneId = '$kWorktreeSetupPanePrefix${newId()}';
       final session = registry.open(
-        id,
+        worktreeSetupHostSessionId(paneId),
         PtySpawnRequest(
           argv: command.argv,
           workingDirectory: command.worktree.path,
@@ -65,25 +74,23 @@ WorktreeService daemonWorktrees({
           rows: 40,
         ),
       );
-      // Its exit is the verdict; its record is let go once read.
+      // Its exit is the verdict. Its record is kept — a client opening the
+      // pane afterwards is shown what it printed — until the registry's own
+      // retention of ended sessions lets it go.
       unawaited(
-        session.drained.then((end) async {
-          setup.noteExit(id, end.exitCode);
-          try {
-            await registry.close(id);
-          } on Object {
-            // Pruned already.
-          }
-        }),
+        session.drained.then((end) => setup.noteExit(paneId, end.exitCode)),
       );
-      return id;
+      return paneId;
     },
-    closePane: (id) => unawaited(
-      registry.close(id).then<void>((_) {}, onError: (Object _) {}),
+    closePane: (paneId) => unawaited(
+      registry
+          .close(worktreeSetupHostSessionId(paneId))
+          .then<void>((_) {}, onError: (Object _) {}),
     ),
   );
   return WorktreeService(
     runnerFactory: runners,
+    creations: creations,
     environmentOf:
         environmentOf ??
         (repo) {

@@ -7,7 +7,6 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -142,7 +141,7 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: git),
+          server.gitWork.serve(FakeCommandRunnerFactory(fallback: git)),
         ),
         // Selecting a project kicks off a CLI-store scan; nothing here is
         // testing import.
@@ -150,8 +149,6 @@ void main() {
           (repos) async => const ImportSummary(),
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
-        probeGateProvider.overrideWithValue(headlessProbeGate),
-        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     addTearDown(container.dispose);

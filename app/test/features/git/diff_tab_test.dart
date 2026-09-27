@@ -1,4 +1,6 @@
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,41 +48,60 @@ const _twinB = 'lib/b/twin.dart';
 const _diff =
     '@@ -1,3 +1,3 @@\n final a = 1;\n-final b = 2;\n+final b = 3;\n final c = 4;\n';
 
-/// `git status --porcelain=v1` and `git diff --numstat HEAD`, spelled the way
-/// git 2.55.0 spells them — the quoted path included, since undoing that is
-/// half of what this file pins.
-const _status =
-    ' M lib/src/app/shell/side_panel.dart\n'
-    'M  lib/staged.dart\n'
-    ' M "lib/h\\303\\251llo.dart"\n'
-    ' M lib/a/twin.dart\n'
-    ' M lib/b/twin.dart\n';
-const _numstat =
-    '1\t1\tlib/src/app/shell/side_panel.dart\n'
-    '1\t1\tlib/staged.dart\n'
-    '1\t1\t"lib/h\\303\\251llo.dart"\n';
+/// The changed files as the server lists them — the quoted path already
+/// unquoted, which is the server's to do (`GitService`'s own tests).
+const _changes = [
+  FileChange(
+    path: _file,
+    type: FileChangeType.modified,
+    staged: false,
+    unstaged: true,
+  ),
+  FileChange(
+    path: _stagedFile,
+    type: FileChangeType.modified,
+    staged: true,
+    unstaged: false,
+  ),
+  FileChange(
+    path: _quotedFile,
+    type: FileChangeType.modified,
+    staged: false,
+    unstaged: true,
+  ),
+  FileChange(
+    path: _twinA,
+    type: FileChangeType.modified,
+    staged: false,
+    unstaged: true,
+  ),
+  FileChange(
+    path: _twinB,
+    type: FileChangeType.modified,
+    staged: false,
+    unstaged: true,
+  ),
+];
 
-/// git as this test's repository answers. **Only a diff that named a base sees
-/// the index**, which is the whole of the staged case.
-CommandResult _git(CommandRequest request) {
-  const nothing = CommandResult(exitCode: 0, stdout: '', stderr: '');
-  final args = request.arguments.skip(2).toList();
-  if (args.first == 'status') {
-    return const CommandResult(exitCode: 0, stdout: _status, stderr: '');
-  }
-  if (args.contains('--numstat')) {
-    return const CommandResult(exitCode: 0, stdout: _numstat, stderr: '');
-  }
-  if (args.first != 'diff' || !args.contains('--')) return nothing;
-  if (args.last == _stagedFile && !args.contains('HEAD')) return nothing;
-  return const CommandResult(exitCode: 0, stdout: _diff, stderr: '');
-}
+/// The server as this test's repository answers. **Only a diff that named a
+/// base sees the index**, which is the whole of the staged case.
+Object? _git(GitWorkRequest<Object?> request) => switch (request) {
+  GitStatusOf() => const WorkingTreeStatus(changes: _changes),
+  GitChangesOf() => _changes,
+  GitFileDiffStats() => const {
+    _file: FileDiffStat(added: 1, removed: 1),
+    _stagedFile: FileDiffStat(added: 1, removed: 1),
+    _quotedFile: FileDiffStat(added: 1, removed: 1),
+  },
+  GitDiff(:final path?, :final base) =>
+    path == _stagedFile && base != 'HEAD' ? '' : _diff,
+  _ => FakeGitWork.unhandled,
+};
 
 void main() {
   late FakeDataServer server;
   late DataClient client;
   late TestMachine db;
-  late FakeCommandRunner git;
 
   setUp(() async {
     db = TestMachine();
@@ -92,22 +113,19 @@ void main() {
     server.repositoryRows.insert(repository());
     client = await server.connect();
     server.installationRows.insert(agentInstallation());
+    server.gitWork.answer = _git;
   });
 
   ProviderContainer shellContainer() {
-    git = FakeCommandRunner(responder: _git);
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(client),
-        commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: git),
-        ),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         repoWorktreesProvider.overrideWith((ref) async => const []),
         recentCommitsProvider.overrideWith((ref) async => const []),
         // Neither the listing, the counts nor `diffForTargetProvider` is
-        // overridden: every one of them is what `ChangesService` asked git for,
+        // overridden: every one of them is what the server was asked for,
         // which is where a staged file and a quoted path go wrong.
       ],
     );
@@ -230,15 +248,12 @@ void main() {
     expect(diffPaneIdFor(target), paneId);
   });
 
-  /// Every `git diff` this test's app asked for, as the pathspec and whether it
-  /// named a base.
+  /// Every diff this test's app asked the server for, as the path and
+  /// whether it named a base.
   List<({String path, bool based})> diffsAsked() => [
-    for (final request in git.requests)
-      if (request.arguments.contains('--'))
-        (
-          path: request.arguments.last,
-          based: request.arguments.contains('HEAD'),
-        ),
+    for (final request in server.gitWork.asked)
+      if (request case GitDiff(:final path?, :final base))
+        (path: path, based: base == 'HEAD'),
   ];
 
   testWidgets('a staged file shows the change its row counted', (tester) async {

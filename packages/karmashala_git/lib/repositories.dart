@@ -9,6 +9,7 @@ export 'src/repositories/data/checkout_presence_probe.dart';
 export 'src/repositories/data/posix_repository_discovery.dart';
 export 'src/repositories/data/repository_discovery.dart';
 export 'src/repositories/domain/checkout.dart';
+export 'src/repositories/domain/checkout_label.dart';
 export 'src/repositories/domain/checkout_retirement.dart';
 export 'src/repositories/domain/discovered_repository.dart';
 export 'src/repositories/domain/repository.dart';

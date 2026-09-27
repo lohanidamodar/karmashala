@@ -12,6 +12,7 @@ import '../../projects/application/projects_controller.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/presentation/settings_section.dart';
+import '../application/setup_run_pane.dart';
 import '../application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'worktree_cleanup_section.dart';
@@ -302,14 +303,14 @@ class _Line extends StatelessWidget {
 /// One worktree's verdict, with its age and the sentences behind it. One
 /// needing attention is expanded and coloured; a worktree with no recorded run
 /// is not listed at all, rather than listed as healthy.
-class _RunLine extends StatelessWidget {
+class _RunLine extends ConsumerWidget {
   const _RunLine({required this.run, required this.now, super.key});
 
   final WorktreeSetupReport run;
   final DateTime now;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final attention = run.verdict == WorktreeSetupVerdict.attention;
@@ -328,6 +329,9 @@ class _RunLine extends StatelessWidget {
     final status = creation == null
         ? (attention ? 'needs attention' : 'set up')
         : describeWorktreeOutcome(creation.outcome);
+    // The server ran the setup command as a session of its own; its output is
+    // a pane away, while it runs and after.
+    final pane = run.command?.paneId;
     return Padding(
       padding: const EdgeInsets.only(top: Insets.xs),
       child: Column(
@@ -352,6 +356,12 @@ class _RunLine extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (pane != null)
+                TextButton(
+                  key: ValueKey('worktree-setup-output ${run.worktreePath}'),
+                  onPressed: () => ref.read(setupRunPaneProvider)(pane),
+                  child: const Text('Show output'),
+                ),
             ],
           ),
           for (final line in lines)

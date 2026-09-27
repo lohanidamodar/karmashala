@@ -1,18 +1,16 @@
+import 'dart:async';
+
+import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
-import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
-import '../../support/fake_data_server.dart';
-import 'package:karmashala/src/features/environments/data/environments_data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_ui/theme.dart';
-import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/git/application/git_providers.dart';
-import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_create_dialog.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_git/git.dart';
+import 'package:karmashala_ui/theme.dart';
 
-import '../../support/fake_command_runner.dart';
+import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
-import 'worktree_processes.dart';
 
 const _repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
 
@@ -21,29 +19,20 @@ const _repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
 /// The finding this closes: `worktree_create` could make one for an agent, and
 /// a person could only get one by launching a session into it — which is
 /// backwards for the case the tool exists for, somewhere to try something
-/// without disturbing the checkout an agent is already editing.
+/// without disturbing the checkout an agent is already editing. The server
+/// makes it (`worktrees.create`); this dialog asks, draws the stages it is
+/// told, and cancels.
 void main() {
-  late FakeCommandRunner runner;
-  late WorktreeService service;
+  late FakeDataServer server;
 
-  setUp(() async {
-    final server = FakeDataServer()..environmentRows.upsert(windowsEnv());
-    final envDao = EnvironmentsData(await server.connect());
-    runner = FakeCommandRunner(
-      responder: (_) =>
-          const CommandResult(exitCode: 0, stdout: '', stderr: ''),
-      processFactory: (_) => finishedGit(),
-    );
-    service = WorktreeService(
-      runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentOf: worktreeEnvironmentOf(envDao),
-    );
+  setUp(() {
+    server = FakeDataServer()..environmentRows.upsert(windowsEnv());
   });
 
   Future<void> open(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [worktreeServiceProvider.overrideWithValue(service)],
+        overrides: [await server.override()],
         child: MaterialApp(
           theme: AppTheme.light(),
           home: Scaffold(
@@ -61,10 +50,32 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// git's argv for the create, or null when nothing was run.
-  List<String>? gitArgv() => worktreeAddArgv(runner);
+  /// The creation the dialog asked the server for, or null.
+  WorktreeCreate? asked() =>
+      server.gitWork.asked.whereType<WorktreeCreate>().firstOrNull;
 
-  testWidgets('a named worktree goes through the service the tool uses', (
+  WorktreeCreationRecord withCheckout(
+    WorktreeStageState state, {
+    String? detail,
+    String? progress,
+    WorktreeCreationOutcome outcome = WorktreeCreationOutcome.running,
+    String? cleanup,
+  }) {
+    final base = WorktreeCreationRecord.initial().withStage(
+      WorktreeStageStatus(
+        stage: WorktreeStage.checkout,
+        state: state,
+        detail: detail,
+        percent: progress == null ? null : 30,
+        progressLabel: progress,
+      ),
+    );
+    return outcome == WorktreeCreationOutcome.running
+        ? base
+        : base.finish(outcome, cleanup: cleanup);
+  }
+
+  testWidgets('a named worktree is asked of the server, with its branch', (
     tester,
   ) async {
     await open(tester);
@@ -74,21 +85,15 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));
     await tester.pumpAndSettle();
 
-    // The sibling path `WorktreeService` computes, not one this dialog made up
-    // — which is what makes it the same worktree the tool creates.
-    expect(gitArgv(), [
-      '-C',
-      r'C:\src\app',
-      'worktree',
-      'add',
-      '--no-checkout',
-      '-b',
-      'spike',
-      r'C:\src\.karmashala-worktrees\app-spike',
-    ]);
+    final create = asked()!;
+    expect(create.checkout.directory, _repo);
+    expect(create.worktreeName, 'spike');
+    expect(create.branch, 'spike');
+    expect(create.baseRef, isNull);
+    expect(create.launchesAgent, isFalse);
   });
 
-  testWidgets('a chosen base ref is passed to git; a blank one is not', (
+  testWidgets('a chosen base ref is passed on; a blank one is not', (
     tester,
   ) async {
     await open(tester);
@@ -106,8 +111,8 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));
     await tester.pumpAndSettle();
 
-    expect(gitArgv(), contains('feat/spike'));
-    expect(gitArgv()!.last, 'origin/main');
+    expect(asked()!.branch, 'feat/spike');
+    expect(asked()!.baseRef, 'origin/main');
   });
 
   testWidgets('cancelling creates nothing', (tester) async {
@@ -118,7 +123,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
 
-    expect(runner.requests, isEmpty);
+    expect(server.gitWork.asked, isEmpty);
   });
 
   testWidgets('an unnamed worktree cannot be created', (tester) async {
@@ -135,11 +140,19 @@ void main() {
   });
 
   testWidgets('git\'s own words survive a failure', (tester) async {
-    runner.responder = (_) => const CommandResult(
-      exitCode: 128,
-      stdout: '',
-      stderr: "fatal: a branch named 'spike' already exists",
-    );
+    const said = "fatal: a branch named 'spike' already exists";
+    server.gitWork.onCreate = (create) async {
+      server.gitWork.creationMoved(
+        create.creationId,
+        _repo,
+        withCheckout(
+          WorktreeStageState.failed,
+          detail: said,
+          outcome: WorktreeCreationOutcome.failed,
+        ),
+      );
+      throw const DataRefused(DataRefusalCode.failed, said);
+    };
     await open(tester);
 
     await tester.enterText(find.widgetWithText(TextField, 'Name'), 'spike');
@@ -154,7 +167,7 @@ void main() {
         of: find.byType(WorktreeCreationDialog),
         matching: find.textContaining('already exists'),
       ),
-      findsOneWidget,
+      findsWidgets,
     );
     expect(find.text('Checkout · failed'), findsOneWidget);
   });
@@ -162,16 +175,41 @@ void main() {
   testWidgets('a checkout in progress can be cancelled from the dialog', (
     tester,
   ) async {
-    final checkout = FakeProcessHandle();
-    runner.processFactory = (_) => checkout;
+    final cancelled = Completer<void>();
+    server.gitWork.answer = (request) {
+      if (request is WorktreeCreationCancel) cancelled.complete();
+      return FakeGitWork.unhandled;
+    };
+    server.gitWork.onCreate = (create) async {
+      server.gitWork.creationMoved(
+        create.creationId,
+        _repo,
+        withCheckout(
+          WorktreeStageState.running,
+          progress: 'Updating files',
+        ),
+      );
+      await cancelled.future;
+      server.gitWork.creationMoved(
+        create.creationId,
+        _repo,
+        withCheckout(
+          WorktreeStageState.failed,
+          detail: 'Cancelled.',
+          outcome: WorktreeCreationOutcome.cancelled,
+          cleanup: 'Removed the half-made worktree.',
+        ),
+      );
+      throw const DataRefused.invalid(
+        'Worktree creation cancelled. Removed the half-made worktree.',
+      );
+    };
     await open(tester);
     await tester.enterText(find.widgetWithText(TextField, 'Name'), 'spike');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));
     // Not settled: a running stage spins for as long as it runs.
     await tester.pump();
-    await tester.pump();
-    checkout.emitStderr('Updating files:  30% (3/10)');
     await tester.pump();
     expect(find.textContaining('Updating files 30%'), findsOneWidget);
 
@@ -185,18 +223,14 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
-    expect(checkout.killed, isTrue);
+    expect(cancelled.isCompleted, isTrue);
     expect(find.text('Checkout · failed'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byType(WorktreeCreationDialog),
         matching: find.textContaining('Removed the half-made worktree'),
       ),
-      findsOneWidget,
-    );
-    expect(
-      runner.requests.map((r) => r.arguments.skip(2).take(3).toList()),
-      contains(equals(['worktree', 'remove', '--force'])),
+      findsWidgets,
     );
     expect(find.widgetWithText(TextButton, 'Close'), findsOneWidget);
   });

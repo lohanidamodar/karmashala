@@ -1,8 +1,8 @@
+import '../../git/data/git_data.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
-import '../../git/application/changes_providers.dart';
 import 'delivery_providers.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
@@ -109,7 +109,7 @@ class DeliveryUpdateService {
     }
 
     final directory = session.worktree ?? repository.path;
-    final changes = _ref.read(changesServiceProvider);
+    final changes = _ref.read(gitDataProvider);
     try {
       // Read again rather than trusting `delivery.dirtyFiles`, which is as old
       // as the last poll: this is the check that protects unrecorded work.
@@ -140,7 +140,7 @@ class DeliveryUpdateService {
   Future<bool> _isMidMerge(EnvironmentPath directory) async {
     try {
       final head = await _ref
-          .read(changesServiceProvider)
+          .read(gitDataProvider)
           .revParse(directory, 'MERGE_HEAD');
       return head != null;
     } catch (_) {

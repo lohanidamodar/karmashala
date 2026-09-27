@@ -5,6 +5,10 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/util.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show CheckoutTouchCause;
+import '../../../features/editor/application/code_editor_providers.dart';
+import '../../../features/git/data/git_data.dart';
 import '../../../features/checkpoints/application/checkpoint_providers.dart';
 import '../../../features/file_explorer/application/file_explorer_providers.dart';
 import '../../../features/sessions/application/session_ui_providers.dart';
@@ -424,6 +428,20 @@ final repoFileIndexProvider = Provider<RepoFileIndex>((ref) {
   ref.onDispose(index.dispose);
   ref.listen(sessionsRevisionProvider, (_, _) => index.touchAll());
   ref.listen(checkpointsRevisionProvider, (_, _) => index.touchAll());
+  // A write the server made, or a worktree it made or removed: the one change
+  // the OS watcher cannot see is a directory appearing or going.
+  final touches = ref.watch(gitDataProvider).touches.listen((touched) {
+    final root = ref.read(editorActionsProvider).windowsPathFor(
+      touched.directory,
+    );
+    if (root == null) return;
+    if (touched.cause == CheckoutTouchCause.worktree) {
+      index.invalidate(root);
+    } else {
+      index.touch(root);
+    }
+  });
+  ref.onDispose(touches.cancel);
   return index;
 });
 

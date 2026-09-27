@@ -4,17 +4,14 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../agents/data/agents_data.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/application/environment_resolver.dart';
 import '../../explorer/application/project_head.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -22,7 +19,7 @@ import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'cli_store_purge.dart';
 import '../../workspaces/data/workspace_data.dart';
-import 'project_service_provider.dart';
+import '../../git/data/git_data.dart';
 import 'wsl_path_existence.dart';
 
 /// The projects as the server keeps them, and the verbs over them. The list
@@ -49,35 +46,31 @@ class ProjectsController extends Notifier<List<Project>> {
     return projects;
   }
 
-  /// Creates a project at a local Windows folder [path] named [name], discovers
-  /// repositories under it. Returns the result so the UI can report how many
-  /// repositories were found.
+  /// Creates a project at a folder [path] on this machine named [name], with
+  /// a checkout for every repository under it — scanned at the server, which
+  /// imports their CLI history. Returns the result so the UI can report how
+  /// many repositories were found.
   Future<ProjectCheckouts> createByDiscovery({
     required String name,
     required String path,
-  }) async {
-    final root = EnvironmentPath(
-      environmentId: localHostEnvironmentId,
-      path: path,
-    );
-    final result = await ref
-        .read(projectServiceProvider)
-        .createProjectByDiscovery(name: name, root: root);
-    await _autoImportSessions(result.repositories);
-    return result;
-  }
+  }) => _created(
+    ref
+        .read(gitDataProvider)
+        .createProject(
+          name: name,
+          root: EnvironmentPath(
+            environmentId: localHostEnvironmentId,
+            path: path,
+          ),
+        ),
+  );
 
-  /// Scans the CLI stores and imports any existing sessions for the new
-  /// project's repositories (best-effort — never blocks project creation).
-  Future<void> _autoImportSessions(List<Repository> repositories) async {
-    try {
-      final summary = await ref.read(autoImportRunnerProvider)(repositories);
-      if (summary.sessions > 0) {
-        ref.read(sessionsRevisionProvider.notifier).bump();
-      }
-    } catch (_) {
-      // CLI stores unavailable — project creation still succeeds.
+  Future<ProjectCheckouts> _created(Future<ProjectCheckouts> create) async {
+    final result = await create;
+    if (result.repositories.isNotEmpty) {
+      ref.read(sessionsRevisionProvider.notifier).bump();
     }
+    return result;
   }
 
   /// The **one** CLI-store import of this app's life, run after the first frame.
@@ -155,59 +148,53 @@ class ProjectsController extends Notifier<List<Project>> {
     return summary;
   }
 
-  /// Creates a project for [targetEnvironmentId] from a Windows-host folder,
-  /// binding it and its repositories to that environment.
+  /// Creates a project for [targetEnvironmentId] from a folder picked on this
+  /// machine: the picked path is spelled for the target (a picker only knows
+  /// this machine's paths), and the server scans and records it there.
   Future<ProjectCheckouts> createInEnvironment({
     required String name,
     required String windowsPath,
     required String targetEnvironmentId,
     String? workspaceId,
-  }) async {
+  }) {
     final dao = ref.read(environmentsDataProvider);
     final windows = dao.getById(localHostEnvironmentId);
     final target = dao.getById(targetEnvironmentId) ?? windows;
     if (windows == null || target == null) {
       throw StateError('No execution environments available.');
     }
-    final result = await ref
-        .read(projectServiceProvider)
-        .createProjectForEnvironment(
-          name: name,
-          windowsScanPath: windowsPath,
-          windows: windows,
-          target: target,
-          workspaceId: workspaceId,
-        );
-    await _autoImportSessions(result.repositories);
-    return result;
+    final picked = EnvironmentPath(environmentId: windows.id, path: windowsPath);
+    final root = target.id == windows.id
+        ? picked
+        : const PathTranslator().translate(picked, from: windows, to: target);
+    return _created(
+      ref
+          .read(gitDataProvider)
+          .createProject(name: name, root: root, workspaceId: workspaceId),
+    );
   }
 
-  /// Creates a project on [targetEnvironmentId], optionally cloning [gitRepoUrl].
-  ///
-  /// Works across local Windows, WSL, and remote SSH environments.
+  /// Creates a project on [targetEnvironmentId], optionally cloning
+  /// [gitRepoUrl] — at the server, in whatever environment that is.
   Future<ProjectCheckouts> createProject({
     required String name,
     required String targetEnvironmentId,
     required String folderPath,
     String? gitRepoUrl,
     String? workspaceId,
-  }) async {
-    final target = ref
-        .read(environmentResolverProvider)
-        .resolve(targetEnvironmentId)
-        .require;
-    final result = await ref
-        .read(projectServiceProvider)
+  }) => _created(
+    ref
+        .read(gitDataProvider)
         .createProject(
           name: name,
-          target: target,
-          targetPath: folderPath,
-          gitRepoUrl: gitRepoUrl,
+          root: EnvironmentPath(
+            environmentId: targetEnvironmentId,
+            path: folderPath,
+          ),
+          gitUrl: gitRepoUrl,
           workspaceId: workspaceId,
-        );
-    await _autoImportSessions(result.repositories);
-    return result;
-  }
+        ),
+  );
 
   /// Edits [projectId]: its name, where its root folder is, and which checkout
   /// its one-click session runs in. A moved root fails before anything is
@@ -225,14 +212,7 @@ class ProjectsController extends Notifier<List<Project>> {
       throw StateError('This project is no longer in the workspace.');
     }
 
-    final dao = ref.read(environmentsDataProvider);
-    final windows = dao.getById(localHostEnvironmentId);
     final environmentId = targetEnvironmentId ?? project.root.environmentId;
-    final target = dao.getById(environmentId) ?? windows;
-    if (windows == null || target == null) {
-      throw StateError('No execution environments available.');
-    }
-
     final trimmed = folderPath?.trim();
     final root = trimmed == null || trimmed.isEmpty
         ? (targetEnvironmentId == null
@@ -244,19 +224,14 @@ class ProjectsController extends Notifier<List<Project>> {
         : EnvironmentPath(environmentId: environmentId, path: trimmed);
 
     final result = await ref
-        .read(projectServiceProvider)
-        .updateProject(
-          project,
+        .read(gitDataProvider)
+        .moveProject(
+          projectId,
           name: name,
           root: root,
           defaultRepositoryId: defaultRepositoryId,
           clearDefaultRepository: clearDefaultRepository,
-          target: target,
-          windows: windows,
         );
-    if (result.discovered.isNotEmpty) {
-      await _autoImportSessions(result.discovered);
-    }
     // Every checkout row a session points at may have moved, so the tree has to
     // redraw even when nothing was discovered.
     if (result.rebased.isNotEmpty || result.discovered.isNotEmpty) {
@@ -289,9 +264,9 @@ class ProjectsController extends Notifier<List<Project>> {
         'project at where it lives — Edit project — or add it again.',
       );
     }
-    final checkout = await ref
-        .read(projectServiceProvider)
-        .recordRootAsCheckout(project);
+    final added = await _workspace.write(CheckoutsAdd(projectId: project.id));
+    final checkout =
+        added.firstOrNull ?? _workspace.repositoriesOf(project.id).first;
     ref.read(sessionsRevisionProvider.notifier).bump();
     return checkout;
   }
@@ -338,66 +313,21 @@ class ProjectsController extends Notifier<List<Project>> {
     if (project == null) {
       throw StateError('This project is no longer in the workspace.');
     }
-    // The same pair `createInEnvironment` resolves, and for the same reason:
-    // the scan runs on the Windows host, the rows belong to the project's own
-    // environment.
-    final dao = ref.read(environmentsDataProvider);
-    final windows = dao.getById(localHostEnvironmentId);
-    final environment = dao.getById(project.root.environmentId) ?? windows;
-    if (windows == null || environment == null) {
-      throw StateError('No execution environments available.');
-    }
-    final added = await ref
-        .read(projectServiceProvider)
-        .rediscover(project, projectEnvironment: environment, windows: windows);
+    // Scanned at the server, which also retires the checkouts provably gone
+    // and imports the new ones' CLI history.
+    final added = await ref.read(gitDataProvider).rescanProject(projectId);
     // Asked for: the folder's own answer is taken again, not from what is kept.
-    if (environment.wslDistribution case final distribution?) {
+    final environment = ref
+        .read(environmentsDataProvider)
+        .getById(project.root.environmentId);
+    if (environment?.wslDistribution case final distribution?) {
       ref
           .read(wslPathExistenceProvider)
           .forget(distribution, project.root.path);
     }
     ref.invalidate(projectPathMissingProvider(project));
-    // A rescan is also the moment to notice what has gone. **Not awaited**: it
-    // probes once per checkout, which over a stopped distro's UNC blocks for
-    // seconds each, and the caller asked what the scan *found*.
-    unawaited(
-      _retireMissingCheckouts(projectId, project, environment, windows),
-    );
-    if (added.isNotEmpty) {
-      // New repositories may already have CLI history behind them, and the
-      // tree's providers all hang off the revision.
-      await _autoImportSessions(added);
-      ref.read(sessionsRevisionProvider.notifier).bump();
-    }
+    ref.read(sessionsRevisionProvider.notifier).bump();
     return added;
-  }
-
-  /// Drops the rows whose directories are provably gone, and says nothing when
-  /// it cannot tell — the project root itself must have answered present.
-  Future<void> _retireMissingCheckouts(
-    String projectId,
-    Project project,
-    ExecutionEnvironment environment,
-    ExecutionEnvironment windows,
-  ) async {
-    try {
-      final report = await ref
-          .read(checkoutRetirementServiceProvider)
-          .retireMissingCheckouts(
-            projectId: projectId,
-            root: project.root,
-            environment: environment,
-            windows: windows,
-          );
-      if (report.retired.isEmpty) return;
-      ref.read(sessionsRevisionProvider.notifier).bump();
-    } catch (error) {
-      // A tidy-up that fails is not a failed rescan. The rows it would have
-      // dropped are still there, which is the safe direction.
-      AppLogger.named(
-        'projects',
-      ).warning('Retiring missing checkouts failed: $error');
-    }
   }
 
   /// Removes [projectId]; the database cascades. With [deleteCliSessions] the

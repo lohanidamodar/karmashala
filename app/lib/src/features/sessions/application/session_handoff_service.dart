@@ -1,3 +1,4 @@
+import '../../git/data/git_data.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -8,7 +9,6 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
 import '../../checkpoints/data/checkpoints_data.dart';
-import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/events.dart';
@@ -363,7 +363,7 @@ class SessionHandoffService {
   Future<List<HandoffChange>?> _changesIn(EnvironmentPath directory) async {
     try {
       final changes = await _ref
-          .read(changesServiceProvider)
+          .read(gitDataProvider)
           .changes(directory);
       return [
         for (final change in changes)

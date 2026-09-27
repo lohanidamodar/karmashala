@@ -3,10 +3,7 @@ import 'dart:convert';
 import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:karmashala_core/paths.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
-import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
-import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
@@ -324,8 +321,6 @@ fakeTerminalOverrides({
   TerminalInstanceFactory? instanceFactory,
   bool shellIntegration = false,
   bool restoreLivePanes = true,
-  bool frameGatedProbes = false,
-  GitFiles? gitFiles,
   PathProbe? pathProbe,
 }) {
   return [
@@ -341,18 +336,6 @@ fakeTerminalOverrides({
         now: ref.watch(clockProvider).nowUtc,
       ),
     ),
-    // Off by default for the same reason and in the same words as
-    // `deliveryPollIntervalProvider` below — see [headlessProbeGate]. The one
-    // test that is *about* the gate asks for the real one.
-    if (!frameGatedProbes)
-      probeGateProvider.overrideWithValue(headlessProbeGate),
-    // No disk by default, and a test that is *about* the two files a delivery
-    // reading reads hands its own in here rather than adding a second override
-    // — Riverpod refuses the same provider twice in one container, the same
-    // constraint `agentUsageServiceProvider` below is written to. See
-    // [NoGitFiles] for why real file I/O in a fake-async test is not a
-    // tidiness question.
-    gitFilesProvider.overrideWithValue(gitFiles ?? noGitFiles),
     // A second container over the same machine (a restart) finds the layout
     // the first saved.
     if (layoutStore ??

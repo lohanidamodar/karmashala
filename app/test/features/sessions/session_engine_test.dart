@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'dart:convert';
 
 import 'package:agent_cli/stream.dart';
@@ -8,32 +7,32 @@ import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/git/application/git_providers.dart';
+import 'package:karmashala/src/features/git/data/git_data.dart';
 
 import '../../support/fake_data_server.dart';
-import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
-import 'package:karmashala/src/features/environments/data/environments_data.dart';
 
 void main() {
-  late EnvironmentsData environments;
   late FakeDataServer server;
   // The app's copy, where the engine's writes land at once.
   late SessionsData sessionDao;
+  late GitData git;
   late SessionRecordsData records;
   // The server's log, where each event lands once it is answered.
   late FakeEventRows eventDao;
 
   setUp(() async {
     server = FakeDataServer();
-    environments = EnvironmentsData(await server.connect());
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     final client = await server.connect();
+    git = GitData(client);
     sessionDao = SessionsData(client);
     records = SessionRecordsData(client);
     eventDao = server.eventRows;
@@ -42,10 +41,7 @@ void main() {
   SessionEngine buildEngine({ChatProtocolResolver? resolver}) => SessionEngine(
     sessions: sessionDao,
     records: records,
-    worktreeService: WorktreeService(
-      runnerFactory: FakeCommandRunnerFactory(),
-      environmentOf: worktreeEnvironmentOf(environments),
-    ),
+    worktreeService: WorktreesClient(git, WorktreeCreations()),
     resolveProtocol:
         resolver ?? (agentId) => FakeChatProtocol(agentId: agentId),
     clock: FixedClock(testTime),

@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +16,6 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 
 void main() {
-  late FakeRepositoryDiscoveryService discovery;
 
   EnvironmentPath root(String path) =>
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
@@ -25,13 +23,12 @@ void main() {
   late Override data;
 
   setUp(() async {
-    data =
-        await (FakeDataServer()
-              ..environmentRows.upsert(localHostEnvironment(testTime)))
-            .override();
-    discovery = FakeRepositoryDiscoveryService(
-      result: [DiscoveredRepository(name: 'app', path: root(r'C:\ws\app'))],
-    );
+    final server = FakeDataServer()
+      ..environmentRows.upsert(localHostEnvironment(testTime));
+    server.gitWork.found = [
+      DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
+    ];
+    data = await server.override();
   });
 
   Future<void> pump(WidgetTester tester) async {
@@ -45,7 +42,6 @@ void main() {
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(),
           ),
-          repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           autoImportRunnerProvider.overrideWithValue(
@@ -83,6 +79,5 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Workspace'), findsOneWidget);
-    expect(discovery.calls, isNotEmpty);
   });
 }

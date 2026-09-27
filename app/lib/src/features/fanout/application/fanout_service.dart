@@ -1,3 +1,4 @@
+import '../../git/data/git_data.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -5,7 +6,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -311,7 +311,7 @@ class FanOutService {
     final worktree = result.session.worktree;
     if (worktree == null) return '';
     if (result.candidate?.worktreeRemoved ?? false) return '';
-    final changes = ref.read(changesServiceProvider);
+    final changes = ref.read(gitDataProvider);
     final unstaged = await changes.diff(worktree);
     final candidate = result.candidate;
     if (candidate != null) {
@@ -335,7 +335,7 @@ class FanOutService {
       candidate: candidate,
       worktree: worktree,
       repository: result.repository,
-      unstaged: await ref.read(changesServiceProvider).diff(worktree),
+      unstaged: await ref.read(gitDataProvider).diff(worktree),
     );
   }
 
@@ -347,7 +347,7 @@ class FanOutService {
     required Repository repository,
     required String unstaged,
   }) async {
-    final changes = ref.read(changesServiceProvider);
+    final changes = ref.read(gitDataProvider);
     var lines = parseDiffLineCounts(unstaged);
     var files = 0;
     int? commits;
@@ -388,7 +388,7 @@ class FanOutService {
   Future<void> mergeWinner(FanOutResult result) async {
     final worktree = result.session.worktree;
     if (worktree == null) throw StateError('This result has no worktree.');
-    final changes = ref.read(changesServiceProvider);
+    final changes = ref.read(gitDataProvider);
     final pending = await changes.changes(worktree);
     if (pending.isNotEmpty) {
       throw StateError(
@@ -458,7 +458,7 @@ class FanOutService {
         }
 
         final changes = await ref
-            .read(changesServiceProvider)
+            .read(gitDataProvider)
             .changes(worktree);
         final confirmed = discardUncommittedFor.contains(loser.session.id);
         if (changes.isNotEmpty && !confirmed) {
@@ -481,7 +481,7 @@ class FanOutService {
               candidate: candidate,
               worktree: worktree,
               repository: loser.repository,
-              unstaged: await ref.read(changesServiceProvider).diff(worktree),
+              unstaged: await ref.read(gitDataProvider).diff(worktree),
             );
           }
         } on Object {

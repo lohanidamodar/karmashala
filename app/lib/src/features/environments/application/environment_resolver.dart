@@ -1,8 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_git/git.dart' show GitException;
-import 'package:karmashala_git/worktrees.dart' show WorktreeEnvironmentOf;
 import '../../../core/process/command_runner_providers.dart';
 import '../data/environments_data.dart';
 import 'environment_providers.dart';
@@ -115,25 +113,6 @@ class ExecutionEnvironmentResolver {
     }
     return EnvironmentResolution.resolved(environment);
   }
-}
-
-/// The resolver as a worktree's `environmentOf`: where [repo]'s git runs, or
-/// the resolver's own refusal as a [GitException], in its words so worktree
-/// creation cannot drift from the launch paths.
-WorktreeEnvironmentOf worktreeEnvironmentOf(
-  EnvironmentsData environments, {
-  CommandRunnerFactory runners = const CommandRunnerFactory(),
-}) {
-  final resolver = ExecutionEnvironmentResolver(
-    environments: environments,
-    runners: runners,
-  );
-  return (repo) {
-    final resolved = resolver.resolveFor(repo);
-    final env = resolved.environment;
-    if (env == null) throw GitException(resolved.reason);
-    return env;
-  };
 }
 
 /// The resolver, wired to the workspace's environments and its runner factory.

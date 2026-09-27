@@ -9,7 +9,6 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
-import 'package:karmashala/src/features/automations/application/automation_timer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_observer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_runner.dart';
@@ -152,7 +151,6 @@ class ResumeHarness {
         dataClientProvider.overrideWithValue(client),
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('resume-')),
-        automationTimerProvider.overrideWithValue(timer),
         notificationPresenterProvider.overrideWithValue(presenter),
         sessionLauncherProvider.overrideWith(
           (ref) => ResumingLauncher(ref, this),
@@ -186,7 +184,6 @@ class ResumeHarness {
   late final MovableClock clock;
   late final ServerUsage usage;
   late final ProviderContainer container;
-  final timer = ManualAutomationTimer();
   final presenter = RecordingPresenter();
   final reports = StreamController<AgentStatusReport>.broadcast();
   final Map<String, AgentStatusReport> statuses = {};

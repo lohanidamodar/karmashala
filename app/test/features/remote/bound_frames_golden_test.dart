@@ -49,7 +49,6 @@ import 'package:karmashala/src/features/remote/application/remote_bindings.dart'
 import 'package:karmashala/src/features/remote/application/remote_providers.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -336,9 +335,6 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(now)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('new-')),
         sessionTranscriptLocatorProvider.overrideWithValue(_NoStore()),
-        repositoryDiscoveryServiceProvider.overrideWithValue(
-          FakeRepositoryDiscoveryService(),
-        ),
         autoImportRunnerProvider.overrideWithValue(
           (_) async => const ImportSummary(),
         ),
