@@ -132,7 +132,11 @@ class CheckpointWorld {
     w.db.execute('PRAGMA foreign_keys = OFF;');
     final created = w.at.toIso8601String();
     for (final (id, kind, name) in [
-      ('local', 'localPosix', 'this machine'),
+      (
+        'local',
+        Platform.isWindows ? 'windowsNative' : 'localPosix',
+        'this machine',
+      ),
       ('box', 'ssh', 'build-box'),
     ]) {
       w.db.execute(
