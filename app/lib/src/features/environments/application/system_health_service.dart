@@ -202,9 +202,19 @@ class SystemHealthService {
 
   Future<SystemCheck> _checkWslInterop(ExecutionEnvironment environment) async {
     final title = 'WSL → Windows interop (${environment.name})';
-    final runner = ref
+    var runner = ref
         .read(commandRunnerFactoryProvider)
         .forEnvironment(environment);
+    // `--exec`: the check is shell text, and `--` hands it to the user's shell
+    // first, whose expansion of its `$…` read as "no handler" (zsh, WSL).
+    if (runner is WslCommandRunner && !runner.exec) {
+      runner = WslCommandRunner(
+        environmentId: runner.environmentId,
+        distribution: runner.distribution,
+        spawner: runner.spawner,
+        exec: true,
+      );
+    }
     WslInteropState state;
     String? detail;
     try {
