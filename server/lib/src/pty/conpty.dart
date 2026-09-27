@@ -85,10 +85,11 @@ class ConPtyLauncher implements PtyLauncher {
       _k.closeHandle(outWrite);
       outWrite = 0;
 
-      // Redirection Guard off for the child (BACKLOG §2), refused by an older
-      // Windows as a bad parameter: then once more without it, and said so.
+      // Redirection Guard off for the child (BACKLOG §2). A failure with it is
+      // tried once more without it, whatever its error: the error is read by
+      // a second FFI call, which the VM can clobber (a first pane read 0).
       var created = _createChild(arena, hPc, request, mitigation: true);
-      if (created.info == null && policyRefused(created.error)) {
+      if (created.info == null) {
         _log(
           'karmashala_host: this Windows refused the redirection-trust '
           'mitigation for ${request.argv.first} (error ${created.error}); '

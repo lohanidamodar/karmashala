@@ -30,12 +30,6 @@ void main() {
     expect(paneAttributeCount(mitigation: false), 1);
   });
 
-  test('only a bad parameter is taken for a refused policy', () {
-    expect(policyRefused(kErrorInvalidParameter), isTrue);
-    expect(policyRefused(2), isFalse, reason: 'a missing executable');
-    expect(policyRefused(5), isFalse, reason: 'access denied');
-  });
-
   test('the child starts suspended and in its job', () {
     expect(kCreateSuspended, 0x4);
     expect(kJobObjectLimitKillOnJobClose, 0x2000);

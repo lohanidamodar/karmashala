@@ -99,11 +99,10 @@ const int kProcThreadAttributeMitigationPolicy = 7 | 0x00020000;
 
 /// The redirection-trust (Redirection Guard) creation flag, turned **off**
 /// for a pane's child (BACKLOG §2): which of the policy's DWORD64 words it
-/// sits in, and its bits there. **Unverified against `winnt.h`** — read
-/// `PROCESS_CREATION_MITIGATION_POLICY*_REDIRECTION_TRUST_POLICY_ALWAYS_OFF`
-/// on a Windows SDK before trusting it (docs/daemon-architecture.md, slice
-/// 5a). A Windows that refuses the value fails `CreateProcess`, and the
-/// launcher starts the child again without it.
+/// sits in, and its bits there. **Not in the SDK**: 10.0.26100's winbase.h
+/// defines POLICY2 fields only up to bit 56 (`FSCTL_SYSTEM_CALL_DISABLE`), and
+/// Windows 11 26200 fails `CreateProcess` with error 87 for this value
+/// (2026-09-27), so every child is started again without it.
 const int kRedirectionTrustPolicyWord = 1;
 const int kRedirectionTrustAlwaysOff = 0x2 << 60;
 
@@ -149,11 +148,6 @@ const int kErrorInsufficientBuffer = 122;
 /// `ERROR_INVALID_PARAMETER`: what a Windows that does not know a mitigation
 /// bit answers `CreateProcess` or `UpdateProcThreadAttribute` with.
 const int kErrorInvalidParameter = 87;
-
-/// Whether [error] is a refusal of the mitigation policy — worth starting the
-/// child again without it — rather than of the launch itself (a missing
-/// executable is `ERROR_FILE_NOT_FOUND`, and is not retried).
-bool policyRefused(int error) => error == kErrorInvalidParameter;
 
 typedef CreatePseudoConsoleNative =
     Int32 Function(Coord, IntPtr, IntPtr, Uint32, Pointer<IntPtr>);
