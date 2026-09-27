@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/remote/relay_local/local_relay_service.d
 import 'package:karmashala/src/features/terminal/application/local_host_startup.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_ssh_host/host.dart' show HostDeployment;
-import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -408,49 +407,6 @@ void main() {
       );
     });
 
-    test('a pane keeps its pseudoconsole when the process is ending', () async {
-      // The second of the two cycles in twenty that ignored `WM_CLOSE`, and the
-      // only one of the findings that no Dart bound could have covered:
-      // releasing a pseudoconsole is a synchronous Windows call, and a
-      // synchronous call that does not return takes the isolate's timers with
-      // it. See [PseudoConsoleOwner].
-      final (container, panes) = reapingContainer(Future<void>.value());
-      final lifecycle = AppLifecycle(container);
-      container
-          .read(terminalSessionsControllerProvider.notifier)
-          .openTab(TerminalProfile.powerShell);
-
-      await lifecycle.shutdown();
-
-      expect(panes.single.keptPseudoConsole, isTrue);
-      expect(
-        panes.single.keptWhileUndisposed,
-        isTrue,
-        reason: 'dispose builds the chain that releases it; too late after',
-      );
-    });
-
-    test('a pane closed in a running app still releases it', () async {
-      // The other half, and the reason this is per pane rather than a flag on
-      // the process: a long session that never released a console would strand
-      // a descriptor and a reader thread per closed pane, which is the leak
-      // 2026-09-03 measured and fixed.
-      final (container, panes) = reapingContainer(Future<void>.value());
-      addTearDown(container.dispose);
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      terminals.openTab(TerminalProfile.powerShell);
-
-      terminals.closeTab(
-        container.read(terminalSessionsControllerProvider).tabs.first.id,
-      );
-
-      expect(panes.first.disposed, isTrue, reason: 'the pane was closed');
-      expect(panes.first.keptPseudoConsole, isFalse);
-    });
-
     test('a kill that never lands does not hold the app open', () async {
       final (container, panes) = reapingContainer(Completer<void>().future);
       // Injected: the property is that the step is abandoned, and proving it
@@ -514,13 +470,6 @@ void main() {
         kShutdownStepBudgets['terminal processes'],
         const Duration(milliseconds: 2500),
         reason: '1500 was under the measured cost of one taskkill.exe',
-      );
-      expect(
-        kShutdownStepBudgets['terminal processes'],
-        kProcessTreeKillBound,
-        reason:
-            'a kill still being waited on after its step was abandoned is '
-            'work outliving the shutdown that owns it',
       );
       expect(kShutdownStepBudgets, hasLength(9));
     });
@@ -887,7 +836,7 @@ void main() {
 /// A pane whose process teardown outlives `dispose()`, the way a real one's
 /// `taskkill /T` does — with the test holding the future.
 class _ReapingInstance extends FakeTerminalInstance
-    implements ReapableTerminalInstance, PseudoConsoleOwner {
+    implements ReapableTerminalInstance {
   _ReapingInstance({
     required super.id,
     required super.title,
@@ -897,19 +846,6 @@ class _ReapingInstance extends FakeTerminalInstance
 
   @override
   final Future<void> reaped;
-
-  /// Whether the quit told this pane to leave its console to the OS, and
-  /// whether it did so while the pane was still there to be told. Recorded
-  /// rather than counted at the end, because "before `dispose`" is the whole
-  /// property: after it the chain that releases the console is already built.
-  bool keptPseudoConsole = false;
-  bool keptWhileUndisposed = false;
-
-  @override
-  void keepPseudoConsoleOnDispose() {
-    keptPseudoConsole = true;
-    keptWhileUndisposed = !disposed;
-  }
 }
 
 /// A [Stopwatch] that always reports the same elapsed time, so the shutdown

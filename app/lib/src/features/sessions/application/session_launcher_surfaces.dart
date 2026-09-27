@@ -38,7 +38,15 @@ extension SessionSurfaceStarters on SessionLauncher {
       // removing something from it.
       inheritsHostEnvironment:
           environment.wslDistribution == null && environment.sshHostId == null,
-      settingsEnvironment: _ref.read(terminalEnvOverlayProvider),
+      // Names only: the server's vault is write-only, so this client knows
+      // what is set, never to what. The decision reads presence — a set name
+      // is kept, and a provider switch set there counts as switched on ('1';
+      // a person who stored "0" in it gets the stricter, kept answer).
+      settingsEnvironment: {
+        for (final variable
+            in _ref.read(envVariablesProvider) ?? const <EnvVariableName>[])
+          variable.name: '1',
+      },
     );
     final launch = AgentPaneLaunch(
       agentId: request.installation.agentId,

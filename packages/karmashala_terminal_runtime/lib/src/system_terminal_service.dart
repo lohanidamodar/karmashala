@@ -7,7 +7,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 import 'package:karmashala_core/apps.dart';
-import 'pty_launch.dart';
+import 'package:karmashala_launch/karmashala_launch.dart'
+    show quotePowerShellArgument, wrapForExternalTerminal;
 
 /// A standalone terminal emulator installed on the host that we can launch
 /// externally (as opposed to the in-app PTY tabs).

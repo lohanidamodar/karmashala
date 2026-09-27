@@ -6,6 +6,7 @@ import 'package:xterm2/core.dart';
 
 import '../pty/pty.dart';
 import 'output_backlog.dart';
+import 'screen_facts.dart';
 import 'screen_snapshot.dart';
 import 'screen_tail.dart';
 import 'screen_text.dart';
@@ -32,6 +33,7 @@ class HostSession {
     required this.startedAt,
     int backlogCapacityBytes = OutputBacklog.defaultCapacityBytes,
     this.recorder,
+    String? hostname,
   }) : _pty = pty,
        backlog = OutputBacklog(capacityBytes: backlogCapacityBytes),
        columns = request.columns,
@@ -39,9 +41,16 @@ class HostSession {
        _lifecycle = const SessionRunning(),
        _screen = Terminal(maxLines: screenScrollbackLines)
          ..resize(request.columns, request.rows) {
+    final screen = _screen!;
+    final facts = ScreenFacts(screen, hostname: hostname);
+    screen
+      ..onTitleChange = facts.titleChanged
+      ..onCurrentDirectoryChange = facts.directoryChanged
+      ..onPrivateOSC = facts.osc;
+    this.facts = facts;
     _screenInput = const Utf8Decoder(
       allowMalformed: true,
-    ).startChunkedConversion(_ScreenSink(_screen!));
+    ).startChunkedConversion(_ScreenSink(screen));
     _pty.output.listen(
       _onOutput,
       onError: (Object error) => _readFault ??= '$error',
@@ -81,7 +90,8 @@ class HostSession {
        _lifecycle = lifecycle,
        _screen = null,
        _outputDone = true,
-       _released = true {
+       _released = true,
+       facts = null {
     // Closed at once, so an attaching client gets the replay and then an end.
     unawaited(_live.close());
     _ended.complete(lifecycle);
@@ -91,6 +101,11 @@ class HostSession {
   final PtySpawnRequest request;
   final DateTime startedAt;
   final OutputBacklog backlog;
+
+  /// What the program has told its terminal — title, directory, last command
+  /// — off the host's copy of the screen; null for a session read back from
+  /// disk, whose screen nobody watched.
+  late final ScreenFacts? facts;
 
   /// Where the ring is mirrored so it outlives this process. Null for a restored
   /// session: replaying into its own record would double every byte.

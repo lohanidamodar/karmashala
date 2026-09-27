@@ -128,24 +128,6 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// nothing is listening on.
   void forget() => _reading = null;
 
-  /// Whether a pane whose host session is [sessionId] belongs in this host.
-  /// False only for a new pane when the last reading found an outdated host:
-  /// that pane runs in the app instead, and a pane with a session there still
-  /// reattaches to it.
-  bool acceptsPane(String sessionId) {
-    final last = _last;
-    if (last == null || !last.hostOutdated) return true;
-    final live = last.liveSessionIds;
-    // Holding nothing, it is replaced by the pane that asks next.
-    if (live != null && (live.isEmpty || live.contains(sessionId))) {
-      return true;
-    }
-    // Looked at again, starting nothing, so the pane after this one goes back
-    // to the host once those sessions have ended.
-    unawaited(observe().catchError((Object _) => last));
-    return false;
-  }
-
   /// Stops whatever host is running — [force] takes its sessions with it —
   /// and starts this app's own. Only on an explicit request from the person.
   Future<HostDeployment> restartHost({required bool force}) async {

@@ -1,44 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
-import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/env_secrets_controller.dart';
-import '../domain/env_variable.dart';
 import 'env_variable_dialog.dart';
 
-/// The environment-variables settings page. The honesty copy is the first
-/// thing on it: "an agent can print these" must be met before the first token.
+/// The environment-variables settings page: the server's vault, write-only.
+/// The honesty copy is the first thing on it: "an agent can print these" must
+/// be met before the first token.
 class EnvSecretsPage extends ConsumerWidget {
   const EnvSecretsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final vault = ref.watch(envSecretsControllerProvider);
-    final controller = ref.read(envSecretsControllerProvider.notifier);
+    final names = ref.watch(envVariablesProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (vault.problem != null) ...[
-          DesktopErrorBanner(vault.problem!),
-          const SizedBox(height: Insets.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: controller.reload,
-              icon: const Icon(AppIcons.arrowsClockwise),
-              label: const Text('Try again'),
-            ),
-          ),
-          const SizedBox(height: Insets.lg),
-        ],
         SettingsSection(
           title: 'ENVIRONMENT VARIABLES',
           trailing: TextButton.icon(
@@ -49,21 +35,19 @@ class EnvSecretsPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Honesty(protection: vault.protection),
+              const _Honesty(),
               const SizedBox(height: Insets.md),
-              SettingsSwitchRow(
-                label: 'Load these in new terminals',
-                help: 'Running panes keep the values they started with.',
-                value: vault.enabled,
-                onChanged: controller.setEnabled,
-              ),
-              const SizedBox(height: Insets.sm),
-              if (vault.variables.isEmpty)
+              if (names == null)
+                Text(
+                  'Waiting for the Karmashala server to say which are set.',
+                  style: theme.textTheme.bodySmall,
+                )
+              else if (names.isEmpty)
                 Text('Nothing defined yet.', style: theme.textTheme.bodySmall)
               else
                 Column(
                   children: [
-                    for (final variable in vault.variables)
+                    for (final variable in names)
                       _VariableCard(variable: variable),
                   ],
                 ),
@@ -77,7 +61,10 @@ class EnvSecretsPage extends ConsumerWidget {
             children: [
               _Fact(
                 icon: AppIcons.terminal,
-                text: 'Windows shells and local terminals get them directly.',
+                text:
+                    'Terminals the server starts on its own machine get them '
+                    'directly. Running panes keep the values they started '
+                    'with.',
               ),
               _Fact(
                 icon: AppIcons.terminalWindow,
@@ -104,14 +91,15 @@ class EnvSecretsPage extends ConsumerWidget {
 
 /// The sentence the page exists to say, and the storage fact under it.
 class _Honesty extends StatelessWidget {
-  const _Honesty({required this.protection});
-
-  final EnvProtection protection;
+  const _Honesty();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final quiet = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
     return Container(
       padding: const EdgeInsets.all(Insets.md),
       decoration: BoxDecoration(
@@ -137,18 +125,13 @@ class _Honesty extends StatelessWidget {
           ),
           const SizedBox(height: Insets.sm),
           Text(
-            protection.summary,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+            'Kept by the Karmashala server, in a file only its account can '
+            'open, and never sent back to any window: a value can be replaced '
+            'or removed, not read.',
+            style: quiet,
           ),
           const SizedBox(height: Insets.xs),
-          Text(
-            'Anything running as you can read them.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
+          Text('Anything running as that account can read them.', style: quiet),
         ],
       ),
     );
@@ -185,12 +168,13 @@ class _Fact extends StatelessWidget {
   }
 }
 
-/// One saved variable. The buttons stay drawn and worded — this is a settings
-/// form — plus the same actions on right-click, `Shift+F10` and the Menu key.
+/// One variable the server holds: its name and when it was set. The buttons
+/// stay drawn and worded — this is a settings form — plus the same actions on
+/// right-click, `Shift+F10` and the Menu key.
 class _VariableCard extends ConsumerWidget {
   const _VariableCard({required this.variable});
 
-  final EnvVariable variable;
+  final EnvVariableName variable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -200,16 +184,9 @@ class _VariableCard extends ConsumerWidget {
       menuLabel: 'Actions for ${variable.name}',
       itemBuilder: () => [
         DesktopMenuItem(
-          value: 'edit',
-          label: variable.secret ? 'Replace' : 'Edit',
+          value: 'replace',
+          label: 'Replace',
           icon: AppIcons.pencilSimple,
-        ),
-        DesktopMenuItem(
-          value: 'toggle',
-          label: variable.enabled
-              ? 'Turn off — keep it, stop loading it'
-              : 'Turn on — load it into terminals',
-          icon: variable.enabled ? AppIcons.pauseCircle : AppIcons.playCircle,
         ),
         const DesktopMenuDivider(),
         DesktopMenuItem(
@@ -220,43 +197,17 @@ class _VariableCard extends ConsumerWidget {
         ),
       ],
       onSelected: (value) => switch (value) {
-        'edit' => EnvVariableDialog.show(context, existing: variable),
-        'toggle' =>
-          ref
-              .read(envSecretsControllerProvider.notifier)
-              .setVariableEnabled(variable.id, !variable.enabled),
+        'replace' => EnvVariableDialog.show(context, replacing: variable.name),
         _ => _remove(context, ref),
       },
       builder: (context) => ItemCard(
-        icon: variable.secret ? AppIcons.warningCircle : AppIcons.code,
+        icon: AppIcons.warningCircle,
         title: Text(variable.name, style: MonoStyles.label),
-        trailing: Switch(
-          value: variable.enabled,
-          onChanged: (value) => ref
-              .read(envSecretsControllerProvider.notifier)
-              .setVariableEnabled(variable.id, value),
-        ),
         details: [
-          // The whole write-only rule, in one widget: a secret shows that it
-          // is set and when, and never what it is.
-          variable.secret
-              ? Text(
-                  'Hidden — set, and not shown again.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                )
-              : Text(
-                  variable.value,
-                  style: MonoStyles.body,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-          const SizedBox(height: Insets.xs),
+          // The whole write-only rule, in one widget: a variable shows that
+          // it is set and when, and never what it is.
           Text(
-            variable.enabled
-                ? 'Updated ${_date(variable.updatedAt)}'
-                : 'Off — kept, but not loaded into terminals.',
+            'Set · updated ${_date(variable.updatedAt)}',
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -265,9 +216,9 @@ class _VariableCard extends ConsumerWidget {
         actions: [
           TextButton.icon(
             onPressed: () =>
-                EnvVariableDialog.show(context, existing: variable),
+                EnvVariableDialog.show(context, replacing: variable.name),
             icon: const Icon(AppIcons.pencilSimple),
-            label: Text(variable.secret ? 'Replace' : 'Edit'),
+            label: const Text('Replace'),
           ),
           TextButton.icon(
             onPressed: () => _remove(context, ref),
@@ -291,16 +242,14 @@ class _VariableCard extends ConsumerWidget {
     final confirmed = await showConfirmDialog(
       context,
       title: 'Remove ${variable.name}?',
-      message: variable.secret
-          ? 'The value is not shown anywhere and cannot be recovered from '
-                'Karmashala afterwards — you would have to paste it again.'
-                '\n\nTerminals already open keep it until they are closed.'
-          : 'New terminals will stop getting this variable. Terminals '
-                'already open keep it until they are closed.',
+      message:
+          'The value is not shown anywhere and cannot be recovered from '
+          'Karmashala afterwards — you would have to paste it again.'
+          '\n\nTerminals already open keep it until they are closed.',
       confirmLabel: 'Remove',
       destructive: true,
     );
     if (!confirmed) return;
-    await ref.read(envSecretsControllerProvider.notifier).remove(variable.id);
+    await ref.read(envVariablesProvider.notifier).remove(variable.name);
   }
 }

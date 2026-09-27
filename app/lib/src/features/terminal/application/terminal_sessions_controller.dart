@@ -9,10 +9,11 @@ import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/primitives.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../editor/domain/document_id.dart';
-import '../../env_secrets/application/env_secrets_controller.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../sessions/application/session_mcp_arguments.dart';
 import '../../sessions/application/session_providers.dart';
@@ -20,7 +21,6 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/application/host_session_providers.dart';
 import '../../ssh/application/ssh_providers.dart';
-import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
@@ -30,6 +30,9 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'local_host_providers.dart';
+import '../data/terminals_client.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show TerminalOpen, TerminalRecord, hostedRunSessionId, terminalSessionId;
 import 'terminal_layout_providers.dart';
 import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';
@@ -353,16 +356,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
-  /// Disposes every pane, returning the reaps still in flight. [forExit] means
-  /// the process is ending, and its one effect is that a pane keeps its
-  /// pseudoconsole for the OS to reclaim. See [PseudoConsoleOwner].
+  /// Disposes every pane, returning the links still closing. No pane owns a
+  /// process since slice 5a: disposing one disconnects it, and its terminal
+  /// keeps running at the server.
   List<Future<void>> _disposeAll({bool forExit = false}) {
     final reaping = <Future<void>>[];
     for (final entry in _instances.entries) {
       _unlisten(entry.key, entry.value);
-      if (forExit && entry.value is PseudoConsoleOwner) {
-        (entry.value as PseudoConsoleOwner).keepPseudoConsoleOnDispose();
-      }
       entry.value.dispose();
       if (entry.value case final ReapableTerminalInstance reapable) {
         reaping.add(reapable.reaped);

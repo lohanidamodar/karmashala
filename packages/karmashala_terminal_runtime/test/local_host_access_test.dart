@@ -507,7 +507,7 @@ void main() {
     });
 
     test(
-      'holding a running session, it is left alone: that pane reattaches, a new one does not go in',
+      'holding a running session, it is left alone',
       () async {
         await serve(build: 'an-earlier-build');
         lastRegistry.open('karmashala_local_p1', shell());
@@ -525,10 +525,9 @@ void main() {
         expect(reading.hostOutdated, isTrue);
         expect(reading.liveSessionIds, ['karmashala_local_p1']);
         expect(reading.reason, contains('1 running session(s)'));
-        expect(access.acceptsPane('karmashala_local_p1'), isTrue);
-        expect(access.acceptsPane('karmashala_local_p2'), isFalse);
-        // Asked again by the next pane, so the host is replaced once its
-        // sessions have ended rather than never.
+        // Asked again, so the host is replaced once its sessions have ended
+        // rather than never.
+        access.forget();
         expect(identical(await access.deployment(), reading), isFalse);
       },
     );
@@ -567,7 +566,6 @@ void main() {
       final next = await access.deployment();
       expect(stopped, isTrue);
       expect(next.hostOutdated, isFalse);
-      expect(access.acceptsPane('karmashala_local_p2'), isTrue);
     });
 
     test('observe says it is outdated and stops nothing', () async {
@@ -597,7 +595,6 @@ void main() {
       );
       final reading = await access.deployment();
       expect(reading.hostOutdated, isFalse);
-      expect(access.acceptsPane('anything'), isTrue);
     });
 
     test('a restart the person asked for passes force through', () async {

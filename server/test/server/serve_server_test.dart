@@ -402,14 +402,15 @@ void main() {
       final writer = (await HostDataLink.connect(server.paths.socketPath))!;
       final reader = (await HostDataLink.connect(server.paths.socketPath))!;
       await reader.send(const DataSubscribe());
-      final told = reader.changes.first;
+      // A subscriber is greeted first (the vault's names, …); the todo is
+      // the batch that carries one.
+      final told = reader.changes
+          .expand((batch) => batch.changes)
+          .firstWhere((change) => change is TodoChanged);
 
       final todo = await writer.send(const TodoAdd(id: 't1', body: 'ship it'));
       await writer.send(const PreferenceSet('settings.v1', '{"a":1}'));
-      expect(
-        ((await told).changes.single as TodoChanged).todo.id,
-        todo.value.id,
-      );
+      expect(((await told) as TodoChanged).todo.id, todo.value.id);
       await writer.close();
       await reader.close();
       await server.stop();

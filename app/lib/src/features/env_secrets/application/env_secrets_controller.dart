@@ -1,126 +1,49 @@
+import 'dart:async';
+
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_core/logging.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
-import '../data/env_vault.dart';
-import '../domain/env_variable.dart';
-import 'env_overlay.dart';
+import '../../../core/data/data_providers.dart';
 
-/// The vault backing this session. Defaults to [EnvVault.unavailable] rather
-/// than throwing: no vault is legitimate, and this must never stop a terminal.
-final envVaultProvider = Provider<EnvVault>((ref) => EnvVault.unavailable());
-
-/// The user's environment variables, and the master switch over them.
-class EnvSecretsController extends Notifier<EnvVaultData> {
+/// **The server's environment vault, as this client may know it** (slice
+/// 5a): the names and when each was set. The vault lives on the server, one
+/// per server, and is write-only — a value is typed here, sent once in
+/// `env.set`, and never read back by any client. Null until the server has
+/// answered.
+class EnvVariablesController extends Notifier<List<EnvVariableName>?> {
   @override
-  EnvVaultData build() {
-    final data = ref.watch(envVaultProvider).data;
-    _publishRedaction(data);
-    return data;
+  List<EnvVariableName>? build() {
+    final client = ref.watch(dataClientProvider);
+    final changes = client.envChanges.listen((names) => state = names);
+    ref.onDispose(changes.cancel);
+    final told = client.envVariables;
+    if (told == null) unawaited(refresh());
+    return told;
   }
 
-  /// Re-reads the vault from disk. Used by the settings page's retry.
-  Future<void> reload() async {
-    final data = await ref.read(envVaultProvider).load();
-    _apply(data);
+  /// Asks the server for the names now. A server that cannot answer leaves
+  /// the list as it was; the page says nothing is known yet.
+  Future<void> refresh() async {
+    try {
+      state = (await ref.read(dataClientProvider).send(const EnvList())).value;
+    } on DataRefused {
+      // Nothing learned; the change stream brings the names when it can.
+    }
   }
 
-  Future<void> setEnabled(bool enabled) =>
-      _save(state.copyWith(enabled: enabled));
-
-  /// Adds a variable. Throws [EnvVaultRefusal] when the vault will not take it.
-  Future<void> add({
-    required String name,
-    required String value,
-    required bool secret,
-  }) => _save(
-    state.copyWith(
-      variables: [
-        ...state.variables,
-        EnvVariable(
-          id: ref.read(idGeneratorProvider).newId(),
-          name: name.trim(),
-          value: value,
-          secret: secret,
-          updatedAt: ref.read(clockProvider).nowUtc(),
-        ),
-      ],
-    ),
-  );
-
-  /// Replaces the name, value and secrecy of [id]. [value] is null when the user
-  /// edited a secret's name only — "leave it alone" has to be expressible.
-  Future<void> update(String id, {String? name, String? value, bool? secret}) =>
-      _save(
-        state.copyWith(
-          variables: [
-            for (final variable in state.variables)
-              if (variable.id == id)
-                variable.copyWith(
-                  name: name?.trim(),
-                  value: value,
-                  secret: secret,
-                  updatedAt: ref.read(clockProvider).nowUtc(),
-                )
-              else
-                variable,
-          ],
-        ),
-      );
-
-  Future<void> setVariableEnabled(String id, bool enabled) => _save(
-    state.copyWith(
-      variables: [
-        for (final variable in state.variables)
-          if (variable.id == id)
-            variable.copyWith(
-              enabled: enabled,
-              updatedAt: ref.read(clockProvider).nowUtc(),
-            )
-          else
-            variable,
-      ],
-    ),
-  );
-
-  Future<void> remove(String id) => _save(
-    state.copyWith(
-      variables: [
-        for (final variable in state.variables)
-          if (variable.id != id) variable,
-      ],
-    ),
-  );
-
-  Future<void> _save(EnvVaultData next) async {
-    _apply(await ref.read(envVaultProvider).save(next));
+  /// Sets [name] to [value] at the server, replacing any value it had.
+  /// Throws [DataRefused] in the server's words.
+  Future<void> set(String name, String value) async {
+    await ref.read(dataClientProvider).send(EnvSet(name.trim(), value));
   }
 
-  void _apply(EnvVaultData data) {
-    state = data;
-    _publishRedaction(data);
-  }
-
-  /// Teaches the log redactor this session's secret values. Belt and braces: a
-  /// value reaching a log line by an unpredicted route must still not get out.
-  void _publishRedaction(EnvVaultData data) {
-    final rule = RedactionRule.literalValues(
-      redactableSecretValues(data),
-      name: 'environment secret',
-      replacement: '[redacted:env-secret]',
-    );
-    Diagnostics.instance.redactor.extraRules = rule == null ? const [] : [rule];
+  /// Removes [name] at the server. Throws [DataRefused] in its words.
+  Future<void> remove(String name) async {
+    await ref.read(dataClientProvider).send(EnvRemove(name));
   }
 }
 
-final envSecretsControllerProvider =
-    NotifierProvider<EnvSecretsController, EnvVaultData>(
-      EnvSecretsController.new,
+final envVariablesProvider =
+    NotifierProvider<EnvVariablesController, List<EnvVariableName>?>(
+      EnvVariablesController.new,
     );
-
-/// The environment overlay every terminal launch layers on. Read, not watched:
-/// a change affects the *next* pane, which is what the settings page says.
-final terminalEnvOverlayProvider = Provider<Map<String, String>>(
-  (ref) => resolveEnvOverlay(ref.watch(envSecretsControllerProvider)),
-);

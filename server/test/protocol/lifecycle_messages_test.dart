@@ -29,7 +29,7 @@ void main() {
   final t0 = DateTime.utc(2026, 9, 25, 10, 0, 30);
 
   test('the feed\'s frame types, and the bump that reshaped `watch`', () {
-    expect(kProtocolVersion, 24);
+    expect(kProtocolVersion, 25);
     expect(MessageType.watch.code, 0x17);
     expect(MessageType.watching.code, 0x18);
     expect(MessageType.lifecycle.code, 0x19);
@@ -294,19 +294,7 @@ void main() {
     });
   });
 
-  test('a hook a client took itself is forwarded to the host whole', () {
-    expect(MessageType.hookForward.code, 0x1b);
-    final taken = AgentHookEvent(
-      agent: 'claude-code',
-      event: 'PreToolUse',
-      sessionHeader: 'row-1',
-      receivedAt: t0,
-      body: const {'session_id': 'c1'},
-    );
-    final back = roundTrip(HookForwardMessage(taken)).hook;
-    expect(back.event, 'PreToolUse');
-    expect(back.sessionHeader, 'row-1');
-    expect(back.receivedAt, t0);
-    expect(back.body, {'session_id': 'c1'});
+  test('0x1b is retired: the server drains the WSL spools itself (5a)', () {
+    expect(MessageType.fromCode(0x1b), isNull);
   });
 }

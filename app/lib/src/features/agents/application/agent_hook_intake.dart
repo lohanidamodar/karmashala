@@ -2,11 +2,9 @@ import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/probe/probe_mode.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_outcome_writer.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'agent_hook_spool_drainer.dart';
 import 'agent_status_providers.dart';
 import 'hook_payload_field.dart';
 import 'agent_providers.dart';
@@ -14,41 +12,6 @@ import 'package:agent_cli/process.dart';
 import '../../explorer/application/where_you_are.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_rebind_providers.dart';
-import '../../sessions/application/host_lifecycle/host_lifecycle_providers.dart';
-import '../../sessions/application/host_lifecycle/relayed_agent_hook.dart';
-
-/// Drains the spool directories a file-reporting agent writes into, applying
-/// each payload exactly as the HTTP route does. An empty list starts no timer.
-final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
-  final logger = AppLogger.named('agent-hooks');
-  final drainer = AgentHookSpoolDrainer(
-    enabled: !ref.read(probeModeProvider).enabled,
-    onEvent: (event) {
-      applyAgentHookCallback(
-        ref.container,
-        agentId: event.agentId,
-        event: event.event,
-        body: event.body,
-        observedAt: event.firedAt,
-        paneSessionId: event.paneSessionId,
-        logger: logger,
-      );
-      // The server's checkpoint recorder never sees a spooled hook: a spool
-      // write has no reply to hold, so its tool has already run.
-      forwardAgentHookToServer(
-        ref.container,
-        agentId: event.agentId,
-        event: event.event,
-        body: event.body,
-        receivedAt: event.firedAt,
-        paneSessionId: event.paneSessionId,
-        logger: logger,
-      );
-    },
-  );
-  ref.onDispose(drainer.dispose);
-  return drainer;
-});
 
 /// A hook the session host took and relayed, applied as the HTTP route applied
 /// one — at the time the host received it. Nothing waits on it: the server
@@ -72,39 +35,6 @@ void applyHostRelayedAgentHook(
     paneSessionId: paneSessionId,
     logger: logger,
   );
-}
-
-/// Hands a hook this app took itself — on its own `/agent-hook` route or from
-/// a spool — to the server, whose checkpoint recorder reads the turns of every
-/// pane on this machine. Unheld by construction: the agent was answered first.
-/// Nothing when no server link is open. **Never throws.**
-void forwardAgentHookToServer(
-  ProviderContainer container, {
-  required String? agentId,
-  required String? event,
-  required String body,
-  DateTime? receivedAt,
-  String? paneSessionId,
-  AppLogger? logger,
-}) {
-  if (agentId == null || agentId.isEmpty || event == null || event.isEmpty) {
-    return;
-  }
-  try {
-    container
-        .read(hostLifecycleSubscriberProvider)
-        ?.forwardHook(
-          RelayedAgentHook(
-            agentId: agentId,
-            event: event,
-            body: body,
-            receivedAt: (receivedAt ?? DateTime.now()).toUtc(),
-            paneSessionId: paneSessionId,
-          ),
-        );
-  } on Object catch (error) {
-    logger?.warning('Forwarding a hook to the server failed: $error');
-  }
 }
 
 /// Everything one hook callback does, whichever transport carried it — a second

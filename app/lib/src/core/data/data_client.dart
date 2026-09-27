@@ -239,6 +239,18 @@ class DataClient {
   /// client alone; a new link watches nothing until asked again.
   Stream<FileChanged> get fileChanges => _fileChanges.stream;
 
+  /// The terminals the server runs (slice 5a), as its screens read them,
+  /// by session id — greeted whole on subscribe, then kept by each change.
+  final terminals = <String, TerminalRecord>{};
+
+  final _terminalChanges = StreamController<TerminalChange>.broadcast(
+    sync: true,
+  );
+
+  /// A server terminal started, moved (title, folder, last command) or
+  /// ended, or was forgotten.
+  Stream<TerminalChange> get terminalChanges => _terminalChanges.stream;
+
   /// The key [knownHosts] keeps a trusted key under.
   static String knownHostKey(String host, int port) => '$host:$port';
 
@@ -275,6 +287,17 @@ class DataClient {
   /// The server's SSH connections moving, and the questions they put to a
   /// person opening and closing.
   Stream<SshChange> get sshChanges => _sshChanges.stream;
+
+  /// The names in the server's environment vault, as last told (slice 5a);
+  /// null until the server has said. Never a value: the vault is write-only.
+  List<EnvVariableName>? envVariables;
+
+  final _envChanges = StreamController<List<EnvVariableName>>.broadcast(
+    sync: true,
+  );
+
+  /// The vault's names, whole, each time they change.
+  Stream<List<EnvVariableName>> get envChanges => _envChanges.stream;
 
   /// The Flutter apps the server is attached to, as last told (slice 3d);
   /// null until the server has said.
@@ -825,6 +848,17 @@ class DataClient {
           if (!_runsChanges.isClosed) _runsChanges.add(change);
         case final FileChanged change:
           if (!_fileChanges.isClosed) _fileChanges.add(change);
+        case final TerminalChange change:
+          switch (change) {
+            case TerminalChanged(:final terminal):
+              terminals[terminal.sessionId] = terminal;
+            case TerminalRemoved(:final sessionId):
+              terminals.remove(sessionId);
+          }
+          if (!_terminalChanges.isClosed) _terminalChanges.add(change);
+        case EnvVariablesChanged(:final variables):
+          envVariables = variables;
+          if (!_envChanges.isClosed) _envChanges.add(variables);
       }
     }
   }
@@ -968,9 +1002,11 @@ class DataClient {
     unawaited(_usageRecorded.close());
     unawaited(_evidenceChanges.close());
     unawaited(_sshChanges.close());
+    unawaited(_envChanges.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
     unawaited(_fileChanges.close());
+    unawaited(_terminalChanges.close());
     unawaited(notes.dispose());
     unawaited(todos.dispose());
     unawaited(preferences.dispose());

@@ -11,7 +11,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../domain/session_registry.dart';
-import '../pty/pty.dart';
+import '../pty/environment_spawn.dart';
 import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
 import 'package:karmashala_session_engine/store.dart';
@@ -81,6 +81,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.worktrees,
     this.onLaunched,
     this.onRowWritten,
+    this.environmentOf,
     Map<String, String>? hostEnvironment,
   }) : _hostEnvironment = hostEnvironment ?? Platform.environment;
 
@@ -103,6 +104,11 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// Told of each row written — created, or its status moved — so every
   /// client hears of it on the data channel.
   final void Function(String sessionId)? onRowWritten;
+
+  /// The environment a checkout names, so an agent in a WSL distribution is
+  /// started through `wsl.exe` (slice 5a). Null, or an unknown id: this
+  /// machine's own, as before.
+  final ExecutionEnvironment? Function(String environmentId)? environmentOf;
 
   final Map<String, String> _hostEnvironment;
 
@@ -194,11 +200,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       onRowWritten?.call(id);
     }
 
-    final access = mcp.accessFor(
-      id,
-      withConfigFile: agents.mcpNeedsConfigFile(agentId),
-    );
-    final request = PtySpawnRequest(
+    final environment = environmentOf?.call(directory.environmentId);
+    final inWsl = environment?.kind == EnvironmentKind.wsl;
+    // A WSL agent is not handed this server's tools: its loopback is not
+    // this machine's and a config file here is not a path there (the app's
+    // stdio bridge for WSL is not the server's yet — slice 5a's gaps).
+    final access = inWsl
+        ? null
+        : mcp.accessFor(id, withConfigFile: agents.mcpNeedsConfigFile(agentId));
+    final request = spawnRequestIn(
+      environment,
       argv: [
         installation.executable.path,
         ...agents.sessionArguments(
@@ -212,14 +223,9 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
           mcpConfigPath: access?.configPath,
         ),
       ],
-      workingDirectory: directory.path,
-      environment: {
-        'TERM': 'xterm-256color',
-        kSessionIdEnvironmentVariable: id,
-      },
-      removedEnvironment: agents.withheldEnvironment(agentId, _hostEnvironment),
-      columns: 120,
-      rows: 40,
+      directory: directory.path,
+      variables: {kSessionIdEnvironmentVariable: id},
+      removed: agents.withheldEnvironment(agentId, _hostEnvironment),
     );
     try {
       registry.open(hostSessionIdOf(id), request);

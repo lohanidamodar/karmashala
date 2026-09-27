@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
@@ -9,7 +8,6 @@ import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'agent_hook_spool_drainer.dart';
 import 'agent_providers.dart';
 import 'agent_status_providers.dart';
 
@@ -67,17 +65,6 @@ class AgentHookInstallationReport {
 
   bool get anyUnknown => unknownByEnvironment.isNotEmpty;
 
-  /// Every spool directory this sweep installed, one per **agent**, so the
-  /// drainer learns what to poll without re-deriving a generated path.
-  List<AgentHookSpoolSource> get spoolSources => [
-    for (final result in results)
-      if (result.installed && result.spoolDirectory != null)
-        AgentHookSpoolSource(
-          environmentId: result.environmentId,
-          directory: Directory(result.spoolDirectory!),
-          wslDistribution: result.wslDistribution,
-        ),
-  ];
 }
 
 /// Ambient state, written after each sweep by whoever ran it.
@@ -125,11 +112,10 @@ class AgentHookInstallation {
   final String? skippedBecause;
 
   /// Where this agent's hooks drop their payloads, or `null` for a socket
-  /// transport. Carried out of the sweep so the drainer cannot spell it twice.
+  /// transport. The server drains it (slice 5a); reported, not polled here.
   final String? spoolDirectory;
 
-  /// The distribution [spoolDirectory] lives in, so the drainer can tell
-  /// whether it is worth listing. `null` outside WSL.
+  /// The distribution [spoolDirectory] lives in. `null` outside WSL.
   final String? wslDistribution;
 }
 

@@ -65,6 +65,9 @@ dependencies:
     path: ../karmashala_flutter_apps
   karmashala_browser:
     path: ../karmashala_browser
+  # Terminal profiles and agent launches: what `terminals.*` carries (5a).
+  karmashala_launch:
+    path: ../karmashala_launch
 
 dev_dependencies:
   # `VerificationVerdict`, in the automations envelope test.

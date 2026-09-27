@@ -64,50 +64,6 @@ void main() {
     });
   });
 
-  group('host-backed local panes setting', () {
-    test('is on, and a file that never said reads as on', () {
-      expect(const Settings().hostBackedLocalPanes, isTrue);
-      expect(Settings.fromJson(const {}).hostBackedLocalPanes, isTrue);
-    });
-
-    test('survives a JSON round-trip, off as well as on', () {
-      const off = Settings(hostBackedLocalPanes: false);
-      expect(Settings.fromJson(off.toJson()).hostBackedLocalPanes, isFalse);
-      expect(Settings.fromJson(off.toJson()), off);
-    });
-
-    test('participates in equality', () {
-      expect(
-        const Settings(hostBackedLocalPanes: false),
-        isNot(const Settings()),
-      );
-      expect(
-        const Settings(hostBackedLocalPanes: false).hashCode,
-        isNot(const Settings().hashCode),
-      );
-    });
-
-    test('the controller persists it', () async {
-      final server = FakeDataServer();
-      final container = ProviderContainer(overrides: [await server.override()]);
-      addTearDown(container.dispose);
-
-      container
-          .read(settingsControllerProvider.notifier)
-          .setHostBackedLocalPanes(true);
-
-      expect(
-        container.read(settingsControllerProvider).hostBackedLocalPanes,
-        isTrue,
-      );
-      expect(
-        (await _stored(server)).hostBackedLocalPanes,
-        isTrue,
-        reason: 'the change must reach the database, not just the notifier',
-      );
-    });
-  });
-
   group('let-agents-update-themselves setting', () {
     test('is unset by default, so the platform decides', () {
       // Tri-state: null means "nobody has said", resolved by platform where it

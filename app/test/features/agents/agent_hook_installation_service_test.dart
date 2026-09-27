@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
-import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
 
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -185,42 +184,14 @@ void main() {
       expect(left, isEmpty, reason: 'left behind: $left');
     });
 
-    test('the drainer is given nothing, and so polls nothing', () async {
+    test('a local store reports no spool: it has a socket', () async {
       final service = containerWith(
         localStore(),
       ).read(agentHookInstallationServiceProvider);
 
-      final report = AgentHookInstallationReport(
-        await service.installAll(endpoint),
-      );
+      final results = await service.installAll(endpoint);
 
-      expect(report.spoolSources, isEmpty);
-
-      // The lifecycle owner hands exactly this to the drainer. An empty list
-      // has to *stop* it rather than run it over nothing: a macOS host would
-      // otherwise wake every 400 ms for the life of the process to discover
-      // there is nothing to read.
-      var asked = 0;
-      final drainer = AgentHookSpoolDrainer(
-        onEvent: (_) => fail('there is nothing to drain'),
-        runningDistributions: () async {
-          asked++;
-          return const {};
-        },
-      );
-      addTearDown(drainer.dispose);
-
-      drainer.watch(report.spoolSources);
-      await drainer.drainOnce();
-
-      expect(drainer.sources, isEmpty);
-      expect(
-        asked,
-        0,
-        reason:
-            'off Windows there is no `wsl.exe` to ask, and asking would be a '
-            'ProcessException every tick',
-      );
+      expect(results.where((r) => r.spoolDirectory != null), isEmpty);
     });
   });
 
@@ -409,7 +380,7 @@ void main() {
       expect(endpointText, isNot(contains('token=')));
     });
 
-    test('is what the drainer is told to poll', () async {
+    test('is reported where the server drains it', () async {
       final (locator, wsl) = wslStore();
       final service = containerWith(
         locator,
@@ -419,14 +390,11 @@ void main() {
         await service.installAll(endpoint),
       );
 
-      expect(report.spoolSources, hasLength(1));
-      expect(report.spoolSources.single.environmentId, wsl.id);
-      expect(report.spoolSources.single.directory.path, spoolDir().path);
-      expect(
-        report.spoolSources.single.wslDistribution,
-        wsl.wslDistribution,
-        reason: 'so the drainer can skip a distribution that is not running',
-      );
+      final spooled = report.results.where((r) => r.spoolDirectory != null);
+      expect(spooled, hasLength(1));
+      expect(spooled.single.environmentId, wsl.id);
+      expect(spooled.single.spoolDirectory, spoolDir().path);
+      expect(spooled.single.wslDistribution, wsl.wslDistribution);
     });
 
     test('a local store is not polled: it has a socket', () async {
@@ -438,7 +406,7 @@ void main() {
         await service.installAll(endpoint),
       );
 
-      expect(report.spoolSources, isEmpty);
+      expect(report.results.where((r) => r.spoolDirectory != null), isEmpty);
       expect(spoolDir().existsSync(), isFalse);
     });
 

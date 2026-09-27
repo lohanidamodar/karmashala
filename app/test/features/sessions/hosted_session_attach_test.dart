@@ -19,8 +19,8 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
-import 'package:karmashala_terminal_runtime/instances.dart'
-    show hostSessionIdFor;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show terminalSessionId;
 
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
@@ -144,7 +144,7 @@ void main() {
       final pane = terminals().instanceFor(row.paneId!)!;
       expect(pane.agentLaunch!.sessionId, 'd1');
       expect(
-        hostSessionIdFor(paneId: row.paneId!, agentSessionId: 'd1'),
+        terminalSessionId(paneId: row.paneId!, agentSessionId: 'd1'),
         hostSessionIdOf('d1'),
       );
       // Its command line is the row's resume, used only if the session ended

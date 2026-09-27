@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -20,22 +19,24 @@ import 'host_pane_link.dart';
 import 'local_host_access.dart';
 import 'pane_terminal.dart';
 import 'pty_output_coalescer.dart';
-import 'pty_launch.dart';
 import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 import 'terminal_instance.dart';
 
-/// The host session pane [paneId] owns: the app's own id rather than one the
-/// host invents, so the same pane finds the same session after the app restarts
-/// and an agent keeps its session across pane replacement. One function, because
-/// the restore asks the host which of these are still running before any pane
-/// exists to ask.
-String hostSessionIdFor({required String paneId, String? agentSessionId}) {
-  final raw = agentSessionId != null
-      ? 'karmashala_$agentSessionId'
-      : 'karmashala_local_$paneId';
-  return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-}
+/// What the server said when asked for a pane's terminal (`terminals.open`):
+/// the session to attach to, whether it was already running, and whether its
+/// launch carries OSC 133 shell integration.
+typedef TerminalOpening = ({
+  String sessionId,
+  bool adopted,
+  bool shellIntegration,
+});
+
+/// Asks the server to start this pane's terminal at [columns]×[rows] — or to
+/// answer the one already running under its id. The server builds the launch
+/// on its own OS (slice 5a); a refusal is thrown in its own words.
+typedef TerminalOpener =
+    Future<TerminalOpening> Function(int columns, int rows);
 
 /// How long a pane waits before each attempt to reach its host again after the
 /// link closed. Bounded: a host that stays away is said so, not polled for.
@@ -47,8 +48,13 @@ const List<Duration> kHostRedialDelays = [
   Duration(seconds: 8),
 ];
 
-/// A pane whose process belongs to the **session host**, so it outlives the app
-/// a `flutter_pty` child would die with. No fallback: it says so and stays dead.
+/// **The** live local and WSL pane (slice 5a): its process is a terminal the
+/// server runs, so it outlives the app, and this only renders it — attached by
+/// session id, with the screen rebuilt from the server's copy. A pane with an
+/// [opener] asks the server to start (or adopt) its terminal first; one
+/// without only attaches — a hosted run, a worktree setup, a restored pane —
+/// and a session that is gone ends it honestly. No fallback: there is no
+/// in-app PTY.
 class HostTerminalInstance
     implements
         TerminalInstance,
@@ -63,7 +69,9 @@ class HostTerminalInstance
     required this.title,
     required this.profileId,
     required this.access,
-    required this.launch,
+    required this.sessionId,
+    this.opener,
+    this.closer,
     String? workingDirectory,
     this.agentLaunch,
     this.adoptTerminal,
@@ -72,7 +80,6 @@ class HostTerminalInstance
     AppLogger? logger,
     bool shellIntegration = false,
     this.redialDelays = kHostRedialDelays,
-    this.attachOnly = false,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
@@ -81,10 +88,8 @@ class HostTerminalInstance
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
 
     _osc.add(_cwd.handleOsc);
-    // Before any byte arrives, as on the PTY path, so no marker is missed.
-    if (shellIntegration) {
-      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
-    }
+    // Before any byte arrives, so no marker is missed.
+    if (shellIntegration) _recordCommandBlocks();
 
     if (adoptTerminal == null) {
       _hasStoredHistory =
@@ -127,10 +132,17 @@ class HostTerminalInstance
   /// interface an SSH pane is handed, so one pane class serves two transports.
   final HostSessionAccess access;
 
-  /// What to run, already built for where it is going by `ptyLaunchFor` /
-  /// `agentPtyLaunchFor` — the same launch a `flutter_pty` pane would have
-  /// spawned, handed to the host instead of to this process.
-  final PtyLaunch launch;
+  /// The server session this pane renders (`terminalSessionId`: the pane's
+  /// own id, or its agent session row's), so the same pane finds the same
+  /// session after the app restarts.
+  final String sessionId;
+
+  /// Asks the server for this pane's terminal; null attaches only.
+  final TerminalOpener? opener;
+
+  /// Ends the session for good at the server (`terminals.close`); null ends
+  /// it over the host link.
+  final Future<void> Function()? closer;
 
   @override
   final AgentPaneLaunch? agentLaunch;
@@ -139,9 +151,10 @@ class HostTerminalInstance
   /// See [kHostRedialDelays]; shorter in tests.
   final List<Duration> redialDelays;
 
-  /// Attaches to a session somebody else started (a run the server hosts) and
-  /// never starts one: a session that is gone ends the pane.
-  final bool attachOnly;
+  /// Attaches to a session somebody else started (a run the server hosts, or
+  /// a restored pane's) and never starts one: a session that is gone ends the
+  /// pane.
+  bool get attachOnly => opener == null;
 
   final AppLogger _logger;
   final WorkingDirectoryTracker _cwd;
@@ -156,11 +169,15 @@ class HostTerminalInstance
   @override
   final ScrollController scrollController = ScrollController();
 
-  /// The OSC 133 blocks, when the pane was launched with shell integration —
-  /// the same bootstrap the PTY path uses, handed to the host. Null otherwise,
-  /// which is what makes `terminal_run` refuse to claim an exit code here.
+  /// The OSC 133 blocks, when the server's launch carries shell integration.
+  /// Null otherwise, which is what makes `terminal_run` refuse to claim an
+  /// exit code here.
   @override
   CommandBlockRecorder? commandBlocks;
+
+  void _recordCommandBlocks() {
+    commandBlocks ??= CommandBlockRecorder(terminal)..attach(_osc);
+  }
 
   @override
   String? get workingDirectory => _cwd.value;
@@ -484,7 +501,6 @@ class HostTerminalInstance
         width,
         height,
         resumeFrom,
-        deployment,
         redialing: redialing,
       );
       final skip = _skipsReplay(attachment, resumeFrom);
@@ -550,95 +566,62 @@ class HostTerminalInstance
         _logger.debug('pane $id could not redial its host: $e');
         return false;
       }
-      _logger.error('The local session host refused pane $id: $e');
-      _fail('The session host could not start this pane: $e');
+      _logger.error('The Karmashala server refused pane $id: $e');
+      _fail('The Karmashala server could not start this pane: $e');
       return false;
     }
   }
 
-  /// Reattaches from the last offset this pane rendered, opening only when
-  /// there is no session. A dead record is shown once, then closed.
+  /// Reattaches from the last offset this pane rendered. A pane with an
+  /// [opener] asks the server for its terminal once, first — the server
+  /// starts it, or answers the one already running under this pane's id
+  /// (and replaces an ended record: an agent quit with Ctrl-C twice is run
+  /// again, not reattached to its corpse). A redial, or a pane that only
+  /// attaches, never starts anything: a session that is gone ends the pane.
   Future<HostAttachment> _attachOrOpen(
     HostPaneLink link,
     int width,
     int height,
-    int sinceOffset,
-    HostDeployment deployment, {
+    int sinceOffset, {
     required bool redialing,
   }) async {
-    final sessionId = hostSessionId;
-    // An agent launched now whose record the host kept after it exited —
-    // `claude` quit with Ctrl-C twice — would otherwise be reattached to that
-    // record, show its exit, and never run again, however often it is resumed.
-    if (agentLaunch != null &&
-        sinceOffset == 0 &&
-        await _endedOnHost(link, sessionId)) {
-      await link.closeSession(sessionId);
+    var fresh = false;
+    final open = opener;
+    if (open != null && !redialing && !_opened) {
+      final opening = await open(width, height);
+      _opened = true;
+      if (opening.sessionId != sessionId) {
+        throw HostLinkException(
+          'the server started ${opening.sessionId}, not $sessionId',
+        );
+      }
+      if (opening.shellIntegration) _recordCommandBlocks();
+      if (opening.adopted) _sayAdopted();
+      fresh = !opening.adopted;
     }
     try {
       final attachment = await link.attachSession(
         sessionId: sessionId,
         sinceOffset: sinceOffset,
-        // A pane with nothing of the session yet asks for its screen: the
-        // program's relative redraws replayed onto an empty one stack up.
-        screenGrid: sinceOffset == 0 ? (width, height) : null,
+        // A pane with nothing of a running session yet asks for its screen:
+        // the program's relative redraws replayed onto an empty one stack up.
+        // A session started just now has written next to nothing, and its
+        // bytes go under the restored history rather than resetting it.
+        screenGrid: sinceOffset == 0 && !fresh ? (width, height) : null,
       );
-      _resumed = true;
+      _resumed = !fresh;
       return attachment;
     } on HostLinkException catch (e) {
-      // Only the host saying there is no such session earns an open. A timeout
-      // or any other refusal may mean the session is there and alive.
+      // Only the server saying there is no such session ends the pane here.
+      // A timeout or any other refusal may mean the session is there.
       if (e.code != ProtocolErrorCode.unknownSession) rethrow;
-      // A pane coming back to its session never starts another in its place.
-      if (redialing || attachOnly) throw const _SessionGone();
-    }
-    // An older host still serves the sessions it holds, but a new one started
-    // in it would run with that build's behaviour.
-    if (deployment.hostOutdated) {
-      throw const HostLinkException(outdatedHostRefusal);
-    }
-    try {
-      return await link.openOrAdopt(
-        sessionId,
-        adopted: _sayAdopted,
-        () => link.openSession(
-          sessionId: sessionId,
-          // The host starts argv[0] once and quotes by CommandLineToArgvW rules,
-          // so a WSL launch goes without the `cmd.exe /c` flutter_pty needs.
-          argv: launch.hostArgv,
-          // The launch's own, never the pane's: a WSL launch leaves it null on
-          // purpose and carries the Linux folder as `--cd`, which Windows'
-          // CreateProcess would refuse as a process directory (errno 267).
-          workingDirectory: launch.workingDirectory,
-          environment: {'TERM': 'xterm-256color', ...launch.environment},
-          removedEnvironment: launch.removedEnvironment,
-          columns: width,
-          rows: height,
-        ),
-      );
-    } on HostLinkException catch (e) {
-      if (e.code != ProtocolErrorCode.badRequest ||
-          launch.removedEnvironment.isEmpty) {
-        rethrow;
-      }
-      throw HostLinkException(
-        withholdingRefusal(launch.removedEnvironment, e.message),
-        code: e.code,
-      );
+      throw const _SessionGone();
     }
   }
 
-  /// Whether the host holds [sessionId] as an ended record. Not being able to
-  /// ask is not a yes: the attach that follows decides as it always did.
-  Future<bool> _endedOnHost(HostPaneLink link, String sessionId) async {
-    try {
-      return (await link.listSessions()).any(
-        (s) => s.id == sessionId && s.lifecycle.hasEnded,
-      );
-    } on HostLinkException {
-      return false;
-    }
-  }
+  /// Whether this pane has asked the server for its terminal already: a
+  /// redial reattaches, it never asks again.
+  var _opened = false;
 
   /// Whether a fresh pane shows the app's own record of itself instead of the
   /// host's replay. An agent's TUI redraws by relative cursor moves counted at
@@ -657,23 +640,24 @@ class HostTerminalInstance
   bool get outlivesApp => !_disposed && !_exited && _link != null;
 
   @override
-  Future<void> endHostedSession() =>
-      _link?.closeSession(hostSessionId) ?? Future<void>.value();
+  Future<void> endHostedSession() => _endSession();
+
+  /// Ends the session for good: at the server's terminals when this pane
+  /// has a [closer], so every client is told; else over the host link.
+  Future<void> _endSession() {
+    final close = closer;
+    if (close != null) return close();
+    return _link?.closeSession(sessionId) ?? Future<void>.value();
+  }
 
   @override
-  String get keptBy => 'the session host';
+  String get keptBy => 'the Karmashala server';
 
   /// Whether this pane attached to a session that already existed. It decides
   /// what an immediate end means: one we opened and that ended is a command
   /// that finished, one we merely found is a leftover to clear away.
   var _resumed = false;
 
-  /// The app's own id, not one the host invents: the same pane must find the
-  /// same session after the app restarts, and an agent must keep its session
-  /// across pane replacement.
-  @visibleForTesting
-  String get hostSessionId =>
-      hostSessionIdFor(paneId: id, agentSessionId: agentLaunch?.sessionId);
 
   void _onLinkClosed() {
     _lastOffset = _link?.lastOffset ?? _lastOffset;
@@ -707,7 +691,7 @@ class HostTerminalInstance
       // A session we found already over — its host was restarted under it. Its
       // scrollback has now been shown; letting the record go is what makes the
       // next start of this pane a new process rather than the same corpse.
-      unawaited(_link?.closeSession(hostSessionId) ?? Future<void>.value());
+      unawaited(_endSession().catchError((Object _) {}));
     }
   }
 
@@ -748,91 +732,6 @@ class HostTerminalInstance
     );
   }
 }
-
-/// Builds the launch for [profile] and hands it to the session host: the same
-/// command line the PTY path builds, shell integration included, decided by
-/// the same [shellIntegrationApplies] — so an agent pane never gets it.
-TerminalInstance createHostTerminalInstance({
-  required String id,
-  required TerminalProfile profile,
-  required HostSessionAccess access,
-  String? workingDirectory,
-  String? restoredScrollback,
-  AgentPaneLaunch? agentLaunch,
-  Terminal? adoptTerminal,
-  Map<String, String> environmentOverlay = const {},
-  bool shellIntegration = false,
-  bool attachOnly = false,
-  String? label,
-}) {
-  final PtyLaunch launch;
-  final String title;
-  final String profileId;
-  final integrate = shellIntegrationApplies(
-    profile: profile,
-    shellIntegration: shellIntegration,
-    agentLaunch: agentLaunch,
-  );
-  if (agentLaunch != null) {
-    launch = agentPtyLaunchFor(
-      agentLaunch,
-      context: LaunchContext.forAgent(
-        agentLaunch,
-        hostIsWindows: Platform.isWindows,
-      ),
-      environment: environmentOverlay,
-    );
-    title = agentLaunch.title ?? agentLaunch.agentId;
-    profileId = agentLaunch.profileId;
-  } else {
-    launch = ptyLaunchFor(
-      profile,
-      context: LaunchContext.forProfile(
-        profile,
-        hostIsWindows: Platform.isWindows,
-        posixShell: Platform.environment['SHELL'],
-      ),
-      workingDirectory: workingDirectory,
-      shellIntegration: integrate,
-      environment: environmentOverlay,
-    );
-    title = profile.label;
-    profileId = profile.id;
-  }
-
-  return HostTerminalInstance(
-    id: id,
-    title: label ?? title,
-    profileId: profileId,
-    access: access,
-    launch: launch,
-    workingDirectory: workingDirectory,
-    agentLaunch: agentLaunch,
-    adoptTerminal: adoptTerminal,
-    restoredScrollback: restoredScrollback,
-    // Windows only, as on the PTY path: elsewhere the launch carries no
-    // bootstrap, so there would be no markers to record.
-    shellIntegration: integrate && Platform.isWindows,
-    attachOnly: attachOnly,
-  );
-}
-
-/// Why a pane that had to withhold [names] did not start: the host predates
-/// withholding, and starting anyway would hand the child what it must not see.
-@visibleForTesting
-String withholdingRefusal(Set<String> names, String hostSaid) =>
-    'This session host is older than this app and cannot leave '
-    '${(names.toList()..sort()).join(', ')} out of a pane, so nothing was '
-    'started. Restart the session host from Settings › Terminal, then reopen '
-    'this pane. (The host said: $hostSaid)';
-
-/// Why a new pane did not start in an outdated host.
-const String outdatedHostRefusal =
-    'An older session host, started by an earlier Karmashala, is still '
-    'running the sessions it holds, so this pane was not started in it: it '
-    'would have run with that version\'s behaviour. Reopen this pane to run it '
-    'inside the app, or restart the session host from Settings › Terminal '
-    '(that ends the sessions it holds).';
 
 /// A redial found the host holding no session of this pane's id.
 class _SessionGone implements Exception {

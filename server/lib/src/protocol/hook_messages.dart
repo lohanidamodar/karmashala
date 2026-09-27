@@ -61,23 +61,3 @@ class HookMessage extends HostMessage {
     AgentHookEvent.fromJson(_decodeJson(WireReader(frame.payload).str())),
   );
 }
-
-/// client → host: a hook the client took itself — on its own `/agent-hook`
-/// route, or from a spool — for the server's checkpoint recorder. The agent
-/// was answered long before this arrives, so it is never held; a
-/// `PreToolUse` in it marks its turn's before-turn checkpoints unverified.
-class HookForwardMessage extends HostMessage {
-  const HookForwardMessage(this.hook);
-  final AgentHookEvent hook;
-
-  @override
-  Frame toFrame() => Frame(
-    MessageType.hookForward,
-    0,
-    (WireWriter()..str(jsonEncode(hook.toJson()))).take(),
-  );
-
-  static HookForwardMessage decode(Frame frame) => HookForwardMessage(
-    AgentHookEvent.fromJson(_decodeJson(WireReader(frame.payload).str())),
-  );
-}

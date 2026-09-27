@@ -16,9 +16,12 @@ import 'win32.dart';
 /// `128 + signal`; and [PtySpawnRequest.environment] is layered *over* this
 /// process's own, because a child with no `SystemRoot` cannot load a DLL.
 class ConPtyLauncher implements PtyLauncher {
-  ConPtyLauncher({Kernel32? kernel32}) : _k = kernel32 ?? Kernel32.open();
+  ConPtyLauncher({Kernel32? kernel32, void Function(String line)? log})
+    : _k = kernel32 ?? Kernel32.open(),
+      _log = log ?? stderr.writeln;
 
   final Kernel32 _k;
+  final void Function(String line) _log;
 
   /// Which library carried the pty entry points here — measured, not assumed.
   String get ptyLibrary => _k.ptyLibrary;
@@ -46,8 +49,6 @@ class ConPtyLauncher implements PtyLauncher {
 
     final arena = Arena();
     var inRead = 0, inWrite = 0, outRead = 0, outWrite = 0, hPc = 0, job = 0;
-    var attributes = nullptr as Pointer<Void>;
-    var attributesInitialised = false;
     try {
       final a = arena<IntPtr>(), b = arena<IntPtr>();
       if (_k.createPipe(a, b, nullptr, 0) == 0) {
@@ -84,8 +85,69 @@ class ConPtyLauncher implements PtyLauncher {
       _k.closeHandle(outWrite);
       outWrite = 0;
 
+      // Redirection Guard off for the child (BACKLOG §2), refused by an older
+      // Windows as a bad parameter: then once more without it, and said so.
+      var created = _createChild(arena, hPc, request, mitigation: true);
+      if (created.info == null && policyRefused(created.error)) {
+        _log(
+          'karmashala_host: this Windows refused the redirection-trust '
+          'mitigation for ${request.argv.first} (error ${created.error}); '
+          "started it without, so it inherits the server's policy",
+        );
+        created = _createChild(arena, hPc, request, mitigation: false);
+      }
+      final info =
+          created.info ??
+          (throw PtyException(
+            'CreateProcess(${request.argv.first}) failed',
+            errno: created.error,
+          ));
+
+      // In its job before it runs a single instruction: started suspended,
+      // so no grandchild can be spawned outside it and outlive the server.
+      job = _adopt(arena, info.hProcess);
+      _k.resumeThread(info.hThread);
+      // Required by CreateProcess; nothing here waits on the primary thread.
+      _k.closeHandle(info.hThread);
+
+      final handle = _ConPtyHandle(
+        kernel32: _k,
+        pseudoConsole: hPc,
+        inputWrite: inWrite,
+        outputRead: outRead,
+        processHandle: info.hProcess,
+        job: job,
+        pid: info.dwProcessId,
+      );
+      hPc = 0;
+      inWrite = 0;
+      outRead = 0;
+      job = 0;
+      return handle;
+    } finally {
+      for (final h in [inRead, inWrite, outRead, outWrite, job]) {
+        if (h != 0) _k.closeHandle(h);
+      }
+      if (hPc != 0) closePc(hPc);
+      arena.releaseAll();
+    }
+  }
+
+  /// Starts the child on [hPc], suspended, with a fresh attribute list: the
+  /// pseudoconsole, and the redirection-trust policy when [mitigation]. The
+  /// info, or the error `CreateProcess` gave (null info).
+  ({ProcessInformation? info, int error}) _createChild(
+    Arena arena,
+    int hPc,
+    PtySpawnRequest request, {
+    required bool mitigation,
+  }) {
+    final count = paneAttributeCount(mitigation: mitigation);
+    var attributes = nullptr as Pointer<Void>;
+    var initialised = false;
+    try {
       final needed = arena<IntPtr>();
-      _k.initializeProcThreadAttributeList(nullptr, 1, 0, needed);
+      _k.initializeProcThreadAttributeList(nullptr, count, 0, needed);
       if (needed.value <= 0) {
         throw PtyException(
           'InitializeProcThreadAttributeList would not size itself',
@@ -93,13 +155,14 @@ class ConPtyLauncher implements PtyLauncher {
         );
       }
       attributes = calloc<Uint8>(needed.value).cast<Void>();
-      if (_k.initializeProcThreadAttributeList(attributes, 1, 0, needed) == 0) {
+      if (_k.initializeProcThreadAttributeList(attributes, count, 0, needed) ==
+          0) {
         throw PtyException(
           'InitializeProcThreadAttributeList failed',
           errno: _k.getLastError(),
         );
       }
-      attributesInitialised = true;
+      initialised = true;
       if (_k.updateProcThreadAttribute(
             attributes,
             0,
@@ -116,6 +179,27 @@ class ConPtyLauncher implements PtyLauncher {
           'UpdateProcThreadAttribute failed',
           errno: _k.getLastError(),
         );
+      }
+      if (mitigation) {
+        final words = redirectionTrustOffPolicy();
+        // Lives in the arena, past CreateProcess: the list points at it.
+        final policy = arena<Uint64>(words.length);
+        for (var i = 0; i < words.length; i++) {
+          policy[i] = words[i];
+        }
+        if (_k.updateProcThreadAttribute(
+              attributes,
+              0,
+              kProcThreadAttributeMitigationPolicy,
+              policy.cast<Void>(),
+              sizeOf<Uint64>() * words.length,
+              nullptr,
+              nullptr,
+            ) ==
+            0) {
+          // Not the launch: the policy alone was refused, so start without it.
+          return (info: null, error: kErrorInvalidParameter);
+        }
       }
 
       final startup = arena<StartupInfoExW>();
@@ -140,7 +224,9 @@ class ConPtyLauncher implements PtyLauncher {
         nullptr,
         nullptr,
         0,
-        kExtendedStartupInfoPresent | kCreateUnicodeEnvironment,
+        kExtendedStartupInfoPresent |
+            kCreateUnicodeEnvironment |
+            kCreateSuspended,
         _environmentBlock(arena, request),
         (cwd == null || cwd.isEmpty)
             ? nullptr
@@ -148,41 +234,13 @@ class ConPtyLauncher implements PtyLauncher {
         startup,
         info,
       );
-      if (ok == 0) {
-        throw PtyException(
-          'CreateProcess(${request.argv.first}) failed',
-          errno: _k.getLastError(),
-        );
-      }
-      // Required by CreateProcess; nothing here waits on the primary thread.
-      _k.closeHandle(info.ref.hThread);
-
-      job = _adopt(arena, info.ref.hProcess);
-
-      final handle = _ConPtyHandle(
-        kernel32: _k,
-        pseudoConsole: hPc,
-        inputWrite: inWrite,
-        outputRead: outRead,
-        processHandle: info.ref.hProcess,
-        job: job,
-        pid: info.ref.dwProcessId,
-      );
-      hPc = 0;
-      inWrite = 0;
-      outRead = 0;
-      job = 0;
-      return handle;
+      if (ok == 0) return (info: null, error: _k.getLastError());
+      return (info: info.ref, error: 0);
     } finally {
       if (attributes != nullptr) {
-        if (attributesInitialised) _k.deleteProcThreadAttributeList(attributes);
+        if (initialised) _k.deleteProcThreadAttributeList(attributes);
         calloc.free(attributes);
       }
-      for (final h in [inRead, inWrite, outRead, outWrite, job]) {
-        if (h != 0) _k.closeHandle(h);
-      }
-      if (hPc != 0) closePc(hPc);
-      arena.releaseAll();
     }
   }
 

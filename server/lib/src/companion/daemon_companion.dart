@@ -244,6 +244,7 @@ class DaemonCompanion implements CompanionHandler {
       mcp: mcp,
       now: () => _now().toUtc(),
       newId: _newId,
+      environmentOf: _rows.environment,
       hostEnvironment: _hostEnvironment,
       worktrees: daemonWorktrees(
         database: database,

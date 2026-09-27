@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/process.dart'
-    show CommandRunnerFactory, localHostEnvironment;
+    show CommandRunnerFactory, EnvironmentKind, localHostEnvironment;
+import 'package:agent_cli/read.dart' show CliStoreLocator;
+import 'package:karmashala_environments/store.dart'
+    show ExecutionEnvironmentDao;
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DecisionRecorded, kFlutterLogsStream;
@@ -23,10 +26,13 @@ import '../domain/session_registry.dart';
 import '../devices/device_app_discovery.dart';
 import '../devices/server_device_claims.dart';
 import '../devices/server_devices.dart';
+import '../env/server_env_vault.dart';
 import '../files/server_files.dart';
+import '../terminals/server_terminals.dart';
 import '../git/server_git.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
+import '../hooks/hook_spools.dart';
 import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/tools/server_tool_schemas.dart';
 import '../browser/server_browser.dart';
@@ -294,9 +300,28 @@ Future<int> runServe(
   // editor's reads and saves, Quick Open's index and the watches, over the
   // same SSH pool.
   final files = ServerFiles(data: data, pool: ssh.pool)..attach();
+  // The variables every terminal this server starts is given (slice 5a):
+  // in its own data folder, write-only to every client.
+  final envVault = ServerEnvVault(
+    dataDirectory: dataDirectory,
+    tell: data.announce,
+  );
+  data
+    ..envVault = envVault
+    ..greeters.add(envVault.greeting);
   // Usage, accounts, detection and the CLI import: the work done for the
   // agents on this machine, whichever client asks, and on its own.
   final hostEnvironment = environment ?? Platform.environment;
+  // Every local and WSL terminal (slice 5a): built here on this machine's OS
+  // with the vault above, run in the registry, attached to by id.
+  final terminals = ServerTerminals(
+    registry: registry,
+    environments: () => data.environments,
+    tell: data.announce,
+    overlay: envVault.overlay,
+    hostEnvironment: hostEnvironment,
+  );
+  data.terminalWork = terminals;
   final agentWork = ServerAgentWork(
     data: data,
     runners: ssh.runners,
@@ -477,11 +502,6 @@ Future<int> runServe(
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   server.panes = sessionSync;
-  // Hooks only the app took (its own route, the WSL spool): never held.
-  server.onForwardedHook = (hook) {
-    checkpoints.forwarded(hook);
-    sessionSync.hook(hook);
-  };
   sessionSync.start();
   // Git, worktrees, their cleanup and GitHub for every client (slice 3b); a
   // turn ending tells them where to read again.
@@ -519,6 +539,26 @@ Future<int> runServe(
     },
     errSink,
   );
+  // The WSL agents' hook spools, drained here (slice 5a): a WSL agent cannot
+  // reach this server's loopback endpoint, so its hook script writes a file.
+  // Never held — its tool has already run. Only the real server drains them
+  // (a Windows one, in its own default data folder): a probe's or a test's
+  // would take the owner's payloads.
+  final spools =
+      Platform.isWindows &&
+          named == null &&
+          hostEnvironment[kAgentWorkVariable] != 'off' &&
+          hostEnvironment[kHookSpoolsVariable] != 'off'
+      ? (HookSpools(
+          sources: _wslSpoolSources(database),
+          onHook: (hook) {
+            checkpoints.spooled(hook);
+            status.hook(hook);
+            sessionSync.hook(hook);
+            server.lifecycle.relayHook(hook);
+          },
+        )..start())
+      : null;
   final mcp = await _openMcp(
     paths,
     dataDirectory,
@@ -708,6 +748,7 @@ Future<int> runServe(
     await subscription.cancel();
   }
   await listener.close();
+  spools?.close();
   await hookServer?.close();
   await mcp?.close();
   mcpTools.close();
@@ -716,6 +757,7 @@ Future<int> runServe(
   agentWork.stop();
   await git.stop();
   await files.close();
+  await terminals.dispose();
   await ssh.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
@@ -749,6 +791,29 @@ List<Object?> _names(List<Map<String, Object?>> schemas) => [
 /// The loopback hook listener, on the last run's port and token when that port
 /// is still free, with [HostPaths.hookEndpointPath] written for the app. Null,
 /// reported, when either fails: sessions do not need hooks.
+/// The spools of the WSL agents this server's store records: each
+/// distribution's stores located as the conversation index locates them,
+/// read afresh each time (a distribution added later is drained too).
+Future<List<HookSpoolSource>> Function() _wslSpoolSources(
+  AppDatabase database,
+) {
+  final environments = ExecutionEnvironmentDao(database);
+  return () async {
+    final all = environments.getAll();
+    if (!all.any((e) => e.kind == EnvironmentKind.wsl)) return const [];
+    final locator = CliStoreLocator(
+      runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
+        environments.getById(id) ??
+            localHostEnvironment(DateTime.now().toUtc()),
+      ),
+    );
+    return wslHookSpoolSources(
+      stores: await locator.locate(all),
+      environments: all,
+    );
+  };
+}
+
 Future<HookServer?> _openHookServer(
   HostPaths paths,
   FutureOr<void> Function(AgentHookEvent hook) onHook,

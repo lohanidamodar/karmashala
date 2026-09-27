@@ -28,6 +28,10 @@ dependencies:
   # A profile names a command and an agent: the process and agent descriptors.
   agent_cli:
     path: ../agent_cli
+  # The launch vocabulary (profiles, agent launches, shell integration), pure
+  # Dart since slice 5a so the server builds launches; re-exported here.
+  karmashala_launch:
+    path: ../karmashala_launch
   # Small shared helpers behind the link scanner.
   karmashala_core:
     path: ../karmashala_core

@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_terminal_runtime/launch.dart' show withWslEnv;
@@ -256,73 +255,6 @@ void main() {
     );
   });
 
-  test('the drainer picks the same payload up on its own', () async {
-    // The loop the app actually runs, rather than one `drain` call: it has to
-    // find this distribution in the running set, list the share, and hand the
-    // payload to the same intake the HTTP route uses.
-    final endpoint = server.hookEndpoint!;
-    final claude = AgentRegistry.builtIn.byId('claudeCode')!;
-    expect(
-      await const AgentHookInstaller().install(
-        descriptor: claude,
-        storeHome: uncHome,
-        endpoint: endpoint,
-        environment: EnvironmentKind.wsl,
-      ),
-      isTrue,
-    );
-    final config =
-        jsonDecode(File(p.join(uncHome, 'settings.json')).readAsStringSync())
-            as Map<String, Object?>;
-    final hook =
-        ((((((config['hooks']! as Map)['Stop']! as List).single
-                            as Map)['hooks']!
-                        as List)
-                    .single
-                as Map)['command']!
-            as String);
-    await _wsl([
-      'sh',
-      '-c',
-      'printf %s \'{"session_id":"live-drainer"}\' | '
-          '${_underHome(wslHome, hook)}',
-    ]);
-
-    final spool = Directory(p.join(uncHome, '$agentHookMarker.spool'));
-    final waiting = spool.listSync().map((e) => p.basename(e.path)).toList();
-    final distribution = await _defaultDistribution();
-    final seen = <AgentHookSpoolEvent>[];
-    final drainer = AgentHookSpoolDrainer(onEvent: seen.add);
-    addTearDown(drainer.dispose);
-    drainer.watch([
-      AgentHookSpoolSource(
-        environmentId: 'wsl:live',
-        directory: spool,
-        wslDistribution: distribution,
-      ),
-    ]);
-    await drainer.drainOnce();
-
-    expect(
-      seen.map((e) => (e.agentId, e.event)),
-      [('claudeCode', 'Stop')],
-      reason:
-          'THE APP: the drainer did not pick the payload up. Either the '
-          'running-distribution gate skipped a distribution that is plainly '
-          'running, or the envelope did not parse.\n'
-          'in the spool before the drain: $waiting\n'
-          'distribution: $distribution\n'
-          'running: ${await wslRunningDistributions()}',
-    );
-    expect(
-      seen.single.firedAt.isAfter(testTime),
-      isTrue,
-      reason:
-          'a spooled payload is timed by its own file, so a backlog drained '
-          'after a crash is discarded as stale rather than announced as news',
-    );
-  });
-
   test('uninstall leaves nothing of ours in the distribution', () async {
     const installer = AgentHookInstaller();
     final claude = AgentRegistry.builtIn.byId('claudeCode')!;
@@ -434,17 +366,6 @@ String _verdict(
 /// statement of its own is what makes the second statement see it.
 String _underHome(String home, String command) =>
     '{ export HOME=$home; $command; }';
-
-/// The distribution `wsl.exe` runs by default — the one everything here uses.
-///
-/// Read through the app's own parse rather than a second copy of it. The
-/// second copy is what failed first: `wsl.exe` answered one of these calls in
-/// UTF-16 and the next in UTF-8, and two parses that disagree about that match
-/// nothing while looking correct.
-Future<String?> _defaultDistribution() async {
-  final running = await wslRunningDistributions();
-  return running.isEmpty ? null : running.first;
-}
 
 /// One command inside the default distribution, **without** throwing on a
 /// non-zero exit. [_wsl]'s counterpart for the diagnosis path, where the exit

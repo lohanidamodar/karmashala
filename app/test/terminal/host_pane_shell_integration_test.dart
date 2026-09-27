@@ -1,18 +1,16 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
-import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 
 import 'fake_host_access.dart';
 
-/// OSC 133 shell integration in a pane whose shell belongs to the session host:
-/// the same bootstrap the PTY path launches, and the same recorder — plus what
-/// only the host has, a reattach whose replay was produced while no pane
-/// watched it.
+/// OSC 133 shell integration in a pane on the server's terminal: the server
+/// decides whether its launch carries the bootstrap (slice 5a — only a
+/// Windows server injects one) and says so in `terminals.open`'s answer; the
+/// pane records blocks off the markers — plus what only a server session has,
+/// a reattach whose replay was produced while no pane watched it.
 ///
 /// The fake machine feeds the bytes a PowerShell with the bootstrap would
 /// write; what a real one writes through the host was measured on Windows
@@ -30,36 +28,40 @@ const _c = '\x1b]133;C\x07';
 String _d(int code) => '\x1b]133;D;$code\x07';
 const _prompt = '${_a}PS C:\\work> $_b';
 
-/// The recorder is attached only on Windows, as on the PTY path: elsewhere the
-/// launch carries no bootstrap.
-final _notWindows = Platform.isWindows ? null : 'integration is Windows-only';
-
 void main() {
   // The replay's end mark can land behind a queued chunk, which schedules a
   // frame; a plain test has no binding to ask for one.
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const powerShell = TerminalProfile(
-    id: 'powershell',
-    label: 'Windows PowerShell',
-    shell: TerminalShell.powerShell,
-  );
-
+  /// A pane whose `terminals.open` answers [shellIntegration] — what a
+  /// Windows server says for a PowerShell launched with the setting on — and
+  /// never for an agent, which runs no shell.
   HostTerminalInstance paneOn(
     PaneAccess access, {
     bool shellIntegration = true,
     AgentPaneLaunch? agentLaunch,
   }) {
-    final pane =
-        createHostTerminalInstance(
-              id: 'p1',
-              profile: powerShell,
-              access: access,
-              workingDirectory: r'C:\work',
-              shellIntegration: shellIntegration,
-              agentLaunch: agentLaunch,
-            )
-            as HostTerminalInstance;
+    final sessionId = agentLaunch == null
+        ? 'karmashala_local_p1'
+        : 'karmashala_${agentLaunch.sessionId}';
+    final pane = HostTerminalInstance(
+      id: 'p1',
+      title: 'Windows PowerShell',
+      profileId: 'powershell',
+      access: access,
+      sessionId: sessionId,
+      workingDirectory: r'C:\work',
+      agentLaunch: agentLaunch,
+      opener: (columns, rows) async {
+        final adopted = access.liveSessions.contains(sessionId);
+        access.liveSessions.add(sessionId);
+        return (
+          sessionId: sessionId,
+          adopted: adopted,
+          shellIntegration: shellIntegration && agentLaunch == null,
+        );
+      },
+    );
     pane.terminal.resize(120, 40);
     addTearDown(pane.dispose);
     return pane;
@@ -104,14 +106,7 @@ void main() {
       await settle();
       final channel = access.channels.single;
 
-      final opened = channel.only<OpenMessage>();
-      expect(opened.argv, [
-        'powershell.exe',
-        '-NoLogo',
-        '-NoExit',
-        '-Command',
-        powerShellIntegrationScript(),
-      ]);
+      expect(channel.all<OpenMessage>(), isEmpty, reason: "the server's job");
       expect(pane.commandBlocks, isNotNull);
 
       channel.pushOutput(0, _prompt);
@@ -129,78 +124,28 @@ void main() {
       expect(outcome.duration, isNotNull);
       expect(pane.commandBlocks!.tracker.blocks.single.exitCode, 3);
     },
-    skip: _notWindows,
   );
 
-  // Measured on a probe (2026-09-22): the pane's Linux directory reached the
-  // host as the process's own working directory, and CreateProcess refused it
-  // with errno 267, so a WSL pane opened in a folder never started.
-  for (final integrated in [false, true]) {
-    test(
-      'a WSL pane gets its folder through --cd, never as the Windows '
-      'process directory (integration ${integrated ? 'on' : 'off'})',
-      () async {
-        const arch = TerminalProfile(
-          id: 'wsl:archlinux',
-          label: 'archlinux (WSL)',
-          shell: TerminalShell.wsl,
-          wslDistribution: 'archlinux',
-        );
-        final access = PaneAccess(readyDeployment());
-        final pane =
-            createHostTerminalInstance(
-                  id: 'p1',
-                  profile: arch,
-                  access: access,
-                  workingDirectory: '/home/me/project',
-                  shellIntegration: integrated,
-                )
-                as HostTerminalInstance;
-        addTearDown(pane.dispose);
-        await settle();
+  test('with no bootstrap in the launch, the pane has no recorder', () async {
+    final access = PaneAccess(readyDeployment());
+    final pane = paneOn(access, shellIntegration: false);
+    await settle();
+    expect(pane.commandBlocks, isNull);
+  });
 
-        final opened = access.channels.single.only<OpenMessage>();
-        expect(opened.workingDirectory, isNull);
-        expect(opened.argv, containsAllInOrder(['--cd', '/home/me/project']));
-      },
-      skip: _notWindows,
+  test('an agent pane is never integrated', () async {
+    final access = PaneAccess(readyDeployment());
+    final pane = paneOn(
+      access,
+      agentLaunch: const AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: 'claude',
+        sessionId: 'sess-1',
+      ),
     );
-  }
-
-  test(
-    'with the setting off, the host pane has no recorder and no bootstrap',
-    () async {
-      final access = PaneAccess(readyDeployment());
-      final pane = paneOn(access, shellIntegration: false);
-      await settle();
-      expect(pane.commandBlocks, isNull);
-      expect(
-        access.channels.single.only<OpenMessage>().argv,
-        isNot(contains('-Command')),
-      );
-    },
-  );
-
-  test(
-    'an agent pane in the host is never integrated, as on the PTY path',
-    () async {
-      final access = PaneAccess(readyDeployment());
-      final pane = paneOn(
-        access,
-        agentLaunch: const AgentPaneLaunch(
-          agentId: 'claudeCode',
-          executable: 'claude',
-          sessionId: 'sess-1',
-        ),
-      );
-      await settle();
-      expect(pane.commandBlocks, isNull);
-      expect(
-        access.channels.single.only<OpenMessage>().argv.join(' '),
-        isNot(contains('OSC 133')),
-      );
-    },
-  );
+    await settle();
+    expect(pane.commandBlocks, isNull);
+  });
 
   group('reattaching to a running session', () {
     test('a replay that starts mid-command yields an unknown-start block, and '
@@ -234,7 +179,7 @@ void main() {
       expect(outcome.exitCode, 0);
       expect(outcome.output.lines, ['ok']);
       expect(tracker.blocks, hasLength(2));
-    }, skip: _notWindows);
+    });
 
     test('a command still running when the pane came back is not mistaken for '
         'the one typed next', () async {
@@ -255,7 +200,7 @@ void main() {
       expect(outcome.output.lines, ['ok']);
       expect(tracker.blocks.map((b) => b.exitCode), [1, 0]);
       expect(tracker.blocks.first.resumed, isTrue);
-    }, skip: _notWindows);
+    });
 
     test(
       'finished commands in the replay make no blocks, and nothing is doubled',
@@ -288,7 +233,6 @@ void main() {
         expect(tracker.blocks.single.exitCode, 0);
         expect(tracker.blocks.single.resumed, isFalse);
       },
-      skip: _notWindows,
     );
 
     test(
@@ -309,7 +253,6 @@ void main() {
         );
         expect(outcome.exitCode, 4);
       },
-      skip: _notWindows,
     );
   });
 }

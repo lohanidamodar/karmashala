@@ -73,10 +73,6 @@ class HostServer {
   /// Answers every client's data requests; null refuses them (no store).
   DataService? data;
 
-  /// Takes each hook a client took itself ([HookForwardMessage]) — its own
-  /// route or a spool — for the checkpoint recorder. Null ignores them.
-  void Function(AgentHookEvent hook)? onForwardedHook;
-
   /// Takes each client's terminal panes as facts ([PaneFactsMessage]):
   /// adoption and attribution decide what they mean. Null ignores them.
   PaneFactsReceiver? panes;
@@ -327,8 +323,6 @@ class _ClientSession {
           _send,
           runByClient: message.runByClient,
         );
-      case HookForwardMessage(:final hook):
-        _server.onForwardedHook?.call(hook);
       case McpToolsMessage():
         _server.mcpTools?.adopt(this, message.tools, _send);
       case McpResultMessage():

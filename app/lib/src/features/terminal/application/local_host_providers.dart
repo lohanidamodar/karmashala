@@ -7,7 +7,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/paths/server_data_directory.dart';
 import '../../../core/probe/probe_mode.dart';
-import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 
@@ -67,12 +66,6 @@ HostPaths? probeHostPaths(ProbeMode probe) {
   if (!probe.enabled || data == null) return null;
   return HostPaths(Directory(p.join(p.absolute(data), 'host')));
 }
-
-/// Whether a local pane's process belongs to the session host rather than this
-/// app. Its own provider so a terminal test need not stand up a settings store.
-final hostBackedLocalPanesProvider = Provider<bool>(
-  (ref) => ref.watch(settingsControllerProvider).hostBackedLocalPanes,
-);
 
 /// What keeps this machine's host up while the app is open, or null when no
 /// host may be reached. Whatever the panes setting: the app's data lives at

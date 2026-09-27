@@ -46,10 +46,8 @@ enum MessageType {
   lifecycle(0x19),
   // An agent hook the host's loopback endpoint received, pushed to watchers.
   hook(0x1a),
-  // client → host: a hook the client took on its own route or spool, for the
-  // server's checkpoint recorder (slice 2b; was `hookReply`, the watcher's
-  // hold, which the server now does itself).
-  hookForward(0x1b),
+  // 0x1b: hookForward, retired in protocol 25 — the server drains the WSL
+  // spools itself (slice 5a).
   // 0x1c: `sessionChanged`, retired in protocol 13 — a status the daemon
   // records reaches clients as a change on the data channel (slice 1c).
   // Protocol 3: the daemon serves agents' MCP and the app runs the tools.
@@ -112,9 +110,9 @@ enum MessageType {
   dataStreamOpen(0x3b),
   dataStreamItems(0x3c),
   dataStreamClose(0x3d),
-  // 0x3e–0x3f are reserved for slice 4b's device byte stream and input (a
-  // mirror of a device on the server's machine). Protocol 24 (slice 4a) added
-  // no frame: the claims change rides the data channel.
+  // 0x3e–0x3f are reserved for slice 5e (outputAck, presence). Protocol 24
+  // (slice 4a) added no frame: the claims change rides the data channel;
+  // neither did protocol 25 (slice 5a): `terminals.*` and `env.*` ride it too.
 
   // 0xf0 and up never change and are answered without hello, whatever the
   // protocol: `karmashala_host stop` must reach a host of any version

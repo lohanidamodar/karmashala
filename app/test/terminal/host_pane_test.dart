@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
-import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -27,12 +26,25 @@ Future<void> settle() async {
 }
 
 void main() {
-  const launch = PtyLaunch(
-    executable: 'cmd.exe',
-    arguments: ['/k'],
-    workingDirectory: r'C:\work',
-    environment: {'KARMASHALA_SESSION': 's1'},
-  );
+  /// What the server's `terminals.open` does for [sessionId] on the fake
+  /// machine: answers a running session as adopted, replaces an ended record,
+  /// starts one otherwise — and records the grid it was asked at.
+  final asked = <(String, int, int)>[];
+  TerminalOpener openerOn(PaneAccess access, String sessionId) =>
+      (columns, rows) async {
+        asked.add((sessionId, columns, rows));
+        final adopted = access.liveSessions.contains(sessionId);
+        if (!adopted) access.grids[sessionId] = (columns, rows);
+        access.endedSessions.remove(sessionId);
+        access.liveSessions.add(sessionId);
+        return (
+          sessionId: sessionId,
+          adopted: adopted,
+          shellIntegration: false,
+        );
+      };
+
+  setUp(asked.clear);
 
   HostTerminalInstance paneOn(PaneAccess access) {
     final instance = HostTerminalInstance(
@@ -40,7 +52,8 @@ void main() {
       title: 'Local',
       profileId: 'powershell',
       access: access,
-      launch: launch,
+      sessionId: 'karmashala_local_p1',
+      opener: openerOn(access, 'karmashala_local_p1'),
       workingDirectory: r'C:\work',
       redialDelays: const [
         Duration(milliseconds: 10),
@@ -56,108 +69,42 @@ void main() {
   String screenOf(HostTerminalInstance pane) =>
       terminalTailLines(pane.terminal, lines: 200).join('\n');
 
-  test('the pane opens the launch it was given, on the host', () async {
+  test('the pane asks the server for its terminal, then attaches to it',
+      () async {
     final access = PaneAccess(readyDeployment());
     final pane = paneOn(access);
     await settle();
 
-    final opened = access.channels.single.only<OpenMessage>();
-    expect(opened.argv, ['cmd.exe', '/k']);
-    expect(opened.workingDirectory, r'C:\work');
-    expect(opened.environment['TERM'], 'xterm-256color');
-    expect(
-      opened.environment['KARMASHALA_SESSION'],
-      's1',
-      reason: "the launch's own variables cross with it",
-    );
-    // The pane's own id, not one the host invents, so the same pane finds the
-    // same session after the app restarts.
-    expect(opened.sessionId, 'karmashala_local_p1');
+    // The server builds the launch (slice 5a): the pane only names the
+    // session its own id gives, at its own grid.
+    expect(asked, [('karmashala_local_p1', 120, 40)]);
+    final channel = access.channels.single;
+    expect(channel.all<OpenMessage>(), isEmpty);
+    expect(channel.only<AttachMessage>().sessionId, 'karmashala_local_p1');
     expect(pane.liveness.value, PaneLiveness.live);
   });
 
-  group('names the launch withholds', () {
-    const withholding = PtyLaunch(
-      executable: 'claude.exe',
-      workingDirectory: r'C:\work',
-      removedEnvironment: {'ANTHROPIC_API_KEY'},
+  test('a refusal from the server ends the pane in its words', () async {
+    final access = PaneAccess(readyDeployment());
+    final pane = HostTerminalInstance(
+      id: 'p1',
+      title: 'Local',
+      profileId: 'powershell',
+      access: access,
+      sessionId: 'karmashala_local_p1',
+      opener: (_, _) async =>
+          throw StateError('this server does not offer the shell "cmd"'),
     );
+    addTearDown(pane.dispose);
+    pane.terminal.resize(120, 40);
+    await settle();
 
-    HostTerminalInstance withholdingPaneOn(PaneAccess access) {
-      final instance = HostTerminalInstance(
-        id: 'p1',
-        title: 'Claude',
-        profileId: 'powershell',
-        access: access,
-        launch: withholding,
-        workingDirectory: r'C:\work',
-      );
-      instance.terminal.resize(120, 40);
-      addTearDown(instance.dispose);
-      return instance;
-    }
-
-    test('cross to the host with the open', () async {
-      final access = PaneAccess(readyDeployment());
-      withholdingPaneOn(access);
-      await settle();
-
-      final opened = access.channels.single.only<OpenMessage>();
-      expect(opened.removedEnvironment, {'ANTHROPIC_API_KEY'});
-    });
-
-    test(
-      'an older host that cannot withhold them refuses the pane in words',
-      () async {
-        final access = PaneAccess(readyDeployment())
-          ..predatesWithholding = true;
-        final pane = withholdingPaneOn(access);
-        await settle();
-
-        // Unwrapped: the sentence is longer than the pane is wide.
-        final screen = screenOf(pane).replaceAll('\n', '');
-        expect(screen, contains('cannot leave ANTHROPIC_API_KEY out'));
-        expect(screen, contains('Restart the session host'));
-        expect(screen, contains('0x14'), reason: 'what the host said, quoted');
-        expect(access.liveSessions, isEmpty, reason: 'nothing was started');
-      },
+    expect(pane.liveness.value, PaneLiveness.exited);
+    expect(
+      screenOf(pane).replaceAll('\n', ''),
+      contains('does not offer the shell "cmd"'),
     );
-  });
-
-  group('an outdated host an earlier app left running', () {
-    HostDeployment outdated(List<String> live) => HostDeployment(
-      status: HostDeploymentStatus.ready,
-      observedAt: DateTime.utc(2026, 9, 22),
-      reason: 'older',
-      remotePath: r'C:\Program Files\Karmashala\host\bin\karmashala_host.exe',
-      hostVersion: '0.1.0',
-      protocolVersion: kProtocolVersion,
-      hostOutdated: true,
-      liveSessionIds: live,
-    );
-
-    test('a new pane is not started in it, and says why', () async {
-      final access = PaneAccess(outdated(const ['karmashala_local_other']));
-      final pane = paneOn(access);
-      await settle();
-
-      expect(access.channels.single.all<OpenMessage>(), isEmpty);
-      final screen = screenOf(pane).replaceAll('\n', '');
-      expect(screen, contains('An older session host'));
-      expect(screen, contains('Reopen this pane to run it inside the app'));
-    });
-
-    test('a pane whose session it holds still reattaches', () async {
-      final access = PaneAccess(outdated(const ['karmashala_local_p1']));
-      access.liveSessions.add('karmashala_local_p1');
-      final pane = paneOn(access);
-      await settle();
-
-      expect(access.channels.single.all<AttachMessage>(), hasLength(1));
-      expect(access.channels.single.all<OpenMessage>(), isEmpty);
-      expect(pane.liveness.value, PaneLiveness.live);
-      expect(screenOf(pane), isNot(contains('An older session host')));
-    });
+    expect(access.channels.single.all<AttachMessage>(), isEmpty);
   });
 
   group('a run the server hosts (attach only, slice 3d)', () {
@@ -167,8 +114,7 @@ void main() {
         title: 'run · app',
         profileId: 'powershell',
         access: access,
-        launch: launch,
-        attachOnly: true,
+        sessionId: 'karmashala_local_hosted-r1',
       );
       instance.terminal.resize(120, 40);
       addTearDown(instance.dispose);
@@ -388,7 +334,8 @@ void main() {
         title: 'Local',
         profileId: 'powershell',
         access: access,
-        launch: launch,
+        sessionId: 'karmashala_local_p1',
+        opener: openerOn(access, 'karmashala_local_p1'),
         // What the app stored when it last closed — the same output the host
         // still holds in its ring.
         restoredScrollback: 'a build that was running\r\n',
@@ -468,24 +415,6 @@ void main() {
       expect(access.channels.single.all<ResizeMessage>(), isEmpty);
     },
   );
-
-  test('an agent pane keeps its session id across pane replacement', () async {
-    final access = PaneAccess(readyDeployment());
-    final pane = HostTerminalInstance(
-      id: 'p9',
-      title: 'Claude',
-      profileId: 'agent',
-      access: access,
-      launch: launch,
-      agentLaunch: const AgentPaneLaunch(
-        agentId: 'claudeCode',
-        executable: 'claude',
-        sessionId: 'sess-1',
-      ),
-    );
-    addTearDown(pane.dispose);
-    expect(pane.hostSessionId, 'karmashala_sess-1');
-  });
 
   group('a link that closes under a live pane', () {
     test('is redialled, and the session resumes from the byte the pane '
@@ -609,7 +538,8 @@ void main() {
         title: 'Claude',
         profileId: 'agent',
         access: access,
-        launch: launch,
+        sessionId: 'karmashala_sess-1',
+        opener: openerOn(access, 'karmashala_sess-1'),
         agentLaunch: const AgentPaneLaunch(
           agentId: 'claudeCode',
           executable: 'claude',
@@ -683,35 +613,6 @@ void main() {
       expect(channel.all<ResizeMessage>(), isEmpty, reason: 'no nudge');
     });
   });
-
-  test(
-    'an agent launched over a record that already exited starts again',
-    () async {
-      final access = PaneAccess(readyDeployment())
-        ..endedSessions.add('karmashala_sess-1');
-      final pane = HostTerminalInstance(
-        id: 'p1',
-        title: 'Claude',
-        profileId: 'agent',
-        access: access,
-        launch: launch,
-        agentLaunch: const AgentPaneLaunch(
-          agentId: 'claudeCode',
-          executable: 'claude',
-          sessionId: 'sess-1',
-        ),
-      );
-      addTearDown(pane.dispose);
-      pane.terminal.resize(120, 40);
-      await settle();
-
-      final channel = access.channels.single;
-      expect(channel.only<CloseMessage>().sessionId, 'karmashala_sess-1');
-      expect(channel.only<OpenMessage>().sessionId, 'karmashala_sess-1');
-      expect(pane.liveness.value, PaneLiveness.live);
-      expect(screenOf(pane), isNot(contains('process exited')));
-    },
-  );
 
   group('the pane\'s own notes', () {
     tearDown(() => HostTerminalInstance.writesNotesToTerminal = true);

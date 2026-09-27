@@ -1,0 +1,27 @@
+name: karmashala_launch
+description: >-
+  What a terminal launches, as pure Dart: the shell profiles a machine offers,
+  an agent pane's launch, the destination a command is quoted for
+  (`LaunchContext`), the argv and environment a PTY child is started with, and
+  the shell-integration scripts carried into it. The server builds every
+  terminal's launch with this on its own OS (slice 5a); a client only names a
+  profile or an agent launch. No Flutter.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # A profile names an environment and an agent launch its descriptor: the
+  # process and agent descriptors, both pure Dart.
+  agent_cli:
+    path: ../agent_cli
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

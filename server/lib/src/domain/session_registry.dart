@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import '../pty/pty.dart';
 import 'host_session.dart';
@@ -65,8 +66,10 @@ class SessionRegistry {
     this.backlogCapacityBytes = OutputBacklog.defaultCapacityBytes,
     this.keepEndedSessions = defaultKeepEndedSessions,
     DateTime Function()? clock,
+    String? hostname,
   }) : _launcher = launcher,
-       _now = clock ?? DateTime.now {
+       _now = clock ?? DateTime.now,
+       hostname = hostname ?? Platform.localHostname {
     _restore();
   }
 
@@ -81,6 +84,10 @@ class SessionRegistry {
 
   final int backlogCapacityBytes;
   final int keepEndedSessions;
+
+  /// This machine's name: a shell's OSC 7 naming another host is not a
+  /// directory here (`ScreenFacts`).
+  final String hostname;
   final DateTime Function() _now;
   final _sessions = <String, HostSession>{};
 
@@ -150,6 +157,7 @@ class SessionRegistry {
       startedAt: startedAt,
       backlogCapacityBytes: backlogCapacityBytes,
       recorder: recorder,
+      hostname: hostname,
     );
     _sessions[id] = session;
     _changes.add(SessionOpened(session));

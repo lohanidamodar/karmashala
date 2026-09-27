@@ -93,7 +93,38 @@ final class ProcessEntry32W extends Struct {
 /// arithmetic so it can be checked against the SDK header.
 const int kProcThreadAttributePseudoConsole = 22 | 0x00020000;
 
+/// `ProcThreadAttributeValue(7, FALSE, TRUE, FALSE)` —
+/// `PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY` (0x00020007).
+const int kProcThreadAttributeMitigationPolicy = 7 | 0x00020000;
+
+/// The redirection-trust (Redirection Guard) creation flag, turned **off**
+/// for a pane's child (BACKLOG §2): which of the policy's DWORD64 words it
+/// sits in, and its bits there. **Unverified against `winnt.h`** — read
+/// `PROCESS_CREATION_MITIGATION_POLICY*_REDIRECTION_TRUST_POLICY_ALWAYS_OFF`
+/// on a Windows SDK before trusting it (docs/daemon-architecture.md, slice
+/// 5a). A Windows that refuses the value fails `CreateProcess`, and the
+/// launcher starts the child again without it.
+const int kRedirectionTrustPolicyWord = 1;
+const int kRedirectionTrustAlwaysOff = 0x2 << 60;
+
+/// The words `UpdateProcThreadAttribute` is handed for the mitigation policy:
+/// the redirection-trust bit in its word, every other policy left to Windows'
+/// default (zero). Two DWORD64s, the size Windows 10 accepts.
+List<int> redirectionTrustOffPolicy() {
+  final words = List<int>.filled(2, 0);
+  words[kRedirectionTrustPolicyWord] = kRedirectionTrustAlwaysOff;
+  return words;
+}
+
+/// How many attributes a pane's list carries: the pseudoconsole, and the
+/// mitigation policy when [mitigation] is asked for.
+int paneAttributeCount({required bool mitigation}) => mitigation ? 2 : 1;
+
 const int kExtendedStartupInfoPresent = 0x00080000;
+
+/// Started suspended, so it is in the job before it can start a child of its
+/// own; resumed once assigned.
+const int kCreateSuspended = 0x00000004;
 const int kCreateUnicodeEnvironment = 0x00000400;
 const int kStartfUseStdHandles = 0x00000100;
 const int kInfinite = 0xFFFFFFFF;
@@ -114,6 +145,15 @@ const int kJobObjectLimitKillOnJobClose = 0x00002000;
 const int kJobExtendedLimitBytes = 144;
 const int kJobLimitFlagsOffset = 16;
 const int kErrorInsufficientBuffer = 122;
+
+/// `ERROR_INVALID_PARAMETER`: what a Windows that does not know a mitigation
+/// bit answers `CreateProcess` or `UpdateProcThreadAttribute` with.
+const int kErrorInvalidParameter = 87;
+
+/// Whether [error] is a refusal of the mitigation policy — worth starting the
+/// child again without it — rather than of the launch itself (a missing
+/// executable is `ERROR_FILE_NOT_FOUND`, and is not retried).
+bool policyRefused(int error) => error == kErrorInvalidParameter;
 
 typedef CreatePseudoConsoleNative =
     Int32 Function(Coord, IntPtr, IntPtr, Uint32, Pointer<IntPtr>);
@@ -271,6 +311,9 @@ class Kernel32 {
           .lookup<NativeFunction<Int32 Function(IntPtr, IntPtr)>>(
             'AssignProcessToJobObject',
           )
+          .asFunction(),
+      resumeThread = lib
+          .lookup<NativeFunction<Uint32 Function(IntPtr)>>('ResumeThread')
           .asFunction();
 
   /// Null on a Windows older than 10 1809, so the host can refuse with a
@@ -323,6 +366,7 @@ class Kernel32 {
   final int Function(Pointer<Void>, Pointer<Utf16>) createJobObjectW;
   final int Function(int, int, Pointer<Void>, int) setInformationJobObject;
   final int Function(int, int) assignProcessToJobObject;
+  final int Function(int) resumeThread;
 
   /// Whether this machine can host a pseudoconsole at all.
   bool get providesPseudoConsole => createPseudoConsole != null;

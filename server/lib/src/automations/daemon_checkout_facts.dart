@@ -70,7 +70,10 @@ class DaemonCheckoutFacts implements CheckoutFacts {
   bool isHere(ExecutionEnvironment environment) => switch (environment.kind) {
     EnvironmentKind.localPosix => !_windows,
     EnvironmentKind.windowsNative => _windows,
-    _ => false,
+    // A distribution is reached through `wsl.exe` from a Windows server
+    // (slice 5a): its sessions are this server's own.
+    EnvironmentKind.wsl => _windows,
+    EnvironmentKind.ssh => false,
   };
 
   /// The environment [path] names, in words, for a refusal.

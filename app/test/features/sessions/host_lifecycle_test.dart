@@ -475,8 +475,8 @@ void main() {
   });
 
   // Checkpoints are the server's (slice 2b): it holds a `PreToolUse` for
-  // them itself, so nothing waits on this app; a hook this app took on its
-  // own route or from a spool is forwarded for the server's recorder.
+  // them itself, so nothing waits on this app; the WSL spools are the
+  // server's to drain (slice 5a), so nothing is forwarded back.
   group('hooks and the server\'s checkpoints', () {
     RelayedAgentHook preToolUse({int second = 5}) => RelayedAgentHook(
       agentId: AgentIds.claudeCode,
@@ -505,39 +505,6 @@ void main() {
             ?.status,
         AgentActivityStatus.working,
       );
-      expect(host.forwarded, isEmpty, reason: 'the server already has it');
-    });
-
-    test(
-      'a hook this app took itself is forwarded to the server whole',
-      () async {
-        row('s1');
-        await startWatching();
-
-        forwardAgentHookToServer(
-          container,
-          agentId: AgentIds.claudeCode,
-          event: 'PreToolUse',
-          body: preToolUse().body,
-          receivedAt: _at(6),
-          paneSessionId: 's1',
-        );
-        final forwarded = host.forwarded.single;
-        expect(forwarded.event, 'PreToolUse');
-        expect(forwarded.paneSessionId, 's1');
-        expect(forwarded.receivedAt, _at(6));
-        expect(jsonDecode(forwarded.body), jsonDecode(preToolUse().body));
-      },
-    );
-
-    test('with no link to the server, a forwarded hook goes nowhere', () {
-      forwardAgentHookToServer(
-        container,
-        agentId: AgentIds.claudeCode,
-        event: 'Stop',
-        body: '{}',
-      );
-      expect(host.forwarded, isEmpty);
     });
   });
 

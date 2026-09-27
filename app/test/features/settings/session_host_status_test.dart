@@ -151,7 +151,6 @@ void main() {
           overrides: [
             localHostSessionAccessProvider.overrideWithValue(access),
             // No supervisor: these are the row's own readings and actions.
-            hostBackedLocalPanesProvider.overrideWithValue(false),
           ],
           child: const MaterialApp(
             home: Scaffold(body: SessionHostStatusLine()),

@@ -30,8 +30,6 @@ import 'src/features/environments/application/browse_sources.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/devices/application/device_bindings.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
-import 'src/features/env_secrets/application/env_secrets_controller.dart';
-import 'src/features/env_secrets/data/env_vault.dart';
 import 'src/features/environments/data/environments_data.dart';
 import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
@@ -159,17 +157,11 @@ Future<void> _bootstrap(AppLogger logger) async {
   }
   logger.info('Discovered ${discovered.length} execution environment(s).');
 
-  // Awaited rather than fired off: `restoreLivePanes` can re-launch panes as
-  // soon as the container exists, and one started early would lack its variables.
-  final envVault = await EnvVault.open(logger: logger);
-  await envVault.load();
-
   final container = ProviderContainer(
     overrides: [
       terminalLayoutStoreProvider.overrideWithValue(layoutStore),
       dataClientProvider.overrideWithValue(data),
       localHostSessionAccessProvider.overrideWithValue(hostAccess),
-      envVaultProvider.overrideWithValue(envVault),
       probeModeProvider.overrideWithValue(probe),
       // What `karmashala_devices` cannot know: this app's clock, its SSH-aware
       // runner factory, where it keeps data, its settings and its shell.
@@ -196,10 +188,6 @@ Future<void> _bootstrap(AppLogger logger) async {
   // The persisted diagnostics preferences: debug mode's root level, the buffer
   // bound, and whether the file is written at all.
   container.read(settingsControllerProvider.notifier).applyDiagnostics();
-
-  // Built eagerly for one reason: constructing it installs the redaction rule
-  // that keeps this session's secret values out of the log.
-  container.read(envSecretsControllerProvider);
 
   // First run, or one that never completed: probe every environment once, in
   // the background. The controller's state updates when it finishes.

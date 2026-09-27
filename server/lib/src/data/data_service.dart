@@ -18,6 +18,7 @@ import 'automations_handler.dart';
 import 'conversations_handler.dart';
 import 'evidence_handler.dart';
 import 'filing_lookup.dart';
+import 'env_work.dart';
 import 'files_work.dart';
 import 'git_work.dart';
 import 'hosts_handler.dart';
@@ -29,6 +30,7 @@ import 'ssh_work.dart';
 import 'data_streams.dart';
 import 'runs_work.dart';
 import 'sessions_handler.dart';
+import 'terminal_work.dart';
 import 'todos_handler.dart';
 import 'workspace_handler.dart';
 import 'worktrees_handler.dart';
@@ -109,6 +111,14 @@ class DataService {
   /// Open's index, watches), set by `serve`; without it that work is refused
   /// `unavailable`.
   FilesWork? filesWork;
+
+  /// The server's environment vault (slice 5a, write-only), set by `serve`;
+  /// without it that work is refused `unavailable`.
+  EnvVault? envVault;
+
+  /// The server's terminals (slice 5a: every local and WSL pane's PTY), set
+  /// by `serve`; without them that work is refused `unavailable`.
+  TerminalWork? terminalWork;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -359,7 +369,9 @@ class DataService {
         GitWorkRequest() ||
         FlutterWorkRequest() ||
         BrowserWorkRequest() ||
-        FilesWorkRequest() => throw DataRefused.invalid(
+        FilesWorkRequest() ||
+        TerminalWorkRequest() ||
+        EnvVaultRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
         final AutomationsRequest r => _automations.handle(r, changes),
@@ -510,7 +522,9 @@ class DataSession implements FileWatchLink {
       request is GitWorkRequest ||
       request is FlutterWorkRequest ||
       request is BrowserWorkRequest ||
-      request is FilesWorkRequest;
+      request is FilesWorkRequest ||
+      request is TerminalWorkRequest ||
+      request is EnvVaultRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
@@ -565,6 +579,24 @@ class DataSession implements FileWatchLink {
           _service.browserWork ??
           (throw const DataRefused.unavailable(
             'this server drives no browser',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final TerminalWorkRequest<Object?> asked) {
+      final work =
+          _service.terminalWork ??
+          (throw const DataRefused.unavailable(
+            'this server runs no terminals',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final EnvVaultRequest<Object?> asked) {
+      final work =
+          _service.envVault ??
+          (throw const DataRefused.unavailable(
+            'this server keeps no environment variables',
           ));
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
@@ -634,6 +666,7 @@ class DataSession implements FileWatchLink {
       ...?_service.sshWork?.greeting(),
       ...?_service.flutterWork?.greeting(),
       ...?_service.browserWork?.greeting(),
+      ...?_service.terminalWork?.greeting(),
       for (final greeter in _service.greeters) ...greeter(),
     ];
     if (greeting.isNotEmpty) {

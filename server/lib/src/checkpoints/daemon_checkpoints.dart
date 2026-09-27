@@ -152,11 +152,11 @@ class DaemonCheckpoints {
         });
   }
 
-  /// A hook a client took itself and forwarded ([HookForwardMessage]): read
-  /// as [hook] reads one, but never held — its agent was answered long
-  /// before — so a `PreToolUse` marks the turn's before-turn checkpoints
-  /// still to come unverified.
-  void forwarded(AgentHookEvent hook) {
+  /// A hook a WSL agent wrote into its spool, drained by the server
+  /// (`HookSpools`, slice 5a): read as [hook] reads one, but never held — its
+  /// agent went on long before — so a `PreToolUse` marks the turn's
+  /// before-turn checkpoints still to come unverified.
+  void spooled(AgentHookEvent hook) {
     final sessionId = _intake(hook);
     if (sessionId == null || !kHeldHookEvents.contains(hook.event)) return;
     // After the edge: a turn this very hook starts has begun, and does not

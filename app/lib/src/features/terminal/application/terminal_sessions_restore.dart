@@ -78,71 +78,88 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     }
   }
 
-  /// Reattaches every restored pane whose session is still running in the
-  /// local session host — in any tab, detached or not, agent panes included.
+  /// Reattaches every restored pane whose terminal the server still runs —
+  /// in any tab, detached or not, agent panes included (slice 5a: the
+  /// server owns every local and WSL terminal, so a pane's process outlives
+  /// this app by design).
   ///
   /// The launch rule keeps a restore from *re-running* things: a shell in a tab
   /// nobody is looking at, an agent whose conversation would replay. A session
-  /// the host kept alive re-runs nothing, so neither concern applies, and
-  /// leaving it as history was worse than idle: its Start button opens a second
-  /// shell beside the first, which stays running in the host with no pane.
-  ///
-  /// Asks with [LocalHostSessionAccess.observe], which starts nothing: a host
-  /// that is not running holds nothing that survived, and starting one to find
-  /// that out would launch a daemon on every app start.
+  /// the server kept alive re-runs nothing, so neither concern applies, and
+  /// leaving it as history was worse than idle: its Start button would have
+  /// looked like the way to a second shell.
   Future<void> _reattachHostSurvivors() async {
-    // First, and with nothing read: most launches restore no history at all,
-    // and a controller with no settings store behind it must not be asked for
-    // one just to learn there was nothing to reattach.
+    // First, and with nothing asked: most launches restore no history at all.
     final dormant = <String, String>{
       for (final entry in _instances.entries)
         if (entry.value case final DormantTerminalInstance pane)
-          hostSessionIdFor(
+          terminalSessionId(
             paneId: entry.key,
             agentSessionId: pane.agentLaunch?.sessionId,
           ): entry.key,
     };
     if (dormant.isEmpty) return;
 
-    HostPaneLink? link;
-    final List<String> running;
+    final List<TerminalRecord> terminals;
     try {
-      if (!ref.read(hostBackedLocalPanesProvider)) return;
-      final access = ref.read(localHostSessionAccessProvider);
-      if (access == null) return;
-      final reading = await access.observe();
-      if (!reading.isReady || _disposed) return;
-      link = await HostPaneLink.open(
-        await access.exec('${reading.remotePath ?? ''} attach'),
-        clientId: 'restore',
-      );
-      running = [
-        for (final session in await link.listSessions())
-          if (!session.lifecycle.hasEnded) session.id,
-      ];
+      if (ref.read(localHostSessionAccessProvider) == null) return;
+      terminals = await ref.read(terminalsClientProvider).list();
     } catch (error, stack) {
-      // A host that cannot be asked leaves every pane as the history it
+      // A server that cannot be asked leaves every pane as the history it
       // already is — the state before this step existed, not a worse one.
       _log.warning(
-        'Could not ask the session host what survived.',
+        'Could not ask the server which terminals survived.',
         error,
         stack,
       );
       return;
-    } finally {
-      await link?.close();
     }
 
-    for (final sessionId in running) {
+    for (final terminal in terminals) {
       if (_disposed) return;
-      final paneId = dormant[sessionId];
+      if (!terminal.isLive) continue;
+      final paneId = dormant[terminal.sessionId];
       // Re-checked: the user may have closed or started it while we asked.
       if (paneId == null || _instances[paneId] is! DormantTerminalInstance) {
         continue;
       }
-      // The Start button's own path, which attaches because the session exists.
-      startPane(paneId);
+      _attachRestored(paneId);
     }
+  }
+
+  /// Puts restored pane [paneId] back on its server session, attaching only
+  /// ([restoredPaneFactoryProvider]); where no server can be reached for
+  /// panes, the Start button's own path.
+  void _attachRestored(String paneId) {
+    final existing = _instances[paneId];
+    if (existing == null || existing.liveness.value.isLive) return;
+    final profile = existing.agentLaunch != null
+        ? TerminalProfile.powerShell
+        : terminalProfileFromId(existing.profileId);
+    if (profile == null) return;
+    final adopt = _adoptableBufferOf(existing);
+    final scrollback = adopt != null
+        ? null
+        : _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
+    final instance = ref.read(restoredPaneFactoryProvider)(
+      id: paneId,
+      profile: profile,
+      workingDirectory: existing.workingDirectory,
+      restoredScrollback: scrollback,
+      agentLaunch: existing.agentLaunch,
+      adoptTerminal: adopt,
+    );
+    if (instance == null) {
+      startPane(paneId);
+      return;
+    }
+    final carried =
+        scrollback ?? _encoded[paneId] ?? _heldScrollbackOf(existing);
+    _releasePane(paneId);
+    _adopt(paneId, instance);
+    _seedEncoding(paneId, carried);
+    _publish();
+    persistStructure();
   }
 
   /// Puts the tabs that came back into the groups they were in, pruned against
@@ -208,13 +225,23 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     // Only the build is guarded, so a refusal is always a pane that was never
     // adopted — no half-adopted state for the dormant fallback to lie over.
     try {
-      instance = ref.read(terminalInstanceFactoryProvider)(
-        id: pane.id,
-        profile: profile,
-        workingDirectory: pane.workingDirectory,
-        restoredScrollback: pane.scrollback,
-        shellIntegration: _shellIntegrationEnabled,
-      );
+      // Attaching only: a restore re-attaches, and a session that is gone
+      // shows its record; the pane's Start asks for a new one.
+      instance =
+          ref.read(restoredPaneFactoryProvider)(
+            id: pane.id,
+            profile: profile,
+            workingDirectory: pane.workingDirectory,
+            restoredScrollback: pane.scrollback,
+            agentLaunch: pane.agentLaunch,
+          ) ??
+          ref.read(terminalInstanceFactoryProvider)(
+            id: pane.id,
+            profile: profile,
+            workingDirectory: pane.workingDirectory,
+            restoredScrollback: pane.scrollback,
+            shellIntegration: _shellIntegrationEnabled,
+          );
     } catch (error, stack) {
       _log.warning(
         'Could not restart pane ${pane.id} on launch; it comes back as '

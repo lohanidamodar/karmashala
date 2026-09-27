@@ -4,7 +4,6 @@ import 'package:karmashala_core/logging.dart';
 
 import '../../../core/probe/probe_mode.dart';
 import 'agent_hook_installation_service.dart';
-import 'agent_hook_intake.dart';
 import 'host_hook_endpoint.dart';
 
 /// Sweeps run one at a time: two at once would splice the same agent configs.
@@ -73,15 +72,10 @@ Future<AgentHookInstallationReport?> _sweep(
     // Published, not just logged: a skipped environment means the hook-only
     // states are unreportable there all run, and Settings is where to say so.
     container.read(agentHookInstallationReportProvider.notifier).set(report);
-    // The environments that report by file rather than by socket — a WSL agent
-    // cannot reach any address this app binds. An empty list stops the timer.
-    container.read(agentHookSpoolDrainerProvider).watch(report.spoolSources);
     logger?.info(
       'Agent hooks: ${report.installed} installed, '
       '${results.length - report.installed - report.unknown} skipped'
-      '${report.unknown == 0 ? '' : ', ${report.unknown} unknown'}'
-      '${report.spoolSources.isEmpty ? '' : ', '
-                '${report.spoolSources.length} reporting by spool'}.',
+      '${report.unknown == 0 ? '' : ', ${report.unknown} unknown'}.',
     );
     return report;
   } on Object catch (error, stack) {

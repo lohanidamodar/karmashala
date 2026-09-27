@@ -4,6 +4,13 @@ library;
 
 export 'src/command_blocks.dart';
 export 'src/osc_router.dart';
-export 'src/shell_integration.dart';
-export 'src/working_directory_osc.dart';
-export 'src/wsl_shell_integration.dart';
+export 'package:karmashala_launch/karmashala_launch.dart'
+    show
+        bashIntegrationRcFile,
+        powerShellIntegrationScript,
+        shellSupportsIntegration,
+        workingDirectoryFromOsc,
+        wslIntegrationBootstrap,
+        zshIntegrationZprofile,
+        zshIntegrationZshenv,
+        zshIntegrationZshrc;

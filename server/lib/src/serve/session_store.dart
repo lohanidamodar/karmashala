@@ -421,7 +421,11 @@ class SessionRecord implements SessionRecorder {
       'id': id,
       'argv': _request.argv,
       'workingDirectory': _request.workingDirectory,
-      'environment': _request.environment,
+      // A vault value is the child's alone, never the record's.
+      'environment': {
+        for (final entry in _request.environment.entries)
+          if (!_request.unrecorded.contains(entry.key)) entry.key: entry.value,
+      },
       'removedEnvironment': _request.removedEnvironment.toList(),
       'columns': _request.columns,
       'rows': _request.rows,

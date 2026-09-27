@@ -12,6 +12,8 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_self_update_providers.dart';
 import '../../agents/application/claude_credential_strip.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show EnvVariableName;
 import '../../env_secrets/application/env_secrets_controller.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/launch.dart';

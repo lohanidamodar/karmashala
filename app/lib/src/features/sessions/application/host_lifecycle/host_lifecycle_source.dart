@@ -23,7 +23,6 @@ class HostLifecycleFeed {
     required this.close,
     this.hookSnapshot = const [],
     Stream<RelayedAgentHook>? hooks,
-    void Function(RelayedAgentHook hook)? forwardHook,
     Stream<HostMcpCall>? mcpCalls,
     void Function(List<Map<String, Object?>> tools)? offerMcpTools,
     void Function(int callId, {Object? result, String? error})? answerMcpCall,
@@ -47,7 +46,6 @@ class HostLifecycleFeed {
   }) : hooks = hooks ?? const Stream.empty(),
        agentStatuses = agentStatuses ?? const Stream.empty(),
        answerPrompt = answerPrompt ?? _noAnswers,
-       forwardHook = forwardHook ?? _noForward,
        mcpCalls = mcpCalls ?? const Stream.empty(),
        offerMcpTools = offerMcpTools ?? _noOffer,
        answerMcpCall = answerMcpCall ?? _noAnswer,
@@ -109,7 +107,6 @@ class HostLifecycleFeed {
   /// Runs a session's project checks in sessions the host owns.
   final Future<ChecksRanMessage> Function(String sessionId) runChecks;
 
-  static void _noForward(RelayedAgentHook hook) {}
   static void _noOffer(List<Map<String, Object?>> tools) {}
   static void _noAnswer(int callId, {Object? result, String? error}) {}
   static void _noAttach({String? localRelayUrl}) {}
@@ -175,10 +172,6 @@ class HostLifecycleFeed {
 
   /// Opens a pairing window at the host.
   final CompanionPair pairCompanion;
-
-  /// Hands the host a hook this app took itself — on its own `/agent-hook`
-  /// route or from a spool — for the server's checkpoint recorder.
-  final void Function(RelayedAgentHook hook) forwardHook;
 
   /// Hangs up; the host's sessions are untouched.
   final Future<void> Function() close;

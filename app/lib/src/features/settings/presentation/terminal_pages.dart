@@ -85,14 +85,7 @@ class TerminalAdvancedSection extends ConsumerWidget {
             value: settings.shellIntegrationEnabled,
             onChanged: controller.setShellIntegrationEnabled,
           ),
-          SettingsSwitchRow(
-            label: 'Run local terminals in the session host',
-            help:
-                'Shells survive a crash or restart. Applies to new terminals.',
-            value: settings.hostBackedLocalPanes,
-            onChanged: controller.setHostBackedLocalPanes,
-          ),
-          // Under the switch either way: it is what the decision needs.
+          // Every local and WSL terminal runs in the server (slice 5a).
           const SessionHostStatusLine(),
           const DataConnectionNotice(),
         ],

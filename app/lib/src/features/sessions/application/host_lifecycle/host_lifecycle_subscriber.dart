@@ -108,12 +108,6 @@ class HostLifecycleSubscriber {
   bool isRunning(String sessionId) =>
       _known[hostSessionIdOf(sessionId)] == HostSessionState.running;
 
-  /// Hands the host a hook this app took itself — on its own `/agent-hook`
-  /// route or from a spool — so the server's checkpoint recorder hears the
-  /// turns of panes it does not run. Nothing while no link is open: those
-  /// turns go unrecorded, as they would with no server.
-  void forwardHook(RelayedAgentHook hook) => _feed?.forwardHook(hook);
-
   /// Asks the host to answer a prompt in a session it runs. Throws
   /// [SessionPromptRefusal] when it will not, or no link is open.
   Future<SessionApprovalAnswer> answerPrompt(PromptAnswerRequest request) {

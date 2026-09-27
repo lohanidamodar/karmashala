@@ -10,8 +10,6 @@ import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala/src/core/probe/probe_mode.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
-import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
-import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
 import 'package:karmashala/src/features/agents/application/agent_skill_installation_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -224,51 +222,6 @@ void main() {
       await service.sweepRemoval();
 
       expect(skillsRoot().existsSync(), isFalse);
-    });
-  });
-
-  group('the spool drainer', () {
-    late Directory spool;
-
-    setUp(() {
-      spool = Directory(p.join(home.path, 'spool'))..createSync();
-      File(
-        p.join(spool.path, '1-0.json'),
-      ).writeAsStringSync('agent=claudeCode\nevent=Stop\n\n{"session_id":"s"}');
-    });
-
-    AgentHookSpoolSource source() => AgentHookSpoolSource(
-      environmentId: 'local',
-      directory: spool,
-      wslDistribution: null,
-    );
-
-    test('the fixture sees an ordinary drainer take the payload', () async {
-      final seen = <AgentHookSpoolEvent>[];
-      final drainer = AgentHookSpoolDrainer(onEvent: seen.add);
-      addTearDown(drainer.dispose);
-
-      drainer.watch([source()]);
-      await drainer.drainOnce();
-
-      expect(seen, hasLength(1));
-      expect(spool.listSync(), isEmpty);
-    });
-
-    test("a probe's drainer polls nothing and takes nothing", () async {
-      final container = containerWith(probe: true);
-      final drainer = container.read(agentHookSpoolDrainerProvider);
-
-      drainer.watch([source()]);
-      await drainer.drainOnce();
-
-      expect(drainer.enabled, isFalse);
-      expect(drainer.sources, isEmpty);
-      expect(
-        spool.listSync(),
-        hasLength(1),
-        reason: 'the payload is still there',
-      );
     });
   });
 

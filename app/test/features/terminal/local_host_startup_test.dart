@@ -36,15 +36,14 @@ void main() {
     removeTempDirectory(home);
   });
 
-  ProviderContainer containerWith(_Access? access, {bool hostBacked = true}) {
+  ProviderContainer containerWith(_Access? access) {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
-        hostBackedLocalPanesProvider.overrideWithValue(hostBacked),
         localHostSessionAccessProvider.overrideWithValue(access),
         // The real source would dial [access]'s socket; this one records it.
         hostLifecycleSourceProvider.overrideWithValue(
-          access == null || !hostBacked ? null : _Source(events),
+          access == null ? null : _Source(events),
         ),
         agentHookInstallationServiceProvider.overrideWith(
           (ref) => _Installer(ref, events),
@@ -123,21 +122,6 @@ void main() {
       expect(events, ['start', 'dial']);
     },
   );
-
-  test('with host-backed panes off, the host still starts — the data '
-      'lives there — but no hook points at it and no feed dials', () async {
-    final host = access();
-    final container = containerWith(host, hostBacked: false);
-
-    container.listen(hostLifecycleSubscriberProvider, (_, _) {});
-    final reading = await container.read(localHostStartupProvider)!;
-    await pumpEventQueue();
-
-    expect(reading?.status, HostDeploymentStatus.ready);
-    expect(container.read(hostLifecycleSubscriberProvider), isNull);
-    expect(host.starts, 1);
-    expect(events, ['start']);
-  });
 
   test('with no host reachable here, nothing is started', () {
     final container = containerWith(null);

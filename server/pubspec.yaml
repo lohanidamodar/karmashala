@@ -50,6 +50,11 @@ dependencies:
     path: ../packages/karmashala_core
   karmashala_git:
     path: ../packages/karmashala_git
+  # Every terminal's launch, built here on the server's own OS (slice 5a):
+  # the profiles this machine offers, the argv and environment of a shell or
+  # an agent, WSL through `wsl.exe` from a Windows server, shell integration.
+  karmashala_launch:
+    path: ../packages/karmashala_launch
   # The session row a daemon-started run writes, and how a session ended.
   karmashala_session:
     path: ../packages/karmashala_session

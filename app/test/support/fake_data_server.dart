@@ -14,6 +14,7 @@ import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_terminal_core/profiles.dart' show TerminalProfile;
 import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_git/git.dart'
     show
@@ -69,6 +70,7 @@ import 'package:karmashala_remote/remote.dart'
 import 'fake_command_runner.dart';
 
 part 'fake_evidence.dart';
+part 'fake_terminals_work.dart';
 part 'fake_hosts.dart';
 part 'fake_sessions.dart';
 part 'fake_pairings.dart';
@@ -80,6 +82,7 @@ part 'fake_ssh_work.dart';
 part 'fake_git_work.dart';
 part 'fake_runs_work.dart';
 part 'fake_files_work.dart';
+part 'fake_env_vault.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -242,6 +245,12 @@ class FakeDataServer {
   /// index, watches — over real file spaces a test points at temp folders.
   final filesWork = FakeFilesWork._();
 
+  /// The server's environment vault, write-only, in memory.
+  late final envVault = FakeEnvVault._(this);
+
+  /// The server's terminals: profiles, starts, records — nothing spawned.
+  late final terminals = FakeTerminalsWork._(this);
+
   /// The automations domain, shaped like the server's DAOs: automations,
   /// their runs, checks and origin chains; scheduled resumes; project checks
   /// and verification switches.
@@ -364,6 +373,13 @@ class FakeDataServer {
         case FilesChange():
           // A watch's news is one link's: [FakeFilesWork.changed] tells it.
           break;
+        case EnvVariablesChanged():
+          // Names only: seed a value through [envVault].
+          break;
+        case TerminalChanged(:final terminal):
+          terminals.records[terminal.sessionId] = terminal;
+        case TerminalRemoved(:final sessionId):
+          terminals.records.remove(sessionId);
       }
     }
     _tell(null, changes);
@@ -477,6 +493,12 @@ class FakeDataServer {
     requests.add(request.kind);
     if (request case final SshWorkRequest<Object?> work) {
       return DataReply(sshWork._handle(work) as R, revision, const []);
+    }
+    if (request case final EnvVaultRequest<Object?> work) {
+      return DataReply(envVault._handle(work) as R, revision, const []);
+    }
+    if (request case final TerminalWorkRequest<Object?> work) {
+      return DataReply(terminals._handle(work) as R, revision, const []);
     }
     if (request case final FlutterWorkRequest<Object?> work) {
       return DataReply(runs._flutter(work) as R, revision, const []);
@@ -615,7 +637,9 @@ class FakeDataServer {
       AgentWorkRequest() ||
       FlutterWorkRequest() ||
       BrowserWorkRequest() ||
-      SshWorkRequest() => throw StateError('answered above'),
+      SshWorkRequest() ||
+      TerminalWorkRequest() ||
+      EnvVaultRequest() => throw StateError('answered above'),
       GitWorkRequest() ||
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
     };

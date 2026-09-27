@@ -44,7 +44,6 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           localHostSessionAccessProvider.overrideWithValue(access()),
-          hostBackedLocalPanesProvider.overrideWithValue(false),
         ],
       );
       addTearDown(container.dispose);
@@ -62,7 +61,6 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           localHostSessionAccessProvider.overrideWithValue(null),
-          hostBackedLocalPanesProvider.overrideWithValue(true),
         ],
       );
       addTearDown(container.dispose);
@@ -95,7 +93,6 @@ void main() {
           await FakeDataServer().override(),
           serverConfigIn(MemoryServerConfigSource()),
           localHostSessionAccessProvider.overrideWithValue(access()),
-          hostBackedLocalPanesProvider.overrideWithValue(false),
           hostCompanionLinkProvider.overrideWithValue(link),
           localRelayServiceProvider.overrideWithValue(localRelay),
           remoteAccessControllerProvider.overrideWith(

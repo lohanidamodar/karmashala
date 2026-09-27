@@ -9,6 +9,7 @@ class PtySpawnRequest {
     this.workingDirectory,
     this.environment = const {},
     this.removedEnvironment = const {},
+    this.unrecorded = const {},
     this.columns = 80,
     this.rows = 24,
   });
@@ -29,6 +30,12 @@ class PtySpawnRequest {
   /// [environment] is laid over it — so a variable `serve` inherited is
   /// withheld too, not only one the client sent.
   final Set<String> removedEnvironment;
+
+  /// Names in [environment] whose values are never written to the session's
+  /// record on disk — the server's environment vault (slice 5a), which is
+  /// write-only and lives in an owner-only file of its own. The child gets
+  /// them; `meta.json` does not.
+  final Set<String> unrecorded;
   final int columns;
   final int rows;
 
@@ -37,6 +44,7 @@ class PtySpawnRequest {
     workingDirectory: workingDirectory,
     environment: environment,
     removedEnvironment: removedEnvironment,
+    unrecorded: unrecorded,
     columns: columns ?? this.columns,
     rows: rows ?? this.rows,
   );

@@ -714,16 +714,6 @@ class LauncherControlServer implements SessionMcp {
         paneSessionId: paneSessionId,
         logger: _logger,
       );
-      // Checkpoints are the server's: it hears this route's hooks only this
-      // way, and never held the tool — answered here at once.
-      forwardAgentHookToServer(
-        _container,
-        agentId: agentId,
-        event: event,
-        body: body,
-        paneSessionId: paneSessionId,
-        logger: _logger,
-      );
       // Always 200 on an authenticated callback, even for an event we do not
       // recognise: a hook must never fail the agent that fired it.
       response.headers.contentType = ContentType.json;

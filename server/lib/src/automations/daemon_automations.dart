@@ -86,6 +86,7 @@ class DaemonAutomations implements AutomationHandler {
         newId: ids,
         stopping: () => _stopped,
         remote: facts.remoteRunnerFor,
+        environmentOf: rows.environment,
       ),
       recorder: CommandCheckRecorder(
         StoreVerificationRecords(
@@ -131,6 +132,7 @@ class DaemonAutomations implements AutomationHandler {
         newId: ids,
         hostEnvironment: hostEnvironment,
         onRowWritten: sessionWritten,
+        environmentOf: rows.environment,
         onLaunched: (sessionId, agentId, directory) => firstRunPrompts.follow(
           sessionId: sessionId,
           agentId: agentId,

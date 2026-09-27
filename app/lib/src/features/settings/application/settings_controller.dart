@@ -466,12 +466,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Applies to the *next* pane: a running shell cannot change its owner.
-  void setHostBackedLocalPanes(bool value) {
-    state = state.copyWith(hostBackedLocalPanes: value);
-    _save();
-  }
-
   /// Whether an agent Karmashala launches may update itself in that session.
   /// Written concretely, so a machine that later flips its platform default
   /// keeps the user's explicit choice. Applies to the *next* launch.

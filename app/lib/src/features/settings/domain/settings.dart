@@ -92,7 +92,6 @@ class Settings {
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
-    this.hostBackedLocalPanes = true,
     this.quitAsks = true,
     this.quitReopens = true,
     this.quitKeepsHostSessions = true,
@@ -245,12 +244,6 @@ class Settings {
   /// Restore last close's live panes at launch; never an agent pane.
   final bool restoreLivePanes;
 
-  /// Run a local pane's shell under `karmashala_host` so it outlives the app.
-  /// On by default since 2026-09-24: shell integration works on that path, a
-  /// pane redials a host that went away, and the quit question says what it
-  /// leaves running.
-  final bool hostBackedLocalPanes;
-
   /// Whether quitting with sessions running asks first. Off, quit uses the
   /// two answers below — and still asks when it would stop a turn midway.
   final bool quitAsks;
@@ -378,7 +371,6 @@ class Settings {
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
     bool? restoreLivePanes,
-    bool? hostBackedLocalPanes,
     bool? quitAsks,
     bool? quitReopens,
     bool? quitKeepsHostSessions,
@@ -453,7 +445,6 @@ class Settings {
     shellIntegrationEnabled:
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
     restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
-    hostBackedLocalPanes: hostBackedLocalPanes ?? this.hostBackedLocalPanes,
     quitAsks: quitAsks ?? this.quitAsks,
     quitReopens: quitReopens ?? this.quitReopens,
     quitKeepsHostSessions: quitKeepsHostSessions ?? this.quitKeepsHostSessions,
@@ -556,7 +547,6 @@ class Settings {
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
     'restoreLivePanes': restoreLivePanes,
-    'hostBackedLocalPanes': hostBackedLocalPanes,
     'quitAsks': quitAsks,
     'quitReopens': quitReopens,
     'quitKeepsHostSessions': quitKeepsHostSessions,
@@ -729,7 +719,6 @@ class Settings {
       // `!= false`: defaults on, so a file written before the key reads as on.
       restoreLivePanes: json['restoreLivePanes'] != false,
       // `!= false`: defaults on; a file that chose off keeps it.
-      hostBackedLocalPanes: json['hostBackedLocalPanes'] != false,
       // `!= false`: all three default on, so an older file reads as on.
       quitAsks: json['quitAsks'] != false,
       quitReopens: json['quitReopens'] != false,
@@ -836,7 +825,6 @@ class Settings {
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.restoreLivePanes == restoreLivePanes &&
-      other.hostBackedLocalPanes == hostBackedLocalPanes &&
       other.quitAsks == quitAsks &&
       other.quitReopens == quitReopens &&
       other.quitKeepsHostSessions == quitKeepsHostSessions &&
@@ -905,7 +893,6 @@ class Settings {
       logBufferSize,
       // Folded in: the outer call is already at `Object.hash`'s 20-arg limit.
       Object.hash(
-        hostBackedLocalPanes,
         letAgentsUpdateThemselves,
         useInAppFilePicker,
         showHiddenFiles,

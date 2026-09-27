@@ -55,6 +55,33 @@ void main() {
     expect(store.restore(), isEmpty);
   });
 
+  test('a vault value is never written to the record, its name only '
+      'withheld', () {
+    final store = storeOf();
+    store
+        .open(
+          'pane-v',
+          const PtySpawnRequest(
+            argv: ['/bin/sh'],
+            environment: {'TERM': 'xterm-256color', 'API_TOKEN': 's3cret'},
+            unrecorded: {'API_TOKEN'},
+          ),
+          startedAt,
+        )
+        .close();
+    final metas = Directory('${root.path}/sessions')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('meta.json'))
+        .toList();
+    expect(metas, hasLength(1));
+    expect(metas.single.readAsStringSync(), isNot(contains('s3cret')));
+    expect(
+      storeOf().restore().single.request.environment,
+      {'TERM': 'xterm-256color'},
+    );
+  });
+
   test('a session that ended is answered for exactly, code and all', () {
     final store = storeOf();
     store.open('pane-a', request, startedAt)

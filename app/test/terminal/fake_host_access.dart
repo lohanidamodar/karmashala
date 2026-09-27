@@ -21,6 +21,10 @@ class PaneAccess implements HostSessionAccess {
   /// Records the host keeps for sessions whose process has exited.
   final endedSessions = <String>{};
 
+  /// The grid each session was started at, as the server's `terminals.open`
+  /// started it; an attach reports it (80×24 when unknown).
+  final grids = <String, (int, int)>{};
+
   /// What tmux on that machine is holding, and whether it will say. Unknown is
   /// a third answer, not a silent "no" — a pane treats it as a session it must
   /// not walk away from.
@@ -86,6 +90,7 @@ class PaneAccess implements HostSessionAccess {
       attachRefusal: attachRefusal,
       predatesWithholding: predatesWithholding,
       hostPid: hostPid,
+      grids: grids,
     );
     channels.add(channel);
     return channel;
@@ -108,7 +113,11 @@ class ScriptedHostChannel implements RemoteChannel {
     this.attachRefusal,
     this.predatesWithholding = false,
     this.hostPid = 11,
-  }) : endedSessions = endedSessions ?? <String>{};
+    Map<String, (int, int)>? grids,
+  }) : endedSessions = endedSessions ?? <String>{},
+       grids = grids ?? {};
+
+  final Map<String, (int, int)> grids;
 
   final int hostPid;
 
@@ -274,8 +283,8 @@ class ScriptedHostChannel implements RemoteChannel {
     requestId: requestId,
     sessionRef: 1,
     sessionId: sessionId,
-    columns: 80,
-    rows: 24,
+    columns: grids[sessionId]?.$1 ?? 80,
+    rows: grids[sessionId]?.$2 ?? 24,
     replayFromOffset: 0,
     droppedBytes: 0,
     totalBytes: resumedTotalBytes,

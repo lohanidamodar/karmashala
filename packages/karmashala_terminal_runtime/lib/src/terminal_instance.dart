@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_pty/flutter_pty.dart';
-import 'package:karmashala_core/logging.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -13,15 +10,9 @@ import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'cast_recorder.dart';
-import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'pane_terminal.dart';
-import 'process_shutdown.dart';
-import 'pty_launch.dart';
-import 'pty_output_coalescer.dart';
 import 'scrollback_replay.dart';
-import 'terminal_grid_text.dart';
-import 'terminal_ingest_budget.dart';
 
 /// One open terminal: a stable [id]/[title] and the xterm [Terminal] buffer the
 /// UI renders. Implementations own whatever backs the buffer.
@@ -97,14 +88,6 @@ abstract interface class HostedTerminalInstance {
 
   /// Ends the session on the host for good. Closing a pane never does this.
   Future<void> endHostedSession();
-}
-
-/// A [TerminalInstance] holding a pseudoconsole of its own. Releasing it is
-/// worth doing while the app runs and worth nothing when the process is ending.
-abstract interface class PseudoConsoleOwner {
-  /// Leave the pseudoconsole to the OS when this pane is disposed. One-way, and
-  /// per pane: set by the shutdown that is about to end the process.
-  void keepPseudoConsoleOnDispose();
 }
 
 /// A [TerminalInstance] whose output ingestion answers to how visible it is.
@@ -210,7 +193,7 @@ class WorkingDirectoryTracker {
 }
 
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
-/// process-free fake (a real [Pty] would try to spawn a shell).
+/// process-free fake (a real one asks the server for a terminal).
 typedef TerminalInstanceFactory =
     TerminalInstance Function({
       required String id,
@@ -221,324 +204,6 @@ typedef TerminalInstanceFactory =
       AgentPaneLaunch? agentLaunch,
       Terminal? adoptTerminal,
     });
-
-/// A [TerminalInstance] backed by a real host ConPTY ([Pty]) wired to an xterm
-/// [Terminal] — the one deliberate exception to the `CommandRunner` rule.
-class PtyTerminalInstance
-    implements
-        TerminalInstance,
-        ReapableTerminalInstance,
-        PseudoConsoleOwner,
-        TieredTerminalInstance,
-        ParkableTerminalInstance,
-        AdoptableTerminalInstance,
-        RecordableTerminalInstance {
-  PtyTerminalInstance({
-    required this.id,
-    required this.title,
-    required this.profileId,
-    required PtyLaunch launch,
-    String? workingDirectory,
-    this.agentLaunch,
-    String? restoredScrollback,
-    bool shellIntegration = false,
-    TerminalIngestBudget? ingestBudget,
-    Terminal? adoptTerminal,
-  }) : _cwd = WorkingDirectoryTracker(workingDirectory) {
-    // Handlers are set on an adopted buffer as well as a fresh one: they are
-    // the same values, and a branch here is a branch that can drift.
-    terminal = (adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines))
-      // `KarmashalaInputHandler` is ours: the package encodes every modified
-      // Enter as a bare CR, so Shift+Enter is indistinguishable from submit.
-      ..inputHandler = const KarmashalaInputHandler()
-      // The pane owns xterm's single OSC slot for its whole life and fans it
-      // out: OSC 133 blocks need integration on, OSC 7 must work either way.
-      ..onPrivateOSC = _osc.dispatch
-      // xterm2 consumes OSC 7 itself, so the directory arrives here instead,
-      // re-shaped into the pair the router carries. (`OSC 9 ; 9` lands here too
-      // with a bare path, which `workingDirectoryFromOsc` declines.)
-      ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
-    // Registered before the process starts, so no sequence can be missed. The
-    // directory listens unconditionally: many shells emit OSC 7 unaided.
-    _osc.add(_cwd.handleOsc);
-    if (shellIntegration) {
-      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
-    }
-    // Replay the previous session's scrollback *before* the shell starts, so
-    // restored history sits above the new process's first output. An adopted
-    // buffer is that history already and needs only the marker.
-    if (adoptTerminal == null) {
-      writeRestoredScrollback(terminal, restoredScrollback);
-    } else {
-      writeRestoreMarker(terminal);
-    }
-    // flutter_pty forwards only a tiny env allowlist; pass the host environment
-    // so Windows shells get SystemRoot/WINDIR (without them powershell.exe and
-    // wsl.exe fail to start), sanitized against a POSIX env leaked from WSL.
-    final startIn =
-        (launch.workingDirectory != null &&
-            Directory(launch.workingDirectory!).existsSync())
-        ? launch.workingDirectory
-        : null;
-    // An exact-argv launch is quoted for flutter_pty's unquoted Windows
-    // concatenation here, and its executable is not repeated.
-    final start = flutterPtyStartFor(launch, hostIsWindows: Platform.isWindows);
-    _pty = Pty.start(
-      launch.executable,
-      arguments: start.arguments,
-      environment: _ptyEnvironment(
-        launch.environment,
-        launch.removedEnvironment,
-      ),
-      workingDirectory: startIn,
-      repeatExecutableOnWindows: start.repeatExecutable,
-    );
-
-    // Buffer the raw PTY bytes and hand them to the terminal once per frame:
-    // flutter_pty reads 1 KB at a time, so a busy shell otherwise costs hundreds
-    // of decodes, parses and notifyListeners() a second on the UI isolate.
-    _coalescer = PtyOutputCoalescer(
-      onData: terminal.write,
-      budget: ingestBudget,
-    );
-    _cold = ColdIngest(terminal: terminal, budget: ingestBudget);
-    _outputSubscription = _pty.output.listen(_onPtyBytes);
-
-    // Captured while the process is certainly alive: the OS can recycle a pid.
-    _pid = _pty.pid;
-
-    unawaited(
-      _pty.exitCode.then(
-        (code) {
-          _exited = true;
-          _exitCode = code;
-          if (_disposed) return;
-          _emit('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
-          // The buffer stays, but the pane is no longer a terminal you can type
-          // into — say so, so the UI can stop drawing it as one.
-          _liveness.value = PaneLiveness.exited;
-        },
-        // A wait that failed is still an ending; the code is genuinely unknown.
-        onError: (Object error) {
-          _exited = true;
-          if (_disposed) return;
-          _emit(
-            '\r\n\x1b[90m[process ended; exit code unknown ($error)]\x1b[0m\r\n',
-          );
-          _liveness.value = PaneLiveness.exited;
-        },
-      ),
-    );
-
-    terminal.onOutput = (data) {
-      if (_disposed) return;
-      _recordGreeting(data);
-      try {
-        _pty.write(const Utf8Encoder().convert(data));
-      } catch (_) {
-        // The PTY has gone away — ignore late keystrokes.
-      }
-    };
-    terminal.onResize = (width, height, pixelWidth, pixelHeight) {
-      if (_disposed) return;
-      _recorder?.addResize(width, height);
-      try {
-        _pty.resize(height, width);
-      } catch (_) {}
-    };
-  }
-
-  @override
-  final String id;
-  @override
-  final String title;
-  @override
-  final String profileId;
-
-  /// Seeded with the launch directory, then kept current by the shell's OSC 7.
-  final WorkingDirectoryTracker _cwd;
-
-  @override
-  String? get workingDirectory => _cwd.value;
-
-  @override
-  ValueListenable<String?> get directory => _cwd.listenable;
-
-  /// Owns `terminal.onPrivateOSC` for this pane's whole life and fans it out —
-  /// see the constructor.
-  final OscRouter _osc = OscRouter();
-
-  @override
-  final AgentPaneLaunch? agentLaunch;
-  @override
-  late final Terminal terminal;
-  @override
-  final TerminalController controller = TerminalController();
-  @override
-  final FocusNode focusNode = FocusNode();
-  @override
-  final ScrollController scrollController = ScrollController();
-  @override
-  CommandBlockRecorder? commandBlocks;
-
-  @override
-  ValueListenable<PaneLiveness> get liveness => _liveness;
-
-  int? _exitCode;
-
-  @override
-  int? get exitCode => _exitCode;
-
-  int? _greetingLines;
-
-  @override
-  int? get greetingLines => _greetingLines;
-
-  /// Records the greeting the first time the user **submits a line** — keyed on
-  /// a carriage return, because the terminal answers ~8 ms in on its own.
-  void _recordGreeting(String data) {
-    if (_greetingLines != null || !data.contains('\r')) return;
-    _greetingLines = nonBlankLineCount(terminal);
-  }
-
-  final _liveness = ValueNotifier(PaneLiveness.live);
-
-  late final Pty _pty;
-  late final PtyOutputCoalescer _coalescer;
-  late final StreamSubscription<Uint8List> _outputSubscription;
-  late final int _pid;
-  bool _disposed = false;
-  bool _exited = false;
-  Future<void>? _reap;
-
-  IngestTier _tier = IngestTier.hot;
-
-  /// Where this pane's output goes, and what redraws its screen, while nobody
-  /// can see it. Also what decides whether it parks at all.
-  late final ColdIngest _cold;
-
-  @override
-  IngestTier get ingestTier => _tier;
-
-  @override
-  String? get parkedScrollback => _cold.parkedScrollback;
-
-  /// This pane's buffer, once its process has gone and while the buffer really
-  /// is the history: not while running, parked, or on the alternate buffer.
-  @override
-  Terminal? get adoptableBuffer =>
-      _exited && !_cold.isParked && !terminal.isUsingAltBuffer
-      ? terminal
-      : null;
-
-  /// Bytes this pane is holding for a replay. Diagnostics, and what the
-  /// ingest-tier tests assert on.
-  @visibleForTesting
-  int get spooledBytes => _cold.spooledBytes;
-
-  /// Reads the pipe. A pane nobody can see sends its bytes to [ColdIngest]
-  /// undecoded, but something must still read, or the child blocks on a full
-  /// OS buffer.
-  void _onPtyBytes(Uint8List bytes) {
-    if (_disposed) return;
-    // Before the tier split, so a recording keeps running while the pane is cold.
-    _recorder?.addOutput(bytes);
-    if (_tier == IngestTier.cold) {
-      _cold.add(bytes);
-      return;
-    }
-    _coalescer.add(bytes);
-  }
-
-  @override
-  void setIngestTier(IngestTier tier) {
-    if (_disposed || _tier == tier) return;
-    final wasCold = _tier == IngestTier.cold;
-    _tier = tier;
-    _coalescer.tier = tier;
-    if (tier == IngestTier.cold) {
-      // Hand over what is already queued rather than parsing it on the way out.
-      if (_cold.detach(_coalescer.takePending())) {
-        // The blocks whose prompt line just went are what held those lines
-        // alive through their anchors; dropping them releases the memory.
-        commandBlocks?.tracker.pruneEvicted();
-      }
-    } else if (wasCold) {
-      _cold.reattach();
-    }
-  }
-
-  /// Writes text the app generated wherever this pane's output is going — the
-  /// buffer while it is visible, and [ColdIngest] while it is not.
-  void _emit(String text) {
-    _recorder?.addText(text);
-    if (_tier == IngestTier.cold) {
-      _cold.emit(text);
-      return;
-    }
-    terminal.write(text);
-  }
-
-  @override
-  Future<void> get reaped => _reap ?? Future<void>.value();
-
-  CastRecorder? _recorder;
-
-  @override
-  CastRecorder? get recorder => _recorder;
-
-  @override
-  void startRecording(CastRecorder recorder) => _recorder = recorder;
-
-  @override
-  void stopRecording() => _recorder = null;
-
-  @override
-  void dispose() {
-    if (_disposed) return;
-    _disposed = true;
-    // Tell the recording its subject has gone before anything else can fail.
-    _recorder?.sourceEnded();
-    _recorder = null;
-    // Set before disposing: a listener still attached deserves the final state,
-    // and a ValueNotifier throws if written to after disposal.
-    _liveness.value = PaneLiveness.exited;
-    _liveness.dispose();
-    // After this the tracker ignores OSC rather than writing to a disposed
-    // notifier — the parser can still flush a sequence it was part-way through.
-    _cwd.dispose();
-    unawaited(_outputSubscription.cancel());
-    _coalescer.dispose();
-    focusNode.dispose();
-    scrollController.dispose();
-    // Ask the process to exit before destroying it, so a build or ssh session
-    // can flush. Quitting waits for it; the pty is released after the reap.
-    _reap =
-        closePaneProcess(
-          kill: _pty.kill,
-          exitCode: _pty.exitCode,
-          // The whole tree, not just the pid: see killWindowsProcessTree.
-          pid: _exited ? null : _pid,
-          // Read at the end, not now: the quit can arrive while this reap is still
-          // in flight, and it is the quit's answer that decides.
-          keepPseudoConsole: () => _keepPseudoConsole,
-          releasePseudoConsole: _pty.destroy,
-        ).then((report) {
-          // What a pane close actually did: the 2026-09-10 hang turned on whether
-          // the tree was gone when the console was released.
-          _log.info('pane $id: ${report.summary}.');
-        });
-  }
-
-  static final _log = AppLogger.named('terminal.pane');
-
-  /// Set by the shutdown that is about to end this process. See
-  /// [PseudoConsoleOwner].
-  bool _keepPseudoConsole = false;
-
-  @override
-  void keepPseudoConsoleOnDispose() => _keepPseudoConsole = true;
-}
 
 /// Writes [scrollback] into [terminal] followed by a dim marker, so replayed
 /// history is visibly separate. Does nothing when there is nothing to restore.
@@ -562,18 +227,6 @@ void writeRestoreMarker(Terminal terminal) {
 }
 
 String _two(int value) => value.toString().padLeft(2, '0');
-
-/// This process's environment, shaped for a PTY child. The rule itself is
-/// [ptyChildEnvironment], so it can be asserted without spawning anything.
-Map<String, String> _ptyEnvironment([
-  Map<String, String> extra = const {},
-  Set<String> removed = const {},
-]) => ptyChildEnvironment(
-  host: Platform.environment,
-  extra: extra,
-  removed: removed,
-  hostIsWindows: Platform.isWindows,
-);
 
 /// A [TerminalInstance] that failed to spawn: it renders the error in its buffer
 /// so the panel surfaces *why* instead of crashing the app.
@@ -796,108 +449,3 @@ class DormantTerminalInstance
     scrollController.dispose();
   }
 }
-
-/// Whether a pane launched this way gets an OSC 133 [CommandBlockRecorder]: no
-/// agent pane (it runs the CLI directly, so there is no prompt hook), the
-/// user's setting on, and a shell that can emit markers — never `cmd.exe`.
-bool shellIntegrationApplies({
-  required TerminalProfile profile,
-  required bool shellIntegration,
-  required AgentPaneLaunch? agentLaunch,
-}) =>
-    agentLaunch == null &&
-    shellIntegration &&
-    shellSupportsIntegration(profile.shell);
-
-/// The production [TerminalInstanceFactory]: spawns a [PtyTerminalInstance],
-/// degrading to an [ErrorTerminalInstance] whose buffer shows the failure.
-TerminalInstance createPtyTerminalInstance({
-  required String id,
-  required TerminalProfile profile,
-  String? workingDirectory,
-  String? restoredScrollback,
-  bool shellIntegration = false,
-  AgentPaneLaunch? agentLaunch,
-  Terminal? adoptTerminal,
-  Map<String, String> environmentOverlay = const {},
-}) {
-  // An agent pane runs the agent CLI itself, so the shell profile is not
-  // consulted and shell integration is meaningless: OSC 133 comes from a shell.
-  final PtyLaunch launch;
-  final String title;
-  final String profileId;
-  final integrate = shellIntegrationApplies(
-    profile: profile,
-    shellIntegration: shellIntegration,
-    agentLaunch: agentLaunch,
-  );
-  if (agentLaunch != null) {
-    // The one place `Platform.isWindows` becomes a launch context: from here
-    // down the command is built for where it is going, not for where we are.
-    launch = agentPtyLaunchFor(
-      agentLaunch,
-      context: LaunchContext.forAgent(
-        agentLaunch,
-        hostIsWindows: Platform.isWindows,
-      ),
-      environment: environmentOverlay,
-    );
-    title = agentLaunch.title ?? agentLaunch.agentId;
-    profileId = agentLaunch.profileId;
-  } else {
-    launch = ptyLaunchFor(
-      profile,
-      context: LaunchContext.forProfile(
-        profile,
-        hostIsWindows: Platform.isWindows,
-        posixShell: Platform.environment['SHELL'],
-      ),
-      workingDirectory: workingDirectory,
-      shellIntegration: integrate,
-      environment: environmentOverlay,
-    );
-    title = profile.label;
-    profileId = profile.id;
-  }
-  try {
-    return PtyTerminalInstance(
-      id: id,
-      title: title,
-      profileId: profileId,
-      launch: launch,
-      workingDirectory: workingDirectory,
-      agentLaunch: agentLaunch,
-      restoredScrollback: restoredScrollback,
-      shellIntegration: integrate && Platform.isWindows,
-      adoptTerminal: adoptTerminal,
-    );
-  } catch (e) {
-    final args = describeLaunchArguments(launch.arguments);
-    return ErrorTerminalInstance(
-      id: id,
-      title: title,
-      profileId: profileId,
-      workingDirectory: workingDirectory,
-      agentLaunch: agentLaunch,
-      restoredScrollback: restoredScrollback,
-      adoptTerminal: adoptTerminal,
-      message:
-          'Failed to start "${launch.executable} $args"'
-          '${launch.workingDirectory == null ? '' : ' in ${launch.workingDirectory}'}: $e',
-    );
-  }
-}
-
-/// The longest an argument may be before it is summarised rather than printed.
-const int _maxArgumentInMessage = 120;
-
-/// [arguments] as one line, with anything unreadably long summarised: a
-/// shell-integrated PowerShell pane's `-Command` script runs to thousands of
-/// characters and pushed the exception that explains the failure off screen.
-String describeLaunchArguments(List<String> arguments) => [
-  for (final argument in arguments)
-    if (argument.length <= _maxArgumentInMessage)
-      argument
-    else
-      '<${argument.length} characters elided>',
-].join(' ');

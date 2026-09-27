@@ -67,10 +67,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
   /// What each open said the app runs itself.
   final runByClient = <List<String>>[];
 
-  /// The hooks the app forwarded for the server's checkpoint recorder — the
-  /// ones it took on its own route or from a spool — in order.
-  final forwarded = <RelayedAgentHook>[];
-
   /// Each link's tool calls, pushed by the test as the daemon forwarding them.
   final mcpCallLinks = <StreamController<HostMcpCall>>[];
 
@@ -159,7 +155,6 @@ class FakeHostLifecycle implements HostLifecycleSource {
       }),
       hookSnapshot: List.of(hookSnapshot),
       hooks: hooks.stream,
-      forwardHook: forwarded.add,
       mcpCalls: calls.stream,
       offerMcpTools: offeredTools.add,
       answerMcpCall: (callId, {result, error}) =>

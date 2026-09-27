@@ -162,42 +162,4 @@ void main() {
       expect(all, isNot(contains('restored')));
     });
   });
-
-  group('a spawn failure names the command without burying its own error', () {
-    // A shell-integrated PowerShell pane's script (once an `-EncodedCommand`
-    // base64 payload) runs to thousands of characters. Printed
-    // verbatim it pushed the exception — the one sentence that explains the
-    // failure — off the visible buffer, so the error message hid its error.
-    final blob = 'A' * 4600;
-
-    test('a long argument is summarised, with its length kept', () {
-      final line = describeLaunchArguments([
-        '-NoLogo',
-        '-EncodedCommand',
-        blob,
-      ]);
-
-      expect(line, '-NoLogo -EncodedCommand <4600 characters elided>');
-      expect(line, isNot(contains(blob)));
-      // The flag before it is what says *which* argument was elided.
-      expect(line, contains('-EncodedCommand'));
-    });
-
-    test('ordinary arguments survive whole', () {
-      const args = [
-        '-d',
-        'archlinux',
-        '--cd',
-        r'C:\Users\dlohani\projects\popupbits\karmashala-app',
-      ];
-
-      expect(describeLaunchArguments(args), args.join(' '));
-    });
-
-    test('and nothing is elided at the boundary', () {
-      final exact = 'x' * 120;
-      expect(describeLaunchArguments([exact]), exact);
-      expect(describeLaunchArguments(['${exact}y']), '<121 characters elided>');
-    });
-  });
 }

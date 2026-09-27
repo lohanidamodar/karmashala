@@ -12,7 +12,7 @@ import 'package:path/path.dart' as p;
 
 import '../automations/daemon_checkout_facts.dart';
 import '../domain/session_registry.dart';
-import '../pty/pty.dart';
+import '../pty/environment_spawn.dart';
 
 /// The pane id prefix of a worktree's setup or teardown command. Its host
 /// session is named as every server-hosted run's is (`hostedRunSessionId`,
@@ -28,9 +28,9 @@ String worktreeSetupHostSessionId(String paneId) => hostedRunSessionId(paneId);
 /// worktree of its own: the staged creation, the setup setting and verdict
 /// table (recorded through [record], which tells every client) — with a
 /// repository's setup and teardown commands run as sessions this host owns
-/// (watchable from any client). A command is run only in this machine's own
-/// environment; elsewhere (WSL, an SSH box) its verdict says no pane could be
-/// opened for it. [environmentOf] widens where git runs (WSL from a Windows
+/// (watchable from any client). A command is run in this machine's own
+/// environment, or a WSL distribution of a Windows server (slice 5a); on an
+/// SSH box its verdict says no pane could be opened for it. [environmentOf] widens where git runs (WSL from a Windows
 /// server, an SSH box through [runners]); by default only this machine's own
 /// environment.
 WorktreeService daemonWorktrees({
@@ -66,14 +66,13 @@ WorktreeService daemonWorktrees({
       // environment is not run in the wrong place.
       if (!facts.isHere(command.environment)) return null;
       final paneId = '$kWorktreeSetupPanePrefix${newId()}';
+      // A WSL checkout's command goes through `wsl.exe` (slice 5a).
       final session = registry.open(
         worktreeSetupHostSessionId(paneId),
-        PtySpawnRequest(
+        spawnRequestIn(
+          command.environment,
           argv: command.argv,
-          workingDirectory: command.worktree.path,
-          environment: const {'TERM': 'xterm-256color'},
-          columns: 120,
-          rows: 40,
+          directory: command.worktree.path,
         ),
       );
       // Its exit is the verdict. Its record is kept — a client opening the

@@ -1,52 +1,25 @@
-import 'dart:io';
-
+import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../environments/application/environments_controller.dart';
+import '../data/terminals_client.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
-/// The shells this machine can open a terminal in. Host-aware, which it was
-/// not: a Mac's settings page listed PowerShell and Command Prompt, and picking
-/// either changed nothing.
+/// The shells a terminal can open in: the server machine's own (its POSIX
+/// shells, or PowerShell, Command Prompt and each WSL distribution on a
+/// Windows server — slice 5a), then each SSH host, whose panes this app
+/// still opens itself until slice 5d.
 final terminalProfilesProvider = Provider<List<TerminalProfile>>((ref) {
+  final server = ref.watch(terminalServerProfilesProvider);
   final environments = ref.watch(environmentsControllerProvider);
-  return terminalProfilesFor(
-    environments,
-    hostIsWindows: Platform.isWindows,
-    loginShell: loginShellPath(),
-    shells: Platform.isWindows ? const [] : installedShells(),
-  );
+  return [
+    ...server,
+    for (final environment in environments)
+      if (environment.kind == EnvironmentKind.ssh &&
+          (environment.sshHostId ?? '').isNotEmpty)
+        TerminalProfile.ssh(
+          environment.sshHostId!,
+          hostName: environment.name,
+        ),
+  ];
 });
-
-/// The owner's login shell, when `$SHELL` names one by absolute path. Only an
-/// absolute path is trusted: `$SHELL` is inherited, and a relative value would
-/// resolve against a working directory this app never chose.
-String? loginShellPath() {
-  final shell = Platform.environment['SHELL']?.trim();
-  if (shell == null || !shell.startsWith('/')) return null;
-  return shell;
-}
-
-/// The shells in `/etc/shells` that actually exist — the system's own answer
-/// to what can be a login shell. Filtered, because the file outlives uninstalls.
-List<String> installedShells() {
-  try {
-    final file = File('/etc/shells');
-    if (!file.existsSync()) return const [];
-    final shells = <String>[];
-    for (final line in file.readAsLinesSync()) {
-      final path = line.trim();
-      if (path.isEmpty || path.startsWith('#') || !path.startsWith('/')) {
-        continue;
-      }
-      if (shells.contains(path)) continue;
-      if (!File(path).existsSync()) continue;
-      shells.add(path);
-    }
-    return shells;
-  } on FileSystemException {
-    // Not worth failing a settings page over; `terminalProfilesFor` falls back
-    // to the login shell.
-    return const [];
-  }
-}

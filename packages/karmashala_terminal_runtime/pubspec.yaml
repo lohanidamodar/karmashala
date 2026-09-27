@@ -1,7 +1,7 @@
 name: karmashala_terminal_runtime
 description: >-
-  What a terminal does: the three running instances (a local ConPTY, a session
-  host's pane and an SSH channel), the command line each is launched with, the
+  What a terminal does: the running instances (a pane on the server's
+  terminal, attached by id, and an SSH channel), the
   coalescer that feeds bytes to a frame, the scrollback codec, spool and park,
   the grid readings and command blocks taken back off the screen, the cast
   recorder and its frame renderer, the Warp and Ghostty theme readers and the
@@ -29,9 +29,10 @@ dependencies:
   # `painting` layer the cast renderer draws its frames with.
   flutter:
     sdk: flutter
-  # The vendored ConPTY/forkpty binding a local pane is started on.
-  flutter_pty:
-    path: ../flutter_pty
+  # The launch vocabulary: what a pane names when it asks the server for a
+  # terminal (slice 5a: the server alone spawns local and WSL panes).
+  karmashala_launch:
+    path: ../karmashala_launch
   # The profile, the pane lifetime, the grid palette, OSC shell integration and
   # the cast format this layer produces values of.
   karmashala_terminal_core:

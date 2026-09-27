@@ -5,6 +5,7 @@ import 'package:karmashala_automations/checks.dart';
 import '../domain/host_session.dart';
 import '../domain/session_registry.dart';
 import '../pty/pty.dart';
+import '../pty/environment_spawn.dart';
 
 /// The host session id prefix of a project check. Never `karmashala_…`, so no
 /// check is ever read as a session row's process.
@@ -21,6 +22,7 @@ class HostedCheckRunner implements CheckCommandRunner {
     required this.newId,
     bool Function()? stopping,
     this.remote,
+    this.environmentOf,
   }) : _stopping = stopping ?? _never;
 
   final SessionRegistry registry;
@@ -30,6 +32,10 @@ class HostedCheckRunner implements CheckCommandRunner {
   /// machine. A check there runs as one command over the server's own
   /// connection — no session to watch, its output kept as the tail.
   final CommandRunner? Function(EnvironmentPath directory)? remote;
+
+  /// The environment a directory names, so a check in a WSL distribution runs
+  /// through `wsl.exe` (slice 5a); null: this machine's own.
+  final ExecutionEnvironment? Function(String environmentId)? environmentOf;
 
   /// True once the host is shutting down: a check it killed on the way out
   /// failed nothing, so its exit is not read as a verdict.
@@ -53,10 +59,10 @@ class HostedCheckRunner implements CheckCommandRunner {
       // as the app's own check panes did. A bare argv[0] is found on its PATH.
       session = registry.open(
         id,
-        PtySpawnRequest(
+        spawnRequestIn(
+          environmentOf?.call(directory.environmentId),
           argv: check.command,
-          workingDirectory: directory.path,
-          environment: const {'TERM': 'xterm-256color'},
+          directory: directory.path,
           columns: 160,
           rows: 50,
         ),

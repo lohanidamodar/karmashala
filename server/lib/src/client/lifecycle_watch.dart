@@ -223,11 +223,6 @@ class HostLifecycleWatch {
   /// [reportPanes]. Buffered like [events].
   Stream<PaneTailsWantedMessage> get paneTailsWanted => _paneTailsWanted.stream;
 
-  /// Hands the host a hook this client took itself — on its own route or
-  /// from a spool — for the server's checkpoint recorder. Nothing when the
-  /// link is gone.
-  void forwardHook(AgentHookEvent hook) => _write(HookForwardMessage(hook));
-
   /// Completes when the link ends, from either side.
   Future<void> get done => _done.future;
 

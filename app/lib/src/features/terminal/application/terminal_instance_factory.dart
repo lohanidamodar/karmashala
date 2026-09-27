@@ -12,8 +12,6 @@ final restoreLivePanesProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).restoreLivePanes,
 );
 
-/// The production factory: a real ConPTY per pane, carrying the user's
-/// variables. The overlay is read *inside* the closure, so a change is next-pane.
 /// A pane on a session the server hosts — a Flutter run or build, a
 /// worktree's setup (slices 3b, 3d) — attaching only, never starting one; null
 /// when this machine's server is not reachable for panes.
@@ -24,20 +22,68 @@ final hostedRunPaneFactoryProvider = Provider<HostedRunPaneFactory>(
   (ref) => ({required String id, required String title}) {
     final access = ref.read(localHostSessionAccessProvider);
     if (access == null) return null;
-    return createHostTerminalInstance(
+    return HostTerminalInstance(
       id: id,
+      title: title,
       // What a restore reopens this pane as, when the run is long gone.
-      profile: resolveTerminalProfile(
+      profileId: resolveTerminalProfile(
         ref.read(settingsControllerProvider).defaultTerminalProfileId,
         ref.read(terminalProfilesProvider),
-      ),
+      ).id,
       access: access,
-      attachOnly: true,
-      label: title,
+      sessionId: hostedRunSessionId(id),
     );
   },
 );
 
+/// A restored pane put back on the server session its pane id names,
+/// **attaching only** (slice 5a): a session still running is re-attached, an
+/// ended one the server kept shows its record and exit, and one it no
+/// longer holds ends the pane with its stored history — the pane's Start is
+/// what asks for a new one. Null where no server can be reached for panes.
+typedef RestoredPaneFactory =
+    TerminalInstance? Function({
+      required String id,
+      required TerminalProfile profile,
+      String? workingDirectory,
+      String? restoredScrollback,
+      AgentPaneLaunch? agentLaunch,
+      Terminal? adoptTerminal,
+    });
+
+final restoredPaneFactoryProvider = Provider<RestoredPaneFactory>(
+  (ref) =>
+      ({
+        required String id,
+        required TerminalProfile profile,
+        String? workingDirectory,
+        String? restoredScrollback,
+        AgentPaneLaunch? agentLaunch,
+        Terminal? adoptTerminal,
+      }) {
+        if (profile.sshHostId != null ||
+            agentLaunch?.sshHostId != null ||
+            ref.read(localHostSessionAccessProvider) == null) {
+          return null;
+        }
+        return _serverPane(
+          ref,
+          id: id,
+          profile: profile,
+          workingDirectory: workingDirectory,
+          restoredScrollback: restoredScrollback,
+          agentLaunch: agentLaunch,
+          adoptTerminal: adoptTerminal,
+          shellIntegration: false,
+          attachOnly: true,
+        );
+      },
+);
+
+/// The production factory: an SSH pane on this app's own connection (until
+/// slice 5d), and **every other pane a terminal the server runs** — asked
+/// for with `terminals.open`, then attached to by id. No in-app PTY, and no
+/// fallback to one.
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
   (ref) =>
       ({
@@ -81,44 +127,114 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
             adoptTerminal: adoptTerminal,
           );
         }
-
-        // Per launch, like the environment overlay: a running shell cannot
-        // change which process owns it, so a setting changed now applies to the
-        // next pane only.
-        final hostAccess = ref.read(hostBackedLocalPanesProvider)
-            ? ref.read(localHostSessionAccessProvider)
-            : null;
-        // An older host an earlier app left running keeps its own sessions; a
-        // new pane runs in the app rather than with that build's behaviour.
-        if (hostAccess != null &&
-            hostAccess.acceptsPane(
-              hostSessionIdFor(
-                paneId: id,
-                agentSessionId: agentLaunch?.sessionId,
-              ),
-            )) {
-          return createHostTerminalInstance(
-            id: id,
-            profile: profile,
-            access: hostAccess,
-            workingDirectory: workingDirectory,
-            restoredScrollback: restoredScrollback,
-            agentLaunch: agentLaunch,
-            adoptTerminal: adoptTerminal,
-            environmentOverlay: ref.read(terminalEnvOverlayProvider),
-            shellIntegration: shellIntegration,
-          );
-        }
-
-        return createPtyTerminalInstance(
+        return _serverPane(
+          ref,
           id: id,
           profile: profile,
           workingDirectory: workingDirectory,
           restoredScrollback: restoredScrollback,
-          shellIntegration: shellIntegration,
           agentLaunch: agentLaunch,
           adoptTerminal: adoptTerminal,
-          environmentOverlay: ref.read(terminalEnvOverlayProvider),
+          shellIntegration: shellIntegration,
+          attachOnly: false,
         );
       },
 );
+
+/// A pane on the server's terminal for [id]: asked for with `terminals.open`
+/// (the server builds the launch on its own OS, with its vault) unless
+/// [attachOnly], then attached to by session id.
+TerminalInstance _serverPane(
+  Ref ref, {
+  required String id,
+  required TerminalProfile profile,
+  required String? workingDirectory,
+  required String? restoredScrollback,
+  required AgentPaneLaunch? agentLaunch,
+  required Terminal? adoptTerminal,
+  required bool shellIntegration,
+  required bool attachOnly,
+}) {
+  final title = agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label;
+  final profileId = agentLaunch?.profileId ?? profile.id;
+  final directory = workingDirectory ?? agentLaunch?.workingDirectory;
+  final access = ref.read(localHostSessionAccessProvider);
+  if (access == null) {
+    return ErrorTerminalInstance(
+      id: id,
+      title: title,
+      profileId: profileId,
+      message:
+          'No Karmashala server can be reached from here, and every terminal '
+          'runs in the server.',
+      workingDirectory: directory,
+      agentLaunch: agentLaunch,
+      restoredScrollback: restoredScrollback,
+      adoptTerminal: adoptTerminal,
+    );
+  }
+  final sessionId = terminalSessionId(
+    paneId: id,
+    agentSessionId: agentLaunch?.sessionId,
+  );
+  final terminals = ref.read(terminalsClientProvider);
+  final offered = ref.read(terminalServerProfilesProvider);
+  return HostTerminalInstance(
+    id: id,
+    title: title,
+    profileId: profileId,
+    access: access,
+    sessionId: sessionId,
+    workingDirectory: directory,
+    agentLaunch: agentLaunch,
+    adoptTerminal: adoptTerminal,
+    restoredScrollback: restoredScrollback,
+    // Known up front only for a session the server already told us of.
+    shellIntegration:
+        attachOnly &&
+        (ref.read(dataClientProvider).terminals[sessionId]?.shellIntegration ??
+            false),
+    closer: () => terminals.close(sessionId),
+    opener: attachOnly
+        ? null
+        : (columns, rows) async {
+            final opened = await terminals.open(
+              TerminalOpen(
+                paneId: id,
+                environmentId: agentLaunch == null
+                    ? _environmentIdOf(ref, profile)
+                    : null,
+                workingDirectory: agentLaunch == null
+                    ? workingDirectory
+                    : null,
+                // A profile the server does not offer — a client's default
+                // from another OS — is the server's own default instead.
+                profileId:
+                    agentLaunch == null && offered.any((p) => p.id == profile.id)
+                    ? profile.id
+                    : null,
+                agentLaunch: agentLaunch,
+                columns: columns,
+                rows: rows,
+                shellIntegration: shellIntegration,
+              ),
+            );
+            return (
+              sessionId: opened.sessionId,
+              adopted: opened.adopted,
+              shellIntegration: opened.shellIntegration,
+            );
+          },
+  );
+}
+
+/// The environment a shell profile opens into, when it names one: a WSL
+/// profile's distribution. The server's own machine otherwise (null).
+String? _environmentIdOf(Ref ref, TerminalProfile profile) {
+  final distro = profile.wslDistribution;
+  if (distro == null || distro.isEmpty) return null;
+  for (final environment in ref.read(environmentsControllerProvider)) {
+    if (environment.wslDistribution == distro) return environment.id;
+  }
+  return null;
+}

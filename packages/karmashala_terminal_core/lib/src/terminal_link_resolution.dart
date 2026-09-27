@@ -6,7 +6,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
 import 'terminal_links.dart';
-import 'terminal_profile.dart';
+import 'package:karmashala_launch/karmashala_launch.dart'
+    show TerminalProfile, terminalProfileFromId;
 
 final RegExp _windowsAbsolute = RegExp(r'^[A-Za-z]:[\\/]');
 

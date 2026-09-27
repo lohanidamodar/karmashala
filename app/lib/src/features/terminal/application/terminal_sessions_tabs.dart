@@ -197,9 +197,9 @@ extension TerminalTabVerbs on TerminalSessionsController {
       )) {
         continue;
       }
-      // The Start button's own path, so opening a tab and pressing Start do the
-      // same thing, scrollback included.
-      startPane(paneId);
+      // Re-attached to what the server still holds; the Start button is what
+      // asks it for a new one.
+      _attachRestored(paneId);
     }
   }
 

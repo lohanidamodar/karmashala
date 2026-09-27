@@ -8,7 +8,6 @@ import 'package:karmashala_ssh_host/host.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
-import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 
 /// The app keeps this machine's host up while it is open — against **real**
@@ -38,11 +37,14 @@ void main() {
     return file;
   }
 
+  /// The host [serve] started last: where a pane's `terminals.open` lands.
+  late SessionRegistry lastRegistry;
+
   /// A host listening on [paths], of this app's build.
   Future<_Host> serve() async {
     final binary = anExecutable();
     final launcher = FakePtyLauncher();
-    final registry = SessionRegistry(launcher: launcher);
+    final registry = lastRegistry = SessionRegistry(launcher: launcher);
     final server = HostServer(
       registry: registry,
       ptyLibrary: 'fake',
@@ -476,7 +478,6 @@ void main() {
       expect(stops, isEmpty, reason: 'a host holding live sessions was killed');
       expect(supervisor.state.phase, HostSupervisionPhase.outdated);
       expect(supervisor.state.heldSessions, ['karmashala_live']);
-      expect(access.acceptsPane('karmashala_local_new'), isFalse);
 
       // Asked again and again, it is still left alone.
       supervisor.hostLost('the lifecycle link to it closed');
@@ -544,15 +545,25 @@ void main() {
   });
 
   group('a pane whose host died', () {
-    const launch = PtyLaunch(executable: '/bin/sh', arguments: []);
-
     HostTerminalInstance paneOn(LocalHostSessionAccess access) {
       final pane = HostTerminalInstance(
         id: 'p1',
         title: 'Local',
         profileId: 'sh',
         access: access,
-        launch: launch,
+        sessionId: 'karmashala_local_p1',
+        // What the server's `terminals.open` does, on the host it runs.
+        opener: (columns, rows) async {
+          lastRegistry.open(
+            'karmashala_local_p1',
+            PtySpawnRequest(argv: const ['/bin/sh'], columns: columns, rows: rows),
+          );
+          return (
+            sessionId: 'karmashala_local_p1',
+            adopted: false,
+            shellIntegration: false,
+          );
+        },
         redialDelays: const [
           Duration(milliseconds: 20),
           Duration(milliseconds: 20),

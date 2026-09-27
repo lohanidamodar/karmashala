@@ -152,6 +152,8 @@ Map<String, String> scratchEnvironment(Directory root) => {
   // Agent work only when asked: no usage schedule reaching for a Keychain,
   // no start-up probe of this machine's CLIs.
   'KARMASHALA_AGENT_WORK': 'off',
+  // No WSL hook spool drained: the owner's distributions write theirs.
+  'KARMASHALA_HOOK_SPOOLS': 'off',
 };
 
 /// A [ServerAgents] whose probe finds nothing and spawns nothing.

@@ -4,17 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/terminals_client.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 
-/// Which pane the *real* factory builds, so "the setting decides" is asserted
-/// rather than assumed.
-///
-/// The whole point of the default is that with it off nothing changes, and the
-/// only way to know that is to open a pane through the same provider the app
-/// does and look at what came back.
+import '../support/fake_data_server.dart';
+
+/// Which pane the *real* factory builds (slice 5a): every local and WSL pane
+/// is a terminal the server runs — asked for with `terminals.open`, attached
+/// to by the session its id names — and nothing runs in the app.
 void main() {
   late Directory home;
 
@@ -40,129 +40,139 @@ void main() {
     ),
   );
 
-  ProviderContainer containerWith({
-    required bool setting,
+  Future<ProviderContainer> containerWith(
+    FakeDataServer server, {
     LocalHostSessionAccess? access,
-  }) => ProviderContainer(
-    overrides: [
-      hostBackedLocalPanesProvider.overrideWithValue(setting),
-      localHostSessionAccessProvider.overrideWithValue(access),
-    ],
-  );
-
-  TerminalInstance openLocalPane(ProviderContainer container) =>
-      container.read(terminalInstanceFactoryProvider)(
-        id: 'p1',
-        profile: const TerminalProfile(
-          id: 'cmd',
-          label: 'Command Prompt',
-          shell: TerminalShell.commandPrompt,
-        ),
-      );
-
-  test('with the setting off, a local pane is what it has always been', () {
-    final container = containerWith(setting: false, access: inertAccess());
+  }) async {
+    final container = ProviderContainer(
+      overrides: [
+        await server.override(),
+        localHostSessionAccessProvider.overrideWithValue(access),
+      ],
+    );
     addTearDown(container.dispose);
-    final pane = openLocalPane(container);
+    // The server's profiles, asked once the client is up.
+    container.read(terminalServerProfilesProvider);
+    await pumpEventQueue();
+    return container;
+  }
+
+  TerminalInstance open(
+    ProviderContainer container, {
+    TerminalProfile profile = const TerminalProfile(
+      id: 'posix:/bin/zsh',
+      label: 'zsh',
+      shell: TerminalShell.posix,
+      posixShellPath: '/bin/zsh',
+    ),
+    AgentPaneLaunch? agentLaunch,
+    String? workingDirectory,
+  }) {
+    final pane = container.read(terminalInstanceFactoryProvider)(
+      id: 'p1',
+      profile: profile,
+      agentLaunch: agentLaunch,
+      workingDirectory: workingDirectory,
+      shellIntegration: true,
+    );
     addTearDown(pane.dispose);
-    expect(pane, isNot(isA<HostTerminalInstance>()));
+    return pane;
+  }
+
+  test('a local pane is the server\'s terminal, under its pane id', () async {
+    final server = FakeDataServer();
+    final container = await containerWith(server, access: inertAccess());
+    final pane = open(container, workingDirectory: '/src/app');
+    expect(pane, isA<HostTerminalInstance>());
+    final host = pane as HostTerminalInstance;
+    expect(host.sessionId, 'karmashala_local_p1');
+    expect(host.attachOnly, isFalse);
+
+    final opening = await host.opener!(100, 30);
+    expect(opening.sessionId, 'karmashala_local_p1');
+    final asked = server.terminals.opened.single;
+    expect(asked.paneId, 'p1');
+    expect(asked.profileId, 'posix:/bin/zsh');
+    expect(asked.workingDirectory, '/src/app');
+    expect((asked.columns, asked.rows), (100, 30));
+    expect(asked.shellIntegration, isTrue);
+    expect(asked.agentLaunch, isNull);
   });
 
-  test('with the setting on, a local pane belongs to the session host', () {
-    final container = containerWith(setting: true, access: inertAccess());
-    addTearDown(container.dispose);
-    final pane = openLocalPane(container);
-    addTearDown(pane.dispose);
-    expect(pane, isA<HostTerminalInstance>());
-    // The launch is the one a flutter_pty pane would have spawned: the profile
-    // decides the command, and the setting decides only whose child it is. Off
-    // Windows a Command Prompt profile opens the login shell, as it always has.
-    expect(
-      (pane as HostTerminalInstance).launch.executable,
-      Platform.isWindows
-          ? 'cmd.exe'
-          : Platform.environment['SHELL'] ?? '/bin/bash',
+  test('a profile the server does not offer asks for its default', () async {
+    final server = FakeDataServer();
+    final container = await containerWith(server, access: inertAccess());
+    final pane =
+        open(container, profile: TerminalProfile.powerShell)
+            as HostTerminalInstance;
+    await pane.opener!(80, 24);
+    expect(server.terminals.opened.single.profileId, isNull);
+  });
+
+  test('an agent pane runs under its session row, launch and all', () async {
+    final server = FakeDataServer();
+    final container = await containerWith(server, access: inertAccess());
+    final pane =
+        open(
+              container,
+              agentLaunch: const AgentPaneLaunch(
+                agentId: 'claudeCode',
+                executable: 'claude',
+                mcpArguments: ['--mcp-config', '/tmp/m.json'],
+                workingDirectory: '/src/app',
+                sessionId: 's1',
+                title: 'Fix it',
+              ),
+            )
+            as HostTerminalInstance;
+    expect(pane.sessionId, 'karmashala_s1');
+    await pane.opener!(80, 24);
+    final asked = server.terminals.opened.single;
+    expect(asked.agentLaunch?.mcpArguments, ['--mcp-config', '/tmp/m.json']);
+    expect(asked.agentLaunch?.sessionId, 's1');
+    expect(asked.profileId, isNull);
+  });
+
+  test('a refusal is thrown in the server\'s words', () async {
+    final server = FakeDataServer()
+      ..terminals.refuseWith = 'no such shell here';
+    final container = await containerWith(server, access: inertAccess());
+    final pane = open(container) as HostTerminalInstance;
+    await expectLater(
+      pane.opener!(80, 24),
+      throwsA(
+        isA<TerminalRefused>().having(
+          (e) => '$e',
+          'words',
+          'no such shell here',
+        ),
+      ),
     );
   });
 
-  test('with the setting on and no host to reach, nothing changes either', () {
-    // A companion build, or any platform with no binary to run: the provider
-    // answers null and the pane falls through to the path that always worked,
-    // rather than to a pane that cannot start.
-    final container = containerWith(setting: true, access: null);
-    addTearDown(container.dispose);
-    final pane = openLocalPane(container);
-    addTearDown(pane.dispose);
-    expect(pane, isNot(isA<HostTerminalInstance>()));
+  test('with no server to reach, the pane says so; nothing runs here', () async {
+    final server = FakeDataServer();
+    final container = await containerWith(server);
+    final pane = open(container);
+    expect(pane, isA<ErrorTerminalInstance>());
+    expect(server.terminals.opened, isEmpty);
   });
 
-  group('an older host an earlier app left running', () {
-    /// A real host over a real socket, of a build this app does not ship,
-    /// holding one running session; and an access that has looked at it.
-    Future<LocalHostSessionAccess> lookedAtOutdatedHost() async {
-      final paths = HostPaths(Directory('${home.path}/.k'))..ensureDirectory();
-      File(
-        '${home.path}/${LocalHostExecutable.fileName}',
-      ).writeAsStringSync('this app\'s build');
-      final launcher = FakePtyLauncher();
-      final registry = SessionRegistry(launcher: launcher);
-      final server = HostServer(
-        registry: registry,
-        ptyLibrary: 'fake',
-        build: 'an-earlier-build',
-      );
-      final listener = await UnixSocketHostListener.bind(paths.socketPath);
-      final subscription = server.listen(listener);
-      addTearDown(() async {
-        await subscription.cancel();
-        await listener.close();
-        for (final handle in launcher.handles) {
-          handle.finish(0);
-        }
-        await registry.shutdown();
-      });
-      registry.open(
-        hostSessionIdFor(paneId: 'kept'),
-        const PtySpawnRequest(argv: ['cmd.exe']),
-      );
-      final access = LocalHostSessionAccess(
-        paths: paths,
-        executable: LocalHostExecutable(executableDirectory: home.path),
-        startServe: (_) async => throw StateError('nothing may start'),
-        stopServe: (_, {required force}) async =>
-            throw StateError('a host with a running session was stopped'),
-      );
-      expect((await access.observe()).hostOutdated, isTrue);
-      return access;
-    }
-
-    test('a new pane runs in the app instead', () async {
-      final container = containerWith(
-        setting: true,
-        access: await lookedAtOutdatedHost(),
-      );
-      addTearDown(container.dispose);
-      final pane = openLocalPane(container);
-      addTearDown(pane.dispose);
-      expect(pane, isNot(isA<HostTerminalInstance>()));
-    });
-
-    test('a pane whose session it holds still goes to it', () async {
-      final container = containerWith(
-        setting: true,
-        access: await lookedAtOutdatedHost(),
-      );
-      addTearDown(container.dispose);
-      final pane = container.read(terminalInstanceFactoryProvider)(
-        id: 'kept',
-        profile: const TerminalProfile(
-          id: 'cmd',
-          label: 'Command Prompt',
-          shell: TerminalShell.commandPrompt,
-        ),
-      );
-      addTearDown(pane.dispose);
-      expect(pane, isA<HostTerminalInstance>());
-    });
+  test('a restored pane and a hosted run only attach', () async {
+    final server = FakeDataServer();
+    final container = await containerWith(server, access: inertAccess());
+    final restored = container.read(restoredPaneFactoryProvider)(
+      id: 'p2',
+      profile: TerminalProfile.posix('/bin/zsh'),
+    );
+    addTearDown(() => restored?.dispose());
+    expect((restored! as HostTerminalInstance).attachOnly, isTrue);
+    final run = container.read(hostedRunPaneFactoryProvider)(
+      id: 'hosted-r1',
+      title: 'run',
+    );
+    addTearDown(() => run?.dispose());
+    expect((run! as HostTerminalInstance).sessionId, 'karmashala_local_hosted-r1');
+    expect((run as HostTerminalInstance).attachOnly, isTrue);
   });
 }

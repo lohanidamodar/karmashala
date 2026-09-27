@@ -216,7 +216,7 @@ void main() {
     expect(MessageType.dataStreamOpen.code, 0x3b);
     expect(MessageType.dataStreamItems.code, 0x3c);
     expect(MessageType.dataStreamClose.code, 0x3d);
-    expect(kProtocolVersion, 24);
+    expect(kProtocolVersion, 25);
   });
 }
 

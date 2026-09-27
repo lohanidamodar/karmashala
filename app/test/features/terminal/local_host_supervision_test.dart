@@ -46,7 +46,6 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
-        hostBackedLocalPanesProvider.overrideWithValue(true),
         localHostSessionAccessProvider.overrideWithValue(host),
         localHostSupervisorProvider.overrideWith((ref) {
           final supervisor = LocalHostSupervisor(
@@ -101,7 +100,6 @@ void main() {
         ProviderScope(
           overrides: [
             localHostSessionAccessProvider.overrideWithValue(supervisor.access),
-            hostBackedLocalPanesProvider.overrideWithValue(true),
             localHostSupervisorProvider.overrideWithValue(supervisor),
             localHostSupervisionProvider.overrideWith(
               (ref) => Stream.value(supervision),

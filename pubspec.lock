@@ -387,13 +387,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.12"
-  flutter_pty:
-    dependency: transitive
-    description:
-      path: "packages/flutter_pty"
-      relative: true
-    source: path
-    version: "0.4.2"
   flutter_riverpod:
     dependency: transitive
     description:

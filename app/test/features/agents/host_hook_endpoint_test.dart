@@ -37,10 +37,9 @@ void main() {
     ),
   );
 
-  ProviderContainer containerWith({required bool hostBacked}) {
+  ProviderContainer containerWith() {
     final container = ProviderContainer(
       overrides: [
-        hostBackedLocalPanesProvider.overrideWithValue(hostBacked),
         localHostSessionAccessProvider.overrideWithValue(inertAccess()),
       ],
     );
@@ -53,16 +52,6 @@ void main() {
     expect(kHookPayloadLimitBytes, kAgentHookPayloadLimitBytes);
   });
 
-  test('with host-backed panes off, hooks still go to the server: it '
-      'checkpoints and adopts from them (slice 2b)', () {
-    final container = containerWith(hostBacked: false);
-    expect(container.read(agentHooksAtHostProvider), isTrue);
-    expect(
-      installableHookEndpoint(container, appRoute: appRoute),
-      isNot(appRoute),
-    );
-  });
-
   test('with no server reachable, the app route is what is installed', () {
     final container = ProviderContainer(
       overrides: [localHostSessionAccessProvider.overrideWithValue(null)],
@@ -72,9 +61,9 @@ void main() {
     expect(installableHookEndpoint(container, appRoute: appRoute), appRoute);
   });
 
-  test('with host-backed panes on and no host yet, only the spool is '
+  test('with no host yet, only the spool is '
       'installed', () {
-    final container = containerWith(hostBacked: true);
+    final container = containerWith();
     final endpoint = installableHookEndpoint(container, appRoute: null)!;
     expect(endpoint.reaches(EnvironmentKind.localPosix), isFalse);
     expect(endpoint.reaches(EnvironmentKind.windowsNative), isFalse);
@@ -84,7 +73,7 @@ void main() {
     );
   });
 
-  group('with host-backed panes on and a host serving hooks', () {
+  group('with a host serving hooks', () {
     late HookServer server;
     late List<AgentHookEvent> received;
 
@@ -117,7 +106,7 @@ void main() {
     }
 
     test('the installer writes the host\'s URL and token', () async {
-      final storeHome = await installed(containerWith(hostBacked: true));
+      final storeHome = await installed(containerWith());
       final file = File(p.join(storeHome, '$agentHookMarker.endpoint'));
       final text = file.readAsStringSync();
       expect(
@@ -132,7 +121,7 @@ void main() {
     });
 
     test('the generated script, unchanged, delivers to the host', () async {
-      final storeHome = await installed(containerWith(hostBacked: true));
+      final storeHome = await installed(containerWith());
       final process = await Process.start(
         'sh',
         [p.join(storeHome, '$agentHookMarker.sh'), 'Stop'],
