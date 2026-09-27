@@ -181,12 +181,14 @@ class HostedStatusKeeper {
       // what they say: a menu drawn once the turn ended outranks the turn's
       // idle hook (and the idle nudges repeating it), and a screen from before
       // says nothing about what came after.
+      // A tie goes to the hook: Windows' clock steps by a millisecond, so a
+      // screen read just before a hook often carries the hook's own time.
       final tailAt = kept.tailAt;
       final since = hook == null
           ? null
           : (kept.hookStatus == hook.status ? kept.hookSince : null) ??
                 hook.observedAt;
-      final grid = since == null || (tailAt != null && !tailAt.isBefore(since))
+      final grid = since == null || (tailAt != null && tailAt.isAfter(since))
           ? _service.gridReport(query, now)
           : null;
       final composed = _service.compose(
