@@ -30,13 +30,12 @@ void main() {
           'the host reports which pty layer it measured, never which it assumed',
     );
     expect(host.greeting, contains('restored 0 session(s)'));
-    // A real `serve` opened a store, minted this machine's id and bound the
-    // phone listener. Asserted on the greeting because that is the only place
-    // it is observable from outside the process — and a companion half that
-    // silently failed to start would otherwise look exactly like one that did.
+    // A real `serve` opened a store and counted its paired phones. Started as
+    // the app starts it, so remote access is off until server.json turns it on
+    // (2db93f96); a store that would not open says "companion unavailable".
     expect(
       host.greeting,
-      contains('companion on port'),
+      contains('companion off'),
       reason: 'a store that would not open reports itself instead',
     );
     expect(host.greeting, contains('0 phone(s) paired'));

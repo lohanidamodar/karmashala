@@ -145,6 +145,25 @@ void main() {
     },
   );
 
+  test('stopCheck is answered without hello, counts only sessions still '
+      'running, and ends the connection', () async {
+    final env = build();
+    env.registry.open('a', const PtySpawnRequest(argv: ['/bin/sh']));
+    env.registry.open('b', const PtySpawnRequest(argv: ['/bin/sh']));
+    env.launcher.handles.first.finish(0);
+    await Future<void>.delayed(Duration.zero);
+    final client = PipeConnection();
+    final serving = env.server.serveConnection(client);
+    await client.send(const StopCheckMessage(5));
+
+    final answer = client.only<StopCheckAnswerMessage>();
+    expect(answer.requestId, 5);
+    expect(answer.protocolVersion, kProtocolVersion);
+    expect(answer.pid, pid);
+    expect(answer.runningSessions, 1);
+    await serving;
+  });
+
   test(
     'welcome reports the host, its pty library and when it looked',
     () async {

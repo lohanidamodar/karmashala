@@ -525,4 +525,35 @@ void main() {
       expect(decoded.bytes, [27, 99, 65]);
     });
   });
+
+  // docs/daemon-architecture.md, "Frames that never change": a host of every
+  // protocol answers these bytes, so no bump may touch them.
+  group('the stop check never changes', () {
+    test('stopCheck, byte for byte', () {
+      expect(const StopCheckMessage(7).toFrame().encode(), [
+        0xf0, 0, 0, 0, 0, 0, 0, 4, //
+        0, 0, 0, 7,
+      ]);
+      expect(roundTrip(const StopCheckMessage(7)).requestId, 7);
+    });
+
+    test('stopCheckAnswer, byte for byte', () {
+      const answer = StopCheckAnswerMessage(
+        requestId: 7,
+        protocolVersion: 17,
+        pid: 0x01020304,
+        runningSessions: 2,
+      );
+      expect(answer.toFrame().encode(), [
+        0xf1, 0, 0, 0, 0, 0, 0, 16, //
+        0, 0, 0, 7, 0, 0, 0, 17, 1, 2, 3, 4, 0, 0, 0, 2,
+      ]);
+      final decoded = roundTrip(answer);
+      expect(
+        (decoded.requestId, decoded.protocolVersion, decoded.pid),
+        (7, 17, 0x01020304),
+      );
+      expect(decoded.runningSessions, 2);
+    });
+  });
 }

@@ -88,9 +88,13 @@ AgentUsage parseCodexUsage(
 DateTime? _codexReset(Map<String, dynamic> window, DateTime now) {
   final resetAt = window['reset_at'];
   if (resetAt is num) {
-    return DateTime.fromMillisecondsSinceEpoch(resetAt.toInt() * 1000);
+    // An instant: UTC, so it serialises with its `Z` as Claude's do.
+    return DateTime.fromMillisecondsSinceEpoch(
+      resetAt.toInt() * 1000,
+      isUtc: true,
+    );
   }
   final after = window['reset_after_seconds'];
-  if (after is num) return now.add(Duration(seconds: after.toInt()));
+  if (after is num) return now.toUtc().add(Duration(seconds: after.toInt()));
   return null;
 }

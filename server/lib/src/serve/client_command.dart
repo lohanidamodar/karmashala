@@ -54,6 +54,37 @@ class HostClient {
     return client;
   }
 
+  /// The version-independent question `stop` asks instead of hello, so a
+  /// host of another protocol still answers. Null when nothing is listening;
+  /// throws [HostClientRefusal] when it will not say.
+  static Future<StopCheckAnswerMessage?> stopCheck(
+    String socketPath, {
+    Duration answerWithin = const Duration(seconds: 10),
+  }) async {
+    final Socket socket;
+    try {
+      socket = await Socket.connect(
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
+      );
+    } on SocketException {
+      return null;
+    }
+    final parser = FrameParser();
+    final messages = socket
+        .expand((chunk) => parser.add(chunk))
+        .map(decodeMessage)
+        .asBroadcastStream();
+    final client = HostClient._(socket, messages);
+    final answer = client._expect<StopCheckAnswerMessage>(within: answerWithin);
+    client._send(const StopCheckMessage(1));
+    try {
+      return await answer;
+    } finally {
+      socket.destroy();
+    }
+  }
+
   void _send(HostMessage message) => _socket.add(message.toFrame().encode());
 
   /// The next message of this type — that [where] accepts, when given — or
@@ -258,37 +289,25 @@ Future<int> runStop(
   final resolved = hostPathsFor('stop', paths: paths, environment: environment);
   final force = args.contains('--force') || args.contains('-f');
 
-  HostClient? client;
-  HostClientRefusal? silent;
+  StopCheckAnswerMessage? answer;
   try {
-    client = await HostClient.connect(
+    answer = await HostClient.stopCheck(
       resolved.socketPath,
       answerWithin: answerWithin,
     );
-  } on HostClientRefusal catch (e) {
-    // Took the connection and never welcomed it: a host wedged in a syscall.
-    silent = e;
-  }
-  var held = 0;
-  int? pid;
-  if (silent != null && !force) {
-    errSink.writeln(
-      'karmashala_host stop: the host at ${resolved.socketPath} would not '
-      'answer ($silent), so what it holds is unknown. Pass --force to stop it '
-      'by the pid in ${resolved.lockPath}.',
-    );
-    return 3;
-  }
-  if (client != null) {
-    pid = client.welcome.pid;
-    try {
-      held = (await client.list()).where((s) => !s.lifecycle.hasEnded).length;
-    } on HostClientRefusal {
-      held = 0;
-    } finally {
-      await client.close();
+  } on HostClientRefusal catch (silent) {
+    // A host wedged in a syscall, or one that predates the stop check.
+    if (!force) {
+      errSink.writeln(
+        'karmashala_host stop: the host at ${resolved.socketPath} would not '
+        'answer ($silent), so what it holds is unknown. Pass --force to stop '
+        'it by the pid in ${resolved.lockPath}.',
+      );
+      return 3;
     }
   }
+  final held = answer?.runningSessions ?? 0;
+  int? pid = answer?.pid;
   if (held > 0 && !force) {
     errSink.writeln(
       'karmashala_host stop: $held session(s) are still running. '

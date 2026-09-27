@@ -274,6 +274,24 @@ class _ClientSession {
       return;
     }
 
+    // Before hello and whatever the client's protocol: a `stop` from any
+    // version must be able to ask (docs/daemon-architecture.md).
+    if (message is StopCheckMessage) {
+      _send(
+        StopCheckAnswerMessage(
+          requestId: message.requestId,
+          protocolVersion: kProtocolVersion,
+          pid: pid,
+          runningSessions: _server.registry
+              .list()
+              .where((s) => !s.lifecycle.hasEnded)
+              .length,
+        ),
+      );
+      _hungUp = true;
+      return;
+    }
+
     if (!_greeted && message is! HelloMessage) {
       _send(
         ErrorMessage(

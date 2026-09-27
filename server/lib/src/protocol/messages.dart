@@ -16,6 +16,7 @@ part 'server_messages.dart';
 part 'data_messages.dart';
 part 'pane_messages.dart';
 part 'run_messages.dart';
+part 'stop_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
@@ -917,4 +918,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.runOffer => RunOfferMessage.decode(frame),
   MessageType.runCall => RunCallMessage.decode(frame),
   MessageType.runResult => RunResultMessage.decode(frame),
+  MessageType.stopCheck => StopCheckMessage.decode(frame),
+  MessageType.stopCheckAnswer => StopCheckAnswerMessage.decode(frame),
 };

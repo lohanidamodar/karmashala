@@ -110,7 +110,12 @@ enum MessageType {
   // it ended.
   runOffer(0x38),
   runCall(0x39),
-  runResult(0x3a);
+  runResult(0x3a),
+  // 0xf0 and up never change and are answered without hello, whatever the
+  // protocol: `karmashala_host stop` must reach a host of any version
+  // (`stop_messages.dart`). Everything above belongs below 0xf0.
+  stopCheck(0xf0),
+  stopCheckAnswer(0xf1);
 
   const MessageType(this.code);
   final int code;

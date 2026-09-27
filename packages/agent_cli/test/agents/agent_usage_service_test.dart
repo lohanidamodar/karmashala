@@ -104,7 +104,28 @@ void main() {
       expect(usage.windows[0].resetsAt, now.add(const Duration(hours: 1)));
       expect(
         usage.windows[1].resetsAt,
-        DateTime.fromMillisecondsSinceEpoch(1785325200 * 1000),
+        DateTime.fromMillisecondsSinceEpoch(1785325200 * 1000, isUtc: true),
+      );
+    });
+
+    test('resets are UTC instants, whatever zone the reader is in', () {
+      final usage = parseCodexUsage({
+        'rate_limit': {
+          'primary_window': {'used_percent': 1.0, 'reset_after_seconds': 60},
+          'secondary_window': {'used_percent': 2.0, 'reset_at': 1785325200},
+        },
+      }, now.toLocal());
+
+      for (final window in usage.windows) {
+        expect(window.resetsAt!.isUtc, isTrue, reason: window.label);
+      }
+      expect(
+        usage.windows[1].resetsAt!.toIso8601String(),
+        '2026-07-29T11:40:00.000Z',
+      );
+      expect(
+        usage.windows[0].resetsAt!.toIso8601String(),
+        '2026-07-28T12:01:00.000Z',
       );
     });
 
