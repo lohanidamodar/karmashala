@@ -156,6 +156,36 @@ final explorerTreeProvider = Provider.autoDispose<ExplorerTree>((ref) {
   );
 });
 
+/// **The Terminals area** (UI overhaul spec §4): every machine in scope with
+/// what it is running, open — the Explorer's terminal groups without its
+/// projects, built by the same function so the two cannot drift.
+final terminalsTreeProvider = Provider.autoDispose<ExplorerTree>((ref) {
+  final scope = ref.watch(explorerEnvironmentScopeProvider);
+  final environments = scope.environments;
+  final open = {
+    for (final choice in environments)
+      if (scope.environmentId == null ||
+          choice.environmentId == scope.environmentId)
+        choice.environmentId,
+  };
+  final nodes = buildExplorerTree(
+    projects: const [],
+    environments: environments,
+    contexts: const [],
+    collapsed: const {},
+    expandedProjects: const {},
+    expandedTerminals: open,
+    environmentScope: scope.environmentId,
+    terminalsOf: (node) => _terminalNodes(ref, node),
+    terminalCountOf: (id) =>
+        ref.watch(environmentTerminalsProvider(id)).runningCount,
+  );
+  // The builder says "no projects" above an empty workspace; the list here
+  // starts at its first machine.
+  final first = nodes.indexWhere((node) => node is TerminalsHeaderNode);
+  return ExplorerTree(first <= 0 ? nodes : nodes.sublist(first));
+});
+
 List<ExplorerNode> _terminalNodes(Ref ref, TerminalsHeaderNode node) {
   final reading = ref.watch(environmentTerminalsProvider(node.environmentId));
   if (reading.problem case final String problem) {

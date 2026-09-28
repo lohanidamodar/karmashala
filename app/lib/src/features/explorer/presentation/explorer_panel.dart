@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -288,7 +289,11 @@ class _ExplorerSectionsListState extends ConsumerState<ExplorerSectionsList>
 
 /// Context headers over Project → Session, built lazily.
 class ExplorerTreeView extends ConsumerStatefulWidget {
-  const ExplorerTreeView({super.key});
+  const ExplorerTreeView({this.source, super.key});
+
+  /// The rows to draw; the Explorer's own tree when null. The Terminals area
+  /// hands its own (`terminalsTreeProvider`).
+  final ProviderListenable<ExplorerTree>? source;
 
   @override
   ConsumerState<ExplorerTreeView> createState() => _ExplorerTreeViewState();
@@ -296,8 +301,11 @@ class ExplorerTreeView extends ConsumerStatefulWidget {
 
 class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
     with ExplorerKeyboardList {
+  ProviderListenable<ExplorerTree> get _source =>
+      widget.source ?? explorerTreeProvider;
+
   @override
-  List<ExplorerNode> readNodes() => ref.read(explorerTreeProvider).nodes;
+  List<ExplorerNode> readNodes() => ref.read(_source).nodes;
 
   /// The row the selection was last scrolled to. A reveal happens on a
   /// *change* of selection, never on every build, or the list would fight the
@@ -350,7 +358,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
         setState(() => _generation++);
       }
     });
-    final nodes = ref.watch(explorerTreeProvider).nodes;
+    final nodes = ref.watch(_source).nodes;
     // A selection that moved — by a click, or by the pane on screen going
     // somewhere — is brought into view once, after this frame.
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
