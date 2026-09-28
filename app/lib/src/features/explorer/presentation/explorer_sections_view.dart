@@ -7,7 +7,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../application/explorer_sections.dart';
 import '../domain/explorer_section.dart';
-import 'package:karmashala_ui/rows.dart';
+import 'sidebar_chrome.dart';
 
 /// One section's header: the disclosure, the name, what it holds, its menu.
 class ExplorerSectionHeader extends ConsumerWidget {
@@ -23,17 +23,15 @@ class ExplorerSectionHeader extends ConsumerWidget {
   /// How many rows the section holds, or null while it is collapsed.
   final int? count;
 
-  /// False for the list's first row: the band's gap is between groups.
+  /// False for the list's first row: the gap is between groups.
   final bool spaceAbove;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final density = UiDensity.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final controller = ref.read(explorerSectionsProvider.notifier);
 
-    // One function handed to both the row and its button: `ExplorerRow` carries
+    // One function handed to both the row and its button: the label carries
     // the right-click and keyboard paths, `RowMenuButton` the pointer's. A
     // literal would build every entry on every build of every header.
     List<PopupMenuEntry<String>> items() => [
@@ -64,42 +62,23 @@ class ExplorerSectionHeader extends ConsumerWidget {
       }
     }
 
-    return ExplorerRow(
-      kind: ExplorerRowKind.group,
-      depth: 0,
-      selected: false,
-      band: true,
+    // The sidebar's group label, as every other group is drawn: no band, the
+    // gap above it is the separator.
+    return SidebarGroupLabel(
+      label: section.name,
+      leading: Icon(
+        _glyphFor(section.rule.kind),
+        // Pinned wears the accent the pin glyph on every row already wears,
+        // so the group and the rows in it are visibly the same idea.
+        color: section.isPinned ? scheme.tertiary : null,
+      ),
+      count: count == null ? null : '$count',
       spaceAbove: spaceAbove,
       expanded: !section.collapsed,
       onTap: () => controller.toggleCollapsed(section.id),
+      menuLabel: 'Section actions',
       menuItemsBuilder: items,
       onMenu: onAction,
-      builder: (context) => ExplorerRowLine(
-        lead: ExplorerRowLead(
-          expanded: !section.collapsed,
-          glyph: Icon(
-            _glyphFor(section.rule.kind),
-            size: ExplorerRow.glyphSize,
-            // Pinned wears the accent the pin glyph on every row already wears,
-            // so the group and the rows in it are visibly the same idea.
-            color: section.isPinned ? scheme.tertiary : scheme.onSurfaceVariant,
-          ),
-        ),
-        title: Text(
-          section.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: density.rowTitle(theme),
-        ),
-        trailing: ExplorerRowTrailing(
-          meta: count == null ? null : ExplorerRowMeta('$count'),
-          menu: RowMenuButton(
-            tooltip: 'Section actions',
-            itemBuilder: items,
-            onSelected: onAction,
-          ),
-        ),
-      ),
     );
   }
 }

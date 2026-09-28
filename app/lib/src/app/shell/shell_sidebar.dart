@@ -9,13 +9,16 @@ import '../../features/explorer/application/explorer_tree_provider.dart';
 import '../../features/explorer/application/session_selection.dart';
 import '../../features/explorer/presentation/agents_lens.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
+import '../../features/explorer/presentation/sidebar_chrome.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
 import 'devices_dock.dart';
 import 'shell_area.dart';
 import 'shell_shortcuts.dart';
 
 /// **The sidebar** (spec §4): the list for the area the strip picked, on the
-/// sidebar's own tone.
+/// sidebar's own tone. Every area draws the same [SidebarAreaHeader] and the
+/// same list metrics ([Sidebar]); nothing between the list and the Devices
+/// dock but space — regions are told apart by tone, not rules.
 class ShellSidebar extends ConsumerWidget {
   const ShellSidebar({super.key});
 
@@ -41,7 +44,10 @@ class ShellSidebar extends ConsumerWidget {
         ],
         child: const AgentsPage(),
       ),
-      ShellArea.projects => const ExplorerPanel(),
+      // Draws its own header — the same [SidebarAreaHeader] — because its
+      // verbs (the filter, the sync spinner) are the Explorer's own. The
+      // machines' terminal groups are the Terminals area's, not listed here.
+      ShellArea.projects => const ExplorerPanel(terminals: false),
       ShellArea.terminals => _Area(
         title: 'Terminals',
         newLabel: 'New terminal',
@@ -86,39 +92,16 @@ class _Area extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: 44,
-          child: Padding(
-            padding: const EdgeInsets.only(left: Insets.lg, right: Insets.xs),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                ...actions,
-                IconButton(
-                  tooltip: newLabel,
-                  icon: const Icon(AppIcons.plus),
-                  onPressed: () => Actions.maybeInvoke(context, newIntent),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(child: child),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SidebarAreaHeader(
+        title: title,
+        actions: actions,
+        newLabel: newLabel,
+        onNew: () => Actions.maybeInvoke(context, newIntent),
+      ),
+      Expanded(child: child),
+    ],
+  );
 }

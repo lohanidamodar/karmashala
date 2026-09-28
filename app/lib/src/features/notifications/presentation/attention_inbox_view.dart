@@ -5,10 +5,12 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/rows.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_handoff_service.dart';
 import 'package:karmashala_session/resume.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
+import '../../explorer/presentation/sidebar_chrome.dart';
 import '../application/attention_inbox.dart';
 import 'package:karmashala_notifications/attention.dart';
 
@@ -19,7 +21,6 @@ class AttentionInboxView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final inbox = ref.watch(attentionInboxProvider);
     final controller = ref.read(attentionInboxProvider.notifier);
     final now = ref.watch(clockProvider).nowUtc();
@@ -34,9 +35,19 @@ class AttentionInboxView extends ConsumerWidget {
         if (item.kind != InboxItemKind.needsApproval) item,
     ];
     final rows = <Widget>[
-      if (asks.isNotEmpty) _GroupLabel('Needs you', count: asks.length),
+      if (asks.isNotEmpty)
+        SidebarGroupLabel(
+          label: 'Needs you',
+          color: SemanticColors.of(context).attention,
+          count: '${asks.length}',
+        ),
       for (final item in asks) row(item, controller, now),
-      if (updates.isNotEmpty) _GroupLabel('Updates', count: updates.length),
+      if (updates.isNotEmpty)
+        SidebarGroupLabel(
+          label: 'Updates',
+          count: '${updates.length}',
+          spaceAbove: asks.isNotEmpty,
+        ),
       for (final item in updates) row(item, controller, now),
     ];
 
@@ -44,39 +55,17 @@ class AttentionInboxView extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // The same header every sidebar area has: its name, then its verbs.
-        SizedBox(
-          height: 44,
-          child: Padding(
-            padding: const EdgeInsets.only(left: Insets.lg, right: Insets.xs),
-            child: Row(
-              children: [
-                Text(
-                  'Inbox',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (inbox.unseen > 0) ...[
-                  const SizedBox(width: Insets.sm),
-                  Text(
-                    '${inbox.unseen} new',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                const Spacer(),
-                if (!inbox.isEmpty)
-                  IconButton(
-                    tooltip: 'Mark all read',
-                    icon: const Icon(AppIcons.check),
-                    onPressed: inbox.unseen == 0
-                        ? null
-                        : controller.markAllSeen,
-                  ),
-              ],
-            ),
-          ),
+        SidebarAreaHeader(
+          title: 'Inbox',
+          meta: inbox.unseen > 0 ? '${inbox.unseen} new' : null,
+          actions: [
+            if (!inbox.isEmpty)
+              IconButton(
+                tooltip: 'Mark all read',
+                icon: const Icon(AppIcons.check),
+                onPressed: inbox.unseen == 0 ? null : controller.markAllSeen,
+              ),
+          ],
         ),
         Expanded(
           child: inbox.isEmpty
@@ -87,10 +76,7 @@ class AttentionInboxView extends ConsumerWidget {
                   // the answer, not decoration.
                   iconColor: SemanticColors.of(context).idle,
                 )
-              : ListView(
-                  padding: const EdgeInsets.only(bottom: Insets.sm),
-                  children: rows,
-                ),
+              : ListView(padding: Sidebar.listPadding, children: rows),
         ),
       ],
     );
@@ -107,36 +93,6 @@ class AttentionInboxView extends ConsumerWidget {
     onOpen: () => controller.open(item),
     onDismiss: () => controller.dismiss(item.id),
   );
-}
-
-/// A group's name over its rows, as the Sessions list draws its groups.
-class _GroupLabel extends StatelessWidget {
-  const _GroupLabel(this.label, {required this.count});
-
-  final String label;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.labelSmall
-        ?.merge(Chrome.groupLabel)
-        .copyWith(color: theme.colorScheme.onSurfaceVariant);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.lg,
-        Insets.md,
-        Insets.lg,
-        Insets.xs,
-      ),
-      child: Row(
-        children: [
-          Expanded(child: Text(label.toUpperCase(), style: style)),
-          Text('$count', style: style),
-        ],
-      ),
-    );
-  }
 }
 
 /// Somewhere for a follow-up to go without leaving the list. It starts nothing:
@@ -238,13 +194,25 @@ class _InboxRow extends ConsumerWidget {
         'continue' => ContinueWithDialog.show(context, item.session.openId),
         _ => onDismiss(),
       },
-      builder: (context) => InkWell(
-        onTap: onOpen,
-        child: _InboxRowContent(
-          item: item,
-          now: now,
-          canContinue: canContinue,
-          onDismiss: onDismiss,
+      // Inset to the rows' fill edge and rounded, as every sidebar row is.
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(
+          ExplorerRow.inset,
+          0,
+          ExplorerRow.inset,
+          Sidebar.rowGap,
+        ),
+        child: InkWell(
+          onTap: onOpen,
+          borderRadius: const BorderRadius.all(Radius.circular(Radii.sm)),
+          // The content paints the hover, which it also needs for the ×.
+          hoverColor: Colors.transparent,
+          child: _InboxRowContent(
+            item: item,
+            now: now,
+            canContinue: canContinue,
+            onDismiss: onDismiss,
+          ),
         ),
       ),
     );
@@ -281,30 +249,25 @@ class _InboxRowContentState extends State<_InboxRowContent> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
-    final tones = SurfaceTones.of(context);
     final look = inboxKindAppearance(item.kind, semantic);
     // Seen items stay in the list but stop shouting — an approval you have
     // read is still an approval you have not answered.
     final muted = item.seen;
-    final ask = item.kind == InboxItemKind.needsApproval;
+    // No band and no edge for an ask: the *Needs you* label over it, its amber
+    // glyph and its bold title say it, as a waiting row says it in Sessions.
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: Container(
         decoration: BoxDecoration(
-          color: ask && !muted ? tones.attentionSurface : null,
-          border: Border(
-            left: BorderSide(
-              width: 2,
-              color: ask ? semantic.attention : Colors.transparent,
-            ),
-          ),
+          color: _hovered ? StateLayers.hover(scheme) : null,
+          borderRadius: const BorderRadius.all(Radius.circular(Radii.sm)),
         ),
         padding: const EdgeInsets.fromLTRB(
-          Insets.md,
-          Insets.sm,
+          Sidebar.labelPadX,
+          Insets.xs + 2,
           Insets.xs,
-          Insets.sm,
+          Insets.xs + 2,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -8,8 +8,9 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../app/shell/shell_state.dart';
+import '../../../app/shell/shell_shortcuts.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../projects/presentation/new_project_dialog.dart';
 import '../application/explorer_section_nodes.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_provider.dart';
@@ -25,22 +26,47 @@ import 'explorer_selection_actions.dart';
 import 'explorer_tree_rows.dart';
 import 'session_rows.dart';
 import 'session_selection_bar.dart';
+import 'sidebar_chrome.dart';
 
-/// The unified left pane: Project → Session, and deliberately nothing else;
-/// checkout rows were removed for their git cost (`checkout_scale_cost_test`).
+/// The Explorer's tree without the machines' terminal groups, which the
+/// Terminals area lists. They are always the tree's tail (see
+/// `buildExplorerTree`), so the cut is at the first of them.
+final explorerProjectsTreeProvider = Provider.autoDispose<ExplorerTree>((ref) {
+  final nodes = ref.watch(explorerTreeProvider).nodes;
+  final first = nodes.indexWhere((node) => node is TerminalsHeaderNode);
+  return first < 0
+      ? ExplorerTree(nodes)
+      : ExplorerTree(nodes.sublist(0, first));
+});
+
+/// **The Projects area** (spec §4): Project → Session, and deliberately nothing
+/// else; checkout rows were removed for their git cost
+/// (`checkout_scale_cost_test`). Drawn as a sidebar area: the same header as
+/// Sessions and Terminals, a quiet search, the machine pills, then the context
+/// groups — no bands and no rules between them.
 ///
 /// It watches only the tree's shape and its own chrome. Every reading a row
 /// draws is watched by that row, so a session's tick rebuilds one row.
 class ExplorerPanel extends ConsumerWidget {
-  const ExplorerPanel({super.key});
+  const ExplorerPanel({this.terminals = true, super.key});
+
+  /// Whether the machines' terminal groups end the tree. The sidebar passes
+  /// false — the Terminals area is where they live; standing alone, the panel
+  /// keeps them.
+  final bool terminals;
+
+  /// The +: the shell's own action when there is one, so the button and its
+  /// chord cannot disagree; the dialog itself where the panel stands alone.
+  static void newProject(BuildContext context) {
+    if (Actions.maybeFind<NewProjectIntent>(context) != null) {
+      Actions.invoke(context, const NewProjectIntent());
+    } else {
+      NewProjectDialog.show(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final focused = ref.watch(
-      shellControllerProvider.select(
-        (s) => s.focusedPane == ShellPane.explorer,
-      ),
-    );
     final hasProjects = ref.watch(
       sortedProjectsProvider.select((p) => p.isNotEmpty),
     );
@@ -55,29 +81,30 @@ class ExplorerPanel extends ConsumerWidget {
           ref.read(explorerSearchQueryProvider.notifier).set(query),
     );
 
-    return PaneScaffold(
-      title: 'Explorer',
-      // No glyph: the title-bar toggle draws this pane's mark 30px above, in
-      // the same column — see [PaneHeader.icon].
-      focused: focused,
-      actions: const [ExplorerHeaderActions()],
-      body: Column(
-        children: [
-          const AgentsEntryRow(),
-          Expanded(
-            child: ExplorerLensBody(
-              lens: lens,
-              projects: _projectsBody(
-                ref,
-                hasProjects: hasProjects,
-                selecting: selecting,
-                showingViews: showingViews,
-                search: search,
-              ),
+    // No Agents entry row: the Sessions area is every session by what it
+    // needs, one click away on the strip.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SidebarAreaHeader(
+          title: 'Projects',
+          actions: const [ExplorerHeaderActions()],
+          newLabel: 'New project',
+          onNew: () => newProject(context),
+        ),
+        Expanded(
+          child: ExplorerLensBody(
+            lens: lens,
+            projects: _projectsBody(
+              ref,
+              hasProjects: hasProjects,
+              selecting: selecting,
+              showingViews: showingViews,
+              search: search,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -92,6 +119,7 @@ class ExplorerPanel extends ConsumerWidget {
       // The search field and the list are one column to the arrow keys.
       ExplorerKeyboardScope(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // The scope — which machine, which context — narrows the tree and
             // not the saved views, which cross both; it is not drawn over them.
@@ -115,7 +143,11 @@ class ExplorerPanel extends ConsumerWidget {
                       child: showingViews
                           ? const ExplorerSectionsList()
                           : hasProjects
-                          ? const ExplorerTreeView()
+                          ? ExplorerTreeView(
+                              source: terminals
+                                  ? null
+                                  : explorerProjectsTreeProvider,
+                            )
                           : const PanePlaceholder(
                               message:
                                   'No projects yet.\nUse + to create one from a '
@@ -187,24 +219,33 @@ KeyEventResult _selectionKeys(WidgetRef ref, KeyEvent event) {
   return KeyEventResult.ignored;
 }
 
-/// The search box above the tree.
+/// The search box above the tree: quiet — the raised tone and no border at
+/// rest, the focus ring only while it is being typed in — so it reads as part
+/// of the list's region rather than a boxed control over it.
 class ExplorerSearchField extends StatelessWidget {
   const ExplorerSearchField({required this.onChanged, super.key});
 
   final ValueChanged<String> onChanged;
 
+  /// The field's line: a sidebar row's height, less the hairlines a row keeps.
+  static const height = 28.0;
+
+  static const _radius = BorderRadius.all(Radius.circular(Radii.sm));
+
   @override
   Widget build(BuildContext context) {
     final links = ExplorerKeyboardScope.maybeOf(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tones = SurfaceTones.of(context);
+    const quiet = OutlineInputBorder(
+      borderRadius: _radius,
+      borderSide: BorderSide.none,
+    );
     return Padding(
-      // Inset to the row tiles' own edges: the field and the rows beneath it
-      // are one column, not two things that nearly line up.
-      padding: const EdgeInsets.fromLTRB(
-        Insets.xs,
-        Insets.sm,
-        Insets.xs,
-        Insets.xs,
-      ),
+      // On the rows' fill edge (6 from the sidebar's side), so the field and
+      // the rows beneath it are one column, not two things that nearly line up.
+      padding: const EdgeInsets.symmetric(horizontal: ExplorerRow.inset + 2),
       // `↓` leaves the field for the list under it — the one key of the
       // field's that a single line has no use for. Every other key is its own.
       child: Focus(
@@ -225,11 +266,40 @@ class ExplorerSearchField extends StatelessWidget {
         },
         child: TextField(
           focusNode: links?.searchFocus,
-          decoration: const InputDecoration(
+          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12.5),
+          decoration: InputDecoration(
             isDense: true,
-            prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
+            filled: true,
+            fillColor: tones.raised,
+            hoverColor: Colors.transparent,
+            constraints: const BoxConstraints(minHeight: height),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: 7,
+            ),
+            prefixIcon: Icon(
+              AppIcons.magnifyingGlass,
+              size: Chrome.iconSmall,
+              color: scheme.onSurfaceVariant,
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: height,
+              minHeight: height,
+            ),
             hintText: 'Search projects',
-            border: OutlineInputBorder(),
+            hintStyle: theme.textTheme.bodyMedium?.copyWith(
+              fontSize: 12.5,
+              color: scheme.outline,
+            ),
+            border: quiet,
+            enabledBorder: quiet,
+            focusedBorder: OutlineInputBorder(
+              borderRadius: _radius,
+              borderSide: BorderSide(
+                color: StateLayers.focusRing(scheme),
+                width: StateLayers.focusRingWidth,
+              ),
+            ),
           ),
           onChanged: onChanged,
         ),
@@ -262,7 +332,7 @@ class _ExplorerSectionsListState extends ConsumerState<ExplorerSectionsList>
       onKeyEvent: keyboard.onKey,
       child: ListView.builder(
         controller: scroll,
-        padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
+        padding: Sidebar.listPadding,
         itemCount: nodes.length,
         itemBuilder: (context, index) {
           final node = nodes[index];
@@ -384,7 +454,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
     final list = ListView.builder(
       key: ValueKey(_generation),
       controller: scroll,
-      padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
+      padding: Sidebar.listPadding,
       itemCount: nodes.length,
       itemBuilder: (context, index) {
         final node = nodes[index];
@@ -428,7 +498,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
               key: ValueKey(_generation),
               controller: scroll,
               nodes: nodes,
-              topPadding: ExplorerRow.gap,
+              topPadding: Sidebar.listPadding.top,
               keyboard: keyboard,
             ),
           ],
@@ -645,10 +715,8 @@ class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
     }
     final node = widget.nodes[pinned];
     if (node is! ExplorerHeaderNode) return const SizedBox.shrink();
-    final scheme = Theme.of(context).colorScheme;
     final keyboard = widget.keyboard;
-    // `first`: it sits at the list's edge, so no gap above its band — and the
-    // band and its hairline are the row's own, the same as in the list.
+    // `first`: it sits at the list's edge, so no gap above it.
     final Widget row = ExplorerTreeRow(
       key: ValueKey('pinned:${node.id}'),
       node: node,
@@ -660,17 +728,25 @@ class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
       right: 0,
       child: DecoratedBox(
         key: _box,
-        // Opaque under the row's own gap, where the rows pass under it.
-        decoration: BoxDecoration(color: scheme.surface),
-        child: keyboard == null
-            ? row
-            : ExplorerKeyboardRow(
-                key: ValueKey('pinned-keys:${node.id}'),
-                id: node.id,
-                keyboard: keyboard,
-                stop: false,
-                child: row,
-              ),
+        // Opaque, on the sidebar's own tone rather than a band of its own: the
+        // rows pass under it, and nothing says it is there but the label.
+        decoration: BoxDecoration(color: SurfaceTones.of(context).side),
+        // The list's own side padding, so the copy sits exactly on the label.
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: Sidebar.listPadding.left,
+            right: Sidebar.listPadding.right,
+          ),
+          child: keyboard == null
+              ? row
+              : ExplorerKeyboardRow(
+                  key: ValueKey('pinned-keys:${node.id}'),
+                  id: node.id,
+                  keyboard: keyboard,
+                  stop: false,
+                  child: row,
+                ),
+        ),
       ),
     );
   }

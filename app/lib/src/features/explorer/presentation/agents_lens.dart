@@ -13,6 +13,7 @@ import '../application/session_selection.dart';
 import 'explorer_selection_actions.dart';
 import 'lens_session_row.dart';
 import 'session_selection_bar.dart';
+import 'sidebar_chrome.dart';
 
 /// The Explorer's way to the Agents page, and the one place it says how many
 /// sessions wait on the user. The count is drawn only above zero: an empty
@@ -178,7 +179,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
             if (selecting) const SessionSelectionBar(),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
+                padding: Sidebar.listPadding,
                 itemCount: items.length,
                 itemBuilder: (context, index) => items[index],
               ),
@@ -223,38 +224,28 @@ class _StateHeader extends StatelessWidget {
   final VoidCallback? onTap;
   final bool spaceAbove;
 
+  /// The label's ink: a group whose name is its state says it in that state's
+  /// colour — amber *Needs you*, the accent *Working*, red *Failed* — and the
+  /// rest are dim (board A2). The words carry the state; the colour repeats it.
+  Color? _ink(BuildContext context) {
+    final semantic = SemanticColors.of(context);
+    return switch (group.state) {
+      AgentState.needsYou => semantic.attention,
+      AgentState.working => Theme.of(context).colorScheme.primary,
+      AgentState.failed => semantic.failure,
+      _ => null,
+    };
+  }
+
   @override
-  Widget build(BuildContext context) => ExplorerRow(
-    kind: ExplorerRowKind.group,
-    depth: 0,
-    selected: false,
-    band: true,
-    spaceAbove: spaceAbove,
+  Widget build(BuildContext context) => SidebarGroupLabel(
+    label: group.state.label,
+    color: _ink(context),
+    count: '${group.length}',
+    countTooltip: group.length == 1 ? '1 session' : '${group.length} sessions',
     expanded: expanded,
     onTap: onTap,
-    builder: (context) {
-      final theme = Theme.of(context);
-      return ExplorerRowLine(
-        // No glyph column: the label lines up with the titles below it.
-        lead: ExplorerRowLead(expanded: expanded, glyphColumn: false),
-        title: Text(
-          group.state.label.toUpperCase(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelSmall
-              ?.merge(Chrome.groupLabel)
-              .copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-        trailing: ExplorerRowTrailing(
-          meta: ExplorerRowMeta(
-            '${group.length}',
-            tooltip: group.length == 1
-                ? '1 session'
-                : '${group.length} sessions',
-          ),
-        ),
-      );
-    },
+    spaceAbove: spaceAbove,
   );
 }
 
@@ -270,9 +261,15 @@ class _FoldRow extends StatelessWidget {
     depth: 0,
     selected: false,
     onTap: onTap,
-    builder: (context) => ExplorerRowLine(
-      lead: const ExplorerRowLead(),
-      title: Text(label, style: UiDensity.of(context).muted(Theme.of(context))),
+    builder: (context) => Sidebar.rowLine(
+      ExplorerRowKind.session,
+      ExplorerRowLine(
+        lead: const ExplorerRowLead(),
+        title: Text(
+          label,
+          style: UiDensity.of(context).muted(Theme.of(context)),
+        ),
+      ),
     ),
   );
 }

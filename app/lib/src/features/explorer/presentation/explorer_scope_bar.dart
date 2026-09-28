@@ -18,6 +18,7 @@ import '../application/explorer_tree_provider.dart';
 import 'environment_rows.dart';
 import 'explorer_context_actions.dart';
 import 'explorer_tree_rows.dart';
+import 'sidebar_chrome.dart';
 
 /// **Which machine the Explorer lists.** The machine used to be the tree's top
 /// level; it is a choice above the list now, so a project stands at depth zero.
@@ -142,81 +143,41 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
   }
 }
 
-/// The machines as a strip of segments — `All · macOS · do-box` — for a
-/// workspace with two or three, so a switch is one click and the choice in
-/// force is always in view. **A row of its own, always**: beside the search
-/// field it was a crush — segments touching, `do-box` cut to `DO`, the field
-/// squeezed to what was left (owner, 2026-09-18) — so the segments share the
-/// full width equally, with a gap between them, and the field keeps its row.
-/// Each segment's right-click carries what the menu's entry for that machine
-/// did: its count, a terminal on it, pairing.
+/// **The machines as pills** (spec §4, board A2) — `All · Windows · do-box` —
+/// for a workspace with two or three, so a switch is one click and the choice
+/// in force is always in view. A row of its own under the search field, each
+/// pill as wide as its name, wrapping onto a second line rather than cutting a
+/// name. Each pill's right-click carries what the menu's entry for that
+/// machine did: its count, a terminal on it, pairing.
 class ExplorerEnvironmentStrip extends ConsumerWidget {
   const ExplorerEnvironmentStrip({super.key});
 
-  /// The most machines a strip holds; above it the switcher is a menu.
+  /// The most machines the pills hold; above it the switcher is a menu.
   static const most = 3;
 
-  /// Under this width per segment (scaled with the text) a segment is its
-  /// glyph alone, and the name is its tooltip.
-  static const labelFloor = 64.0;
-
-  /// Between two segments: they are separate targets, not one bar notched.
+  /// Between two pills (the mockup's `gap: 4px`).
   static const gap = Insets.xs;
 
-  /// A segment's own padding: [padX] each side, [padY] above and below.
-  static const padX = Insets.sm;
-  static const padY = Insets.xs;
+  // The equal-share segment geometry the strip used before it was pills.
+  // Nothing draws with it now; it is kept only so `explorer_scope_test.dart`
+  // compiles until that test is rewritten for content-sized pills.
 
-  /// Between a segment's glyph and its name.
-  static const glyphGap = Insets.sm;
+  /// Under this width per segment a segment was its glyph alone.
+  static const labelFloor = 64.0;
 
-  /// What a segment [share] wide leaves its name beside its glyph, once the
-  /// padding, the glyph and the gap have theirs.
+  /// What a segment [share] wide left its name beside its glyph.
   static double labelRoomOf(double share) =>
-      share - padX * 2 - Chrome.icon - glyphGap;
+      share - Insets.sm * 2 - Chrome.icon - Insets.sm;
 
-  /// What a segment [share] wide leaves its name on its own.
-  static double nameRoomOf(double share) => share - padX * 2;
+  /// What a segment [share] wide left its name on its own.
+  static double nameRoomOf(double share) => share - Insets.sm * 2;
 
-  /// A segment's width when [count] of them share [width].
+  /// A segment's width when [count] of them shared [width].
   static double shareOf(double width, int count) =>
       (width - gap * (count - 1)) / count;
 
-  /// Whether a segment [share] wide draws its glyph beside its name, from the
-  /// widest of [labels] in [context]'s text: yes while every name fits beside
-  /// one; otherwise the names stand alone — a whole `macOS` says more than
-  /// `>_ ma…`, the rows under the strip wear the glyphs anyway — and one that
-  /// does not fit even alone is ellipsised, whole in the tooltip and to a
-  /// screen reader. Measured at w600, the weight of the one in scope, so a
-  /// click never changes the strip's shape.
-  static (bool glyph, bool name) _fit(
-    BuildContext context,
-    double share,
-    List<String> labels,
-  ) {
-    final painter = TextPainter(
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    );
-    final style = UiDensity.of(
-      context,
-    ).rowTitle(Theme.of(context), strong: true);
-    var widest = 0.0;
-    try {
-      for (final label in labels) {
-        painter
-          ..text = TextSpan(text: label, style: style)
-          ..layout();
-        widest = math.max(widest, painter.width);
-      }
-    } finally {
-      painter.dispose();
-    }
-    // A pixel kept back: what is drawn is not what was measured to the last
-    // fraction.
-    return (widest + 1 <= labelRoomOf(share), true);
-  }
+  /// The most of the row one machine's name may take before it is ellipsised.
+  static const nameMax = 120.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -225,7 +186,6 @@ class ExplorerEnvironmentStrip extends ConsumerWidget {
     if (environments.length < 2 || environments.length > most) {
       return const SizedBox.shrink();
     }
-    final scheme = Theme.of(context).colorScheme;
     final total = environments.fold(0, (sum, e) => sum + e.projectCount);
     final segments = [
       _Segment(
@@ -248,39 +208,12 @@ class ExplorerEnvironmentStrip extends ConsumerWidget {
           choice: choice,
         ),
     ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final share = shareOf(constraints.maxWidth, segments.length);
-        final floor = MediaQuery.textScalerOf(context).scale(labelFloor);
-        final (glyph, name) = share < floor
-            ? (true, false)
-            : _fit(context, share, [
-                for (final segment in segments) segment.label,
-              ]);
-        return Material(
-          color: Colors.transparent,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.md),
-            side: BorderSide(color: scheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              for (final (index, segment) in segments.indexed) ...[
-                if (index > 0) const SizedBox(width: gap),
-                Expanded(
-                  child: _SegmentButton(
-                    segment: segment,
-                    glyph: glyph,
-                    name: name,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
+    return Wrap(
+      spacing: gap,
+      runSpacing: gap,
+      children: [
+        for (final segment in segments) _SegmentButton(segment: segment),
+      ],
     );
   }
 }
@@ -297,9 +230,11 @@ class _Segment {
   });
 
   final String value;
+
+  /// The machine's glyph, for its menu entry. The pill itself is words only.
   final IconData icon;
 
-  /// On the segment.
+  /// On the pill.
   final String label;
 
   /// In full, for the tooltip, the menu and a screen reader.
@@ -312,89 +247,25 @@ class _Segment {
 }
 
 class _SegmentButton extends ConsumerWidget {
-  const _SegmentButton({
-    required this.segment,
-    required this.glyph,
-    required this.name,
-  });
+  const _SegmentButton({required this.segment});
 
   final _Segment segment;
 
-  /// What the segment draws — never neither; see [ExplorerEnvironmentStrip].
-  final bool glyph;
-  final bool name;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final density = UiDensity.of(context);
-    final ink = segment.selected ? scheme.onSurface : scheme.onSurfaceVariant;
     final choice = segment.choice;
-    const shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
-    );
-    final button = Semantics(
-      button: true,
+    final button = SidebarPill(
+      label: segment.label,
       selected: segment.selected,
-      label: 'Environment: ${segment.name}',
-      child: Tooltip(
-        message: '${segment.name} · ${segment.detail}',
-        child: Material(
-          color: segment.selected
-              ? StateLayers.selected(scheme)
-              : Colors.transparent,
-          shape: shape,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            customBorder: shape,
-            hoverColor: StateLayers.hover(scheme),
-            onTap: () => ExplorerEnvironmentSwitcher.run(
-              context,
-              ref,
-              segment.value,
-              choice,
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: Chrome.control),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: ExplorerEnvironmentStrip.padX,
-                  vertical: ExplorerEnvironmentStrip.padY,
-                ),
-                // The label above names the segment in full; the glyph and
-                // the short word on it would only be read out twice.
-                child: ExcludeSemantics(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (glyph)
-                        Icon(segment.icon, size: Chrome.icon, color: ink),
-                      if (glyph && name)
-                        const SizedBox(
-                          width: ExplorerEnvironmentStrip.glyphGap,
-                        ),
-                      if (name)
-                        Flexible(
-                          child: Text(
-                            segment.label,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: density
-                                .rowTitle(theme, strong: segment.selected)
-                                ?.copyWith(color: ink),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      // The label names the pill in full; its short word would only be read
+      // out twice.
+      semanticLabel: 'Environment: ${segment.name}',
+      tooltip: '${segment.name} · ${segment.detail}',
+      maxLabelWidth: MediaQuery.textScalerOf(
+        context,
+      ).scale(ExplorerEnvironmentStrip.nameMax),
+      onTap: () =>
+          ExplorerEnvironmentSwitcher.run(context, ref, segment.value, choice),
     );
     return ContextMenuRegion(
       itemBuilder: () => [
@@ -552,7 +423,7 @@ class ExplorerScopeBar extends ConsumerWidget {
                   maxWidth: constraints.maxWidth * switcherShare,
                 ),
                 child: const Padding(
-                  padding: EdgeInsets.only(left: Insets.xs, top: Insets.xs),
+                  padding: EdgeInsets.only(left: Insets.xs),
                   child: ExplorerEnvironmentSwitcher(),
                 ),
               ),
@@ -566,10 +437,9 @@ class ExplorerScopeBar extends ConsumerWidget {
       children: [
         search,
         const Padding(
-          // The search field keeps [Insets.xs] under it; the strip sits in
-          // the same column as the field and the rows, and costs the row
-          // one [Chrome.control] and that gap.
-          padding: EdgeInsets.fromLTRB(Insets.xs, 0, Insets.xs, Insets.xs),
+          // On the rows' fill edge, as the field above is; the space above
+          // is the only thing between the two.
+          padding: EdgeInsets.fromLTRB(6, Sidebar.headerGap, 6, 0),
           child: ExplorerEnvironmentStrip(),
         ),
       ],
@@ -645,17 +515,20 @@ class ExplorerContextChips extends ConsumerWidget {
         ref.read(workspaceScopeProvider.notifier).select(target);
 
     final theme = Theme.of(context);
-    final style = theme.textTheme.labelSmall;
+    // Measured in the pill's own hand, at the weight of the one in force, so
+    // a click never changes which chips fit.
+    final style = theme.textTheme.labelSmall?.copyWith(
+      fontSize: 12,
+      letterSpacing: 0,
+      fontWeight: FontWeight.w500,
+    );
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.xs,
-        Insets.hair,
-        Insets.xs,
-        Insets.xs,
-      ),
+      // On the rows' fill edge, under the machine pills: the same pills, the
+      // same column.
+      padding: const EdgeInsets.fromLTRB(6, Sidebar.headerGap, 6, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final painter = TextPainter(
@@ -828,83 +701,31 @@ class _ScopeChip extends StatelessWidget {
   final List<PopupMenuEntry<String>> Function()? menuItems;
   final ValueChanged<String> onMenu;
 
-  static const _padX = Insets.sm;
-
-  /// Between a chip's colour dot and its label.
-  static const _dotGap = Insets.xs;
-
   /// What a chip whose text measures [text] takes of the row, with its colour
   /// [dot] when it wears one.
   static double widthFor(double text, TextScaler scaler, {bool dot = false}) =>
       math.min(text, scaler.scale(ExplorerContextChips.chipMax)) +
-      (dot ? ContextHueDot.chipSize + _dotGap : 0) +
-      _padX * 2 +
+      (dot ? Chrome.dot + SidebarPill.leadGap : 0) +
+      SidebarPill.padX * 2 +
       // The border, and a pixel kept back: what is drawn is not what was
       // measured to the last fraction.
       3;
 
+  /// A context is chosen with the same pill a machine is (board A2 `.pill`).
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final scaler = MediaQuery.textScalerOf(context);
     final hue = entry.hue;
-    const shape = StadiumBorder();
-    final chip = Semantics(
-      button: true,
+    final chip = SidebarPill(
+      label: entry.label,
       selected: selected,
-      child: Tooltip(
-        message: entry.workspace?.description ?? projectCountWords(entry.count),
-        child: Material(
-          color: selected ? StateLayers.selected(scheme) : Colors.transparent,
-          shape: StadiumBorder(
-            side: BorderSide(
-              color: selected ? Colors.transparent : scheme.outlineVariant,
-            ),
-          ),
-          child: InkWell(
-            customBorder: shape,
-            onTap: onTap,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: Chrome.statusBar,
-                maxWidth:
-                    scaler.scale(ExplorerContextChips.chipMax) +
-                    (hue == null ? 0 : ContextHueDot.chipSize + _dotGap) +
-                    _padX * 2,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: _padX),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // The dot stays whether or not the chip is the one in
-                    // force: the colour is the context's, not the filter's.
-                    if (hue != null) ...[
-                      ContextHueDot(hue: hue, size: ContextHueDot.chipSize),
-                      const SizedBox(width: _dotGap),
-                    ],
-                    Flexible(
-                      child: Text(
-                        entry.label,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: selected
-                              ? scheme.onSurface
-                              : scheme.onSurfaceVariant,
-                          fontWeight: selected ? FontWeight.w600 : null,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      tooltip: entry.workspace?.description ?? projectCountWords(entry.count),
+      maxLabelWidth: MediaQuery.textScalerOf(
+        context,
+      ).scale(ExplorerContextChips.chipMax),
+      // The dot stays whether or not the chip is the one in force: the
+      // colour is the context's, not the filter's.
+      leading: hue == null ? null : ContextHueDot(hue: hue, size: Chrome.dot),
+      onTap: onTap,
     );
     final menuItems = this.menuItems;
     return menuItems == null
@@ -935,7 +756,7 @@ class _OverflowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: width,
-    height: Chrome.statusBar,
+    height: SidebarPill.height,
     child: PopupMenuButton<String>(
       tooltip: hidden == 0 ? 'Contexts' : 'Contexts — $hidden more',
       padding: EdgeInsets.zero,

@@ -7,10 +7,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../projects/application/projects_controller.dart';
-import '../../projects/presentation/new_project_dialog.dart';
-import '../../sessions/presentation/new_session_dialog.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/explorer_agent_filter.dart';
 import '../application/explorer_sections.dart';
@@ -19,8 +16,13 @@ import '../application/explorer_view_mode.dart';
 import '../application/session_selection.dart';
 import '../domain/agent_filter.dart';
 
-/// The Explorer header's buttons. Its own widget, so a sync starting or the
-/// filter changing repaints the header and not the tree beneath it.
+/// The Projects header's verbs, drawn before its **+** (spec §4, board A2):
+/// **Select several**, then the filter. Its own widget, so a sync starting or
+/// the filter changing repaints the header and not the tree beneath it.
+///
+/// *Detect CLI sessions* and *New session* are not here: both are in the
+/// Workspace menu and the quick panel, and *New session* is the Sessions
+/// area's own **+** — a header of five glyphs was the clutter the board cut.
 class ExplorerHeaderActions extends ConsumerWidget {
   const ExplorerHeaderActions({super.key});
 
@@ -33,69 +35,33 @@ class ExplorerHeaderActions extends ConsumerWidget {
     final hasProjects = ref.watch(
       explorerFilteredProjectsProvider.select((p) => p.isNotEmpty),
     );
-    return ExplorerHeaderSlots(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (syncing)
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: Insets.sm),
+            padding: EdgeInsets.symmetric(horizontal: Insets.xs),
             child: InlineSpinner(size: InlineSpinnerSize.medium),
           ),
-        // One funnel for everything the Explorer holds back: two hiding
-        // controls would be two stories about why a session is off screen.
-        if (hasProjects) const _ConnectedFilterButton(),
         IconButton(
           // A toggle rather than Ctrl-click, which is invisible until
-          // somebody tells you about it.
-          tooltip: selecting ? 'Leave selection' : 'Select',
+          // somebody tells you about it. The same words and glyph as the
+          // Sessions area's, so the two headers teach one gesture.
+          tooltip: selecting ? 'Done selecting' : 'Select several',
           isSelected: selecting,
-          icon: Icon(selecting ? AppIcons.x : AppIcons.check),
+          icon: const Icon(AppIcons.listChecks),
           onPressed: () =>
               ref.read(sessionSelectionProvider.notifier).toggleMode(),
         ),
-        IconButton(
-          tooltip: 'Detect CLI sessions',
-          // Not `globe`, which is the Browser surface's glyph; imported
-          // cards already use this one for "an agent already wrote this".
-          icon: const Icon(AppIcons.clockCounterClockwise),
-          onPressed: () => DetectedProjectsView.show(context),
-        ),
-        IconButton(
-          // The dialog asks where; nothing has to be selected for it to.
-          tooltip: 'New session',
-          icon: const Icon(AppIcons.chatCircleDots),
-          onPressed: () => NewSessionDialog.show(context),
-        ),
-        IconButton(
-          tooltip: 'New project',
-          icon: const Icon(AppIcons.folderPlus),
-          onPressed: () => NewProjectDialog.show(context),
-        ),
+        // One funnel for everything the Explorer holds back: two hiding
+        // controls would be two stories about why a session is off screen.
+        if (hasProjects) ...[
+          const SizedBox(width: 6),
+          const _ConnectedFilterButton(),
+        ],
       ],
     );
   }
-}
-
-/// The pane header's action row, clamped to 30px slots: Material's 48px
-/// IconButton squares overflow the Explorer's 200px minimum width.
-class ExplorerHeaderSlots extends StatelessWidget {
-  const ExplorerHeaderSlots({required this.children, super.key});
-
-  final List<Widget> children;
-
-  static const _slot = Size(30, Chrome.tabStrip);
-
-  @override
-  Widget build(BuildContext context) => IconButtonTheme(
-    data: IconButtonThemeData(
-      style: IconButton.styleFrom(
-        minimumSize: _slot,
-        maximumSize: _slot,
-        padding: EdgeInsets.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: children),
-  );
 }
 
 /// Reads what [ExplorerFilterButton] draws and writes what it picks.

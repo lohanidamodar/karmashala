@@ -6,13 +6,15 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../application/environment_terminals.dart';
+import 'sidebar_chrome.dart';
 
 /// A group's label over the rows it holds — a context, a machine's terminals.
 /// Flat: it stands at depth zero and indents nothing beneath it, and the list
-/// pins it while its rows scroll under it. It is drawn in the same row model
-/// as those rows — caret column, glyph column, the right-hand column, `+` and
-/// `⋮` on hover — on a tinted band, with the context's colour dot where a
-/// project row keeps its folder.
+/// pins it while its rows scroll under it. Drawn as the sidebar's group label
+/// ([SidebarGroupLabel], board A2 `.grp`): 24px, small caps in the dim ink, the
+/// context's colour dot before the name, the count at the right with `+` and
+/// `⋮` in its place on hover — and no band or rule: the gap above it is what
+/// separates it from the group before.
 class ExplorerGroupHeader extends StatelessWidget {
   const ExplorerGroupHeader({
     required this.expanded,
@@ -63,76 +65,21 @@ class ExplorerGroupHeader extends StatelessWidget {
   final String? tooltip;
 
   @override
-  Widget build(BuildContext context) {
-    final menuItemsBuilder = this.menuItemsBuilder;
-    final onMenu = this.onMenu;
-    final hue = this.hue;
-    final row = ExplorerRow(
-      kind: ExplorerRowKind.group,
-      expanded: expanded,
-      depth: 0,
-      selected: false,
-      band: true,
-      spaceAbove: spaceAbove,
-      onTap: onTap,
-      menuItemsBuilder: menuItemsBuilder,
-      onMenu: onMenu,
-      builder: (context) {
-        final theme = Theme.of(context);
-        final density = UiDensity.of(context);
-        final detail = this.detail;
-        final trailing = trailingText;
-        return ExplorerRowLine(
-          lead: ExplorerRowLead(
-            expanded: expanded,
-            glyph: hue == null
-                ? null
-                : ContextHueDot(hue: hue, label: '${hue.label} context'),
-          ),
-          title: Row(
-            children: [
-              Flexible(
-                child: Text(
-                  label.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall
-                      ?.merge(Chrome.groupLabel)
-                      .copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ),
-              if (detail != null) ...[
-                SizedBox(width: density.glyphGap),
-                Expanded(
-                  child: Text(
-                    detail,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: density.muted(theme),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          trailing: ExplorerRowTrailing(
-            meta: trailing == null
-                ? null
-                : ExplorerRowMeta(trailing, tooltip: trailingWords),
-            action: action,
-            menu: menuItemsBuilder == null || onMenu == null
-                ? null
-                : RowMenuButton(
-                    tooltip: menuLabel ?? ExplorerRowKind.group.menuLabel,
-                    itemBuilder: menuItemsBuilder,
-                    onSelected: onMenu,
-                  ),
-          ),
-        );
-      },
-    );
-    return tooltip == null ? row : Tooltip(message: tooltip!, child: row);
-  }
+  Widget build(BuildContext context) => SidebarGroupLabel(
+    label: label,
+    count: trailingText,
+    countTooltip: trailingWords,
+    hue: hue,
+    detail: detail,
+    expanded: expanded,
+    onTap: onTap,
+    spaceAbove: spaceAbove,
+    action: action,
+    menuLabel: menuLabel,
+    menuItemsBuilder: menuItemsBuilder,
+    onMenu: onMenu,
+    tooltip: tooltip,
+  );
 }
 
 /// The glyph for a machine, by what it is rather than by what it is called.
@@ -174,54 +121,57 @@ class TerminalRow extends StatelessWidget {
       final theme = Theme.of(context);
       final scheme = theme.colorScheme;
       final density = UiDensity.of(context);
-      return LayoutBuilder(
-        builder: (context, constraints) => Row(
-          children: [
-            ExplorerRowLead(
-              glyph: Icon(
-                terminal.running ? AppIcons.playCircle : AppIcons.checkCircle,
-                size: ExplorerRow.glyphSize,
-                color: terminal.running
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
-              ),
-            ),
-            Expanded(
-              child: Text(
-                terminal.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: density.rowTitle(theme),
-              ),
-            ),
-            const SizedBox(width: Insets.sm),
-            // Scaled rather than clipped when large text meets a narrow pane.
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (terminal.running)
-                      TextButton(
-                        onPressed: onOpen,
-                        child: Text(terminal.isHosted ? 'Attach' : 'Focus'),
-                      ),
-                    if (onEnd != null)
-                      TextButton(
-                        onPressed: onEnd,
-                        style: TextButton.styleFrom(
-                          foregroundColor: scheme.error,
-                        ),
-                        child: const Text('End'),
-                      ),
-                  ],
+      return Sidebar.rowLine(
+        ExplorerRowKind.terminal,
+        LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              ExplorerRowLead(
+                glyph: Icon(
+                  terminal.running ? AppIcons.playCircle : AppIcons.checkCircle,
+                  size: ExplorerRow.glyphSize,
+                  color: terminal.running
+                      ? scheme.primary
+                      : scheme.onSurfaceVariant,
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                child: Text(
+                  terminal.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: density.rowTitle(theme),
+                ),
+              ),
+              const SizedBox(width: Insets.sm),
+              // Scaled rather than clipped when large text meets a narrow pane.
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (terminal.running)
+                        TextButton(
+                          onPressed: onOpen,
+                          child: Text(terminal.isHosted ? 'Attach' : 'Focus'),
+                        ),
+                      if (onEnd != null)
+                        TextButton(
+                          onPressed: onEnd,
+                          style: TextButton.styleFrom(
+                            foregroundColor: scheme.error,
+                          ),
+                          child: const Text('End'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     },

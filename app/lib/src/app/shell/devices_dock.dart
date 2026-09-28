@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_device_pane/providers.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../features/explorer/presentation/sidebar_chrome.dart';
 import 'shell_area.dart';
 
 /// One device as the dock draws it.
@@ -96,6 +98,10 @@ class ShellDevicesDock extends ConsumerWidget {
 
 /// The dock from values: the devices, and what opening one (or the header,
 /// with null) does.
+///
+/// Drawn on the sidebar's own tone, not a band of its own: the group label
+/// says where it starts, and the structural hairline above it is transparent
+/// unless the user chose borders (spec §2, "Tone, not lines").
 class DevicesDock extends StatelessWidget {
   const DevicesDock({required this.devices, required this.onOpen, super.key});
 
@@ -105,80 +111,42 @@ class DevicesDock extends StatelessWidget {
   /// Rows drawn before the rest fold into "n more".
   static const visibleRows = 3;
 
+  /// The dock's own padding: the list's sides, a little air above the label
+  /// and the list's 8 under the last row (board A2 `padding: 6px 6px 8px`,
+  /// less the 4 every row insets its fill).
+  static const padding = EdgeInsets.fromLTRB(2, 6, 2, 8);
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final tones = SurfaceTones.of(context);
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
     final shown = devices.take(visibleRows).toList();
     final hidden = devices.length - shown.length;
-    return ColoredBox(
-      color: tones.chrome,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: tones.line)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        padding: padding,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _DockLine(
-              onTap: () => onOpen(null),
+            SidebarGroupLabel(
+              label: 'Devices',
+              leading: const Icon(AppIcons.deviceMobile),
               tooltip: 'Open Devices',
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'DEVICES',
-                      style: muted?.merge(Chrome.groupLabel),
-                    ),
-                  ),
-                  Text(
-                    devices.isEmpty
-                        ? 'none'
-                        : hidden > 0
-                        ? '$hidden more'
-                        : '${devices.length}',
-                    style: muted,
-                  ),
-                ],
-              ),
+              onTap: () => onOpen(null),
+              count: devices.isEmpty
+                  ? 'none'
+                  : hidden > 0
+                  ? '$hidden more'
+                  : '${devices.length}',
             ),
             for (final device in shown)
               _DockLine(
                 key: ValueKey('dock-device:${device.id}'),
+                device: device,
                 onTap: () => onOpen(device),
-                tooltip: [
-                  device.name,
-                  if (device.emulator) 'emulator',
-                  if (!device.ready) 'not connected',
-                ].join(' · '),
-                child: Row(
-                  children: [
-                    Icon(
-                      AppIcons.deviceMobile,
-                      size: Chrome.iconSmall,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: Insets.sm),
-                    Expanded(
-                      child: Text(
-                        device.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                    Icon(
-                      AppIcons.circleFill,
-                      size: 7,
-                      semanticLabel: device.ready ? 'connected' : 'offline',
-                      color: device.ready
-                          ? SemanticColors.of(context).working
-                          : theme.colorScheme.outline,
-                    ),
-                  ],
-                ),
               ),
           ],
         ),
@@ -187,30 +155,83 @@ class DevicesDock extends StatelessWidget {
   }
 }
 
+/// One device on the sidebar's row (`.row`): 28px, radius 6, its state dot,
+/// its name, and — muted — what kind of device it is.
 class _DockLine extends StatelessWidget {
-  const _DockLine({
-    required this.onTap,
-    required this.tooltip,
-    required this.child,
-    super.key,
-  });
+  const _DockLine({required this.device, required this.onTap, super.key});
 
+  final DockDevice device;
   final VoidCallback onTap;
-  final String tooltip;
-  final Widget child;
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
-    child: InkWell(
-      onTap: onTap,
-      child: SizedBox(
-        height: 26,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
-          child: child,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final kind = device.simulator
+        ? 'simulator'
+        : device.emulator
+        ? 'emulator'
+        : null;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        ExplorerRow.inset,
+        0,
+        ExplorerRow.inset,
+        Sidebar.rowGap,
+      ),
+      child: Tooltip(
+        message: [
+          device.name,
+          if (device.emulator) 'emulator',
+          if (!device.ready) 'not connected',
+        ].join(' · '),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: const BorderRadius.all(Radius.circular(Radii.sm)),
+          hoverColor: StateLayers.hover(scheme),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Sidebar.rowHeight),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: Sidebar.labelPadX,
+                right: Sidebar.labelTrailOf(density),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    AppIcons.circleFill,
+                    size: Chrome.dot,
+                    semanticLabel: device.ready ? 'connected' : 'offline',
+                    color: device.ready
+                        ? SemanticColors.of(context).idle
+                        : SurfaceTones.of(context).floatingLine,
+                  ),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Text(
+                      device.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: density.rowTitle(theme),
+                    ),
+                  ),
+                  if (kind != null) ...[
+                    const SizedBox(width: Insets.sm),
+                    Text(
+                      kind,
+                      maxLines: 1,
+                      style: density
+                          .muted(theme)
+                          ?.copyWith(color: scheme.outline),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

@@ -38,7 +38,7 @@ class ExplorerTreeRow extends StatelessWidget {
   final Key? anchorKey;
 
   /// The list's first row, and the pinned copy: a header there keeps no gap
-  /// above its band.
+  /// above it.
   final bool first;
 
   @override
@@ -141,7 +141,9 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
     final known = node.environment != null;
     return ExplorerGroupHeader(
       expanded: node.expanded,
-      label: node.label,
+      // The machine alone: these groups are the Terminals area's, whose
+      // header already says "Terminals" (board A2 — `Windows`, `archlinux`).
+      label: node.environmentLabel,
       spaceAbove: spaceAbove,
       trailingText: node.count == null ? null : '${node.count}',
       trailingWords: node.count == null ? null : '${node.count} running',
