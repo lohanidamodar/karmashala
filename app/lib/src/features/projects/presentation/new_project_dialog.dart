@@ -8,6 +8,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import '../../sessions/presentation/new_dialog_section.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 
 import 'package:agent_cli/process.dart';
@@ -334,100 +335,67 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                 NewSessionDialog.show(host);
               },
             ),
-            DropdownButtonFormField<String>(
-              initialValue: _targetId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Environment'),
-              items: [
-                for (final env in environments)
-                  DropdownMenuItem(
-                    value: env.id,
-                    child: _Choice(_environmentLabel(env)),
+            // Three labelled parts in the order the choice is made (spec §5):
+            // the machine, what to add from it, and what to call it.
+            NewDialogSection(
+              label: 'Machine',
+              first: true,
+              child: DropdownButtonFormField<String>(
+                initialValue: _targetId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Machine'),
+                items: [
+                  for (final env in environments)
+                    DropdownMenuItem(
+                      value: env.id,
+                      child: _Choice(_environmentLabel(env)),
+                    ),
+                ],
+                onChanged: (v) => setState(() {
+                  _targetId = v ?? localHostEnvironmentId;
+                  _suggestWorkspace();
+                }),
+              ),
+            ),
+            NewDialogSection(
+              label: 'Folder or clone',
+              child: _source(isSsh: isSsh, hasGit: hasGit, preview: preview),
+            ),
+            NewDialogSection(
+              label: 'Name & context',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Project name',
+                      hintText: 'Karmashala',
+                    ),
                   ),
-              ],
-              onChanged: (v) => setState(() {
-                _targetId = v ?? localHostEnvironmentId;
-                _suggestWorkspace();
-              }),
-            ),
-            const SizedBox(height: Insets.md),
-            TextField(
-              controller: _gitUrlController,
-              decoration: const InputDecoration(
-                labelText: 'Git repository URL (optional)',
-                hintText: 'https://github.com/owner/repo.git',
+                  const SizedBox(height: Insets.md),
+                  _ContextField(
+                    workspaces: workspaces,
+                    selectedId: _workspaceId,
+                    naming: _namingWorkspace,
+                    newName: _newWorkspaceController,
+                    enabled: !_busy,
+                    onSelected: (value) => setState(() {
+                      _workspaceId = value;
+                      _workspaceChosen = true;
+                    }),
+                    onStartNaming: () => setState(() {
+                      _namingWorkspace = true;
+                      _workspaceChosen = true;
+                    }),
+                    onStopNaming: () => setState(() {
+                      _namingWorkspace = false;
+                      _newWorkspaceController.clear();
+                    }),
+                  ),
+                ],
               ),
-              onChanged: (url) {
-                if (_nameController.text.trim().isEmpty &&
-                    url.trim().isNotEmpty) {
-                  setState(() {
-                    _nameController.text = repoNameFromUrl(url);
-                  });
-                } else {
-                  setState(() {});
-                }
-              },
-            ),
-            const SizedBox(height: Insets.md),
-            PathFieldRow.inDialog(
-              controller: _folderController,
-              label: isSsh
-                  ? (hasGit
-                        ? 'Remote folder path (optional)'
-                        : 'Remote folder path')
-                  : (hasGit ? 'Destination folder path' : 'Folder path'),
-              hint: isSsh
-                  ? (hasGit ? '~/karmashala/<repo>' : '/home/user/project')
-                  : (Platform.isWindows
-                        ? r'C:\src\karmashala'
-                        : '~/src/karmashala'),
-              helper: isSsh && hasGit
-                  ? 'Defaults to ~/karmashala/<repo> on remote host'
-                  : null,
-              onChanged: (_) => setState(_suggestWorkspace),
-              actions: [
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _browse,
-                  icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
-                  label: const Text('Browse'),
-                ),
-              ],
-            ),
-            if (preview != null)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.xs),
-                child: Text(
-                  'Stored as: $preview',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            const SizedBox(height: Insets.md),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Project name',
-                hintText: 'Karmashala',
-              ),
-            ),
-            const SizedBox(height: Insets.md),
-            _ContextField(
-              workspaces: workspaces,
-              selectedId: _workspaceId,
-              naming: _namingWorkspace,
-              newName: _newWorkspaceController,
-              enabled: !_busy,
-              onSelected: (value) => setState(() {
-                _workspaceId = value;
-                _workspaceChosen = true;
-              }),
-              onStartNaming: () => setState(() {
-                _namingWorkspace = true;
-                _workspaceChosen = true;
-              }),
-              onStopNaming: () => setState(() {
-                _namingWorkspace = false;
-                _newWorkspaceController.clear();
-              }),
             ),
             if (_error != null) ...[
               const SizedBox(height: Insets.md),
@@ -450,6 +418,67 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       ],
     );
   }
+
+  /// Where the project comes from: a repository to clone, a folder on the
+  /// machine, or both — a clone lands in the folder — and how the folder will
+  /// be stored there.
+  Widget _source({
+    required bool isSsh,
+    required bool hasGit,
+    required String? preview,
+  }) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextField(
+        controller: _gitUrlController,
+        decoration: const InputDecoration(
+          labelText: 'Git repository URL (optional)',
+          hintText: 'https://github.com/owner/repo.git',
+        ),
+        onChanged: (url) {
+          if (_nameController.text.trim().isEmpty && url.trim().isNotEmpty) {
+            setState(() {
+              _nameController.text = repoNameFromUrl(url);
+            });
+          } else {
+            setState(() {});
+          }
+        },
+      ),
+      const SizedBox(height: Insets.md),
+      PathFieldRow.inDialog(
+        controller: _folderController,
+        label: isSsh
+            ? (hasGit ? 'Remote folder path (optional)' : 'Remote folder path')
+            : (hasGit ? 'Destination folder path' : 'Folder path'),
+        hint: isSsh
+            ? (hasGit ? '~/karmashala/<repo>' : '/home/user/project')
+            : (Platform.isWindows ? r'C:\src\karmashala' : '~/src/karmashala'),
+        helper: isSsh && hasGit
+            ? 'Defaults to ~/karmashala/<repo> on remote host'
+            : null,
+        onChanged: (_) => setState(_suggestWorkspace),
+        actions: [
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _browse,
+            icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
+            label: const Text('Browse'),
+          ),
+        ],
+      ),
+      if (preview != null)
+        Padding(
+          padding: const EdgeInsets.only(top: Insets.xs),
+          child: Text(
+            'Stored as: $preview',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 /// The context picker: which of the user's four or five contexts this project

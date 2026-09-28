@@ -27,23 +27,41 @@ class NewSessionAgentCards extends StatelessWidget {
   final ValueChanged<AgentInstallation> onSelected;
   final bool enabled;
 
+
   @override
   Widget build(BuildContext context) => Semantics(
     label: 'Agent',
     container: true,
-    child: Wrap(
-      spacing: Insets.sm,
-      runSpacing: Insets.sm,
+    // Two across, sharing the row evenly. Rows of Expanded rather than a
+    // LayoutBuilder: a dialog measures its content's intrinsic size, which a
+    // LayoutBuilder refuses — the dialog failed layout and never showed.
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final installation in installations)
-          _AgentCard(
-            key: ValueKey('agent-card:${installation.id}'),
-            installation: installation,
-            selected: installation.id == selected?.id,
-            onTap: enabled ? () => onSelected(installation) : null,
+        for (var i = 0; i < installations.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: Insets.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _card(installations[i])),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: i + 1 < installations.length
+                    ? _card(installations[i + 1])
+                    : const SizedBox.shrink(),
+              ),
+            ],
           ),
+        ],
       ],
     ),
+  );
+
+  Widget _card(AgentInstallation installation) => _AgentCard(
+    key: ValueKey('agent-card:${installation.id}'),
+    installation: installation,
+    selected: installation.id == selected?.id,
+    onTap: enabled ? () => onSelected(installation) : null,
   );
 }
 
@@ -84,8 +102,10 @@ class _AgentCard extends ConsumerWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(Radii.md),
           child: Container(
-            width: 200,
-            padding: const EdgeInsets.all(Insets.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.md,
+              vertical: Insets.sm,
+            ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(Radii.md),
               border: Border.all(
