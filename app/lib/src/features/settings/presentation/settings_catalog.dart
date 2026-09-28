@@ -264,6 +264,23 @@ enum SettingsAnchor {
     'bindings',
     'keys',
   ]),
+  // Anchors of their own, so search finds them and a link can land on them.
+  notifications(SettingsSectionId.notifications, 'Notifications', [
+    'notifications',
+    'alerts',
+    'toast',
+    'sound',
+    'badge',
+    'tray',
+  ]),
+  about(SettingsSectionId.about, 'About', [
+    'about',
+    'version',
+    'build',
+    'licences',
+    'licenses',
+    'repository',
+  ]),
   notes(SettingsSectionId.general, 'Notes', [
     'note',
     'notes',

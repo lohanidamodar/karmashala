@@ -1,3 +1,5 @@
+import 'about_page.dart';
+import 'notifications_page.dart';
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
@@ -103,6 +105,8 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.startup => const StartupSection(),
   SettingsAnchor.launcherHotkey => const LauncherHotkeySection(),
   SettingsAnchor.keyboard => const KeyboardSection(),
+  SettingsAnchor.notifications => const NotificationsSection(),
+  SettingsAnchor.about => const AboutSection(),
   SettingsAnchor.notes => const NotesSettingsSection(),
   SettingsAnchor.themeText => const ThemeTextSection(),
   SettingsAnchor.sidePanel => const SidePanelItemsSection(),

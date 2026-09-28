@@ -5,8 +5,6 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'about_page.dart';
-import 'notifications_page.dart';
 import 'settings_layout.dart';
 import 'settings_nav.dart';
 import 'settings_page_body.dart';
@@ -239,7 +237,6 @@ class _SectionContent extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final extra = _pageExtra(section);
           return SingleChildScrollView(
             // A fresh scroll position per section, not one shared offset.
             key: PageStorageKey('settings-${section.name}'),
@@ -250,19 +247,7 @@ class _SectionContent extends StatelessWidget {
                 constraints: const BoxConstraints(
                   maxWidth: SettingsLayout.contentMaxWidth,
                 ),
-                child: extra == null
-                    ? SettingsPageBody(page: section)
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SettingsPageBody(page: section),
-                          // Outside the body's own scope, so measured here.
-                          SettingsNarrowScope(
-                            narrow: SettingsLayout.isNarrow(width, scaler),
-                            child: extra,
-                          ),
-                        ],
-                      ),
+                child: SettingsPageBody(page: section),
               ),
             ),
           );
@@ -276,11 +261,6 @@ class _SectionContent extends StatelessWidget {
   /// in `settings_page_body.dart` is held by the responsive work. The body
   /// still draws their title and description; this draws what follows. Search
   /// finds both pages by their label and [SettingsSectionId.aliases].
-  static Widget? _pageExtra(SettingsSectionId page) => switch (page) {
-    SettingsSectionId.notifications => const NotificationsSection(),
-    SettingsSectionId.about => const AboutSection(),
-    _ => null,
-  };
 }
 
 /// **The sticky category picker** of a narrow Settings tab (spec §6): the
