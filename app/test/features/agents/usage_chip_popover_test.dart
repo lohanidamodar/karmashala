@@ -5,10 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/presentation/toolbar_usage_strip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_ui/charts.dart';
 
 import '../../support/fakes.dart';
@@ -49,32 +49,35 @@ void main() {
     }
   }
 
-  testWidgets('hovering the chip opens a card of meters, with pace', (
+  Widget strip(ProviderContainer container) => UncontrolledProviderScope(
+    container: container,
+    child: const MaterialApp(
+      home: Scaffold(
+        body: Center(child: SizedBox(width: 900, child: ToolbarUsageStrip())),
+      ),
+    ),
+  );
+
+  testWidgets('clicking the chip opens a card of meters, with pace', (
     tester,
   ) async {
     final container = ProviderContainer(overrides: overrides());
     addTearDown(container.dispose);
-    container.read(selectedSessionIdProvider.notifier).select('s1');
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: Center(child: UsageChip(sessionId: 's1')),
-          ),
-        ),
-      ),
-    );
+    await tester.pumpWidget(strip(container));
     await tester.pump();
     expect(find.text('62% · 2h11m'), findsOneWidget);
     expect(find.byType(UsageChipPopover), findsNothing);
 
+    // A hover opens nothing: the toolbar stays quiet under a passing pointer.
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
     addTearDown(mouse.removePointer);
-    await mouse.moveTo(tester.getCenter(find.byType(UsageChip)));
+    await mouse.moveTo(tester.getCenter(find.text('62% · 2h11m')));
     await tester.pump(const Duration(seconds: 1));
-    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(UsageChipPopover), findsNothing);
+
+    await tester.tap(find.text('62% · 2h11m'));
+    await tester.pumpAndSettle();
 
     expect(find.byType(UsageChipPopover), findsOneWidget);
     expect(find.byType(LinearMeter), findsNWidgets(2));
@@ -82,10 +85,9 @@ void main() {
     expect(find.text('Slightly ahead of pace'), findsOneWidget);
     expect(find.text('owner@example.com'), findsOneWidget);
     expect(find.text('Checked just now'), findsOneWidget);
-    expect(find.text('Click for usage & limits'), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+    expect(find.text('Usage settings'), findsOneWidget);
 
-    await mouse.moveTo(const Offset(1, 1));
-    await tester.pump(const Duration(seconds: 1));
     container.read(windowFocusedProvider.notifier).set(false);
     await tester.pump(const Duration(seconds: 1));
   });
@@ -96,21 +98,16 @@ void main() {
     final semantics = tester.ensureSemantics();
     final container = ProviderContainer(overrides: overrides());
     addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: Center(child: UsageChip(sessionId: 's1')),
-          ),
+    await tester.pumpWidget(strip(container));
+    await tester.pump();
+    expect(
+      find.bySemanticsLabel(
+        RegExp(
+          r'^Claude usage: .*5-hour · 62% · resets in 2h11m.*Checked',
+          dotAll: true,
         ),
       ),
-    );
-    await tester.pump();
-    final data = tester.getSemantics(find.byType(UsageChip)).getSemanticsData();
-    expect(
-      data.tooltip,
-      allOf(contains('5-hour · 62% · resets in 2h11m'), contains('Checked')),
+      findsOneWidget,
     );
     container.read(windowFocusedProvider.notifier).set(false);
     await tester.pump();

@@ -5,6 +5,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
+import 'package:karmashala/src/features/agents/presentation/toolbar_usage_strip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -61,8 +62,9 @@ Widget chipIn(ProviderContainer container, {bool visible = true}) =>
       child: MaterialApp(
         home: Scaffold(
           body: Center(
+            // The toolbar's strip, as wide as a desktop toolbar leaves it.
             child: visible
-                ? const UsageChip(sessionId: 's1')
+                ? const SizedBox(width: 900, child: ToolbarUsageStrip())
                 : const SizedBox.shrink(),
           ),
         ),
@@ -156,11 +158,17 @@ void main() {
     await tester.pump();
   }
 
-  /// The sentence behind the hover card — what a screen reader is given.
+  /// The chip's sentence — what a screen reader is given, and what its card
+  /// spells out.
   String tooltipOf(WidgetTester tester) {
-    final tip = tester.widget<Tooltip>(find.byType(Tooltip));
-    final card = (tip.richMessage! as WidgetSpan).child as UsageChipPopover;
-    return card.view.tooltip;
+    final chip = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Semantics && (w.properties.label ?? '').contains(' usage: '),
+      ),
+    );
+    final label = chip.properties.label!;
+    return label.substring(label.indexOf(' usage: ') + ' usage: '.length);
   }
 
   Color? colourOf(WidgetTester tester, String label) =>
@@ -437,18 +445,19 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('is absent entirely for an agent we have no endpoint for', (
+  testWidgets('an account the server never read draws nothing at all', (
     tester,
   ) async {
+    // An agent with no usage endpoint is one the server never reads.
+    answer = null;
     final container = await pumpChip(tester, agentId: 'unknownAgent');
 
-    expect(find.byType(UsageChip), findsOneWidget);
+    expect(find.byType(ToolbarUsageStrip), findsOneWidget);
     expect(
       find.byIcon(AppIcons.circleHalf),
       findsNothing,
       reason: 'not an error and not a placeholder — nothing at all',
     );
-    expect(find.byType(Tooltip), findsNothing);
     expect(
       server.agentWork.refreshes,
       isEmpty,
@@ -633,21 +642,35 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('clicking asks the server to refresh and opens the usage view '
-      'Settings already has', (tester) async {
+  testWidgets('clicking opens the account\'s card; its Refresh asks the '
+      'server, and Usage settings opens the view Settings already has', (
+    tester,
+  ) async {
     answer = usageSnapshot();
     final container = await pumpChip(tester);
 
     await tester.tap(find.byIcon(AppIcons.circleHalf));
     await tester.pumpAndSettle();
+    expect(find.byType(UsageChipPopover), findsOneWidget);
+    expect(
+      server.agentWork.refreshes,
+      isEmpty,
+      reason: 'opening the card reads nothing: the server keeps its schedule',
+    );
 
+    await tester.tap(find.text('Refresh'));
+    await tester.pumpAndSettle();
     expect(
       server.agentWork.refreshes,
       [_claudeAccount],
       reason:
-          'a click asks the server to read this account; its throttle '
+          'Refresh asks the server to read this account; its throttle '
           'decides whether that costs a request',
     );
+
+    await tester.tap(find.text('Usage settings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(UsageChipPopover), findsNothing);
     // Settings is a workbench tab now, so the click asks for a **page**
     // rather than pushing a route: it writes the section and opens the tab.
     final target = container.read(settingsTabSectionProvider);
@@ -666,16 +689,15 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('clicking again focuses the one Settings tab, however often', (
-    tester,
-  ) async {
-    // Each click is an ask of the server — whose floor decides whether it
-    // costs a request (the server's own tests) — and never a second tab.
+  testWidgets('Usage settings again focuses the one Settings tab, however '
+      'often', (tester) async {
     answer = usageSnapshot();
     final container = await pumpChip(tester);
 
     for (var i = 0; i < 5; i++) {
       await tester.tap(find.byIcon(AppIcons.circleHalf));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usage settings'));
       await tester.pumpAndSettle();
       // Nothing to dismiss between clicks: the tab is already open, and the
       // second ask focuses it rather than stacking a second copy.
@@ -688,7 +710,11 @@ void main() {
       );
     }
 
-    expect(server.agentWork.refreshes, hasLength(5));
+    expect(
+      server.agentWork.refreshes,
+      isEmpty,
+      reason: 'opening the card and the page read nothing',
+    );
     await quiesce(tester, container);
   });
 

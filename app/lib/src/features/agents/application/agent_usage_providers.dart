@@ -4,11 +4,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
 import '../data/agents_data.dart';
-import 'agent_installations_controller.dart';
-import 'agent_providers.dart';
 
 /// **Usage as the server reads it.** The server asks each agent's usage
 /// endpoint on its own schedule — the floor while the quota moves, longer
@@ -117,24 +113,4 @@ final agentUsageProvider = Provider.autoDispose
       }
       final usage = state?.usage;
       return usage == null ? const AsyncLoading() : AsyncData(usage);
-    });
-
-/// **Whose quota one session is spending**: keyed by session, not by whatever
-/// is focused. Null — and no chip at all — for an agent with no endpoint.
-final usageInstallationForSessionProvider = Provider.autoDispose
-    .family<AgentInstallation?, String>((ref, sessionId) {
-      ref.watchSessionKinds(const {SessionChangeKind.membership});
-      final session = ref.read(sessionsDataProvider).getById(sessionId);
-      if (session == null) return null;
-      for (final installation in ref.watch(
-        agentInstallationsControllerProvider,
-      )) {
-        if (installation.id != session.agentInstallationId) continue;
-        final usage = ref
-            .watch(agentRegistryProvider)
-            .adapterFor(installation.agentId)
-            ?.usage;
-        return usage == null ? null : installation;
-      }
-      return null;
     });

@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
@@ -106,7 +105,6 @@ void main() {
 
     ShellStatusBar.debugItemBuildCount = 0;
     ModelChip.debugBuildCount = 0;
-    UsageChip.debugBuildCount = 0;
 
     container.read(sessionLauncherProvider).setModel('s1', 'opus');
     await tester.pump();
@@ -117,11 +115,6 @@ void main() {
       reason:
           'the branch, the tab count and the panel toggle know nothing about '
           'a model and must not repaint for one',
-    );
-    expect(
-      UsageChip.debugBuildCount,
-      0,
-      reason: 'and the quota has followed it out of this row entirely',
     );
     await quiesce(tester, container);
   });
@@ -154,14 +147,12 @@ void main() {
     await tester.pump();
 
     ShellStatusBar.debugItemBuildCount = 0;
-    UsageChip.debugBuildCount = 0;
     container
         .read(sessionsRevisionProvider.notifier)
         .changed(const SessionChange.renamed('s1'));
     await tester.pump();
 
     expect(ShellStatusBar.debugItemBuildCount, 0);
-    expect(UsageChip.debugBuildCount, 0);
     await quiesce(tester, container);
   });
 

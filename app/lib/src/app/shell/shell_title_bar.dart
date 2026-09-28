@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../features/agents/presentation/toolbar_usage_strip.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'app_shell.dart' show ShellWidth;
@@ -105,7 +106,8 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// The command field, or nothing once the row leaves it no room.
+/// The command field, then every agent account's usage in the room left —
+/// or nothing once the row leaves no room.
 class _QuickOpenSlot extends StatelessWidget {
   const _QuickOpenSlot();
 
@@ -113,14 +115,28 @@ class _QuickOpenSlot extends StatelessWidget {
   /// convenience — `Ctrl+K` is the same.
   static const _minWidth = 64.0;
 
+  /// The field's own cap (`QuickOpenButton`); it keeps that much first.
+  static const _fieldWidth = 280.0;
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => constraints.maxWidth < _minWidth
-        ? const SizedBox.shrink()
-        : const Align(
-            alignment: Alignment.centerLeft,
-            child: QuickOpenButton(),
-          ),
+    builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      if (width < _minWidth) return const SizedBox.shrink();
+      final field = width < _fieldWidth ? width : _fieldWidth;
+      final rest = width - field - Insets.sm;
+      return Row(
+        children: [
+          SizedBox(width: field, child: const QuickOpenButton()),
+          // Usage is per account, not per session, so it lives here rather
+          // than under a pane — in whatever the field leaves.
+          if (rest > 0) ...[
+            const SizedBox(width: Insets.sm),
+            const Expanded(child: ToolbarUsageStrip()),
+          ],
+        ],
+      );
+    },
   );
 }
 

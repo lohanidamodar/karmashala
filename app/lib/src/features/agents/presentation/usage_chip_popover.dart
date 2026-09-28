@@ -25,6 +25,8 @@ class UsageChipPopover extends ConsumerWidget {
     required this.accountKey,
     required this.agentId,
     required this.environmentId,
+    this.environmentIds,
+    this.footer,
     super.key,
   });
 
@@ -32,6 +34,14 @@ class UsageChipPopover extends ConsumerWidget {
   final String accountKey;
   final String agentId;
   final String environmentId;
+
+  /// Every environment the account is signed in from, for a title that names
+  /// them all; [environmentId] alone when null.
+  final List<String>? environmentIds;
+
+  /// What ends the card instead of its "click for more" line: a popup's own
+  /// actions.
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,9 +51,13 @@ class UsageChipPopover extends ConsumerWidget {
     final muted = small?.copyWith(color: scheme.onSurfaceVariant);
     final now = ref.watch(clockProvider).nowUtc();
     final reading = view.reading;
+    final environments = [
+      for (final id in environmentIds ?? [environmentId])
+        ref.watch(environmentLabelForIdProvider(id)),
+    ];
     final title =
         '${AgentRegistry.builtIn.displayNameFor(agentId)} · '
-        '${ref.watch(environmentLabelForIdProvider(environmentId))}';
+        '${environments.join(', ')}';
 
     final header = Text(
       title,
@@ -116,12 +130,13 @@ class UsageChipPopover extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: Insets.xs),
-                Text(
-                  'Click for usage & limits',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: muted,
-                ),
+                footer ??
+                    Text(
+                      'Click for usage & limits',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
               ],
             ),
           ),

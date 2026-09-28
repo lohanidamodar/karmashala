@@ -5,7 +5,7 @@ import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
+import 'package:karmashala/src/features/agents/presentation/toolbar_usage_strip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
@@ -118,7 +118,7 @@ void main() {
     await tester.pumpWidget(bar(container));
     await tester.pump();
 
-    expect(find.byType(UsageChip), findsNothing);
+    expect(find.byType(ToolbarUsageStrip), findsNothing);
     expect(find.textContaining('62%'), findsNothing);
     expect(
       server.agentWork.refreshes,
@@ -134,7 +134,6 @@ void main() {
     await tester.pump();
 
     ShellStatusBar.debugItemBuildCount = 0;
-    UsageChip.debugBuildCount = 0;
 
     // The server's next reading of the session's account, told as a change.
     seedUsage(server, agentInstallation(), usage: usageSnapshot(percent: 77));
@@ -148,7 +147,7 @@ void main() {
           'the branch, the tab count and the panel toggle know nothing '
           'about a quota and must not repaint for one',
     );
-    expect(UsageChip.debugBuildCount, 0, reason: 'there is no chip here');
+    expect(find.textContaining('77%'), findsNothing, reason: 'no chip here');
     await quiesce(tester, container);
   });
 
@@ -180,7 +179,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ShellStatusBar), findsOneWidget);
-    expect(find.byType(UsageChip), findsNothing);
+    expect(find.byType(ToolbarUsageStrip), findsNothing);
     await quiesce(tester, container);
   });
 

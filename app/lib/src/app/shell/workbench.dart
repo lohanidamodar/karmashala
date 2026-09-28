@@ -10,7 +10,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 
 import 'package:agent_cli/descriptors.dart';
-import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/automations/presentation/scheduled_resume_chip.dart';
 import '../../features/cli_detection/presentation/imported_session_view.dart';
 import '../../features/editor/application/editor_tab_actions.dart';

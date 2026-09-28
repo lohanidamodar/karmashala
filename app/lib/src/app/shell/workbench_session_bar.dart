@@ -134,8 +134,8 @@ class _SessionBar extends ConsumerWidget {
   }
 }
 
-/// The caption over the action row: the delivery state, and the usage (and at
-/// width the stats) of the session.
+/// The caption over the action row: the delivery state and, at width, the
+/// stats of the session. Usage is per account, so it is in the toolbar.
 class _SessionFactsRow extends StatelessWidget {
   const _SessionFactsRow({required this.sessionId, required this.roomForStats});
 
@@ -160,15 +160,14 @@ class _SessionFactsRow extends StatelessWidget {
           },
         ),
       ),
-      // In the facts line and not the action row: a quota is not a control and
-      // must not compete for those pixels, and neither is what a session cost.
+      // In the facts line and not the action row: what a session cost is not a
+      // control and must not compete for those pixels.
       if (roomForStats) ...[
         SessionStatsButton(sessionId: sessionId),
         const SizedBox(width: Insets.xs),
       ],
-      // Beside the quota it waits on. Nothing, and no width, until one is armed.
+      // Nothing, and no width, until one is armed.
       Flexible(child: ScheduledResumeChip(sessionId: sessionId)),
-      Flexible(child: UsageChip(sessionId: sessionId)),
     ],
   );
 }

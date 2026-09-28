@@ -2166,49 +2166,6 @@ WorkbenchView
                                 Flexible
                                   ScheduledResumeChip
                                     SizedBox
-                                Flexible
-                                  UsageChip
-                                    InkWell
-                                      _InkResponseStateWidget
-                                        _ParentInkResponseProvider
-                                          Actions
-                                            _ActionsScope
-                                              Focus
-                                                _FocusInheritedScope
-                                                  Semantics
-                                                    MouseRegion
-                                                      Builder
-                                                        DefaultSelectionStyle
-                                                          Semantics
-                                                            GestureDetector
-                                                              RawGestureDetector
-                                                                Listener
-                                                                  Semantics
-                                                                    Tooltip
-                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                        OverlayPortal
-                                                                          _OverlayPortal
-                                                                            Semantics
-                                                                              _ExclusiveMouseRegion
-                                                                                Listener
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Padding
-                                                                                        Row
-                                                                                          Icon
-                                                                                            Semantics
-                                                                                              ExcludeSemantics
-                                                                                                SizedBox
-                                                                                                  Center
-                                                                                                    RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="62% · 2h11m"
-                                                                                              RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="1% · 3d"
-                                                                                              RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder
@@ -4413,49 +4370,6 @@ WorkbenchView
                                 Flexible
                                   ScheduledResumeChip
                                     SizedBox
-                                Flexible
-                                  UsageChip
-                                    InkWell
-                                      _InkResponseStateWidget
-                                        _ParentInkResponseProvider
-                                          Actions
-                                            _ActionsScope
-                                              Focus
-                                                _FocusInheritedScope
-                                                  Semantics
-                                                    MouseRegion
-                                                      Builder
-                                                        DefaultSelectionStyle
-                                                          Semantics
-                                                            GestureDetector
-                                                              RawGestureDetector
-                                                                Listener
-                                                                  Semantics
-                                                                    Tooltip
-                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                        OverlayPortal
-                                                                          _OverlayPortal
-                                                                            Semantics
-                                                                              _ExclusiveMouseRegion
-                                                                                Listener
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Padding
-                                                                                        Row
-                                                                                          Icon
-                                                                                            Semantics
-                                                                                              ExcludeSemantics
-                                                                                                SizedBox
-                                                                                                  Center
-                                                                                                    RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="62% · 2h11m"
-                                                                                              RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="1% · 3d"
-                                                                                              RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder
@@ -5205,49 +5119,6 @@ WorkbenchView
                                 Flexible
                                   ScheduledResumeChip
                                     SizedBox
-                                Flexible
-                                  UsageChip
-                                    InkWell
-                                      _InkResponseStateWidget
-                                        _ParentInkResponseProvider
-                                          Actions
-                                            _ActionsScope
-                                              Focus
-                                                _FocusInheritedScope
-                                                  Semantics
-                                                    MouseRegion
-                                                      Builder
-                                                        DefaultSelectionStyle
-                                                          Semantics
-                                                            GestureDetector
-                                                              RawGestureDetector
-                                                                Listener
-                                                                  Semantics
-                                                                    Tooltip
-                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                        OverlayPortal
-                                                                          _OverlayPortal
-                                                                            Semantics
-                                                                              _ExclusiveMouseRegion
-                                                                                Listener
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Padding
-                                                                                        Row
-                                                                                          Icon
-                                                                                            Semantics
-                                                                                              ExcludeSemantics
-                                                                                                SizedBox
-                                                                                                  Center
-                                                                                                    RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="62% · 2h11m"
-                                                                                              RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="1% · 3d"
-                                                                                              RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder

@@ -1,24 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../app/shell/workbench_tabs.dart';
-import '../../settings/presentation/settings_nav.dart';
-import '../application/agent_usage_providers.dart';
 import 'package:agent_cli/usage.dart';
-import 'usage_chip_popover.dart';
 
 export 'package:agent_cli/usage.dart'
     show kUsageWarningPercent, kUsageCriticalPercent;
-
-/// The glyph size and gap the status bar's other items use. Named rather than
-/// re-guessed so the chip cannot drift away from the row it sits in.
-const double _glyph = 12;
-const double _glyphGap = 5;
 
 /// How loud the chip is. Maps to [SemanticColors], never to a raw colour, and
 /// never carries the state on its own — see [UsageChipView.label].
@@ -263,113 +250,4 @@ String formatUsageDuration(Duration span) {
     return minutes == 0 ? '${span.inHours}h' : '${span.inHours}h${minutes}m';
   }
   return '${span.inMinutes}m';
-}
-
-/// **What the account behind one session has left**, in that session's own bar:
-/// the reading is per account (`usageAccountKey`), the display per session.
-class UsageChip extends ConsumerStatefulWidget {
-  const UsageChip({required this.sessionId, super.key});
-
-  /// The session whose account this describes.
-  final String sessionId;
-
-  /// Builds of the chip, counted so a cost test can prove a usage change
-  /// repaints this and nothing else in the bar it sits in.
-  @visibleForTesting
-  static int debugBuildCount = 0;
-
-  @override
-  ConsumerState<UsageChip> createState() => _UsageChipState();
-}
-
-class _UsageChipState extends ConsumerState<UsageChip> {
-  /// One period's words. Both slots are drawn in one colour — the worst
-  /// window's — because two colours in a 12px row read as two chips.
-  Widget _words(String fact, Color colour) => Text(
-    fact,
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    style: TextStyle(color: colour),
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    UsageChip.debugBuildCount++;
-    final installation = ref.watch(
-      usageInstallationForSessionProvider(widget.sessionId),
-    );
-    if (installation == null) return const SizedBox.shrink();
-
-    // The server reads the account on its own schedule and tells this app;
-    // the chip only draws what it was told.
-    final account = usageAccountKey(installation);
-    final state = ref.watch(accountUsageProvider(account));
-    final view = usageChipViewFor(
-      ref.watch(agentUsageProvider(installation)),
-      ref.read(clockProvider).nowUtc(),
-      // The last reading, shown stale beside a failed attempt.
-      remembered: state?.usage,
-    );
-    final semantic = SemanticColors.of(context);
-    final colour = switch (view.tone) {
-      UsageTone.healthy => semantic.idle,
-      UsageTone.warning => semantic.attention,
-      UsageTone.critical => semantic.failure,
-      UsageTone.muted => semantic.neutral,
-    };
-
-    return InkWell(
-      onTap: () {
-        unawaited(ref.read(usageReadingsProvider).refresh(account));
-        openSettingsTab(ref, anchor: SettingsAnchor.usage);
-      },
-      // The hover card is pictures; the plain sentence is what a screen reader
-      // is given instead.
-      child: Semantics(
-        tooltip: view.tooltip,
-        child: Tooltip(
-          excludeFromSemantics: true,
-          padding: EdgeInsets.zero,
-          decoration: const BoxDecoration(),
-          richMessage: WidgetSpan(
-            child: UsageChipPopover(
-              view: view,
-              accountKey: account,
-              agentId: installation.agentId,
-              environmentId: installation.environmentId,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  // The health panel's glyphs, on purpose: one vocabulary for
-                  // "a reading with an age" and for "nothing was observed".
-                  switch (view.mark) {
-                    UsageMark.live => AppIcons.circleHalf,
-                    UsageMark.stale => AppIcons.clockCounterClockwise,
-                    UsageMark.unknown => AppIcons.question,
-                  },
-                  size: _glyph,
-                  color: colour,
-                ),
-                const SizedBox(width: _glyphGap),
-                // Flexible, so a bounded bar makes the chip give up its tail
-                // rather than overflow, each period giving up its own.
-                Flexible(child: _words(view.label, colour)),
-                if (view.longLabel case final longer?) ...[
-                  // A gap rather than another `·`: the dot already separates the
-                  // halves *inside* a fact. It also costs no height.
-                  const SizedBox(width: Insets.sm),
-                  Flexible(child: _words(longer, colour)),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
