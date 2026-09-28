@@ -30,7 +30,6 @@ import '../application/terminal_theme_controller.dart';
 import '../application/terminal_search_controller.dart';
 import '../application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
-import 'package:karmashala_terminal_runtime/themes.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -101,12 +100,9 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   TerminalSessionsController get _sessions =>
       ref.read(terminalSessionsControllerProvider.notifier);
 
-  /// The imported palette, or null when the user is on the built-in theme or
-  /// the stored theme no longer resolves.
-  TerminalPalette? _importedPalette() {
-    final result = ref.watch(importedTerminalThemeProvider);
-    return result is ThemeLoadOk ? result.palette : null;
-  }
+  /// The chosen scheme's palette (built-in or imported), or null on Match app
+  /// or when a stored theme file no longer resolves.
+  TerminalPalette? _schemePalette() => ref.watch(terminalPaletteProvider);
 
   @override
   Widget build(BuildContext context) {

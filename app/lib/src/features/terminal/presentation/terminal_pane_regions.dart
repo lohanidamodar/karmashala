@@ -136,7 +136,7 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
               fallback: instance,
               focused: focused,
               fontSize: fontSize,
-              terminalTheme: terminalThemeFor(theme, _importedPalette()),
+              terminalTheme: terminalThemeFor(theme, _schemePalette()),
               chordOverrides: chordOverrides,
               onKeyEvent: _actions.onPaneKey,
               // Right-click → copy selection / paste / end the session.

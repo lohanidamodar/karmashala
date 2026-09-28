@@ -40,7 +40,8 @@ enum SettingsSectionId {
     'Appearance',
     AppIcons.circleHalf,
     SettingsGroup.general,
-    'Theme, accent, text size, density, the sidebar and the context panel.',
+    'Theme, accent, text size, density, terminal colours, the sidebar and '
+        'the context panel.',
   ),
   // The switches were only ever in the tray menu; a page is where somebody
   // looks for them. Drawn by the screen, not an anchor (see settings_screen).
@@ -299,6 +300,22 @@ enum SettingsAnchor {
     'density',
     'compact',
   ]),
+  // Moved from Terminal to Appearance with the built-in schemes; the enum name
+  // is kept so a link written against it still lands, and Terminal › Font
+  // keeps a row pointing here.
+  terminalTheme(SettingsSectionId.appearance, 'Terminal colours', [
+    'terminal',
+    'colour',
+    'colours',
+    'color',
+    'colors',
+    'scheme',
+    'theme',
+    'palette',
+    'ansi',
+    'ghostty',
+    'warp',
+  ]),
   // Also View › Side panel items. The enum name is kept so old links resolve;
   // the rail and Explorer it was named for are gone, but people still search
   // by those words.
@@ -319,11 +336,6 @@ enum SettingsAnchor {
     'profile',
   ]),
   terminalFont(SettingsSectionId.terminal, 'Font', ['font', 'size']),
-  terminalTheme(SettingsSectionId.terminal, 'Terminal theme', [
-    'theme',
-    'colors',
-    'colours',
-  ]),
   terminalChords(SettingsSectionId.terminal, 'Terminal chords', [
     'chords',
     'keys',
@@ -780,8 +792,28 @@ const settingsEntries = <SettingsEntry>[
   SettingsEntry(
     'Terminal colours',
     anchor: SettingsAnchor.terminalTheme,
-    description: 'Use a Ghostty or Warp theme found on this machine.',
-    keywords: ['theme', 'colors', 'ghostty', 'warp'],
+    description:
+        'Match the app, pick a built-in scheme, or use a Ghostty or Warp '
+        'theme found on this machine.',
+    keywords: [
+      'terminal',
+      'colour',
+      'color',
+      'colors',
+      'scheme',
+      'theme',
+      'palette',
+      'ansi',
+      'dracula',
+      'nord',
+      'solarized',
+      'gruvbox',
+      'tokyo night',
+      'one dark',
+      'monokai',
+      'ghostty',
+      'warp',
+    ],
   ),
   SettingsEntry(
     'Keyboard shortcuts',

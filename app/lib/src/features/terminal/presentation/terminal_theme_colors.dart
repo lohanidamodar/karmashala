@@ -1,25 +1,41 @@
-/// The terminal's colours, and the one `copyWith` xterm2 does not ship. Read
-/// from outside the panel — the recording dialog renders a cast in the colours
-/// the pane had — and re-exported by `terminal_panel.dart`.
+/// The terminal's colours. Read from outside the panel — the recording dialog
+/// renders a cast in the colours the pane had, Settings previews each scheme —
+/// and re-exported by `terminal_panel.dart`.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_terminal_core/grid.dart';
 
-/// The terminal's colours: xterm's own 16-colour palette, with the background,
-/// foreground and cursor aligned to the app surface so the panel reads as one
-/// piece. An imported theme brings its own background and wins.
-TerminalTheme terminalThemeFor(ThemeData theme, TerminalPalette? imported) {
+/// The terminal's colours under [theme], with [palette] — a built-in scheme's
+/// or an imported file's — layered over **Match app**:
+///
+///  * the ground is the `term` surface, so the pane reads as one piece with
+///    the tab it sits in; the text is the app's, the cursor its accent, and a
+///    selection a tint of the accent that reads on either ground;
+///  * the sixteen ANSI colours are a fixed set tuned for the ground they sit
+///    on — for a palette with its own background, *that* ground's lightness,
+///    not the app's, so a half-filled light theme is not topped up with
+///    colours made for black.
+///
+/// A palette's own colours win: they were picked deliberately.
+TerminalTheme terminalThemeFor(ThemeData theme, TerminalPalette? palette) {
   final scheme = theme.colorScheme;
-  final base = TerminalThemes.defaultTheme.copyWith(
-    background: scheme.surfaceContainerLowest,
-    foreground: scheme.onSurface,
-    cursor: scheme.primary,
-  );
-  // Picked deliberately, so they win over the app surface.
-  return imported?.applyTo(base) ?? base;
+  final term =
+      theme.extension<SurfaceTones>()?.term ?? scheme.surfaceContainerLowest;
+  final lightGround = palette?.isLight ?? theme.brightness == Brightness.light;
+  final base = TerminalSchemes.matchAppAnsi(dark: !lightGround)
+      .applyTo(TerminalThemes.defaultTheme)
+      .copyWith(
+        background: term,
+        foreground: scheme.onSurface,
+        cursor: scheme.primary,
+        // Painted under the glyphs, so a translucent tint keeps them legible.
+        selection: scheme.primary.withValues(alpha: 0.30),
+      );
+  return palette?.applyTo(base) ?? base;
 }
 
 extension on TerminalTheme {
@@ -27,10 +43,11 @@ extension on TerminalTheme {
     Color? background,
     Color? foreground,
     Color? cursor,
+    Color? selection,
   }) {
     return TerminalTheme(
       cursor: cursor ?? this.cursor,
-      selection: selection,
+      selection: selection ?? this.selection,
       foreground: foreground ?? this.foreground,
       background: background ?? this.background,
       black: black,

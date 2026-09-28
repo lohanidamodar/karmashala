@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../terminal/application/terminal_theme_controller.dart';
-import 'package:karmashala_terminal_runtime/themes.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
@@ -14,6 +12,7 @@ import 'session_host_status_line.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
+import 'terminal_colours_section.dart';
 import '../../terminal/application/terminal_profiles.dart';
 
 /// Settings → Terminal → Default terminal: the shell, and what comes back at
@@ -94,7 +93,8 @@ class TerminalAdvancedSection extends ConsumerWidget {
   }
 }
 
-/// The terminal's font size — separate from the UI text scale on purpose.
+/// The terminal's font size — separate from the UI text scale on purpose —
+/// and a pointer to its colours, which live under Appearance.
 class TerminalFontSection extends ConsumerWidget {
   const TerminalFontSection({super.key});
 
@@ -107,125 +107,58 @@ class TerminalFontSection extends ConsumerWidget {
     final isDefault = size == Settings.defaultTerminalFontSize;
     return SettingsSection(
       title: SettingsAnchor.terminalFont.heading,
-      child: SettingsRow(
-        label: 'Terminal font size',
-        help: 'Ctrl+= larger, Ctrl+- smaller, Ctrl+0 default.',
-        controlMaxWidth: 220,
-        control: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            if (!isDefault)
-              IconButton(
-                tooltip: 'Reset terminal font size',
-                onPressed: controller.resetTerminalFontSize,
-                icon: const Icon(
-                  AppIcons.arrowCounterClockwise,
-                  size: Chrome.icon,
-                ),
-              ),
-            IconButton(
-              tooltip: 'Smaller terminal font',
-              onPressed: size > Settings.minTerminalFontSize
-                  ? () => controller.adjustTerminalFontSize(-1)
-                  : null,
-              icon: const Icon(AppIcons.minusCircle, size: Chrome.icon),
-            ),
-            // Flexible, not fixed: the mono number grows with the text scale.
-            Flexible(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 30),
-                child: Text(
-                  size == size.roundToDouble()
-                      ? '${size.round()}'
-                      : size.toStringAsFixed(1),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  style: MonoStyles.label,
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Larger terminal font',
-              onPressed: size < Settings.maxTerminalFontSize
-                  ? () => controller.adjustTerminalFontSize(1)
-                  : null,
-              icon: const Icon(AppIcons.plusCircle, size: Chrome.icon),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Import a terminal colour theme from Ghostty or Warp. The identity is
-/// stored, not the colours, so editing the file is picked up.
-class TerminalThemeSection extends ConsumerWidget {
-  const TerminalThemeSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final controller = ref.read(settingsControllerProvider.notifier);
-    final selected = ref.watch(settingsControllerProvider).terminalThemeSource;
-    final discovered = ref.watch(discoveredTerminalThemesProvider);
-    final loaded = ref.watch(importedTerminalThemeProvider);
-
-    // A vanished theme file would leave the dropdown on a value no item
-    // carries, which makes it throw.
-    final ids = discovered.map((t) => t.id).toSet();
-    final value = selected != null && ids.contains(selected) ? selected : null;
-
-    return SettingsSection(
-      title: SettingsAnchor.terminalTheme.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SettingsRow(
-            label: 'Colours',
-            help: discovered.isEmpty
-                ? 'No Ghostty or Warp themes found on this machine.'
-                : null,
-            control: DropdownButtonFormField<String?>(
-              isExpanded: true,
-              initialValue: value,
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Built-in')),
-                for (final t in discovered)
-                  DropdownMenuItem(
-                    value: t.id,
-                    child: Text('${t.name}  ·  ${t.format.name}'),
+            label: 'Terminal font size',
+            help: 'Ctrl+= larger, Ctrl+- smaller, Ctrl+0 default.',
+            controlMaxWidth: 220,
+            control: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (!isDefault)
+                  IconButton(
+                    tooltip: 'Reset terminal font size',
+                    onPressed: controller.resetTerminalFontSize,
+                    icon: const Icon(
+                      AppIcons.arrowCounterClockwise,
+                      size: Chrome.icon,
+                    ),
                   ),
+                IconButton(
+                  tooltip: 'Smaller terminal font',
+                  onPressed: size > Settings.minTerminalFontSize
+                      ? () => controller.adjustTerminalFontSize(-1)
+                      : null,
+                  icon: const Icon(AppIcons.minusCircle, size: Chrome.icon),
+                ),
+                // Flexible, not fixed: the mono number grows with the text scale.
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 30),
+                    child: Text(
+                      size == size.roundToDouble()
+                          ? '${size.round()}'
+                          : size.toStringAsFixed(1),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      style: MonoStyles.label,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Larger terminal font',
+                  onPressed: size < Settings.maxTerminalFontSize
+                      ? () => controller.adjustTerminalFontSize(1)
+                      : null,
+                  icon: const Icon(AppIcons.plusCircle, size: Chrome.icon),
+                ),
               ],
-              onChanged: (id) => controller.setTerminalThemeSource(id),
             ),
           ),
-          // Said under the row it is about, in its own tone, not as a loose
-          // red line between rows.
-          if (selected != null && value == null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Insets.sm),
-              child: Text(
-                'The saved theme is no longer where it was; using the built-in '
-                'colours.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          if (loaded is ThemeLoadError)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Insets.sm),
-              child: Text(
-                '${loaded.reason} Using the built-in colours.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          if (loaded is ThemeLoadOk && loaded.notes.isNotEmpty)
-            SettingsNote(loaded.notes.join(' ')),
+          const TerminalColoursPointerRow(),
         ],
       ),
     );

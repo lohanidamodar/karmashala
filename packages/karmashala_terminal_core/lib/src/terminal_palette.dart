@@ -25,8 +25,9 @@ String? normalizeHexColor(String? value) {
   return '#${expanded.toLowerCase()}';
 }
 
-/// A colour theme read from an external terminal, as a **sparse** set of
-/// overrides — which is what makes [applyTo] safe on a half-read file.
+/// A colour theme — one read from an external terminal, or a built-in scheme
+/// (`TerminalSchemes`) — as a **sparse** set of overrides, which is what makes
+/// [applyTo] safe on a half-read file.
 class TerminalPalette {
   const TerminalPalette({
     this.background,
@@ -51,6 +52,13 @@ class TerminalPalette {
   /// current theme with a colour or two disturbed, which looks like a bug.
   bool get isUsable =>
       background != null && foreground != null && ansi.isNotEmpty;
+
+  /// Whether this palette draws on a light ground, or null when it carries no
+  /// background of its own.
+  bool? get isLight {
+    final ground = _toColor(background);
+    return ground == null ? null : ground.computeLuminance() > 0.5;
+  }
 
   bool get isEmpty =>
       background == null &&

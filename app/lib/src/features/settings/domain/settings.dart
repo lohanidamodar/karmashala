@@ -278,7 +278,9 @@ class Settings {
   /// own updates outside Karmashala are untouched (docs/windows-antivirus.md).
   final bool? letAgentsUpdateThemselves;
 
-  /// The imported terminal theme as `<format>:<path>`, or `null` for built-in.
+  /// The terminal colour scheme: `null` for Match app, `preset:<id>` for a
+  /// built-in scheme (an unknown id reads as Match app), or `<format>:<path>`
+  /// for a Ghostty or Warp theme file.
   final String? terminalThemeSource;
 
   /// Overall UI text scale (1.0 = 100%); multiplies the OS scale, not replaces.

@@ -34,6 +34,7 @@ import 'settings_catalog.dart';
 import 'settings_layout.dart';
 import 'settings_theme.dart';
 import 'side_panel_items_section.dart';
+import 'terminal_colours_section.dart';
 import 'terminal_pages.dart';
 import 'tools_page.dart';
 import 'watch_set_section.dart';
@@ -127,7 +128,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   ),
   SettingsAnchor.defaultTerminal => const DefaultTerminalSection(),
   SettingsAnchor.terminalFont => const TerminalFontSection(),
-  SettingsAnchor.terminalTheme => const TerminalThemeSection(),
+  SettingsAnchor.terminalTheme => const TerminalColoursSection(),
   SettingsAnchor.terminalChords => const TerminalChordsSection(),
   SettingsAnchor.terminalAdvanced => const TerminalAdvancedSection(),
   SettingsAnchor.worktreeSetup => const WorktreeSetupPage(),

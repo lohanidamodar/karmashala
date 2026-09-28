@@ -7,5 +7,6 @@ export 'src/pane_search.dart';
 export 'src/terminal_link_resolution.dart';
 export 'src/terminal_links.dart';
 export 'src/terminal_palette.dart';
+export 'src/terminal_schemes.dart';
 export 'src/terminal_search.dart';
 export 'src/terminal_search_query.dart';

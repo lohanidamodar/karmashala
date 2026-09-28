@@ -10,6 +10,7 @@ import 'package:karmashala_media/media.dart';
 import '../../../core/media/video_support_provider.dart';
 import 'package:agent_cli/process.dart';
 import '../application/terminal_recording_controller.dart';
+import '../application/terminal_theme_controller.dart';
 import 'package:karmashala_terminal_runtime/recording.dart';
 import 'terminal_panel.dart';
 
@@ -120,7 +121,11 @@ class _FormatChoices extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final terminalTheme = terminalThemeFor(theme, null);
+    // The colours the panes have, so the video looks like the session did.
+    final terminalTheme = terminalThemeFor(
+      theme,
+      ref.watch(terminalPaletteProvider),
+    );
     final support = ref.watch(videoSupportProvider);
 
     // Where the OS can write an MP4, the frame sequence has nothing left to
