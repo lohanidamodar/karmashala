@@ -228,12 +228,14 @@ class AttentionInbox {
 
   /// The item to jump to next, given the session on screen. Walks [items] so
   /// there is one order; wraps, and an unknown [openId] starts at the first.
-  InboxItem? nextAfter(String? openId) {
-    if (items.isEmpty) return null;
-    if (openId == null) return items.first;
-    final at = items.indexWhere((item) => item.session.openId == openId);
-    if (at < 0) return items.first;
-    return items[(at + 1) % items.length];
+  /// [where] narrows the walk to the items it accepts.
+  InboxItem? nextAfter(String? openId, {bool Function(InboxItem item)? where}) {
+    final walk = where == null ? items : items.where(where).toList();
+    if (walk.isEmpty) return null;
+    if (openId == null) return walk.first;
+    final at = walk.indexWhere((item) => item.session.openId == openId);
+    if (at < 0) return walk.first;
+    return walk[(at + 1) % walk.length];
   }
 
   /// Indexes one list of items — one pass, and the only place a new inbox is

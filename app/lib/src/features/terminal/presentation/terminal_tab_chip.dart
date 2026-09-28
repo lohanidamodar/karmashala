@@ -129,6 +129,7 @@ class TerminalTabChip extends StatelessWidget {
     return WorkbenchTabChip(
       selected: selected,
       accented: accented,
+      needsYou: status == AgentActivityStatus.awaitingApproval,
       onTap: onTap,
       onSecondaryTapDown: (details) => _menu(context, details.globalPosition),
       // Middle click, the same close the X performs: the session keeps running.

@@ -23,9 +23,17 @@ import '../application/session_status_providers.dart';
 /// The pending approval for one session, and the buttons that answer it. It
 /// never words the request itself, and offers only keys the agent named.
 class ApprovalRequestCard extends ConsumerWidget {
-  const ApprovalRequestCard({required this.sessionId, super.key});
+  const ApprovalRequestCard({
+    required this.sessionId,
+    this.docked = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// Docked above the terminal pane's status line (spec §5, the ask dock):
+  /// the same card, without the way to a terminal it is already under.
+  final bool docked;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,6 +47,14 @@ class ApprovalRequestCard extends ConsumerWidget {
     }
 
     final waiting = report.waiting;
+    // Docked, it is an ask or nothing: an agent that finished a turn and waits
+    // for input has nothing to answer here, and an amber card saying so under
+    // the prompt was the complaint that removed the first dock.
+    if (docked &&
+        waiting != AgentWaitKind.approval &&
+        waiting != AgentWaitKind.question) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);
@@ -92,14 +108,16 @@ class ApprovalRequestCard extends ConsumerWidget {
       ],
     );
 
-    return Container(
+    final card = Container(
       // Flush with the composer stack it is pinned above.
       margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
       padding: const EdgeInsets.all(Insets.sm),
+      // Amber, the one colour that means "needs you" (spec §5): the ask is
+      // the thing on screen that is blocking the session.
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
+        color: SurfaceTones.of(context).attentionSurface,
         borderRadius: BorderRadius.circular(Radii.sm),
-        border: Border.all(color: scheme.outlineVariant),
+        border: Border.all(color: SurfaceTones.of(context).attentionEdge),
       ),
       // The phone's cards, answered through the phone's own guarded paths:
       // a menu by the option chosen, a question by the options picked. Never
@@ -120,6 +138,7 @@ class ApprovalRequestCard extends ConsumerWidget {
               _ => standard,
             },
     );
+    return docked ? _Docked(child: card) : card;
   }
 }
 
@@ -255,11 +274,26 @@ class _TerminalLink extends ConsumerWidget {
   final String sessionId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => TextButton.icon(
-    onPressed: () => _openTerminal(ref, sessionId),
-    icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
-    label: const Text('Terminal view'),
-  );
+  Widget build(BuildContext context, WidgetRef ref) =>
+      // Docked under the terminal, the terminal is already here.
+      _Docked.of(context)
+      ? const SizedBox.shrink()
+      : TextButton.icon(
+          onPressed: () => _openTerminal(ref, sessionId),
+          icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
+          label: const Text('Terminal view'),
+        );
+}
+
+/// Marks a card docked under its terminal (see [ApprovalRequestCard.docked]).
+class _Docked extends InheritedWidget {
+  const _Docked({required super.child});
+
+  static bool of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_Docked>() != null;
+
+  @override
+  bool updateShouldNotify(_Docked oldWidget) => false;
 }
 
 /// What the agent said, quoted, or an admission that we do not know.
@@ -373,11 +407,7 @@ class _NothingToAnswer extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: Insets.xs),
-        TextButton.icon(
-          onPressed: () => _openTerminal(ref, sessionId),
-          icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
-          label: const Text('Terminal view'),
-        ),
+        _TerminalLink(sessionId: sessionId),
       ],
     );
   }
@@ -429,11 +459,7 @@ class _Answers extends ConsumerWidget {
                 onPressed: () => _press(context, ref, rules.approve!),
                 child: Text(rules.approve!.label),
               ),
-            TextButton.icon(
-              onPressed: () => _openTerminal(ref, sessionId),
-              icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
-              label: const Text('Terminal view'),
-            ),
+            _TerminalLink(sessionId: sessionId),
           ],
         ),
         const SizedBox(height: 2),

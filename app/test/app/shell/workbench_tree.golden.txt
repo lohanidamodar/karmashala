@@ -2476,6 +2476,8 @@ WorkbenchView
                     Padding
                       _HeldHeight
                         Column
+                          ApprovalRequestCard
+                            SizedBox
                           LayoutBuilder
                             _SessionStatusLine
                               Row
@@ -4679,6 +4681,8 @@ WorkbenchView
                     Padding
                       _HeldHeight
                         Column
+                          ApprovalRequestCard
+                            SizedBox
                           LayoutBuilder
                             _SessionStatusLine
                               Row
@@ -5417,6 +5421,8 @@ WorkbenchView
                     Padding
                       _HeldHeight
                         Column
+                          ApprovalRequestCard
+                            SizedBox
                           LayoutBuilder
                             SizedBox
                           SessionNoticeLine

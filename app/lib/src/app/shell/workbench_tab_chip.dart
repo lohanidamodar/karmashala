@@ -18,6 +18,7 @@ class WorkbenchTabChip extends StatelessWidget {
     this.tooltip,
     this.accented,
     this.dense = false,
+    this.needsYou = false,
     super.key,
   });
 
@@ -30,6 +31,11 @@ class WorkbenchTabChip extends StatelessWidget {
   /// Whether this chip belongs to a **pane** header rather than the window's tab
   /// strip: shorter, and selected on its *bottom* edge, so it reads as a header.
   final bool dense;
+
+  /// Whether the tab's session is waiting on the user (spec §5): the chip
+  /// takes the attention tone and edge, so a blocked session is seen from any
+  /// strip, focused or not.
+  final bool needsYou;
 
   final VoidCallback onTap;
   final String label;
@@ -51,13 +57,19 @@ class WorkbenchTabChip extends StatelessWidget {
     // (selected in a group without focus) keeps the tone and drops the accent.
     final rule = BorderSide(
       width: 2,
-      color: switch ((selected, accented)) {
-        (true, null) || (true, true) => scheme.primary,
-        _ => Colors.transparent,
-      },
+      color: needsYou
+          ? tones.attentionEdge
+          : switch ((selected, accented)) {
+              (true, null) || (true, true) => scheme.primary,
+              _ => Colors.transparent,
+            },
     );
     final chip = Material(
-      color: selected ? tones.term : Colors.transparent,
+      color: needsYou
+          ? tones.attentionSurface
+          : selected
+          ? tones.term
+          : Colors.transparent,
       child: GestureDetector(
         onTertiaryTapUp: onClose == null ? null : (_) => onClose!(),
         child: InkWell(

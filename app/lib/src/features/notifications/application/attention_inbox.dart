@@ -109,11 +109,13 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     _send(InboxOpen(item.id));
   }
 
-  /// Opens the next session that needs you, through [open].
+  /// Opens the next session that needs you — one waiting on an answer, not
+  /// one that merely finished — through [open].
   bool openNext() {
     final next = state.nextAfter(
       ref.read(selectedSessionIdProvider) ??
           ref.read(selectedImportedSessionIdProvider),
+      where: (item) => item.kind == InboxItemKind.needsApproval,
     );
     if (next == null) return false;
     open(next);

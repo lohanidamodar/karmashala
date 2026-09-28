@@ -972,40 +972,43 @@ void main() {
     agentWaiting = AgentWaitKind.approval;
   }
 
-  testWidgets('a pending approval draws no card on the terminal surface', (
+  testWidgets('a pending approval docks above the pane\'s status line', (
     tester,
   ) async {
-    // The card used to sit under the panes, and this used to assert it was
-    // there. What it answers is the prompt the agent draws in the terminal
-    // directly above it — already answerable by typing there — so the surface
-    // carried a second copy of a control it hosts. Gone on purpose, which is
-    // what this now pins.
+    // The ask dock (UI overhaul spec §5). It was dropped on 2026-09-02 as a
+    // second copy of the prompt the terminal draws; the approved redesign
+    // brings it back as the amber "this session is blocked on you" with the
+    // answers one click away, and without the way to a terminal it is under.
     seedAPendingApproval();
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
 
-    expect(find.byType(ApprovalRequestCard), findsNothing);
-    expect(find.textContaining('is waiting for you'), findsNothing);
-    expect(find.textContaining('Do you want to make this edit'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
-    expect(find.widgetWithText(OutlinedButton, 'Deny'), findsNothing);
-    // The rows it took are the terminal's again: the surface is the panes and
-    // nothing else, whether or not something is waiting.
+    final card = find.byType(ApprovalRequestCard);
+    expect(card, findsOneWidget);
     expect(
-      tester.getSize(find.byType(TerminalPaneStack)).height,
-      tester.getSize(find.byKey(kWorkbenchSurfaces)).height,
+      find.textContaining('Do you want to make this edit'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Terminal view'), findsNothing);
+    // Under the panes, not over them: the terminal keeps its own prompt.
+    expect(
+      tester.getTopLeft(card).dy,
+      greaterThanOrEqualTo(
+        tester.getBottomLeft(find.byType(TerminalPaneStack)).dy,
+      ),
     );
   });
 
-  testWidgets('the conversation still draws the approval the terminal drops', (
+  testWidgets('the conversation draws the approval with the way back', (
     tester,
   ) async {
     seedAPendingApproval();
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
-    expect(find.byType(ApprovalRequestCard), findsNothing);
+    expect(find.byType(ApprovalRequestCard), findsOneWidget);
 
     await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
@@ -1043,8 +1046,8 @@ void main() {
   });
 
   testWidgets(
-    'an approval nobody is looking at still reaches the tray, the toast and '
-    'the inbox with no card under the terminal',
+    'an approval nobody is looking at reaches the tray, the toast and the '
+    'inbox, not only the dock',
     (tester) async {
       // The one real risk in dropping the card: it was the loudest sign that a
       // session had stopped for the user. Nothing that *finds* an approval for
@@ -1060,7 +1063,6 @@ void main() {
       // lands while the window is behind something else.
       container.read(windowFocusedProvider.notifier).set(false);
       await pump(tester);
-      expect(find.byType(ApprovalRequestCard), findsNothing);
 
       const watched = WatchedSession(
         key: AgentSessionKey(AgentIds.claudeCode, 's1'),

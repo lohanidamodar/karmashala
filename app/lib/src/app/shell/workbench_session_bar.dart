@@ -97,6 +97,11 @@ class _SessionBar extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // **The ask dock** (spec §5): what the agent is waiting on,
+                // answerable here, above the line that describes it. Nothing
+                // at all while it is not waiting.
+                if (sessionId != null)
+                  ApprovalRequestCard(sessionId: sessionId, docked: true),
                 // At width the pane's status is one line: the facts, then the
                 // controls. Below it the facts are a caption over the controls.
                 if (sessionId != null)
