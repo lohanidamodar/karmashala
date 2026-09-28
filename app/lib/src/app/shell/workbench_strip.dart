@@ -55,7 +55,7 @@ class _TabStrip extends ConsumerWidget {
       builder: (context, candidate, _) => Container(
         height: Chrome.tabStrip,
         color: candidate.isEmpty
-            ? scheme.surfaceContainerLow
+            ? SurfaceTones.of(context).chrome
             : StateLayers.subtle(scheme),
         child: Row(
           children: [
@@ -351,7 +351,9 @@ class _OverflowButton extends ConsumerWidget {
           height: Chrome.tabStrip,
           padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: scheme.outlineVariant)),
+            border: Border(
+              left: BorderSide(color: SurfaceTones.of(context).line),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

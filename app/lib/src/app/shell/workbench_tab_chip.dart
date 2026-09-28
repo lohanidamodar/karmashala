@@ -45,18 +45,19 @@ class WorkbenchTabChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // The active chip takes the colour of the ground it sits over, and selection
-    // is then a rule on its edge; the middle state is neutral, not unselected.
+    final tones = SurfaceTones.of(context);
+    // The active chip takes the tone of the pane it heads — the terminal's —
+    // and the accent on its edge says where the keyboard is. The middle state
+    // (selected in a group without focus) keeps the tone and drops the accent.
     final rule = BorderSide(
       width: 2,
       color: switch ((selected, accented)) {
-        (false, _) => Colors.transparent,
-        (true, false) => scheme.outlineVariant,
-        _ => scheme.primary,
+        (true, null) || (true, true) => scheme.primary,
+        _ => Colors.transparent,
       },
     );
     final chip = Material(
-      color: selected ? scheme.surfaceContainerLowest : Colors.transparent,
+      color: selected ? tones.term : Colors.transparent,
       child: GestureDetector(
         onTertiaryTapUp: onClose == null ? null : (_) => onClose!(),
         child: InkWell(
@@ -73,7 +74,9 @@ class WorkbenchTabChip extends StatelessWidget {
               border: Border(
                 top: dense ? BorderSide.none : rule,
                 bottom: dense ? rule : BorderSide.none,
-                right: BorderSide(color: scheme.outlineVariant),
+                // A hairline only when the user asked for lines between
+                // regions; otherwise the tones part the tabs.
+                right: BorderSide(color: tones.line),
               ),
             ),
             // Fills the slot the strip gave it rather than hugging its title:
