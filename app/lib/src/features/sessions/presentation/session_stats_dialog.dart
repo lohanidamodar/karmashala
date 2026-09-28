@@ -16,12 +16,17 @@ import '../application/session_signals.dart';
 import '../application/session_stats_providers.dart';
 import '../application/session_status_providers.dart';
 import 'agent_status_badge.dart';
+import 'session_stats_popover.dart';
 import 'session_stats_sections.dart';
 
 export 'session_stats_sections.dart' show kStatNotRecorded;
 
 /// What one session has cost, in counts, on demand. **Counts only, never
 /// money**: a price table drifts the moment a model is repriced.
+///
+/// The context chip no longer opens this — it opens [SessionStatsPopover]
+/// (spec §7). The dialog stays constructible for its tests and is the only
+/// view that still shows the agent's all-time totals.
 class SessionStatsDialog extends ConsumerWidget {
   const SessionStatsDialog({required this.sessionId, super.key});
 
@@ -378,19 +383,32 @@ class _Notice extends StatelessWidget {
 }
 
 /// **The context chip** (spec §5): how full this session's context window was
-/// at its newest request — a small bar and "62% context" — opening Session
-/// stats. Says "Stats" where the agent records counts but not the window, and
-/// is hidden where its store records nothing.
+/// at its newest request — a small bar and "62% context" — opening the
+/// [SessionStatsPopover] anchored to it (spec §7: the dialog became a
+/// popover). Says "Stats" where the agent records counts but not the window,
+/// and is hidden where its store records nothing.
 ///
 /// Read when it appears and again as each turn ends, never on a timer: the
 /// numbers come from the agent's own record on disk.
-class SessionStatsButton extends ConsumerWidget {
+class SessionStatsButton extends ConsumerStatefulWidget {
   const SessionStatsButton({required this.sessionId, super.key});
 
   final String sessionId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SessionStatsButton> createState() =>
+      _SessionStatsButtonState();
+}
+
+class _SessionStatsButtonState extends ConsumerState<SessionStatsButton> {
+  // Kept across rebuilds: a turn ending while the popover is open re-reads
+  // the stats, and that rebuild must not close it.
+  final _controller = MenuController();
+
+  String get sessionId => widget.sessionId;
+
+  @override
+  Widget build(BuildContext context) {
     // The row is what names the agent, and moving a session onto a different
     // CLI conversation is a write to this row.
     ref.watchSession(sessionId);
@@ -406,11 +424,28 @@ class SessionStatsButton extends ConsumerWidget {
         }
       },
     );
-    return SessionStatsChip(
-      stats: ref.watch(sessionStatsProvider(sessionId)).value?.stats,
-      onTap: () => SessionStatsDialog.show(context, sessionId),
+    // Esc and a click outside close it: MenuAnchor's own dismissal.
+    return MenuAnchor(
+      controller: _controller,
+      style: _popoverStyle,
+      menuChildren: [SessionStatsPopover(sessionId: sessionId)],
+      child: SessionStatsChip(
+        stats: ref.watch(sessionStatsProvider(sessionId)).value?.stats,
+        onTap: () =>
+            _controller.isOpen ? _controller.close() : _controller.open(),
+      ),
     );
   }
+
+  /// The menu draws nothing of its own: the popover is the whole card, with
+  /// its own tone, hairline, radius and shadow.
+  static const _popoverStyle = MenuStyle(
+    padding: WidgetStatePropertyAll(EdgeInsets.zero),
+    backgroundColor: WidgetStatePropertyAll(Colors.transparent),
+    shadowColor: WidgetStatePropertyAll(Colors.transparent),
+    surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+    elevation: WidgetStatePropertyAll(0),
+  );
 
   /// Whether this session's agent keeps a store with counts in it. Read rather
   /// than awaited, so nothing draws a control that opens onto an apology.
