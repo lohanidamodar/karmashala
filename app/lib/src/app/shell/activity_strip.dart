@@ -35,7 +35,12 @@ class ShellActivityStrip extends ConsumerWidget {
         ShellArea.inbox: ref.watch(attentionCountProvider),
       },
       // A hover worth having teaches the key that reaches the same place.
-      hints: {ShellArea.inbox: ?shellChordLabel<OpenAttentionInboxIntent>()},
+      hints: {
+        for (final area in ShellArea.values)
+          area: ?shellChordLabel<ShowShellAreaIntent>(
+            where: (intent) => intent.area == area,
+          ),
+      },
       settingsHint: shellChordLabel<OpenSettingsIntent>(),
       onSelect: (picked) => toggleShellArea(ref, picked),
       onSettings: () => openSettingsTab(ref),

@@ -1,6 +1,7 @@
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import 'package:karmashala/src/app/shell/shell_area.dart';
 import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -126,11 +127,14 @@ void main() {
     WidgetTester tester,
     LogicalKeyboardKey key, {
     bool shift = false,
+    bool alt = false,
   }) async {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    if (alt) await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(key);
     if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    if (alt) await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
   }
@@ -158,29 +162,38 @@ void main() {
     expect(toShell, isEmpty);
   });
 
-  testWidgets('Ctrl+3 toggles the side panel from a focused terminal pane', (
+  testWidgets('Ctrl+Alt+B toggles the context panel from a terminal pane', (
     tester,
   ) async {
     final (container, toShell) = await pumpFocusedTerminal(tester);
     expect(container.read(sidePanelProvider), isNull, reason: 'closed first');
 
-    await chord(tester, LogicalKeyboardKey.digit3);
+    await chord(tester, LogicalKeyboardKey.keyB, alt: true);
     expect(container.read(sidePanelProvider), isNotNull);
 
-    await chord(tester, LogicalKeyboardKey.digit3);
+    await chord(tester, LogicalKeyboardKey.keyB, alt: true);
     expect(container.read(sidePanelProvider), isNull);
     expect(toShell, isEmpty);
   });
 
-  testWidgets('Ctrl+1 and Ctrl+2 move the focused pane from the terminal', (
-    tester,
-  ) async {
+  testWidgets('Ctrl+1…5 show an area and take the keyboard there; the same '
+      'chord again gives it back to the workbench', (tester) async {
     final (container, toShell) = await pumpFocusedTerminal(tester);
 
     await chord(tester, LogicalKeyboardKey.digit1);
+    expect(container.read(shellAreaProvider), ShellArea.sessions);
     expect(
       container.read(shellControllerProvider).focusedPane,
       ShellPane.explorer,
+    );
+
+    await chord(tester, LogicalKeyboardKey.digit3);
+    expect(container.read(shellAreaProvider), ShellArea.terminals);
+
+    await chord(tester, LogicalKeyboardKey.digit3);
+    expect(
+      container.read(shellControllerProvider).focusedPane,
+      ShellPane.detail,
     );
     expect(toShell, isEmpty);
   });
@@ -451,7 +464,7 @@ void main() {
 
   test('the Explorer advertises the chord that survives a terminal', () {
     expect(shellChordLabel<ToggleExplorerPaneIntent>(), 'Ctrl+Shift+B');
-    expect(shellChordLabel<ToggleSidePanelIntent>(), 'Ctrl+3');
+    expect(shellChordLabel<ToggleSidePanelIntent>(), 'Ctrl+Alt+B');
   });
 
   testWidgets('Ctrl+B claimed in Settings stops being the tmux prefix', (

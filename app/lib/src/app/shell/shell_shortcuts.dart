@@ -27,6 +27,13 @@ class FocusPaneIntent extends Intent {
   final ShellPane pane;
 }
 
+/// Intent: show [area] in the sidebar and give it the keyboard — or, when it
+/// already has both, hand the keyboard back to the workbench.
+class ShowShellAreaIntent extends Intent {
+  const ShowShellAreaIntent(this.area);
+  final ShellArea area;
+}
+
 /// Intent: show/hide the collapsible explorer pane.
 class ToggleExplorerPaneIntent extends Intent {
   const ToggleExplorerPaneIntent();
@@ -243,18 +250,29 @@ String _paneEditLabel(String key) =>
 SingleActivator commandActivator(
   LogicalKeyboardKey key, {
   bool shift = false,
+  bool alt = false,
 }) => SingleActivator(
   key,
   control: !commandKeyIsMeta,
   meta: commandKeyIsMeta,
   shift: shift,
+  alt: alt,
 );
 
 /// How that chord is written for the user: `⇧⌘K` on macOS, `Ctrl+Shift+K`
 /// elsewhere — the macOS modifier order is the platform's own.
-String _commandLabel(String key, {bool shift = false}) => commandKeyIsMeta
-    ? '${shift ? '⇧' : ''}⌘$key'
-    : 'Ctrl+${shift ? 'Shift+' : ''}$key';
+String _commandLabel(String key, {bool shift = false, bool alt = false}) =>
+    commandKeyIsMeta
+    ? '${alt ? '⌥' : ''}${shift ? '⇧' : ''}⌘$key'
+    : 'Ctrl+${alt ? 'Alt+' : ''}${shift ? 'Shift+' : ''}$key';
+
+const _digits = [
+  LogicalKeyboardKey.digit1,
+  LogicalKeyboardKey.digit2,
+  LogicalKeyboardKey.digit3,
+  LogicalKeyboardKey.digit4,
+  LogicalKeyboardKey.digit5,
+];
 
 List<ShellChord> _buildChords() => [
   ShellChord(
@@ -266,28 +284,24 @@ List<ShellChord> _buildChords() => [
     does: 'Go to the next agent waiting for you',
     skipsShell: true,
   ),
+  // Ctrl 1…5: the activity strip's areas, top to bottom (spec §4). Pressing
+  // the one the sidebar already has the keyboard in hands it back to the
+  // workbench, so focusing the workbench costs no key of its own.
+  for (final (index, area) in ShellArea.values.indexed)
+    ShellChord(
+      activator: commandActivator(_digits[index]),
+      intent: ShowShellAreaIntent(area),
+      command: 'view.area.${area.name}',
+      label: _commandLabel('${index + 1}'),
+      does: 'Show ${area.label} in the sidebar',
+      skipsShell: true,
+    ),
   ShellChord(
-    activator: commandActivator(LogicalKeyboardKey.digit1),
-    intent: FocusPaneIntent(ShellPane.explorer),
-    command: 'view.focusExplorer',
-    label: _commandLabel('1'),
-    does: 'Focus the Explorer',
-    skipsShell: true,
-  ),
-  ShellChord(
-    activator: commandActivator(LogicalKeyboardKey.digit2),
-    intent: FocusPaneIntent(ShellPane.detail),
-    command: 'view.focusWorkbench',
-    label: _commandLabel('2'),
-    does: 'Focus the workbench',
-    skipsShell: true,
-  ),
-  ShellChord(
-    activator: commandActivator(LogicalKeyboardKey.digit3),
+    activator: commandActivator(LogicalKeyboardKey.keyB, alt: true),
     intent: ToggleSidePanelIntent(),
     command: 'view.toggleSidePanel',
-    label: _commandLabel('3'),
-    does: 'Show or hide the side panel',
+    label: _commandLabel('B', alt: true),
+    does: 'Show or hide the context panel',
     skipsShell: true,
   ),
   // The tmux prefix. Bound app-wide, deliberately absent from the skip-list.
@@ -895,6 +909,21 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
             onInvoke: (intent) {
               openSettingsTab(ref);
+              return null;
+            },
+          ),
+          ShowShellAreaIntent: CallbackAction<ShowShellAreaIntent>(
+            onInvoke: (intent) {
+              final shell = ref.read(shellControllerProvider);
+              final showing =
+                  shell.explorerPaneVisible &&
+                  ref.read(shellAreaProvider) == intent.area;
+              if (showing && shell.focusedPane == ShellPane.explorer) {
+                controller.focusPane(ShellPane.detail);
+              } else {
+                showShellArea(ref, intent.area);
+                controller.focusPane(ShellPane.explorer);
+              }
               return null;
             },
           ),
