@@ -172,6 +172,8 @@ void main() {
   testWidgets('a new context can be named inline, and nothing is written '
       'until the project is', (tester) async {
     await pumpDialog(tester);
+    // The Session | Project switch above the form pushes this below the fold.
+    await tester.ensureVisible(find.byTooltip('New context'));
     await tester.tap(find.byTooltip('New context'));
     await tester.pumpAndSettle();
 
@@ -188,6 +190,9 @@ void main() {
     );
 
     // Backing out leaves nothing behind either.
+    await tester.ensureVisible(
+      find.byTooltip('Pick an existing context instead'),
+    );
     await tester.tap(find.byTooltip('Pick an existing context instead'));
     await tester.pumpAndSettle();
     expect(container.read(workspacesControllerProvider), isEmpty);

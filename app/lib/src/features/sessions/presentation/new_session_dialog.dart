@@ -346,110 +346,134 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         scrollable: true,
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: DialogWidth.narrow),
-          child: destination == null
-              ? _noProjects()
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SessionDestinationPicker(
-                      destination: destination,
-                      enabled: !_busy,
-                      onChanged: (picked) {
-                        setState(() {
-                          _error = null;
-                          _destination = picked;
-                          // The agent belongs to the environment we are leaving.
-                          // Cleared so `_agentFor` re-resolves the default.
-                          _installation = null;
-                        });
-                        _afterDestinationChanged();
-                      },
-                    ),
-                    const SizedBox(height: Insets.md),
-                    TextField(
-                      controller: _titleController,
-                      decoration: const InputDecoration(labelText: 'Title'),
-                    ),
-                    const SizedBox(height: Insets.md),
-                    if (installations.isEmpty)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              checkout == null
-                                  ? 'No agent installations found yet.'
-                                  : 'No agent is installed in '
-                                        '${ref.watch(environmentLabelForIdProvider(checkout.path.environmentId))} yet.',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // One dialog, two tabs (spec §5): Project swaps this dialog for
+              // the new-project one in the same place. In the body, not the
+              // title, so it scrolls into view with the rest.
+              NewKindSwitch(
+                current: NewKind.session,
+                onChanged: (_) {
+                  final navigator = Navigator.of(context);
+                  final host = navigator.context;
+                  navigator.pop();
+                  NewProjectDialog.show(host);
+                },
+              ),
+              destination == null
+                  ? _noProjects()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SessionDestinationPicker(
+                          destination: destination,
+                          enabled: !_busy,
+                          onChanged: (picked) {
+                            setState(() {
+                              _error = null;
+                              _destination = picked;
+                              // The agent belongs to the environment we are leaving.
+                              // Cleared so `_agentFor` re-resolves the default.
+                              _installation = null;
+                            });
+                            _afterDestinationChanged();
+                          },
+                        ),
+                        const SizedBox(height: Insets.md),
+                        TextField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(labelText: 'Title'),
+                        ),
+                        const SizedBox(height: Insets.md),
+                        if (installations.isEmpty)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  checkout == null
+                                      ? 'No agent installations found yet.'
+                                      : 'No agent is installed in '
+                                            '${ref.watch(environmentLabelForIdProvider(checkout.path.environmentId))} yet.',
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _busy ? null : _discoverAgents,
+                                child: const Text('Discover agents'),
+                              ),
+                            ],
+                          )
+                        else
+                          NewSessionAgentCards(
+                            installations: installations,
+                            selected: installation,
+                            enabled: !_busy,
+                            onSelected: (v) =>
+                                setState(() => _installation = v),
+                          ),
+                        const SizedBox(height: Insets.md),
+                        TextField(
+                          controller: _promptController,
+                          minLines: 2,
+                          maxLines: 6,
+                          decoration: const InputDecoration(
+                            labelText: 'First message (optional)',
+                            hintText: 'What should the agent start on?',
+                            helperText: 'Ctrl+Enter starts the session',
+                          ),
+                        ),
+                        const SizedBox(height: Insets.md),
+                        SegmentedButton<bool>(
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(
+                              value: false,
+                              icon: Icon(
+                                AppIcons.chat,
+                                size: Chrome.iconAction,
+                              ),
+                              label: Text('In-app'),
+                            ),
+                            ButtonSegment(
+                              value: true,
+                              icon: Icon(
+                                AppIcons.arrowSquareOut,
+                                size: Chrome.iconAction,
+                              ),
+                              label: Text('External terminal'),
+                            ),
+                          ],
+                          selected: {_external},
+                          onSelectionChanged: (s) =>
+                              setState(() => _external = s.first),
+                        ),
+                        if (_external) _terminalPicker(),
+                        // Offered for both surfaces: the worktree is created before
+                        // the agent starts, so its window makes no difference.
+                        if (worktreeOffered)
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: _useWorktree,
+                            onChanged: (v) =>
+                                setState(() => _useWorktree = v ?? false),
+                            title: const Text(
+                              'Run in a dedicated Git worktree',
                             ),
                           ),
-                          TextButton(
-                            onPressed: _busy ? null : _discoverAgents,
-                            child: const Text('Discover agents'),
-                          ),
+                        if (_creation != null) ...[
+                          const SizedBox(height: Insets.sm),
+                          WorktreeCreationLiveView(tracker: _creation!),
                         ],
-                      )
-                    else
-                      NewSessionAgentCards(
-                        installations: installations,
-                        selected: installation,
-                        enabled: !_busy,
-                        onSelected: (v) => setState(() => _installation = v),
-                      ),
-                    const SizedBox(height: Insets.md),
-                    TextField(
-                      controller: _promptController,
-                      minLines: 2,
-                      maxLines: 6,
-                      decoration: const InputDecoration(
-                        labelText: 'First message (optional)',
-                        hintText: 'What should the agent start on?',
-                        helperText: 'Ctrl+Enter starts the session',
-                      ),
-                    ),
-                    const SizedBox(height: Insets.md),
-                    SegmentedButton<bool>(
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(
-                          value: false,
-                          icon: Icon(AppIcons.chat, size: Chrome.iconAction),
-                          label: Text('In-app'),
-                        ),
-                        ButtonSegment(
-                          value: true,
-                          icon: Icon(
-                            AppIcons.arrowSquareOut,
-                            size: Chrome.iconAction,
-                          ),
-                          label: Text('External terminal'),
-                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: Insets.sm),
+                          DesktopErrorBanner(_error!),
+                        ],
                       ],
-                      selected: {_external},
-                      onSelectionChanged: (s) =>
-                          setState(() => _external = s.first),
                     ),
-                    if (_external) _terminalPicker(),
-                    // Offered for both surfaces: the worktree is created before
-                    // the agent starts, so its window makes no difference.
-                    if (worktreeOffered)
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _useWorktree,
-                        onChanged: (v) =>
-                            setState(() => _useWorktree = v ?? false),
-                        title: const Text('Run in a dedicated Git worktree'),
-                      ),
-                    if (_creation != null) ...[
-                      const SizedBox(height: Insets.sm),
-                      WorktreeCreationLiveView(tracker: _creation!),
-                    ],
-                    if (_error != null) ...[
-                      const SizedBox(height: Insets.sm),
-                      DesktopErrorBanner(_error!),
-                    ],
-                  ],
-                ),
+            ],
+          ),
         ),
         actions: [
           TextButton(

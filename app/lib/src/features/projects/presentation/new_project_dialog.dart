@@ -8,6 +8,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import '../../sessions/presentation/new_session_dialog.dart';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/picking.dart';
@@ -322,6 +323,17 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // One dialog, two tabs (spec §5): Session swaps this dialog for
+            // the new-session one in the same place.
+            NewKindSwitch(
+              current: NewKind.project,
+              onChanged: (_) {
+                final navigator = Navigator.of(context);
+                final host = navigator.context;
+                navigator.pop();
+                NewSessionDialog.show(host);
+              },
+            ),
             DropdownButtonFormField<String>(
               initialValue: _targetId,
               isExpanded: true,

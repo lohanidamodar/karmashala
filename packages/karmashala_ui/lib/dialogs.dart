@@ -3,3 +3,4 @@
 library;
 
 export 'src/desktop_dialog.dart';
+export 'src/new_kind_switch.dart';
