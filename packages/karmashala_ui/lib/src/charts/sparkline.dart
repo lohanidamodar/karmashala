@@ -42,27 +42,25 @@ class Sparkline extends StatelessWidget {
       container: true,
       label: semanticsLabel,
       child: ExcludeSemantics(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final resolved =
-                width ??
-                (constraints.hasBoundedWidth
-                    ? constraints.maxWidth
-                    : _fallbackWidth);
-            return SizedBox(
-              width: resolved,
-              height: height,
-              child: CustomPaint(
-                painter: SparklinePainter(
-                  values: values,
-                  color: color,
-                  minValue: minValue,
-                  maxValue: maxValue,
-                  areaAlpha: area ? ink.areaAlpha : 0,
-                ),
+        // No LayoutBuilder: a menu or popover measures its content's
+        // intrinsic size, which a LayoutBuilder refuses — the card it sat in
+        // failed layout and closed as it opened. LimitedBox gives the same
+        // rule: the incoming width, or the fallback where that is unbounded.
+        child: LimitedBox(
+          maxWidth: _fallbackWidth,
+          child: SizedBox(
+            width: width ?? double.infinity,
+            height: height,
+            child: CustomPaint(
+              painter: SparklinePainter(
+                values: values,
+                color: color,
+                minValue: minValue,
+                maxValue: maxValue,
+                areaAlpha: area ? ink.areaAlpha : 0,
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
