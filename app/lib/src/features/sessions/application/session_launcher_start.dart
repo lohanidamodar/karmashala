@@ -48,6 +48,8 @@ extension SessionStartVerbs on SessionLauncher {
             newSession: request.purpose == SessionPurpose.newSession,
             surface: request.surface,
             worktree: request.useWorktree,
+            worktreeBranch: request.worktreeBranch,
+            worktreeBase: request.worktreeBase,
             existingWorktree: request.existingWorktree,
             workingDirectory: request.workingDirectory,
             additionalRepositoryIds: [

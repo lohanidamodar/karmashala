@@ -42,6 +42,8 @@ class HostedLaunch {
     this.permissionMode,
     this.prompt,
     this.worktree = false,
+    this.worktreeBranch,
+    this.worktreeBase,
     this.resuming,
     this.parentSessionId,
     this.parentLink,
@@ -83,6 +85,12 @@ class HostedLaunch {
 
   /// Start in a worktree of its own, on a new branch.
   final bool worktree;
+
+  /// With [worktree]: the branch a person named, else the session-named one.
+  final String? worktreeBranch;
+
+  /// With [worktree]: what the new branch starts from; null is HEAD.
+  final String? worktreeBase;
 
   /// The row being continued: its id, its conversation, its directory, its
   /// mode and model are kept (unless named here), and it is marked running.
@@ -305,7 +313,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       final created = await service.create(
         repo: launch.repository.path,
         worktreeName: sessionWorktreeName(id),
-        branch: sessionBranchName(id),
+        branch: launch.worktreeBranch ?? sessionBranchName(id),
+        baseRef: launch.worktreeBase,
         launchesAgent: true,
       );
       directory = created.worktree.path;

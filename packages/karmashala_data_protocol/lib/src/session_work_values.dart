@@ -27,6 +27,8 @@ final class SessionStartSpec {
     this.newSession = true,
     this.surface = SessionSurface.pane,
     this.worktree = false,
+    this.worktreeBranch,
+    this.worktreeBase,
     this.existingWorktree,
     this.workingDirectory,
     this.additionalRepositoryIds = const [],
@@ -58,6 +60,13 @@ final class SessionStartSpec {
 
   /// A worktree of its own, on a new branch.
   final bool worktree;
+
+  /// With [worktree]: the branch a person named, or null for the
+  /// session-named one. Absent on the wire from an older client.
+  final String? worktreeBranch;
+
+  /// With [worktree]: what [worktreeBranch] starts from; null is HEAD.
+  final String? worktreeBase;
 
   /// A worktree that already exists, joined rather than created.
   final EnvironmentPath? existingWorktree;
@@ -99,6 +108,8 @@ final class SessionStartSpec {
     'newSession': newSession,
     'surface': surface.name,
     'worktree': worktree,
+    'worktreeBranch': ?worktreeBranch,
+    'worktreeBase': ?worktreeBase,
     if (existingWorktree != null)
       'existingWorktree': environmentPathToJson(existingWorktree!),
     if (workingDirectory != null)
@@ -144,6 +155,8 @@ final class SessionStartSpec {
       newSession: json['newSession'] != false,
       surface: named(SessionSurface.values, 'surface') ?? SessionSurface.pane,
       worktree: json['worktree'] == true,
+      worktreeBranch: text('worktreeBranch'),
+      worktreeBase: text('worktreeBase'),
       existingWorktree: json['existingWorktree'] == null
           ? null
           : environmentPathFromJson(json['existingWorktree']),

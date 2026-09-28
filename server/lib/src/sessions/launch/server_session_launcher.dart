@@ -281,7 +281,10 @@ class ServerSessionLauncher {
         modelId: spec.modelId,
         prompt: prompt,
         worktree: spec.worktree,
+        worktreeBranch: spec.worktreeBranch,
+        worktreeBase: spec.worktreeBase,
         existingWorktree: spec.existingWorktree,
+
         workingDirectory: workingDirectory,
         recordDirectory: recordDirectory,
         resuming: reused,

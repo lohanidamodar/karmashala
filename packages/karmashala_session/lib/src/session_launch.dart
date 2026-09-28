@@ -58,6 +58,8 @@ class SessionLaunchRequest {
     this.titleTyped = false,
     this.surface = SessionSurface.pane,
     this.useWorktree = false,
+    this.worktreeBranch,
+    this.worktreeBase,
     this.existingWorktree,
     this.workingDirectory,
     this.additionalRepositories = const [],
@@ -91,6 +93,13 @@ class SessionLaunchRequest {
 
   /// Create a **new** worktree for this session.
   final bool useWorktree;
+
+  /// With [useWorktree]: the branch the new worktree creates, or null for
+  /// the session-named one a caller that did not ask gets.
+  final String? worktreeBranch;
+
+  /// With [useWorktree]: what [worktreeBranch] starts from; null is HEAD.
+  final String? worktreeBase;
 
   /// Run in a worktree that already exists rather than creating one — what a
   /// handoff on the same branch needs. Mutually exclusive with [useWorktree].
@@ -164,6 +173,8 @@ class SessionLaunchRequest {
     titleTyped: titleTyped,
     surface: surface,
     useWorktree: useWorktree,
+    worktreeBranch: worktreeBranch,
+    worktreeBase: worktreeBase,
     existingWorktree: existingWorktree,
     workingDirectory: workingDirectory,
     additionalRepositories: additionalRepositories,

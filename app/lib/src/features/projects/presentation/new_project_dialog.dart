@@ -1,4 +1,5 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -19,7 +20,12 @@ import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspace_suggestion.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import '../../../core/process/command_runner_providers.dart';
+import '../../agents/data/agents_data.dart';
+import '../../git/data/git_data.dart';
+import 'package:karmashala_git/git.dart';
 import '../application/project_service.dart';
+import '../application/project_source_preview.dart';
 import '../application/projects_controller.dart';
 
 /// Creates a project from a folder or Git repository URL. Supports local,
@@ -61,16 +67,66 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   bool _busy = false;
   String? _error;
 
+  /// What the chosen folder holds (spec §5), read after typing pauses.
+  late final ProjectSourcePreviewReader _reader;
+  Timer? _previewPause;
+  ProjectSourcePreview? _preview;
+  EnvironmentPath? _previewedRoot;
+  bool _previewing = false;
+
   static const _translator = PathTranslator();
 
   @override
   void initState() {
     super.initState();
     _targetId = widget.initialEnvironmentId ?? localHostEnvironmentId;
+    _reader = ProjectSourcePreviewReader(
+      ref.read(gitDataProvider),
+      ref.read(commandRunnerFactoryProvider),
+      ref.read(agentWorkProvider),
+    );
+  }
+
+  /// Reads the folder once typing pauses. Cancelled on close, so no read
+  /// outlives the dialog.
+  void _schedulePreview() {
+    _previewPause?.cancel();
+    _previewPause = Timer(const Duration(milliseconds: 400), _readPreview);
+  }
+
+  Future<void> _readPreview() async {
+    if (!mounted) return;
+    final environments = ref.read(environmentsControllerProvider);
+    final root = _storedRoot(environments);
+    final environment = _envById(environments, _targetId);
+    // A clone's folder does not exist yet: there is nothing in it to read.
+    if (root == null ||
+        environment == null ||
+        _gitUrlController.text.trim().isNotEmpty) {
+      setState(() {
+        _preview = null;
+        _previewedRoot = null;
+        _previewing = false;
+      });
+      return;
+    }
+    if (root == _previewedRoot && _preview != null) return;
+    setState(() {
+      _previewedRoot = root;
+      _previewing = true;
+    });
+    final read = await _reader.read(root, environment);
+    // A later folder has been asked about since: this answer is for no one.
+    if (!mounted || _previewedRoot != root) return;
+    setState(() {
+      _preview = read;
+      _previewing = false;
+    });
   }
 
   @override
   void dispose() {
+    _previewPause?.cancel();
     _gitUrlController.dispose();
     _nameController.dispose();
     _folderController.dispose();
@@ -96,6 +152,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       }
       _suggestWorkspace();
     });
+    _schedulePreview();
   }
 
   static String _leafOf(String path) {
@@ -351,16 +408,28 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                       child: _Choice(_environmentLabel(env)),
                     ),
                 ],
-                onChanged: (v) => setState(() {
-                  _targetId = v ?? localHostEnvironmentId;
-                  _suggestWorkspace();
-                }),
+                onChanged: (v) {
+                  setState(() {
+                    _targetId = v ?? localHostEnvironmentId;
+                    _suggestWorkspace();
+                  });
+                  _schedulePreview();
+                },
               ),
             ),
             NewDialogSection(
               label: 'Folder or clone',
               child: _source(isSsh: isSsh, hasGit: hasGit, preview: preview),
             ),
+            if (hasGit || _folderController.text.trim().isNotEmpty)
+              NewDialogSection(
+                label: 'What was found',
+                child: _ProjectSourceFacts(
+                  cloneUrl: hasGit ? _gitUrlController.text.trim() : null,
+                  preview: _preview,
+                  reading: _previewing,
+                ),
+              ),
             NewDialogSection(
               label: 'Name & context',
               child: Column(
@@ -444,6 +513,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
           } else {
             setState(() {});
           }
+          _schedulePreview();
         },
       ),
       const SizedBox(height: Insets.md),
@@ -458,7 +528,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         helper: isSsh && hasGit
             ? 'Defaults to ~/karmashala/<repo> on remote host'
             : null,
-        onChanged: (_) => setState(_suggestWorkspace),
+        onChanged: (_) {
+          setState(_suggestWorkspace);
+          _schedulePreview();
+        },
         actions: [
           OutlinedButton.icon(
             onPressed: _busy ? null : _browse,
@@ -562,6 +635,141 @@ class _ContextField extends StatelessWidget {
       ],
     );
   }
+}
+
+/// What the folder turned out to hold, read-only (board N3): git and its
+/// remote, the app kind, and the agents' earlier conversations there. A clone
+/// says only what its URL does, the folder not existing yet.
+class _ProjectSourceFacts extends StatelessWidget {
+  const _ProjectSourceFacts({
+    required this.cloneUrl,
+    required this.preview,
+    required this.reading,
+  });
+
+  final String? cloneUrl;
+  final ProjectSourcePreview? preview;
+  final bool reading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final semantic = SemanticColors.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final url = cloneUrl;
+    final lines = <Widget>[];
+    void fact(IconData icon, Color colour, String text) =>
+        lines.add(_FactLine(icon: icon, colour: colour, text: text));
+
+    if (url != null) {
+      fact(
+        AppIcons.gitBranch,
+        semantic.idle,
+        'Git repository to clone · ${repoNameFromUrl(url)} from $url',
+      );
+      fact(
+        AppIcons.info,
+        muted,
+        'The app kind and earlier conversations are read once it is cloned.',
+      );
+    } else if (preview == null) {
+      fact(
+        AppIcons.circle,
+        muted,
+        reading ? 'Looking in the folder…' : 'Nothing read yet.',
+      );
+    } else {
+      final p = preview!;
+      switch (p.git) {
+        case GitPresence.notARepository:
+          fact(AppIcons.info, muted, 'Not a Git repository · a plain folder');
+        case GitPresence.unknown:
+          fact(AppIcons.question, muted, 'Whether it is under Git is unknown');
+        case GitPresence.repository:
+          final parts = [
+            'Git repository',
+            ?p.branch,
+            p.remote == null ? 'no remote' : 'remote ${p.remote}',
+          ];
+          fact(AppIcons.check, semantic.idle, parts.join(' · '));
+      }
+      final app = p.app;
+      if (app != null) {
+        fact(
+          AppIcons.check,
+          semantic.idle,
+          '${app.kind.label} app found'
+          '${app.evidence.isEmpty ? '' : ' · ${app.evidence.first}'}',
+        );
+      } else {
+        fact(AppIcons.info, muted, p.appNote ?? 'No app project found');
+      }
+      final counts = p.conversations;
+      if (counts == null) {
+        fact(AppIcons.question, muted, 'Earlier conversations: not read');
+      } else if (p.conversationCount == 0) {
+        fact(AppIcons.info, muted, 'No earlier agent conversations here');
+      } else {
+        final by = [
+          for (final e in counts.entries) '${e.key} ${e.value}',
+        ].join(', ');
+        fact(
+          AppIcons.chatCircleDots,
+          theme.colorScheme.primary,
+          '${p.conversationCount} earlier conversation'
+          '${p.conversationCount == 1 ? '' : 's'} here ($by) · refreshing '
+          'the project’s sessions imports them',
+        );
+      }
+      if (reading) {
+        fact(AppIcons.circle, muted, 'Looking again…');
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.md,
+        vertical: Insets.sm,
+      ),
+      decoration: BoxDecoration(
+        color: SurfaceTones.of(context).raised,
+        borderRadius: BorderRadius.circular(Radii.md),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, line) in lines.indexed) ...[
+            if (i > 0) const SizedBox(height: Insets.xs),
+            line,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One detected fact: a marker that is not colour alone, and the words.
+class _FactLine extends StatelessWidget {
+  const _FactLine({
+    required this.icon,
+    required this.colour,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color colour;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: Chrome.icon, color: colour),
+      const SizedBox(width: Insets.sm),
+      Expanded(child: Text(text, style: Theme.of(context).textTheme.bodySmall)),
+    ],
+  );
 }
 
 /// A dropdown choice: one line, ellipsized, because environment and context

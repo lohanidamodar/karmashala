@@ -9,6 +9,7 @@ import 'package:karmashala_ui/primitives.dart';
 
 import '../../agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_git/git.dart';
 import '../../explorer/application/explorer_actions.dart';
@@ -27,6 +28,23 @@ import 'package:karmashala_session/launch.dart';
 import 'session_destination_picker.dart';
 import 'new_dialog_section.dart';
 import 'new_session_agent_cards.dart';
+
+/// Where a new session's work lands (spec §5, board N3).
+enum _WorkPlace { checkout, newWorktree, existingWorktree }
+
+/// Whether [name] could be a branch: the refusals of
+/// `git check-ref-format --branch` a person is likely to type, caught before
+/// the server is asked.
+bool _isBranchName(String name) =>
+    !name.startsWith('-') &&
+    !name.startsWith('/') &&
+    !name.endsWith('/') &&
+    !name.endsWith('.') &&
+    !name.endsWith('.lock') &&
+    !name.contains('..') &&
+    !name.contains('//') &&
+    !name.contains('@{') &&
+    !RegExp(r'[\s~^:?*\[\\\x00-\x1f\x7f]').hasMatch(name);
 
 /// Creates a session **where you say**. Browsing and cancelling leaves the
 /// app's selection alone; pressing Start moves it, it being no longer a guess.
@@ -63,7 +81,19 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// [GitPresence.unknown], which offers a worktree: not having looked is not
   /// the same as having found a plain folder.
   GitPresence _presence = GitPresence.unknown;
-  bool _useWorktree = false;
+  _WorkPlace _place = _WorkPlace.checkout;
+
+  /// The new worktree's branch; blank lets the server name it after the session.
+  final _branchController = TextEditingController();
+
+  /// What the new branch starts from; null is the checkout's HEAD.
+  String? _base;
+
+  /// The destination's worktrees, read once per destination; null until read.
+  List<GitWorktree>? _worktrees;
+
+  /// The existing worktree picked, by path.
+  String? _existingPath;
   bool _external = false;
   SystemTerminal? _terminal;
   bool _busy = false;
@@ -93,6 +123,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// provider, which a life-cycle may not do — and is that anywhere under git.
   void _afterDestinationChanged() {
     _presence = GitPresence.unknown;
+    _worktrees = null;
+    _existingPath = null;
+    _base = null;
+    if (_place == _WorkPlace.existingWorktree) _place = _WorkPlace.checkout;
     Future(() async {
       if (!mounted) return;
       final runnable = await _runnable(_destination);
@@ -111,7 +145,56 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     ref.read(checkoutGitPresenceProvider(path).future).then((presence) {
       if (!mounted || _destination?.checkout?.path != path) return;
       setState(() => _presence = presence);
+      if (presence != GitPresence.notARepository) _readWorktrees(path);
     });
+  }
+
+  /// The worktrees an existing-worktree launch can join, and the branches a new
+  /// one can start from. Read, not watched, for [_readPresence]'s reason.
+  void _readWorktrees(EnvironmentPath path) {
+    ref
+        .read(worktreeServiceProvider)
+        .list(path)
+        .then(
+          (listed) {
+            if (!mounted || _destination?.checkout?.path != path) return;
+            setState(() => _worktrees = listed);
+          },
+          onError: (Object _) {
+            // Unlisted reads as none: the existing-worktree choice stays shut.
+            if (!mounted || _destination?.checkout?.path != path) return;
+            setState(() => _worktrees = const []);
+          },
+        );
+  }
+
+  /// The worktrees other than the checkout itself: what "existing" can join.
+  List<GitWorktree> _joinable(Repository? checkout) => [
+    for (final w in _worktrees ?? const <GitWorktree>[])
+      if (!w.isBare && !_isCheckout(w, checkout)) w,
+  ];
+
+  /// Branches a new worktree can start from, as far as the worktree listing
+  /// knows them — there is no branch listing to ask yet.
+  List<String> _baseChoices(Repository? checkout) {
+    final own = _ownBranch(checkout);
+    return {
+      for (final w in _worktrees ?? const <GitWorktree>[])
+        if (w.branch != null && w.branch != own) w.branch!,
+    }.toList();
+  }
+
+  /// By place, not spelling: `git worktree list` writes `C:/src/x` for the
+  /// checkout recorded as `C:\src\x`.
+  static bool _isCheckout(GitWorktree w, Repository? checkout) =>
+      checkout != null && Checkout(w.path) == Checkout(checkout.path);
+
+  /// The branch the checkout itself has out, when the listing names it.
+  String? _ownBranch(Repository? checkout) {
+    for (final w in _worktrees ?? const <GitWorktree>[]) {
+      if (_isCheckout(w, checkout)) return w.branch;
+    }
+    return null;
   }
 
   /// [destination] with somewhere to run: the project's own folder, recorded so
@@ -136,6 +219,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   void dispose() {
     _titleController.dispose();
     _promptController.dispose();
+    _branchController.dispose();
     super.dispose();
   }
 
@@ -175,12 +259,27 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
   }
 
-  /// [useWorktree] comes from the button, not the field: a checkbox that is
-  /// not on screen must not still be ticked underneath it.
+  /// [place] comes from the button, not the field: a choice that is not on
+  /// screen must not still be made underneath it.
   Future<void> _create(
     AgentInstallation? installation, {
-    required bool useWorktree,
+    required _WorkPlace place,
   }) async {
+    final useWorktree = place == _WorkPlace.newWorktree;
+    final branch = _branchController.text.trim();
+    if (useWorktree && branch.isNotEmpty && !_isBranchName(branch)) {
+      setState(() => _error = '"$branch" is not a branch name git accepts.');
+      return;
+    }
+    final existing = place != _WorkPlace.existingWorktree
+        ? null
+        : _joinable(
+            _destination?.checkout,
+          ).where((w) => w.path.path == _existingPath).firstOrNull?.path;
+    if (place == _WorkPlace.existingWorktree && existing == null) {
+      setState(() => _error = 'Choose the worktree to work in.');
+      return;
+    }
     final repo = _destination?.checkout;
     if (repo == null || installation == null) return;
     final terminal = _terminalFrom(
@@ -223,6 +322,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   ? SessionSurface.external
                   : SessionSurface.pane,
               useWorktree: useWorktree,
+              worktreeBranch: useWorktree && branch.isNotEmpty ? branch : null,
+              worktreeBase: useWorktree ? _base : null,
+              existingWorktree: existing,
               targetPaneId: widget.targetPaneId,
               firstMessage: _promptController.text.trim().isEmpty
                   ? null
@@ -305,10 +407,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     ],
   );
 
-  /// In the app or in a terminal of its own, and in the checkout or a fresh
-  /// worktree beside it. The worktree is offered for both surfaces: it is
-  /// created before the agent starts, so its window makes no difference.
-  Widget _whereItWorks(bool worktreeOffered) => Column(
+  /// In the app or in a terminal of its own, and in the checkout, a new
+  /// worktree, or one that exists (spec §5). Worktrees are offered for both
+  /// surfaces: they exist before the agent starts, so its window is moot.
+  Widget _whereItWorks(bool worktreeOffered, Repository? checkout) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -332,17 +434,156 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       if (_external) _terminalPicker(),
       if (worktreeOffered) ...[
         const SizedBox(height: Insets.xs),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: _useWorktree,
-          onChanged: (v) => setState(() => _useWorktree = v ?? false),
-          title: const Text('Run in a dedicated Git worktree'),
-        ),
+        _placeChoice(checkout),
       ],
     ],
   );
+
+  /// The three places of board N3, each with a line saying what it means.
+  Widget _placeChoice(Repository? checkout) {
+    final joinable = _joinable(checkout);
+    final own = _ownBranch(checkout);
+    final listed = _worktrees != null;
+    return RadioGroup<_WorkPlace>(
+      groupValue: _place,
+      onChanged: (v) {
+        if (_busy || v == null) return;
+        setState(() {
+          _place = v;
+          _existingPath ??= joinable.firstOrNull?.path.path;
+        });
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RadioListTile<_WorkPlace>(
+            key: const ValueKey('new-session-place:checkout'),
+            value: _WorkPlace.checkout,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('The project checkout'),
+            subtitle: Text(
+              own == null
+                  ? 'Works in ${checkout?.path.path ?? 'the checkout'}.'
+                  : 'Works on $own in ${checkout?.path.path}.',
+            ),
+          ),
+          RadioListTile<_WorkPlace>(
+            key: const ValueKey('new-session-place:worktree'),
+            value: _WorkPlace.newWorktree,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('A new worktree'),
+            subtitle: const Text(
+              'Its own folder and branch, so it cannot trip over other '
+              'sessions. Merge back when done.',
+            ),
+          ),
+          if (_place == _WorkPlace.newWorktree) _newWorktreeFields(checkout),
+          RadioListTile<_WorkPlace>(
+            key: const ValueKey('new-session-place:existing'),
+            value: _WorkPlace.existingWorktree,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            enabled: joinable.isNotEmpty,
+            title: const Text('An existing worktree'),
+            subtitle: Text(
+              !listed
+                  ? 'Looking for worktrees…'
+                  : joinable.isEmpty
+                  ? 'This checkout has no other worktree.'
+                  : 'Pick one of ${joinable.length} '
+                        'worktree${joinable.length == 1 ? '' : 's'}.',
+            ),
+          ),
+          if (_place == _WorkPlace.existingWorktree && joinable.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: Insets.xl),
+              child: DropdownButtonFormField<String>(
+                // Keyed by checkout: the field keeps its own value, so a new
+                // destination must start a new field.
+                key: ValueKey(
+                  'new-session-existing-worktree:${checkout?.path.path}',
+                ),
+                initialValue: _existingPath,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Worktree'),
+                items: [
+                  for (final w in joinable)
+                    DropdownMenuItem(
+                      value: w.path.path,
+                      child: Text(
+                        '${w.label} · ${w.path.path}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _existingPath = v),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// The new worktree's branch and what it starts from. Rows of Expanded, not
+  /// a LayoutBuilder: the dialog measures intrinsics.
+  Widget _newWorktreeFields(Repository? checkout) {
+    final own = _ownBranch(checkout);
+    final bases = _baseChoices(checkout);
+    return Padding(
+      padding: const EdgeInsets.only(left: Insets.xl, bottom: Insets.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextField(
+              key: const ValueKey('new-session-worktree-branch'),
+              controller: _branchController,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                labelText: 'Branch',
+                helperText: 'Blank names it after the session.',
+              ),
+            ),
+          ),
+          const SizedBox(width: Insets.sm),
+          Expanded(
+            child: DropdownButtonFormField<String?>(
+              key: ValueKey('new-session-worktree-base:${checkout?.path.path}'),
+              initialValue: bases.contains(_base) ? _base : null,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'From'),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(
+                    own ?? 'Current HEAD',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                for (final b in bases)
+                  DropdownMenuItem<String?>(
+                    value: b,
+                    child: Text(
+                      b,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: _busy ? null : (v) => setState(() => _base = v),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// The workspace has nothing to run a session in, and says so instead of
   /// offering an empty dropdown.
@@ -387,8 +628,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         checkout != null && _presence != GitPresence.notARepository;
 
     final canStart = !_busy && checkout != null && installation != null;
-    void start() =>
-        _create(installation, useWorktree: worktreeOffered && _useWorktree);
+    void start() => _create(
+      installation,
+      place: worktreeOffered ? _place : _WorkPlace.checkout,
+    );
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
@@ -467,7 +710,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                         ),
                         NewDialogSection(
                           label: 'Where it works',
-                          child: _whereItWorks(worktreeOffered),
+                          child: _whereItWorks(worktreeOffered, checkout),
                         ),
                         NewDialogSection(
                           label: 'First prompt',
