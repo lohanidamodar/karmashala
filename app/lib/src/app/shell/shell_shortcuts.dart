@@ -343,7 +343,7 @@ List<ShellChord> _buildChords() => [
     intent: ToggleFocusModeIntent(),
     command: 'view.toggleFocusMode',
     label: _commandLabel('\\'),
-    does: 'Focus mode',
+    does: 'Zen: only the pane',
     skipsShell: true,
     shellCost: 'SIGQUIT (^\\) — use kill -QUIT',
   ),

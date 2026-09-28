@@ -71,6 +71,16 @@ class ShellMenuActions {
   void toggleFocusMode() =>
       _ref.read(terminalMaximizedProvider.notifier).toggle();
 
+  /// Whether there is a terminal for the Terminal verbs to act on.
+  bool get hasTerminal =>
+      _ref.read(terminalSessionsControllerProvider).tabs.isNotEmpty;
+
+  void findInScrollback() => TerminalActions(_ref).openSearch();
+
+  void commandSnippets() => QuickOpen.show(_context, initialQuery: r'$');
+
+  void commandsRun() => TerminalActions(_ref).showCommands(_context);
+
   void openSettings() => openSettingsTab(_ref);
 
   void about() => KarmashalaAboutDialog.show(_context);
@@ -401,7 +411,7 @@ class _FocusModeCheckItem extends ConsumerWidget {
     value: ref.watch(terminalMaximizedProvider),
     shortcut: commandActivator(LogicalKeyboardKey.backslash),
     onChanged: (_) => actions.toggleFocusMode(),
-    child: const Text('Focus mode'),
+    child: const Text('Zen'),
   );
 }
 
@@ -447,27 +457,25 @@ class _TerminalSubmenu extends ConsumerWidget {
     final hasTabs = ref.watch(
       terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
     );
-    final actions = TerminalActions(ref);
+    final actions = ShellMenuActions(context, ref);
     return SubmenuButton(
       leadingIcon: const Icon(AppIcons.terminal),
       menuChildren: [
         MenuItemButton(
           leadingIcon: const Icon(AppIcons.magnifyingGlass),
           shortcut: commandActivator(LogicalKeyboardKey.keyF, shift: true),
-          onPressed: hasTabs ? actions.openSearch : null,
+          onPressed: hasTabs ? actions.findInScrollback : null,
           child: const Text('Find in scrollback'),
         ),
         MenuItemButton(
           leadingIcon: const Icon(AppIcons.bookBookmark),
           shortcut: commandActivator(LogicalKeyboardKey.keyS, shift: true),
-          onPressed: hasTabs
-              ? () => QuickOpen.show(context, initialQuery: r'$')
-              : null,
+          onPressed: hasTabs ? actions.commandSnippets : null,
           child: const Text('Command snippets'),
         ),
         MenuItemButton(
           leadingIcon: const Icon(AppIcons.clockCounterClockwise),
-          onPressed: hasTabs ? () => actions.showCommands(context) : null,
+          onPressed: hasTabs ? actions.commandsRun : null,
           child: const Text('Commands run here…'),
         ),
       ],

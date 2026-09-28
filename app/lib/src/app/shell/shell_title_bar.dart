@@ -185,7 +185,9 @@ class _BarDivider extends StatelessWidget {
     width: 1,
     height: Chrome.iconAction,
     margin: const EdgeInsets.symmetric(horizontal: Insets.sm),
-    color: SurfaceTones.of(context).line,
+    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(
+      alpha: 0.3,
+    ),
   );
 }
 

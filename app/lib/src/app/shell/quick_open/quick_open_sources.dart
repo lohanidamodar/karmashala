@@ -313,8 +313,8 @@ class QuickOpenSources {
           onSelect: () => panel.select(surface),
         ),
       _command(
-        'Focus mode',
-        subtitle: 'Give the workbench the whole window',
+        'Zen',
+        subtitle: 'Only the pane — everything else steps aside',
         icon: AppIcons.arrowsOutSimple,
         shortcut: shellCommandLabel('view.toggleFocusMode'),
         onSelect: () => ref.read(terminalMaximizedProvider.notifier).toggle(),

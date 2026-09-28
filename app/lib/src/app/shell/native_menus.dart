@@ -176,6 +176,9 @@ class NativeShellMenus extends ConsumerWidget {
     );
     final hasRoom = ref.watch(sidePanelRoomProvider);
     final focus = ref.watch(terminalMaximizedProvider);
+    final terminal = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
+    );
     final surfaces = SidePanelSurface.offered(
       debugMode: ref.watch(
         settingsControllerProvider.select((s) => s.debugMode),
@@ -250,10 +253,42 @@ class NativeShellMenus extends ConsumerWidget {
               ),
           ],
         ),
+        // The terminal's verbs, as in the in-window View menu.
+        PlatformMenuItemGroup(
+          members: [
+            PlatformMenu(
+              label: 'Terminal',
+              menus: [
+                PlatformMenuItem(
+                  label: 'Find in Scrollback',
+                  shortcut: const SingleActivator(
+                    LogicalKeyboardKey.keyF,
+                    meta: true,
+                    shift: true,
+                  ),
+                  onSelected: terminal ? actions.findInScrollback : null,
+                ),
+                PlatformMenuItem(
+                  label: 'Command Snippets',
+                  shortcut: const SingleActivator(
+                    LogicalKeyboardKey.keyS,
+                    meta: true,
+                    shift: true,
+                  ),
+                  onSelected: terminal ? actions.commandSnippets : null,
+                ),
+                PlatformMenuItem(
+                  label: 'Commands Run Here…',
+                  onSelected: terminal ? actions.commandsRun : null,
+                ),
+              ],
+            ),
+          ],
+        ),
         PlatformMenuItemGroup(
           members: [
             PlatformMenuItem(
-              label: focus ? 'Leave Focus Mode' : 'Enter Focus Mode',
+              label: focus ? 'Leave Zen' : 'Enter Zen',
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.backslash,
                 meta: true,
