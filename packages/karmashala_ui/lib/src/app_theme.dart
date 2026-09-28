@@ -121,6 +121,10 @@ class AppTheme {
     final text = _textTheme(
       scheme,
     ).apply(fontFamily: kBundledSansFamily, fontFamilyFallback: sansFallback);
+    final tones = SurfaceTones.forBrightness(
+      brightness,
+      separation: options.separation,
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -134,7 +138,7 @@ class AppTheme {
       fontFamilyFallback: sansFallback,
       extensions: [
         SemanticColors.forBrightness(brightness),
-        SurfaceTones.forBrightness(brightness, separation: options.separation),
+        tones,
       ],
       // A neutral chrome has no business tinting elevated surfaces towards the
       // accent; the ramp already says how high a surface is.
@@ -265,10 +269,19 @@ class AppTheme {
         iconColor: scheme.onSurfaceVariant,
         textColor: scheme.onSurface,
       ),
+      // A floating note on the raised tone with the floating hairline, like
+      // every other card that hovers over the window - not Material's light
+      // inverse bar across the whole width.
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        backgroundColor: tones.raised,
+        contentTextStyle: text.bodySmall?.copyWith(color: scheme.onSurface),
+        actionTextColor: scheme.primary,
+        width: 480,
+        elevation: 6,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(Radii.sm),
+          borderRadius: BorderRadius.circular(Radii.md),
+          side: BorderSide(color: tones.floatingLine),
         ),
       ),
       tooltipTheme: TooltipThemeData(

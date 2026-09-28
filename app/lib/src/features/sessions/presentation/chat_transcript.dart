@@ -552,6 +552,10 @@ class _ChatMessageTile extends StatelessWidget {
       child: TranscriptSelectionGroup(
         endsTurn: true,
         child: switch (message.role) {
+          // Claude Code records an interruption as a user message; it is the
+          // tool's note, not the person's words, so it is no bubble.
+          'user' when _interruptionNote.hasMatch(message.text.trim()) =>
+            _InterruptionNote(text: message.text.trim()),
           'user' => _UserMessageCard(
             message: message,
             onSaveNote: onSaveNote,
@@ -852,6 +856,38 @@ class _AgentMessageBlock extends StatelessWidget {
           ?detail,
         ],
       ),
+    );
+  }
+}
+
+/// Claude Code's own "[Request interrupted by user…]" lines.
+final _interruptionNote = RegExp(r'^\[Request interrupted by user[^\]]*\]$');
+
+/// An interruption, said quietly on the agent's side: a muted line, since
+/// the person did not type it.
+class _InterruptionNote extends StatelessWidget {
+  const _InterruptionNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final words = text.contains('tool use')
+        ? 'Interrupted: you stopped the tool call'
+        : 'Interrupted by you';
+    return Row(
+      children: [
+        Icon(AppIcons.stopCircle, size: Chrome.iconSmall, color: muted),
+        const SizedBox(width: Insets.sm),
+        Flexible(
+          child: Text(
+            words,
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ),
+      ],
     );
   }
 }
