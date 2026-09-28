@@ -165,6 +165,9 @@ class ServerRemoteHosts implements RemoteSessions {
     }
     final remotePath = reading.remotePath;
     if (!reading.isReady || remotePath == null) {
+      // Not kept: a Retry opens again, and what stopped this one — a bundle
+      // not on the server yet, a box that could not unpack — may be fixed.
+      access.forgetReading();
       throw BoxUnavailable(
         HostDeployFailure(hostName: host.name, deployment: reading).toString(),
         deployment: reading,
@@ -314,10 +317,12 @@ class ServerRemoteHosts implements RemoteSessions {
     final ref = boxSessionRef(hostId, sessionId);
     if (!(_screens[ref]?.linked ?? false)) {
       unawaited(
-        link.attach(sessionId: sessionId).then(
-          (own) => _keep(hostId, sessionId, own),
-          onError: (Object _) {},
-        ),
+        link
+            .attach(sessionId: sessionId)
+            .then(
+              (own) => _keep(hostId, sessionId, own),
+              onError: (Object _) {},
+            ),
       );
     }
     return route;
@@ -330,7 +335,11 @@ class ServerRemoteHosts implements RemoteSessions {
       _screens[boxSessionRef(hostId, sessionId)]?.resized(columns, rows);
 
   /// Ends [sessionId] on [hostId] for good; its exit code, when it had one.
-  Future<int?> closeOn(String hostId, String sessionId, {int signal = 15}) async {
+  Future<int?> closeOn(
+    String hostId,
+    String sessionId, {
+    int signal = 15,
+  }) async {
     final code = await (await link(
       hostId,
     )).closeSession(sessionId, signal: signal);
@@ -372,7 +381,9 @@ class ServerRemoteHosts implements RemoteSessions {
         if (screen.hostId == hostId && !screen.lifecycle.hasEnded) screen,
     ];
     if (waiting.isEmpty) return;
-    _log('the link to $hostId dropped ($why); ${waiting.length} session(s) wait');
+    _log(
+      'the link to $hostId dropped ($why); ${waiting.length} session(s) wait',
+    );
     unawaited(_relink(hostId));
   }
 

@@ -181,6 +181,25 @@ void main() {
     );
   });
 
+  test('a bundle put on the server after a refusal is deployed by the Retry, '
+      'on the same connection', () async {
+    final targets = <String>[];
+    final later = BoxWorld(bundles: FakeBundles(targets));
+    addTearDown(later.close);
+    Future<Object> open() => later.ssh.remote.open(
+      later.environment,
+      sessionId: 'karmashala_local_p1',
+      columns: 80,
+      rows: 24,
+    );
+    await expectLater(open(), throwsA(isA<RemoteSessionRefused>()));
+
+    targets.add('linux-x64');
+    await open();
+    expect(later.box.uploads, hasLength(1));
+    expect(later.box.ptys, hasLength(1));
+  });
+
   test('a probe\'s server uses no box\'s host at all', () async {
     final probe = BoxWorld(probe: true);
     addTearDown(probe.close);
