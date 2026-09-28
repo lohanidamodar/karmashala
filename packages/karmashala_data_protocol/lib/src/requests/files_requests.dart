@@ -15,6 +15,10 @@ part of '../data_request.dart';
 /// answer comes near the 16 MiB frame (base64 grows a chunk by a third).
 const int kFileChunkBytes = 1024 * 1024;
 
+/// The largest file one upload carries (slice 5e): a file dropped from a
+/// client on another machine, sent in [kFileChunkBytes] pieces.
+const int kMaxUploadBytes = 512 * 1024 * 1024;
+
 /// The most one `files.write` carries. The editor opens nothing over 512 KiB
 /// for editing; this is the frame's bound with base64 room to spare.
 const int kFileWriteBytes = 8 * 1024 * 1024;
@@ -52,6 +56,24 @@ DataRequest<Object?>? _filesRequestFromJson(String kind, _Arguments args) =>
       FilesIndex.name => FilesIndex(args._path('root')),
       FilesWatch.name => FilesWatch(args._paths('paths')),
       FilesUnwatch.name => FilesUnwatch(args._paths('paths')),
+      FilesUploadBegin.name => FilesUploadBegin(
+        args.string('environmentId'),
+        directory: args.values['directory'] == null
+            ? null
+            : args._path('directory'),
+        fileName: args.string('name'),
+        size: args.integer('size'),
+      ),
+      FilesUploadChunk.name => FilesUploadChunk(
+        args.string('environmentId'),
+        args.string('uploadId'),
+        offset: args.integer('offset'),
+        bytes: args._bytes('bytes'),
+      ),
+      FilesUploadCommit.name => FilesUploadCommit(
+        args.string('environmentId'),
+        args.string('uploadId'),
+      ),
       _ => null,
     };
 
@@ -425,5 +447,97 @@ final class FilesUnwatch extends FilesWorkRequest<DataAck> with _AnswersAck {
   @override
   Map<String, Object?> argumentsToJson() => {
     'paths': [for (final path in paths) environmentPathToJson(path)],
+  };
+}
+
+/// Starts putting a file from the client's own machine on [environmentId]
+/// (slice 5e: a drop or a pick on a client whose server is elsewhere), in
+/// [directory] — or, when null, the server's own uploads folder. Answered
+/// with the upload's id; the bytes follow in [FilesUploadChunk]s.
+final class FilesUploadBegin extends FilesWorkRequest<String> {
+  const FilesUploadBegin(
+    this.environmentId, {
+    required this.directory,
+    required this.fileName,
+    required this.size,
+  });
+
+  static const String name = 'files.upload.begin';
+
+  @override
+  final String environmentId;
+  final EnvironmentPath? directory;
+  final String fileName;
+  final int size;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'environmentId': environmentId,
+    if (directory != null) 'directory': environmentPathToJson(directory!),
+    'name': fileName,
+    'size': size,
+  };
+
+  @override
+  Object? resultToJson(String result) => result;
+
+  @override
+  String resultFromJson(Object? json) =>
+      json is String ? json : _badAnswer(kind);
+}
+
+/// The next [bytes] of upload [uploadId], at [offset] — which must be what
+/// has arrived so far. At most [kFileChunkBytes].
+final class FilesUploadChunk extends FilesWorkRequest<DataAck>
+    with _AnswersAck {
+  const FilesUploadChunk(
+    this.environmentId,
+    this.uploadId, {
+    required this.offset,
+    required this.bytes,
+  });
+
+  static const String name = 'files.upload.chunk';
+
+  @override
+  final String environmentId;
+  final String uploadId;
+  final int offset;
+  final Uint8List bytes;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'environmentId': environmentId,
+    'uploadId': uploadId,
+    'offset': offset,
+    'bytes': base64Encode(bytes),
+  };
+}
+
+/// Upload [uploadId] is whole: it is put in place and answered with where
+/// it landed — under a free name when the one asked for is taken.
+final class FilesUploadCommit extends FilesWorkRequest<EnvironmentPath>
+    with _AnswersPath {
+  const FilesUploadCommit(this.environmentId, this.uploadId);
+
+  static const String name = 'files.upload.commit';
+
+  @override
+  final String environmentId;
+  final String uploadId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'environmentId': environmentId,
+    'uploadId': uploadId,
   };
 }

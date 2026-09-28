@@ -34,6 +34,26 @@ class ClaimRefusal {
 /// and the age of the claim, which "someone else has it" alone cannot be acted on.
 class WriteToken {
   WriteClaim? _holder;
+  DateTime? _lastActiveAt;
+
+  /// How long a holder must have typed nothing before another client's
+  /// keystroke takes the token from it (slice 5e).
+  static const idleBeforeTakeover = Duration(seconds: 3);
+
+  /// When the holder last typed, or claimed.
+  DateTime? get lastActiveAt => _lastActiveAt;
+
+  /// The holder typed.
+  void touch(DateTime now) => _lastActiveAt = now;
+
+  /// Whether a keystroke from someone else may take the token now: nobody
+  /// holds it, or its holder has been idle past [idleBeforeTakeover].
+  bool yieldsTo(String clientId, DateTime now) {
+    final current = _holder;
+    if (current == null || current.clientId == clientId) return true;
+    final last = _lastActiveAt ?? current.claimedAt;
+    return now.difference(last) > idleBeforeTakeover;
+  }
 
   WriteClaim? get holder => _holder;
   bool get isHeld => _holder != null;
@@ -45,6 +65,7 @@ class WriteToken {
     final current = _holder;
     if (current == null) {
       _holder = WriteClaim(clientId: clientId, claimedAt: now);
+      _lastActiveAt = now;
       return null;
     }
     if (current.clientId == clientId) return null;
@@ -67,12 +88,14 @@ class WriteToken {
     final current = _holder;
     if (current == null) {
       _holder = WriteClaim(clientId: to, claimedAt: now);
+      _lastActiveAt = now;
       return null;
     }
     if (current.clientId != from) {
       return ClaimRefusal.heldBy(current, now);
     }
     _holder = WriteClaim(clientId: to, claimedAt: now);
+    _lastActiveAt = now;
     return null;
   }
 }

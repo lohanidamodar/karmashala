@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala_terminal_runtime/host_link.dart'
-    show LocalHostSessionAccess;
 import 'package:karmashala_terminal_runtime/instances.dart'
     show HostTerminalInstance;
 import 'package:riverpod/riverpod.dart';
@@ -21,14 +19,13 @@ import '../session_providers.dart';
 import 'host_agent_statuses.dart';
 import 'host_lifecycle_source.dart';
 import 'host_lifecycle_subscriber.dart';
-import 'local_host_lifecycle_source.dart';
+import 'server_lifecycle_source.dart';
 
-/// This machine's server feed, whatever the panes setting (which governs only
-/// where panes run), or null when no server may be reached — never under
-/// `flutter test`, which a test overrides.
+/// The feed of the server this window is a client of, or null when no server
+/// may be reached — never under `flutter test`, which a test overrides.
 final hostLifecycleSourceProvider = Provider<HostLifecycleSource?>((ref) {
-  final access = ref.watch(localHostSessionAccessProvider);
-  return access == null ? null : LocalHostLifecycleSource(access.socketPath);
+  final access = ref.watch(serverAccessProvider);
+  return access == null ? null : ServerLifecycleSource(access);
 });
 
 /// The subscriber to this machine's host, or null without a source. **Watched
@@ -134,5 +131,5 @@ bool _isLocalHostPane(Ref ref, String paneId) {
       .read(terminalSessionsControllerProvider.notifier)
       .instanceFor(paneId);
   return instance is HostTerminalInstance &&
-      instance.access is LocalHostSessionAccess;
+      identical(instance.access, ref.read(serverAccessProvider));
 }

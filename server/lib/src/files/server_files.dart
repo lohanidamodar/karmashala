@@ -26,6 +26,7 @@ class ServerFiles implements FilesWork {
     required this.data,
     this.remoteSpace,
     this.defaultDirectoryOf,
+    this.uploadsDirectory,
     bool? windowsHost,
     FileWatches? watches,
     RepoFileIndex? index,
@@ -55,8 +56,15 @@ class ServerFiles implements FilesWork {
   /// The folder a saved SSH host names to start in.
   final String? Function(String hostId)? defaultDirectoryOf;
 
+  /// Where an upload that names no folder lands on this machine (slice 5e):
+  /// `<data dir>/uploads`. Null refuses such an upload.
+  final String? uploadsDirectory;
+
   /// Whether WSL's share is there to read a distribution through.
   final bool _windowsHost;
+
+  final _uploads = <String, _Upload>{};
+  var _lastUpload = 0;
 
   late final FileWatches watches;
   late final RepoFileIndex index;
@@ -78,7 +86,14 @@ class ServerFiles implements FilesWork {
   }
 
   @override
-  void linkClosed(FileWatchLink link) => watches.closed(link);
+  void linkClosed(FileWatchLink link) {
+    watches.closed(link);
+    for (final entry in _uploads.entries.toList()) {
+      if (!identical(entry.value.link, link)) continue;
+      _uploads.remove(entry.key);
+      unawaited(entry.value.discard());
+    }
+  }
 
   @override
   Future<Object?> handle(
@@ -195,7 +210,119 @@ class ServerFiles implements FilesWork {
       case FilesUnwatch(:final paths):
         watches.unwatch(link, paths);
         return const DataAck();
+      case FilesUploadBegin():
+        return _beginUpload(request, link);
+      case FilesUploadChunk(:final uploadId, :final offset, :final bytes):
+        final upload = _upload(uploadId, link);
+        if (offset != upload.received) {
+          throw DataRefused.invalid(
+            'files.upload.chunk: expected offset ${upload.received}, got '
+            '$offset',
+          );
+        }
+        if (bytes.length > kFileChunkBytes ||
+            upload.received + bytes.length > upload.size) {
+          throw const DataRefused.invalid(
+            'files.upload.chunk: more than the upload announced',
+          );
+        }
+        await upload.sink.add(bytes);
+        upload.received += bytes.length;
+        return const DataAck();
+      case FilesUploadCommit(:final uploadId):
+        final upload = _upload(uploadId, link);
+        _uploads.remove(uploadId);
+        try {
+          if (upload.received != upload.size) {
+            throw DataRefused.invalid(
+              'files.upload.commit: ${upload.received} of ${upload.size} '
+              'bytes arrived',
+            );
+          }
+          await upload.sink.close();
+          final landed = await _placeUpload(upload);
+          await _moved(landed);
+          return landed;
+        } finally {
+          await upload.discard();
+        }
     }
+  }
+
+  Future<String> _beginUpload(FilesUploadBegin request, FileWatchLink link) async {
+    _name(request.fileName);
+    if (request.size < 0 || request.size > kMaxUploadBytes) {
+      throw DataRefused.invalid(
+        'files.upload.begin: a file of ${request.size} bytes is over the '
+        '${kMaxUploadBytes ~/ (1024 * 1024)} MiB an upload carries',
+      );
+    }
+    final directory = request.directory;
+    if (directory == null) {
+      final here = uploadsDirectory;
+      final space = _spaceIn(request.environmentId);
+      if (here == null || space is! LocalFileSpace) {
+        throw const DataRefused.invalid(
+          'files.upload.begin: name a folder; this server keeps an uploads '
+          'folder only on its own machine',
+        );
+      }
+    } else {
+      _space(directory);
+    }
+    final staging = await Directory.systemTemp.createTemp('ks-upload-');
+    final file = File('${staging.path}${Platform.pathSeparator}part');
+    final id = 'upload-${++_lastUpload}';
+    _uploads[id] = _Upload(
+      link: link,
+      environmentId: request.environmentId,
+      directory: directory,
+      fileName: request.fileName,
+      size: request.size,
+      staging: staging,
+      file: file,
+      sink: _Sink(file.openWrite()),
+    );
+    return id;
+  }
+
+  _Upload _upload(String id, FileWatchLink link) {
+    final upload = _uploads[id];
+    if (upload == null || !identical(upload.link, link)) {
+      throw DataRefused.notFound('no upload $id on this link');
+    }
+    return upload;
+  }
+
+  /// Puts a finished upload in place under a name nothing there has.
+  Future<EnvironmentPath> _placeUpload(_Upload upload) async {
+    final space = _spaceIn(upload.environmentId);
+    var directory = upload.directory;
+    if (directory == null) {
+      final day = DateTime.now().toIso8601String().substring(0, 10);
+      final folder = Directory(
+        '$uploadsDirectory${Platform.pathSeparator}$day',
+      );
+      await folder.create(recursive: true);
+      directory = EnvironmentPath(
+        environmentId: upload.environmentId,
+        path: folder.path,
+      );
+    }
+    final dot = upload.fileName.lastIndexOf('.');
+    final stem = dot > 0 ? upload.fileName.substring(0, dot) : upload.fileName;
+    final extension = dot > 0 ? upload.fileName.substring(dot) : '';
+    var target = space.child(directory, upload.fileName);
+    for (var n = 2; (await space.stat(target)).exists; n++) {
+      target = space.child(directory, '$stem ($n)$extension');
+    }
+    final here = space.hostPathOf(target);
+    if (here != null) {
+      await upload.file.copy(here);
+    } else {
+      await space.copyFromLocal(upload.file.path, target);
+    }
+    return target;
   }
 
   static void _name(String name) {
@@ -306,4 +433,57 @@ class ServerFiles implements FilesWork {
 
   ExecutionEnvironment? _environment(String id) =>
       data.environments.where((e) => e.id == id).firstOrNull;
+}
+
+/// One file arriving from a client, staged on this machine's disk until it
+/// is whole.
+class _Upload {
+  _Upload({
+    required this.link,
+    required this.environmentId,
+    required this.directory,
+    required this.fileName,
+    required this.size,
+    required this.staging,
+    required this.file,
+    required this.sink,
+  });
+
+  final FileWatchLink link;
+  final String environmentId;
+  final EnvironmentPath? directory;
+  final String fileName;
+  final int size;
+  final Directory staging;
+  final File file;
+  final _Sink sink;
+  var received = 0;
+
+  Future<void> discard() async {
+    await sink.close();
+    try {
+      await staging.delete(recursive: true);
+    } on FileSystemException {
+      // A staged file left in the temp folder costs nothing.
+    }
+  }
+}
+
+/// A file being written, closed at most once.
+class _Sink {
+  _Sink(this._sink);
+
+  final IOSink _sink;
+  var _closed = false;
+
+  Future<void> add(Uint8List bytes) async {
+    _sink.add(bytes);
+    await _sink.flush();
+  }
+
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    await _sink.close();
+  }
 }

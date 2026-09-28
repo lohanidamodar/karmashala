@@ -26,6 +26,15 @@ final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
   return localHostSessionAccessFor(ref.watch(probeModeProvider));
 });
 
+/// **The server this window is a client of** (slice 5e): this machine's own
+/// ([localHostSessionAccessProvider]), or — overridden by `main` when the
+/// person chose one — a server on another machine, only dialled. Panes, the
+/// data API and the lifecycle feed share one link to it. Null where no
+/// server may be reached.
+final serverAccessProvider = Provider<HostSessionAccess?>(
+  (ref) => ref.watch(localHostSessionAccessProvider),
+);
+
 /// The access [localHostSessionAccessProvider] holds, for `main`, which dials
 /// the server for data before the container exists and hands the same one
 /// to it — one access, so one measurement and one start.

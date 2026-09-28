@@ -20,6 +20,7 @@ import 'local_host_access.dart';
 import 'pane_terminal.dart';
 import 'prompt_typer.dart';
 import 'pty_output_coalescer.dart';
+import 'shared_host_link.dart';
 import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 import 'terminal_instance.dart';
@@ -213,9 +214,22 @@ class HostTerminalInstance
   HostPaneLink? _link;
   StreamSubscription<Uint8List>? _output;
   StreamSubscription<String>? _notices;
+  StreamSubscription<HostPresence>? _presenceSubscription;
+  final ValueNotifier<HostPresence?> _presence = ValueNotifier(null);
+
+  /// Who drives this pane's session and who else watches it (slice 5e), as
+  /// the server last said; null before it has.
+  ValueListenable<HostPresence?> get presence => _presence;
+
+  /// Takes the session from whoever is typing in it: "Take over".
+  Future<void> takeOver() async => _link?.takeOver();
   CastRecorder? _recorder;
   Completer<void>? _reap;
   var _disposed = false;
+
+  /// Completes on [dispose], so a wait for the client's next link ends with
+  /// the pane rather than outliving it.
+  final _gone = Completer<void>();
   var _exited = false;
 
   /// What the pane has actually rendered. Kept across a link being replaced so
@@ -448,9 +462,20 @@ class HostTerminalInstance
     if (_disposed || _exited) return;
     _emit(
       '\r\n\x1b[33m[could not reach the session host again. The session may '
-      'still be there; reopening this pane resumes it from byte '
-      '$_lastOffset.]\x1b[0m\r\n',
+      'still be there; this pane reattaches from byte $_lastOffset when the '
+      'server is back.]\x1b[0m\r\n',
     );
+    // A server on another machine comes back when this client's link to it
+    // does (the data client keeps dialling it): reattach then.
+    final next = Completer<void>();
+    final waiting = SharedHostLinks.opened(access).listen((_) {
+      if (!next.isCompleted) next.complete();
+    });
+    await Future.any([next.future, _gone.future]);
+    await waiting.cancel();
+    if (_disposed || _exited || _link != null) return;
+    if (await _dial(await access.deployment(), redialing: true)) return;
+    unawaited(_redial());
   }
 
   static const _hostStopped =
@@ -483,9 +508,9 @@ class HostTerminalInstance
     final resumeFrom = _lastOffset;
     HostPaneLink? link;
     try {
-      link = await HostPaneLink.open(
-        await access.exec('${deployment.remotePath} attach'),
-        clientId: 'pane-$id',
+      // One link per server, every pane a ref on it (slice 5e).
+      link = HostPaneLink.on(
+        await SharedHostLinks.linkTo(access, deployment: deployment),
       );
       if (_disposed) {
         await link.close();
@@ -558,6 +583,9 @@ class HostTerminalInstance
       _output = link.output.listen(_onLinkBytes, onDone: _onLinkClosed);
       _notices = link.notices.listen(
         (n) => _emit('\r\n\x1b[33m[$n]\x1b[0m\r\n'),
+      );
+      _presenceSubscription = link.presence.listen(
+        (told) => _presence.value = told,
       );
       unawaited(link.ended.then(_onSessionEnded));
       // What is on screen now belongs to the live session: a later redial
@@ -668,7 +696,6 @@ class HostTerminalInstance
   /// that finished, one we merely found is a leftover to clear away.
   var _resumed = false;
 
-
   void _onLinkClosed() {
     _lastOffset = _link?.lastOffset ?? _lastOffset;
     _link = null;
@@ -716,6 +743,7 @@ class HostTerminalInstance
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _gone.complete();
     _recorder?.sourceEnded();
     _recorder = null;
     _typer.dispose();
@@ -725,6 +753,8 @@ class HostTerminalInstance
 
     unawaited(_output?.cancel());
     unawaited(_notices?.cancel());
+    unawaited(_presenceSubscription?.cancel());
+    _presence.dispose();
     _coalescer.dispose();
     focusNode.dispose();
     scrollController.dispose();

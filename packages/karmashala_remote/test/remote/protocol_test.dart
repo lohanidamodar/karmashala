@@ -192,6 +192,7 @@ void main() {
         'attachment.begin',
         'attachment.chunk',
         'stream.ack',
+        'host.attach',
         'session.options',
         'session.configure',
         'session.changed',
@@ -206,6 +207,7 @@ void main() {
     });
 
     test('carry the capability the spec gates them with', () {
+      expect(FrameType.hostAttach.capability, Capability.desktopClient);
       expect(FrameType.sessionsList.capability, Capability.viewSessions);
       expect(FrameType.sessionSubscribe.capability, Capability.viewSessions);
       expect(FrameType.transcriptGet.capability, Capability.readTranscript);
@@ -350,7 +352,15 @@ void main() {
 
       expect((a | b).granted, {Capability.viewSessions, Capability.approve});
       expect((a & b), CapabilitySet.none);
-      expect(CapabilitySet.all.granted.length, Capability.values.length);
+      // "all" is a phone's everything: the desktop grants are named.
+      expect(
+        CapabilitySet.all.granted,
+        Capability.values.where((c) => !c.privileged).toSet(),
+      );
+      expect(
+        Capability.values.where((c) => c.privileged).map((c) => c.bit),
+        [1 << 10, 1 << 11, 1 << 12],
+      );
     });
 
     test('refuses a bitset that is not a non-negative integer', () {

@@ -153,7 +153,10 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     return _PaneDropTarget(
       paneId: paneId,
       groupId: widget.groupId,
-      child: TerminalFileDrop(paneId: paneId, child: paneWithActions),
+      child: TerminalFileDrop(
+        paneId: paneId,
+        child: TerminalPresence(paneId: paneId, child: paneWithActions),
+      ),
     );
   }
 

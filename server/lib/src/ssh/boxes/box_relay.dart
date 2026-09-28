@@ -179,7 +179,7 @@ class _RelayClient implements BoxRelayClient {
   void input(InputMessage message) {
     final relayed = _relayed[message.sessionRef];
     if (relayed == null) return;
-    if (_refused(relayed)) return;
+    if (_refused(relayed, message.sessionRef)) return;
     relayed.route.input(message.bytes);
   }
 
@@ -187,7 +187,7 @@ class _RelayClient implements BoxRelayClient {
   void resize(ResizeMessage message) {
     final relayed = _relayed[message.sessionRef];
     if (relayed == null) return;
-    if (_refused(relayed)) return;
+    if (_refused(relayed, message.sessionRef)) return;
     relayed.route.resize(message.columns, message.rows);
     _boxes.resized(
       relayed.hostId,
@@ -197,8 +197,9 @@ class _RelayClient implements BoxRelayClient {
     );
   }
 
-  /// Whether this client may not type or resize; said to it when so.
-  bool _refused(_Relayed relayed) {
+  /// Whether this client may not type or resize; said to it (on [ref]) when
+  /// so.
+  bool _refused(_Relayed relayed, int ref) {
     final clientId = _peer.clientId;
     if (relayed.token.isHeldBy(clientId)) return false;
     final now = _peer.now();
@@ -210,6 +211,7 @@ class _RelayClient implements BoxRelayClient {
         holder == null
             ? ClaimRefusal.unclaimed(now).message
             : ClaimRefusal.heldBy(holder, now).message,
+        sessionRef: ref,
       ),
     );
     return true;

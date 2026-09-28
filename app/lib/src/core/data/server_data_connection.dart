@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_host/data.dart' show HostDataLink;
-import 'package:karmashala_host_protocol/host_access.dart' show HostDeploymentStatus;
+import 'package:karmashala_host_protocol/host_access.dart'
+    show HostDeploymentStatus, HostSessionAccess;
 import 'package:karmashala_terminal_runtime/host_link.dart'
-    show LocalHostSessionAccess, LocalHostSupervisor;
+    show LocalHostSessionAccess, LocalHostSupervisor, SharedHostLinks;
 
 import 'data_client.dart';
 
@@ -36,7 +38,7 @@ Future<DataClient> connectLocalServerData({
     notUp = 'it did not start ($error)';
   }
   final client = await DataClient.connect(
-    () => HostDataLink.connect(access.socketPath),
+    () => dialServerData(access),
     unavailableReason: notUp,
     logger: log,
   );
@@ -77,4 +79,38 @@ void Function() superviseDataLink(
     unawaited(restarted.cancel());
     unawaited(changes.cancel());
   };
+}
+
+/// This app's data on a server on another machine (slice 5e): dialled, never
+/// started, on the one link its panes and lifecycle feed share. Unreachable,
+/// it comes back unavailable and keeps redialling, as the local one does.
+Future<DataClient> connectRemoteServerData({
+  required HostSessionAccess access,
+  AppLogger? logger,
+}) async {
+  final log = logger ?? AppLogger.named('data');
+  final client = await DataClient.connect(
+    () => dialServerData(access),
+    logger: log,
+    serverOnThisMachine: false,
+  );
+  if (client.connection.state == DataLinkState.connected) {
+    log.info('Data: through the Karmashala server on ${access.address}.');
+  } else {
+    log.warning(
+      'Data: the Karmashala server on ${access.address} is not reachable '
+      '(${client.connection.reason}).',
+    );
+  }
+  return client;
+}
+
+/// The data API on the client's one link to [access]'s server; null when
+/// nothing answers there.
+Future<HostDataLink?> dialServerData(HostSessionAccess access) async {
+  try {
+    return HostDataLink.onLink(await SharedHostLinks.linkTo(access));
+  } on SocketException {
+    return null;
+  }
 }

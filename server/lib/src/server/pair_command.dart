@@ -13,7 +13,7 @@ import 'terminal_qr.dart';
 /// would be deciding something nobody asked it to.
 const String kPairDefaultCapabilities = 'all';
 
-/// `karmashala_host pair [--capabilities=<list|all>] [--relay=<url>]
+/// `karmashala_host pair [--grants|--capabilities=<list|all>] [--relay=<url>]
 /// [--name=<label>] [--address=<host[:port]>] [--no-color]`: opens a pairing
 /// window at the running server — the same `pair` frame the desktop's dialog
 /// sends — prints the code, its expiry, the payload and a QR code, then waits
@@ -37,7 +37,9 @@ Future<int> runPair(
   final CapabilitySet capabilities;
   try {
     capabilities = parseCapabilities(
-      _flag(args, 'capabilities') ?? kPairDefaultCapabilities,
+      _flag(args, 'grants') ??
+          _flag(args, 'capabilities') ??
+          kPairDefaultCapabilities,
     );
   } on FormatException catch (error) {
     errSink.writeln('karmashala_host pair: ${error.message}');
@@ -201,9 +203,19 @@ Future<int> runPair(
   }
 }
 
-/// `all`, or a comma-separated list of capability names
-/// (`view_sessions,approve,…`). Throws [FormatException] naming the unknown
-/// one and the known ones.
+/// Short names for the grants a desktop client is paired with (slice 5e):
+/// `pair --grants desktop` for another machine's app, plus `admin` and `ssh`
+/// when it should administer this server or answer its SSH questions.
+const Map<String, Capability> kGrantAliases = {
+  'desktop': Capability.desktopClient,
+  'admin': Capability.serverAdmin,
+  'ssh': Capability.sshPrompts,
+};
+
+/// `all` (every phone capability), or a comma-separated list of capability
+/// names (`view_sessions,approve,…`) and [kGrantAliases], mixed with `all`
+/// if wanted. Throws [FormatException] naming the unknown one and the known
+/// ones.
 CapabilitySet parseCapabilities(String text) {
   final trimmed = text.trim();
   if (trimmed == 'all') return CapabilitySet.all;
@@ -211,11 +223,15 @@ CapabilitySet parseCapabilities(String text) {
   for (final part in trimmed.split(',')) {
     final name = part.trim();
     if (name.isEmpty) continue;
-    final capability = Capability.tryParse(name);
+    if (name == 'all') {
+      chosen.addAll(CapabilitySet.all.granted);
+      continue;
+    }
+    final capability = kGrantAliases[name] ?? Capability.tryParse(name);
     if (capability == null) {
       throw FormatException(
         'unknown capability "$name" — use "all" or a comma-separated list of '
-        '${Capability.values.map((c) => c.wire).join(', ')}',
+        '${[...kGrantAliases.keys, ...Capability.values.map((c) => c.wire)].join(', ')}',
       );
     }
     chosen.add(capability);

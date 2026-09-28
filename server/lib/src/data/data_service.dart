@@ -187,6 +187,11 @@ class DataService {
   /// server's SSH asks a person goes only where somebody can answer.
   bool get hasSubscribers => _links.any((link) => link._subscribed);
 
+  /// Whether a subscribed client may be asked the server's SSH questions — a
+  /// window on this machine, or a paired one granted them (slice 5e).
+  bool get hasPromptAnswerers =>
+      _links.any((link) => link._subscribed && link.sshPrompts);
+
   /// How many clients are subscribed now — the windows a cue to show
   /// something (`inbox.open`) reaches.
   int get subscriberCount => _links.where((link) => link._subscribed).length;
@@ -223,8 +228,21 @@ class DataService {
 
   /// One client link. [deliver] gets the changes other links make once the
   /// client has sent [DataSubscribe].
-  DataSession open(void Function(DataChanges changes) deliver) {
-    final link = DataSession._(this, deliver);
+  ///
+  /// A link from another machine passes what its pairing grants: without
+  /// [admin] it may not rename, grant or revoke devices; without
+  /// [sshPrompts] it is neither told nor may answer an SSH question.
+  DataSession open(
+    void Function(DataChanges changes) deliver, {
+    bool admin = true,
+    bool sshPrompts = true,
+  }) {
+    final link = DataSession._(
+      this,
+      sshPrompts ? deliver : (batch) => deliver(_withoutPrompts(batch)),
+      admin: admin,
+      sshPrompts: sshPrompts,
+    );
     _links.add(link);
     return link;
   }
@@ -401,7 +419,25 @@ class DataService {
     }
   }
 
+  static DataChanges _withoutPrompts(DataChanges batch) => DataChanges(
+    batch.revision,
+    List.unmodifiable([
+      for (final change in batch.changes)
+        if (change is! SshPromptOpened) change,
+    ]),
+  );
+
   DataReply<R> _handle<R>(DataSession? origin, DataRequest<R> request) {
+    if (origin != null &&
+        !origin.admin &&
+        (request is DeviceRename ||
+            request is DeviceGrant ||
+            request is DeviceRevoke)) {
+      throw const DataRefused.denied(
+        'this client may not change paired devices: its pairing does not '
+        'grant administering this server',
+      );
+    }
     final changes = <DataChange>[];
     final Object? result;
     try {
@@ -560,9 +596,18 @@ class DataService {
 
 /// One client's link to the [DataService].
 class DataSession implements FileWatchLink {
-  DataSession._(this._service, this._deliver);
+  DataSession._(
+    this._service,
+    this._deliver, {
+    required this.admin,
+    required this.sshPrompts,
+  });
 
   final DataService _service;
+
+  /// What this link's pairing grants (slice 5e); both true on this machine.
+  final bool admin;
+  final bool sshPrompts;
   final void Function(DataChanges changes) _deliver;
   var _subscribed = false;
   var _signOfLife = 0;
@@ -622,6 +667,12 @@ class DataSession implements FileWatchLink {
       return DataReply(result as R, _service._revision);
     }
     if (request case final SshWorkRequest<Object?> asked) {
+      if (asked is SshAnswerPrompt && !sshPrompts) {
+        throw const DataRefused.denied(
+          'this client may not answer SSH questions: its pairing does not '
+          'grant it',
+        );
+      }
       final work =
           _service.sshWork ??
           (throw const DataRefused.unavailable('this server reaches no SSH'));

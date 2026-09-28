@@ -99,10 +99,15 @@ enum MessageType {
   dataStreamOpen(0x3b),
   dataStreamItems(0x3c),
   dataStreamClose(0x3d),
-  // 0x3e–0x3f are reserved for slice 5e (outputAck, presence). Protocol 24
-  // (slice 4a) added no frame: the claims change rides the data channel;
-  // neither did protocol 25 (slice 5a): `terminals.*` and `env.*` ride it too;
-  // nor protocol 27 (slice 5c): `status.*`, `inbox.*` and `checks.run` do.
+  // Protocol 24 (slice 4a) added no frame: the claims change rides the data
+  // channel; neither did protocol 25 (slice 5a): `terminals.*` and `env.*`
+  // ride it too; nor protocol 27 (slice 5c): `status.*`, `inbox.*` and
+  // `checks.run` do.
+  // Protocol 31 (slice 5e): client → host, the output offset a pane has
+  // rendered (the server keeps a bounded amount unacknowledged per ref);
+  // host → client, who drives a session and who watches it.
+  outputAck(0x3e),
+  presence(0x3f),
   // Protocol 30 (slice 5d): client → host, stop one attachment's stream and
   // free its ref without hanging up — the server's one link per SSH box
   // carries many panes' attachments. The `ssh.*` box work rides the data

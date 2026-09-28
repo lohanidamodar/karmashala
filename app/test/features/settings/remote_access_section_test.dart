@@ -220,13 +220,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(PairingDialog), findsOneWidget);
-    // Every capability this build knows is offered, granted by default and
-    // untickable — including starting sessions, which is why the count is
-    // pinned to the enum rather than to a number.
+    // Every capability this build knows is offered — which is why the count
+    // is pinned to the enum rather than to a number — a phone's granted by
+    // default, the desktop grants (slice 5e) only when ticked.
     expect(find.byType(FilterChip), findsNWidgets(Capability.values.length));
-    for (final chip in tester.widgetList<FilterChip>(find.byType(FilterChip))) {
-      expect(chip.selected, isTrue);
-    }
+    final chips = tester.widgetList<FilterChip>(find.byType(FilterChip));
+    expect(
+      chips.where((chip) => chip.selected),
+      hasLength(CapabilitySet.all.granted.length),
+    );
+    expect(
+      chips.where((chip) => !chip.selected),
+      hasLength(Capability.values.where((c) => c.privileged).length),
+    );
     expect(
       find.byWidgetPredicate(
         (widget) => widget is CustomPaint && widget.painter is QrPainter,

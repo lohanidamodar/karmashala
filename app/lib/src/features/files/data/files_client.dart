@@ -169,6 +169,53 @@ class FilesClient {
     String? name,
   }) => _send(FilesCopy(source, toDirectory, fileName: name));
 
+  /// Puts [size] bytes of this machine's, named [name], on the server's disk
+  /// (slice 5e: a drop on a client whose server is elsewhere) — in
+  /// [directory] or, null, the server's uploads folder — in 1 MiB pieces.
+  /// Answers where it landed. The caller reads the file; this only sends.
+  Future<EnvironmentPath> upload(
+    String name,
+    int size,
+    Stream<List<int>> content, {
+    String environmentId = localHostEnvironmentId,
+    EnvironmentPath? directory,
+  }) async {
+    final id = await _send(
+      FilesUploadBegin(
+        environmentId,
+        directory: directory,
+        fileName: name,
+        size: size,
+      ),
+    );
+    var sent = 0;
+    final pending = BytesBuilder(copy: false);
+    Future<void> flush() async {
+      final bytes = pending.takeBytes();
+      await _send(FilesUploadChunk(environmentId, id, offset: sent, bytes: bytes));
+      sent += bytes.length;
+    }
+
+    await for (final piece in content) {
+      pending.add(piece);
+      while (pending.length >= kFileChunkBytes) {
+        final all = pending.takeBytes();
+        pending.add(Uint8List.sublistView(all, kFileChunkBytes));
+        await _send(
+          FilesUploadChunk(
+            environmentId,
+            id,
+            offset: sent,
+            bytes: Uint8List.sublistView(all, 0, kFileChunkBytes),
+          ),
+        );
+        sent += kFileChunkBytes;
+      }
+    }
+    if (pending.isNotEmpty) await flush();
+    return _send(FilesUploadCommit(environmentId, id));
+  }
+
   /// Every file under the checkout [root], from the server's index.
   Future<RepoFiles> index(EnvironmentPath root) => _send(FilesIndex(root));
 

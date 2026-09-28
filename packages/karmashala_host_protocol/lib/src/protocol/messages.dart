@@ -25,7 +25,11 @@ part 'stop_messages.dart';
 /// 30: slice 5d (SSH boxes reached by the server: a client attaches to
 /// `ssh:<hostId>/<sessionId>` at its own server, which relays the box host's
 /// frames by ref; 0x40 `detach` added).
-const int kProtocolVersion = 30;
+/// 31: slice 5e (a client on another machine, over the companion's sealed
+/// channel, and several clients on one session: 0x3e `outputAck`, 0x3f
+/// `presence`, `hello` features, a ref on per-attachment errors, `claim`
+/// taking over).
+const int kProtocolVersion = 31;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -61,18 +65,30 @@ class HelloMessage extends HostMessage {
     required this.requestId,
     required this.clientId,
     this.protocolVersion = kProtocolVersion,
+    this.features = 0,
   });
+
+  /// The client sends [OutputAckMessage]s, so the host may hold its output
+  /// per ref to a bounded amount unacknowledged (slice 5e). A client without
+  /// it — the CLI, a box link — is paced by its connection alone.
+  static const int acksOutput = 1;
 
   final int requestId;
   final String clientId;
   final int protocolVersion;
+
+  /// A bitset of what this client does beyond the protocol's minimum.
+  final int features;
+
+  bool get ackingOutput => features & acksOutput != 0;
 
   @override
   Frame toFrame() {
     final w = WireWriter()
       ..u32(requestId)
       ..u32(protocolVersion)
-      ..str(clientId);
+      ..str(clientId)
+      ..u32(features);
     return Frame(MessageType.hello, 0, w.take());
   }
 
@@ -82,6 +98,7 @@ class HelloMessage extends HostMessage {
       requestId: r.u32(),
       protocolVersion: r.u32(),
       clientId: r.str(),
+      features: r.remaining >= 4 ? r.u32() : 0,
     );
   }
 }
@@ -250,19 +267,51 @@ class ResizeMessage extends HostMessage {
 }
 
 class ClaimMessage extends HostMessage {
-  const ClaimMessage(this.requestId, this.sessionRef);
+  const ClaimMessage(this.requestId, this.sessionRef, {this.takeOver = false});
   final int requestId;
   final int sessionRef;
+
+  /// Take the token from whoever holds it (a person's "Take over"), rather
+  /// than be refused while they hold it.
+  final bool takeOver;
 
   @override
   Frame toFrame() => Frame(
     MessageType.claim,
     sessionRef,
-    (WireWriter()..u32(requestId)).take(),
+    (WireWriter()
+          ..u32(requestId)
+          ..boolean(takeOver))
+        .take(),
   );
 
-  static ClaimMessage decode(Frame frame) =>
-      ClaimMessage(WireReader(frame.payload).u32(), frame.sessionRef);
+  static ClaimMessage decode(Frame frame) {
+    final r = WireReader(frame.payload);
+    return ClaimMessage(
+      r.u32(),
+      frame.sessionRef,
+      takeOver: r.remaining > 0 && r.boolean(),
+    );
+  }
+}
+
+/// The offset a client has rendered up to on [sessionRef] (slice 5e): the
+/// host sends at most a bounded amount past it, and a client that falls
+/// behind the host's ring is sent the screen again, never a gap.
+class OutputAckMessage extends HostMessage {
+  const OutputAckMessage(this.sessionRef, this.offset);
+  final int sessionRef;
+  final int offset;
+
+  @override
+  Frame toFrame() => Frame(
+    MessageType.outputAck,
+    sessionRef,
+    (WireWriter()..u64(offset)).take(),
+  );
+
+  static OutputAckMessage decode(Frame frame) =>
+      OutputAckMessage(frame.sessionRef, WireReader(frame.payload).u64());
 }
 
 class ReleaseMessage extends HostMessage {
@@ -719,15 +768,24 @@ class ClaimedMessage extends HostMessage {
 }
 
 class ErrorMessage extends HostMessage {
-  const ErrorMessage(this.requestId, this.code, this.message);
+  const ErrorMessage(
+    this.requestId,
+    this.code,
+    this.message, {
+    this.sessionRef = 0,
+  });
   final int requestId;
   final ProtocolErrorCode code;
   final String message;
 
+  /// The attachment a refusal is about (a write refused on one ref of a
+  /// connection carrying many); 0 for the connection itself.
+  final int sessionRef;
+
   @override
   Frame toFrame() => Frame(
     MessageType.error,
-    0,
+    sessionRef,
     (WireWriter()
           ..u32(requestId)
           ..u32(code.code)
@@ -737,7 +795,67 @@ class ErrorMessage extends HostMessage {
 
   static ErrorMessage decode(Frame frame) {
     final r = WireReader(frame.payload);
-    return ErrorMessage(r.u32(), ProtocolErrorCode.fromCode(r.u32()), r.str());
+    return ErrorMessage(
+      r.u32(),
+      ProtocolErrorCode.fromCode(r.u32()),
+      r.str(),
+      sessionRef: frame.sessionRef,
+    );
+  }
+}
+
+/// Who drives a session and who watches it, told to every client attached to
+/// it whenever that changes (slice 5e). [holder] types and its grid is the
+/// session's; everyone else renders [columns]×[rows], sized for [sizedFor].
+class PresenceMessage extends HostMessage {
+  const PresenceMessage({
+    required this.sessionRef,
+    required this.holder,
+    required this.viewers,
+    required this.sizedFor,
+    required this.columns,
+    required this.rows,
+  });
+
+  final int sessionRef;
+
+  /// The client holding the write token, or null when nobody does.
+  final String? holder;
+
+  /// Every other client attached, by id, holder excluded.
+  final List<String> viewers;
+
+  /// The client whose grid the session is at, or null when none said.
+  final String? sizedFor;
+  final int columns;
+  final int rows;
+
+  @override
+  Frame toFrame() => Frame(
+    MessageType.presence,
+    sessionRef,
+    (WireWriter()
+          ..str(holder ?? '')
+          ..strings(viewers)
+          ..str(sizedFor ?? '')
+          ..u16(columns)
+          ..u16(rows))
+        .take(),
+  );
+
+  static PresenceMessage decode(Frame frame) {
+    final r = WireReader(frame.payload);
+    final holder = r.str();
+    final viewers = r.strings();
+    final sizedFor = r.str();
+    return PresenceMessage(
+      sessionRef: frame.sessionRef,
+      holder: holder.isEmpty ? null : holder,
+      viewers: viewers,
+      sizedFor: sizedFor.isEmpty ? null : sizedFor,
+      columns: r.u16(),
+      rows: r.u16(),
+    );
   }
 }
 
@@ -904,6 +1022,8 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.claim => ClaimMessage.decode(frame),
   MessageType.release => ReleaseMessage.decode(frame),
   MessageType.detach => DetachMessage.decode(frame),
+  MessageType.outputAck => OutputAckMessage.decode(frame),
+  MessageType.presence => PresenceMessage.decode(frame),
   MessageType.claimed => ClaimedMessage.decode(frame),
   MessageType.error => ErrorMessage.decode(frame),
   MessageType.pair => PairMessage.decode(frame),

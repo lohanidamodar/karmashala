@@ -250,6 +250,7 @@ class HostSession implements ScreenSession {
   ClaimRefusal? write(String clientId, Uint8List bytes, DateTime now) {
     final refusal = _requireToken(clientId, now);
     if (refusal != null) return refusal;
+    token.touch(now);
     _pty.write(bytes);
     return null;
   }

@@ -102,7 +102,7 @@ extension TerminalLayoutRestore on TerminalSessionsController {
 
     final List<TerminalRecord> terminals;
     try {
-      if (ref.read(localHostSessionAccessProvider) == null) return;
+      if (ref.read(serverAccessProvider) == null) return;
       terminals = await ref.read(terminalsClientProvider).list();
     } catch (error, stack) {
       // A server that cannot be asked leaves every pane as the history it

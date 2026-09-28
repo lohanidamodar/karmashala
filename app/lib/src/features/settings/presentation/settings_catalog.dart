@@ -425,6 +425,13 @@ enum SettingsAnchor {
     'known hosts',
     'keys',
   ]),
+  machines(SettingsSectionId.remote, 'Machines', [
+    'machine',
+    'machines',
+    'server',
+    'remote server',
+    'switch machine',
+  ]),
   remoteAccess(SettingsSectionId.remote, 'Remote access', [
     'companion',
     'phone',
@@ -884,6 +891,14 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.knownHosts,
     description: 'SSH host keys you have accepted.',
     keywords: ['known hosts', 'fingerprint', 'keys'],
+  ),
+  SettingsEntry(
+    'Machines',
+    anchor: SettingsAnchor.machines,
+    description:
+        'The Karmashala server this window uses: this computer\'s, or one '
+        'on another machine.',
+    keywords: ['machine', 'server', 'add a machine', 'droplet', 'switch'],
   ),
   SettingsEntry(
     'Remote access',

@@ -118,6 +118,7 @@ import '../sessions/daemon_session_sync.dart';
 import '../ssh/ssh_domain.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
+import '../transport/sealed_transport.dart';
 import '../transport/socket_transport.dart';
 import 'package:karmashala_local_ipc/socket_location.dart';
 import 'package:karmashala_host_protocol/host_paths.dart';
@@ -358,6 +359,7 @@ Future<int> runServe(
     data: data,
     remoteSpace: ssh.fileSpaceFor,
     defaultDirectoryOf: ssh.defaultDirectoryOf,
+    uploadsDirectory: p.join(dataDirectory, 'uploads'),
   )..attach();
   // The variables every terminal this server starts is given (slice 5a):
   // in its own data folder, write-only to every client.
@@ -558,6 +560,15 @@ Future<int> runServe(
     ..prompts = prompts
     // A client attached to a box's session is relayed its frames (5d).
     ..boxes = ssh.relay;
+  // A desktop client on another machine, over the companion's sealed
+  // channel (slice 5e), is one more connection with its pairing's grants.
+  final hostServer = server;
+  companion.onHostLink = (link) {
+    final connection = SealedHostConnection(link);
+    unawaited(
+      hostServer.serveConnection(connection, trust: connection.trust),
+    );
+  };
   server.lifecycle.statusSnapshot = status.snapshot;
   // Every turn's before and after checkpoints, taken here (slice 2b): off the
   // status of a session this server runs, and off the hooks of any other

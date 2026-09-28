@@ -174,10 +174,11 @@ class ScriptedHostChannel implements RemoteChannel {
             when endedSessions.contains(sessionId):
           // What the real host does: attach to the kept record, then say it
           // already ended.
-          push(_attached(requestId, sessionId));
+          final attached = _attached(requestId, sessionId);
+          push(attached);
           push(
             ExitedMessage(
-              sessionRef: 1,
+              sessionRef: attached.sessionRef,
               sessionId: sessionId,
               exitCode: 0,
               reason: 'exited',
@@ -237,7 +238,7 @@ class ScriptedHostChannel implements RemoteChannel {
           push(
             AttachedMessage(
               requestId: requestId,
-              sessionRef: 1,
+              sessionRef: ++_refs,
               sessionId: sessionId,
               columns: columns,
               rows: rows,
@@ -255,9 +256,12 @@ class ScriptedHostChannel implements RemoteChannel {
     }
   }
 
+  /// Refs handed out on this link, one per attachment, as the host does.
+  var _refs = 0;
+
   AttachedMessage _attached(int requestId, String sessionId) => AttachedMessage(
     requestId: requestId,
-    sessionRef: 1,
+    sessionRef: ++_refs,
     sessionId: sessionId,
     columns: grids[sessionId]?.$1 ?? 80,
     rows: grids[sessionId]?.$2 ?? 24,
@@ -274,8 +278,8 @@ class ScriptedHostChannel implements RemoteChannel {
     if (!_toApp.isClosed) _toApp.add(message.toFrame().encode());
   }
 
-  void pushOutput(int offset, String text) =>
-      push(OutputMessage(1, offset, Uint8List.fromList(text.codeUnits)));
+  void pushOutput(int offset, String text, {int ref = 1}) =>
+      push(OutputMessage(ref, offset, Uint8List.fromList(text.codeUnits)));
 
   @override
   Future<int> get exitCode async => 0;

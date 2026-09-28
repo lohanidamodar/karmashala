@@ -348,6 +348,7 @@ void main() {
             0,
             ProtocolErrorCode.writeRefused,
             'write token held by pane-2',
+            sessionRef: 4,
           ),
         );
         await Future<void>.delayed(Duration.zero);

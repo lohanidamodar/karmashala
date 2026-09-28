@@ -12,13 +12,24 @@ import '../data/data_streams.dart';
 import '../domain/host_session.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import '../domain/session_registry.dart';
+import '../domain/write_token.dart';
 import '../pty/pty.dart';
 import '../server/server_admin.dart';
 import '../ssh/ssh_domain.dart'
     show BoxRelay, BoxRelayClient, BoxRelayPeer;
 import '../status/daemon_prompt_answers.dart';
+import '../transport/link_trust.dart';
 import '../transport/transport.dart';
 import 'lifecycle_feed.dart';
+
+/// The most one ref's output may run ahead of what its client acknowledged
+/// (slice 5e); past it the pump stops, and resumes from the ring — or from
+/// the screen, once the ring has moved on.
+const int kUnackedOutputBytes = 512 * 1024;
+
+/// The largest output frame: a replay of the whole ring is sent in pieces,
+/// so one pane's history never holds a link for megabytes.
+const int kOutputChunkBytes = 64 * 1024;
 
 /// Serves the protocol to whoever connects, over whatever carried them. It
 /// knows nothing about SSH transport (see transport.dart); a session on an
@@ -76,9 +87,14 @@ class HostServer {
   int get clientCount => _clients.length;
 
   /// Serves one connection until the peer goes away, then releases that
-  /// client's tokens and kills nothing.
-  Future<void> serveConnection(HostConnection connection) async {
-    final client = _ClientSession(this, connection);
+  /// client's tokens and kills nothing. [trust] is what the link may do: all
+  /// of it over this machine's socket, what its pairing grants over the
+  /// companion's sealed channel (slice 5e).
+  Future<void> serveConnection(
+    HostConnection connection, {
+    LinkTrust trust = LinkTrust.local,
+  }) async {
+    final client = _ClientSession(this, connection, trust);
     _clients.add(client);
     try {
       await client.run();
@@ -92,21 +108,92 @@ class HostServer {
       .listen((connection) => unawaited(serveConnection(connection)));
 
   DateTime now() => _now();
+
+  /// Every client attachment to each of this server's sessions, by id.
+  final _attachments = <String, Set<(_ClientSession, int)>>{};
+
+  /// Whose grid each session is at, by id: the last holder that sized it.
+  final _sizedFor = <String, String>{};
+
+  void _attached(HostSession session, _ClientSession client, int ref) {
+    (_attachments[session.id] ??= {}).add((client, ref));
+    _presenceChanged(session);
+  }
+
+  void _detached(HostSession session, _ClientSession client, int ref) {
+    final set = _attachments[session.id];
+    if (set == null) return;
+    set.remove((client, ref));
+    if (set.isEmpty) _attachments.remove(session.id);
+    _presenceChanged(session);
+  }
+
+  /// A client's id, made unique among those connected: the token and
+  /// presence name clients by it, and two windows are two clients.
+  String _uniqueId(String wanted, _ClientSession self) {
+    bool taken(String id) =>
+        _clients.any((c) => !identical(c, self) && c._clientId == id);
+    if (!taken(wanted)) return wanted;
+    for (var n = 2; ; n++) {
+      final next = '$wanted ($n)';
+      if (!taken(next)) return next;
+    }
+  }
+
+  /// Tells every client attached to [session] who drives it and who watches.
+  void _presenceChanged(HostSession session) {
+    final set = _attachments[session.id];
+    if (set == null || set.isEmpty) return;
+    final holder = session.token.holder?.clientId;
+    final viewers = <String>{
+      for (final (client, _) in set)
+        if (client._clientId != holder) client._clientId,
+    }.toList();
+    for (final (client, ref) in set) {
+      client._send(
+        PresenceMessage(
+          sessionRef: ref,
+          holder: holder,
+          viewers: viewers,
+          sizedFor: _sizedFor[session.id],
+          columns: session.columns,
+          rows: session.rows,
+        ),
+      );
+    }
+  }
+}
+
+/// One ref's output as sent to a client that acknowledges it.
+class _Flow {
+  _Flow(this.session, this.sent) : acked = sent;
+
+  final HostSession session;
+  int sent;
+  int acked;
+  StreamSubscription<OutputChunk>? subscription;
+  StreamSubscription<void>? exitWatch;
+  var stalled = false;
+  var exitPending = false;
+
+  /// The grid this client last asked for, kept while it could not apply it:
+  /// a claim takes the session there.
+  (int, int)? wantedGrid;
 }
 
 /// One connected client: its id, its session refs, its subscriptions.
 class _ClientSession implements BoxRelayPeer {
-  _ClientSession(this._server, this._connection);
+  _ClientSession(this._server, this._connection, this._trust);
 
   final HostServer _server;
   final HostConnection _connection;
+  final LinkTrust _trust;
 
   String _clientId = '';
   var _greeted = false;
+  var _acks = false;
   var _refs = 0;
-  final _byRef = <int, HostSession>{};
-  final _subscriptions = <int, StreamSubscription<OutputChunk>>{};
-  final _exitWatches = <int, StreamSubscription<void>>{};
+  final _flows = <int, _Flow>{};
 
   /// This client's attachments to SSH box sessions (slice 5d), relayed by
   /// the ssh domain; made on the first one.
@@ -178,14 +265,12 @@ class _ClientSession implements BoxRelayPeer {
   var _hungUp = false;
 
   Future<void> _cleanUp() async {
-    for (final subscription in _subscriptions.values) {
-      await subscription.cancel();
+    final flows = Map.of(_flows);
+    _flows.clear();
+    for (final flow in flows.values) {
+      await flow.subscription?.cancel();
+      await flow.exitWatch?.cancel();
     }
-    for (final subscription in _exitWatches.values) {
-      await subscription.cancel();
-    }
-    _subscriptions.clear();
-    _exitWatches.clear();
     // Only a client with box attachments waits on them: every other hangs
     // up exactly as before.
     final relay = _relay;
@@ -195,6 +280,9 @@ class _ClientSession implements BoxRelayPeer {
     await _lifecycleWatch?.cancel();
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
+    for (final entry in flows.entries) {
+      _server._detached(entry.value.session, this, entry.key);
+    }
     await _connection.close();
   }
 
@@ -292,6 +380,18 @@ class _ClientSession implements BoxRelayPeer {
     // Before hello and whatever the client's protocol: a `stop` from any
     // version must be able to ask (docs/daemon-architecture.md).
     if (message is StopCheckMessage) {
+      if (_trust.remote) {
+        _send(
+          const ErrorMessage(
+            0,
+            ProtocolErrorCode.badRequest,
+            'stop is asked on the server\'s own machine, not over a remote '
+            'link',
+          ),
+        );
+        _hungUp = true;
+        return;
+      }
       _send(
         StopCheckAnswerMessage(
           requestId: message.requestId,
@@ -319,6 +419,8 @@ class _ClientSession implements BoxRelayPeer {
       return;
     }
 
+    if (_trust.remote && _refusedRemotely(message)) return;
+
     switch (message) {
       case HelloMessage():
         _onHello(message);
@@ -338,6 +440,8 @@ class _ClientSession implements BoxRelayPeer {
         _onRelease(message);
       case DetachMessage(:final sessionRef):
         await _onDetach(sessionRef);
+      case OutputAckMessage():
+        _onOutputAck(message);
       case CloseMessage():
         await _onClose(message);
       case PairMessage():
@@ -370,6 +474,39 @@ class _ClientSession implements BoxRelayPeer {
           ),
         );
     }
+  }
+
+  /// What a client on another machine may not ask (slice 5e), refused in
+  /// words: it pairs nothing, closes no pairing window, spawns no argv of its
+  /// own, and administers the server only when its pairing grants it.
+  bool _refusedRemotely(HostMessage message) {
+    String? refusal;
+    var requestId = 0;
+    switch (message) {
+      case PairMessage():
+        requestId = message.requestId;
+        refusal = 'pairing is opened on the server\'s own machine, not over '
+            'a remote link';
+      case CompanionNoticeMessage():
+        return true;
+      case OpenMessage():
+        requestId = message.requestId;
+        refusal = 'a client on another machine opens terminals through the '
+            'server (terminals.open), not by argv';
+      case ServerCallMessage() when !_trust.admin:
+        _send(
+          ServerResultMessage.failure(
+            message.requestId,
+            'this client may not administer the server: its pairing does not '
+            'grant it',
+          ),
+        );
+        return true;
+      default:
+        return false;
+    }
+    _send(ErrorMessage(requestId, ProtocolErrorCode.badRequest, refusal));
+    return true;
   }
 
   /// Not awaited: an answer reads the screen back between keys, and this
@@ -441,6 +578,8 @@ class _ClientSession implements BoxRelayPeer {
     }
     final session = _data ??= service.open(
       (changes) => _send(DataChangesMessage(DataEnvelope.changes(changes))),
+      admin: _trust.admin,
+      sshPrompts: _trust.sshPrompts,
     );
     final answer = session.handleJson(message.envelope);
     if (answer is Future<Map<String, Object?>>) {
@@ -560,9 +699,13 @@ class _ClientSession implements BoxRelayPeer {
       return;
     }
     _greeted = true;
-    _clientId = message.clientId.isEmpty
-        ? _connection.description
-        : message.clientId;
+    _acks = message.ackingOutput;
+    _clientId = _server._uniqueId(
+      message.clientId.isNotEmpty
+          ? message.clientId
+          : _trust.label ?? _connection.description,
+      this,
+    );
     _send(
       WelcomeMessage(
         requestId: message.requestId,
@@ -655,7 +798,6 @@ class _ClientSession implements BoxRelayPeer {
     }
     final now = _server.now();
     final ref = ++_refs;
-    _byRef[ref] = session;
 
     String? holder = session.token.holder?.clientId;
     if (message.claimWrite) {
@@ -671,12 +813,13 @@ class _ClientSession implements BoxRelayPeer {
         session.token.isHeldBy(_clientId) &&
         (grid.$1 != session.columns || grid.$2 != session.rows)) {
       session.resize(_clientId, grid.$1, grid.$2, now);
+      _server._sizedFor[session.id] = _clientId;
     }
     final screen = grid == null ? null : session.snapshot();
 
     // Measured before the pump starts, so the numbers told are the numbers sent.
     final slice = session.backlog.since(message.sinceOffset);
-    final from = screen?.$2 ?? message.sinceOffset;
+    final from = screen?.$2 ?? slice.offset;
     _send(
       AttachedMessage(
         requestId: message.requestId,
@@ -684,7 +827,7 @@ class _ClientSession implements BoxRelayPeer {
         sessionId: session.id,
         columns: session.columns,
         rows: session.rows,
-        replayFromOffset: screen?.$2 ?? slice.offset,
+        replayFromOffset: from,
         droppedBytes: screen == null ? slice.droppedBytes : 0,
         totalBytes: session.backlog.totalBytes,
         holdsWriteToken: session.token.isHeldBy(_clientId),
@@ -697,24 +840,104 @@ class _ClientSession implements BoxRelayPeer {
       _send(ScreenMessage(ref, screen.$2, utf8.encode(screen.$1)));
     }
 
-    late final StreamSubscription<OutputChunk> subscription;
-    subscription = session.readFrom(from).listen((chunk) {
-      _send(OutputMessage(ref, chunk.offset, chunk.bytes));
-      _paceOutput(subscription);
-    });
-    _subscriptions[ref] = subscription;
+    final flow = _Flow(session, from)..wantedGrid = grid;
+    _flows[ref] = flow;
+    _server._attached(session, this, ref);
+    _pump(ref, flow, from);
 
     if (session.lifecycle.hasEnded) {
-      _sendExit(ref, session);
+      _exitWhenDrained(ref, flow);
     } else {
-      _exitWatches[ref] = session.ended.asStream().listen(
-        (_) => _sendExit(ref, session),
+      flow.exitWatch = session.ended.asStream().listen(
+        (_) => _exitWhenDrained(ref, flow),
       );
     }
   }
 
+  /// Streams [flow]'s output from [from] in pieces of at most
+  /// [kOutputChunkBytes]; for a client that acknowledges, stops once
+  /// [kUnackedOutputBytes] are out unacknowledged.
+  void _pump(int ref, _Flow flow, int from) {
+    late final StreamSubscription<OutputChunk> subscription;
+    subscription = flow.session.readFrom(from).listen(
+      (chunk) {
+        if (flow.stalled) return;
+        var at = chunk.offset < flow.sent ? flow.sent : chunk.offset;
+        while (at < chunk.nextOffset) {
+          if (_acks && at - flow.acked >= kUnackedOutputBytes) {
+            flow.stalled = true;
+            unawaited(subscription.cancel());
+            return;
+          }
+          final end = at + kOutputChunkBytes < chunk.nextOffset
+              ? at + kOutputChunkBytes
+              : chunk.nextOffset;
+          _send(
+            OutputMessage(
+              ref,
+              at,
+              Uint8List.sublistView(
+                chunk.bytes,
+                at - chunk.offset,
+                end - chunk.offset,
+              ),
+            ),
+          );
+          at = end;
+          flow.sent = end;
+        }
+        _paceOutput(subscription);
+      },
+      onDone: () {
+        if (!flow.stalled && flow.exitPending) _sendExit(ref, flow.session);
+      },
+    );
+    flow.subscription = subscription;
+  }
+
+  /// A client that caught up is sent the rest from the ring — or, when the
+  /// ring has moved past what it last saw, the screen again: never a gap.
+  void _onOutputAck(OutputAckMessage message) {
+    final flow = _flows[message.sessionRef];
+    if (flow == null) return;
+    if (message.offset > flow.acked) flow.acked = message.offset;
+    if (!flow.stalled || flow.sent - flow.acked > kUnackedOutputBytes ~/ 2) {
+      return;
+    }
+    flow.stalled = false;
+    final session = flow.session;
+    var from = flow.sent;
+    if (session.backlog.firstAvailableOffset > from) {
+      final screen = session.snapshot();
+      if (screen != null) {
+        _send(
+          ScreenMessage(message.sessionRef, screen.$2, utf8.encode(screen.$1)),
+        );
+        from = screen.$2;
+      } else {
+        from = session.backlog.firstAvailableOffset;
+      }
+      flow.sent = from;
+      flow.acked = from;
+    }
+    _pump(message.sessionRef, flow, from);
+  }
+
+  /// The exit follows the last byte this client is sent, not the process.
+  void _exitWhenDrained(int ref, _Flow flow) {
+    if (flow.stalled || flow.sent < flow.session.backlog.totalBytes) {
+      flow.exitPending = true;
+      return;
+    }
+    _sendExit(ref, flow.session);
+  }
+
   void _sendExit(int ref, HostSession session) {
+    final flow = _flows[ref];
+    if (flow == null) return;
+    flow.exitPending = false;
     final lifecycle = session.lifecycle;
+    if (!lifecycle.hasEnded) return;
     _send(
       ExitedMessage(
         sessionRef: ref,
@@ -726,45 +949,84 @@ class _ClientSession implements BoxRelayPeer {
     );
   }
 
+  /// A keystroke from a client that does not hold the token takes it when
+  /// its holder has been idle past [WriteToken.idleBeforeTakeover] (or
+  /// nobody holds it); otherwise it is refused on its ref, and the pane
+  /// offers "Take over" from the presence it was told.
   void _onInput(InputMessage message) {
     if (_relays(message.sessionRef)) return _boxes.input(message);
-    final session = _byRef[message.sessionRef];
-    if (session == null) return _sendUnknownRef(message.sessionRef);
-    final refusal = session.write(_clientId, message.bytes, _server.now());
+    final flow = _flows[message.sessionRef];
+    if (flow == null) return _sendUnknownRef(message.sessionRef);
+    final session = flow.session;
+    final now = _server.now();
+    if (!session.token.isHeldBy(_clientId) &&
+        session.token.yieldsTo(_clientId, now)) {
+      _takeToken(flow, now);
+    }
+    final refusal = session.write(_clientId, message.bytes, now);
     if (refusal != null) {
-      _send(ErrorMessage(0, ProtocolErrorCode.writeRefused, refusal.message));
+      _send(
+        ErrorMessage(
+          0,
+          ProtocolErrorCode.writeRefused,
+          refusal.message,
+          sessionRef: message.sessionRef,
+        ),
+      );
     }
   }
 
+  /// Hands the token to this client and the session to its grid.
+  void _takeToken(_Flow flow, DateTime now) {
+    final session = flow.session;
+    final token = session.token;
+    final from = token.holder?.clientId;
+    if (from == null) {
+      token.claim(_clientId, now);
+    } else {
+      token.handOver(from, _clientId, now);
+    }
+    final grid = flow.wantedGrid;
+    if (grid != null &&
+        (grid.$1 != session.columns || grid.$2 != session.rows)) {
+      session.resize(_clientId, grid.$1, grid.$2, now);
+    }
+    if (grid != null) _server._sizedFor[session.id] = _clientId;
+    _server._presenceChanged(session);
+  }
+
+  /// The holder's grid wins: a viewer's size is kept for when it claims,
+  /// and it renders the holder's meanwhile.
   void _onResize(ResizeMessage message) {
     if (_relays(message.sessionRef)) return _boxes.resize(message);
-    final session = _byRef[message.sessionRef];
-    if (session == null) return _sendUnknownRef(message.sessionRef);
-    final refusal = session.resize(
-      _clientId,
-      message.columns,
-      message.rows,
-      _server.now(),
-    );
-    if (refusal != null) {
-      _send(ErrorMessage(0, ProtocolErrorCode.writeRefused, refusal.message));
-    }
+    final flow = _flows[message.sessionRef];
+    if (flow == null) return _sendUnknownRef(message.sessionRef);
+    flow.wantedGrid = (message.columns, message.rows);
+    final session = flow.session;
+    if (!session.token.isHeldBy(_clientId)) return;
+    session.resize(_clientId, message.columns, message.rows, _server.now());
+    _server._sizedFor[session.id] = _clientId;
+    _server._presenceChanged(session);
   }
 
   void _onClaim(ClaimMessage message) {
     if (_relays(message.sessionRef)) return _boxes.claim(message);
-    final token = _byRef[message.sessionRef]?.token;
-    if (token == null) return _sendUnknownRef(message.sessionRef);
-    final refusal = token.claim(_clientId, _server.now());
-    if (refusal != null) {
-      _send(
-        ErrorMessage(
-          message.requestId,
-          ProtocolErrorCode.writeRefused,
-          refusal.message,
-        ),
-      );
-      return;
+    final flow = _flows[message.sessionRef];
+    if (flow == null) return _sendUnknownRef(message.sessionRef);
+    final token = flow.session.token;
+    final now = _server.now();
+    if (!token.isHeldBy(_clientId)) {
+      if (!message.takeOver && token.isHeld) {
+        _send(
+          ErrorMessage(
+            message.requestId,
+            ProtocolErrorCode.writeRefused,
+            ClaimRefusal.heldBy(token.holder!, now).message,
+          ),
+        );
+        return;
+      }
+      _takeToken(flow, now);
     }
     _send(
       ClaimedMessage(
@@ -778,8 +1040,9 @@ class _ClientSession implements BoxRelayPeer {
 
   void _onRelease(ReleaseMessage message) {
     if (_relays(message.sessionRef)) return _boxes.release(message);
-    final token = _byRef[message.sessionRef]?.token;
-    if (token == null) return _sendUnknownRef(message.sessionRef);
+    final flow = _flows[message.sessionRef];
+    if (flow == null) return _sendUnknownRef(message.sessionRef);
+    final token = flow.session.token;
     token.release(_clientId);
     _send(
       ClaimedMessage(
@@ -789,15 +1052,18 @@ class _ClientSession implements BoxRelayPeer {
         writeHolder: token.holder?.clientId,
       ),
     );
+    _server._presenceChanged(flow.session);
   }
 
   /// Stops one attachment's stream and frees its ref (slice 5d); the session
   /// goes on.
   Future<void> _onDetach(int ref) async {
     if (_relays(ref)) return _boxes.detach(ref);
-    if (_byRef.remove(ref) == null) return;
-    await _subscriptions.remove(ref)?.cancel();
-    await _exitWatches.remove(ref)?.cancel();
+    final flow = _flows.remove(ref);
+    if (flow == null) return;
+    await flow.subscription?.cancel();
+    await flow.exitWatch?.cancel();
+    _server._detached(flow.session, this, ref);
   }
 
   Future<void> _onClose(CloseMessage message) async {

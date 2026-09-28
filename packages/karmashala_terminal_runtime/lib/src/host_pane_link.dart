@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 
-import 'package:karmashala_host_protocol/host_access.dart';
+export 'package:karmashala_host_protocol/host_access.dart'
+    show HostClientLink, HostLinkException;
 
 /// What the host said when a pane attached.
 class HostAttachment {
@@ -42,67 +44,112 @@ class HostAttachment {
   final DateTime observedAt;
 }
 
-/// The app's end of the host protocol, over one channel. It relays bytes and
-/// normalises nothing — the entire reason the host exists rather than tmux.
-class HostPaneLink {
-  HostPaneLink._(this._channel, this.clientId, this._attachBound);
+/// Who drives a session this pane shows, and who else watches it (slice
+/// 5e), as the host last told it.
+class HostPresence {
+  const HostPresence({
+    required this.holder,
+    required this.viewers,
+    required this.sizedFor,
+    required this.columns,
+    required this.rows,
+    required this.me,
+  });
 
-  final RemoteChannel _channel;
-  final String clientId;
+  final String? holder;
+  final List<String> viewers;
+  final String? sizedFor;
+  final int columns;
+  final int rows;
+
+  /// This client's own id, so a pane can tell "me" from someone else.
+  final String me;
+
+  bool get mine => holder == me;
+
+  /// Someone else is typing here.
+  bool get heldElsewhere => holder != null && holder != me;
+
+  /// The session is at another client's grid.
+  bool get sizedElsewhere => sizedFor != null && sizedFor != me;
+}
+
+/// One pane's attachment on a client's link to its server. Many panes share
+/// one [HostClientLink] (slice 5e): each has its own ref, its own output and
+/// exit, and closing it lets go of that ref only. [open] still makes a link
+/// of its own, for a one-off question (a probe, a session list).
+class HostPaneLink {
+  HostPaneLink._(this._link, this._owns, this._attachBound);
+
+  final HostClientLink _link;
+  final bool _owns;
 
   /// How long an open or attach is given before its reply counts as lost.
   final Duration _attachBound;
 
-  final _parser = FrameParser();
   final _output = StreamController<Uint8List>();
   final _notices = StreamController<String>.broadcast();
-  final _pending = <int, Completer<HostMessage>>{};
+  final _presence = StreamController<HostPresence>.broadcast();
   final _exit = Completer<HostSessionEnd>();
 
-  StreamSubscription<Uint8List>? _subscription;
-  WelcomeMessage? _welcome;
+  StreamSubscription<HostMessage>? _frames;
   int _sessionRef = 0;
-  int _requestId = 0;
   var _closed = false;
+  HostPresence? _lastPresence;
 
   /// The absolute offset of the last byte handed to the terminal. This is what
   /// a reattach asks from, so nothing is replayed twice or lost.
   int lastOffset = 0;
+  int _ackedOffset = 0;
+  Timer? _ackTimer;
 
-  WelcomeMessage? get welcome => _welcome;
+  /// Acknowledged after this much, or shortly after the last byte.
+  static const int _ackEvery = 64 * 1024;
 
-  /// Raw bytes from the child. Closed when the channel goes away.
+  WelcomeMessage? get welcome => _link.isClosed ? null : _link.welcome;
+
+  String get clientId => _link.clientId;
+
+  /// Raw bytes from the child. Closed when the attachment or the link ends.
   Stream<Uint8List> get output => _output.stream;
 
   /// Things worth telling the user: a refused write, a gap in the backlog.
   Stream<String> get notices => _notices.stream;
 
+  /// Who drives the session and who watches, each time that changes.
+  Stream<HostPresence> get presence => _presence.stream;
+  HostPresence? get lastPresence => _lastPresence;
+
   /// Completes when the session ends. A missing code stays missing.
   Future<HostSessionEnd> get ended => _exit.future;
 
-  /// Sends `hello` and waits for the host to answer. Throws
-  /// [HostLinkException] when it will not, or speaks another protocol.
+  /// Sends `hello` over a channel of its own and waits for the host to
+  /// answer. Throws [HostLinkException] when it will not, or speaks another
+  /// protocol.
   static Future<HostPaneLink> open(
     RemoteChannel channel, {
     required String clientId,
     Duration bound = const Duration(seconds: 20),
     Duration attachBound = const Duration(seconds: 20),
   }) async {
-    final link = HostPaneLink._(channel, clientId, attachBound);
-    link._listen();
-    final welcome = await link._request<WelcomeMessage>(
-      (id) => HelloMessage(requestId: id, clientId: clientId),
-      bound,
+    final link = await HostClientLink.open(
+      channel,
+      clientId: clientId,
+      bound: bound,
     );
-    if (welcome.protocolVersion != kProtocolVersion) {
-      await link.close();
-      throw HostLinkException(
-        'The host speaks protocol ${welcome.protocolVersion}; this app speaks '
-        '$kProtocolVersion.',
-      );
-    }
-    link._welcome = welcome;
-    return link;
+    return HostPaneLink._(link, true, attachBound).._watchLink();
+  }
+
+  /// A pane's attachment on the client's shared [link].
+  static HostPaneLink on(
+    HostClientLink link, {
+    Duration attachBound = const Duration(seconds: 20),
+  }) => HostPaneLink._(link, false, attachBound).._watchLink();
+
+  void _watchLink() {
+    unawaited(
+      _link.done.then((_) => _fail(_link.closeReason ?? 'The link closed.')),
+    );
   }
 
   Future<HostAttachment> openSession({
@@ -154,7 +201,7 @@ class HostPaneLink {
 
   /// Reattaches from [sinceOffset] — the last offset this pane rendered.
   /// With [screenGrid], asks for the session's screen at that grid rather
-  /// than its output; a host that predates it replays as before.
+  /// than its output.
   Future<HostAttachment> attachSession({
     required String sessionId,
     required int sinceOffset,
@@ -171,9 +218,11 @@ class HostPaneLink {
   );
 
   Future<HostAttachment> _attachment(HostMessage Function(int) build) async {
-    final attached = await _request<AttachedMessage>(build, _attachBound);
+    final attached = await _link.request<AttachedMessage>(build, _attachBound);
     _sessionRef = attached.sessionRef;
     lastOffset = attached.replayFromOffset;
+    _ackedOffset = lastOffset;
+    _frames = _link.framesFor(_sessionRef).listen(_onFrame, onDone: _refEnded);
     if (attached.droppedBytes > 0) {
       _notices.add(
         'The host had already discarded ${attached.droppedBytes} bytes of this '
@@ -184,7 +233,8 @@ class HostPaneLink {
       _notices.add(
         attached.writeHolder == null
             ? 'This pane is attached read-only.'
-            : 'This pane is attached read-only; ${attached.writeHolder} is driving it.',
+            : 'This pane is attached read-only; ${attached.writeHolder} is '
+                  'driving it.',
       );
     }
     return HostAttachment(
@@ -202,11 +252,9 @@ class HostPaneLink {
     );
   }
 
-  /// Every session this host holds, ended ones included — the host keeps a
-  /// record of what happened, and a list that hid them would answer a
-  /// different question from the one a person asks.
+  /// Every session this host holds, ended ones included.
   Future<List<SessionSummary>> listSessions() async {
-    final answer = await _request<SessionsMessage>(
+    final answer = await _link.request<SessionsMessage>(
       ListMessage.new,
       const Duration(seconds: 20),
     );
@@ -216,34 +264,46 @@ class HostPaneLink {
   /// Ends a session on the host for good. Never called by a pane closing —
   /// that is a *disconnect*, and surviving one is the whole point.
   Future<void> closeSession(String sessionId) async {
-    if (_closed) return;
+    if (_link.isClosed) return;
     try {
-      await _request<ClosedMessage>(
+      await _link.request<ClosedMessage>(
         (id) => CloseMessage(id, sessionId),
         const Duration(seconds: 10),
       );
     } on HostLinkException {
-      // Already gone, or the link went with it. Either way there is nothing
-      // left to clear away and nothing a pane could do about it.
+      // Already gone, or the link went with it.
+    }
+  }
+
+  /// Takes the write token from whoever holds it — a person's "Take over".
+  Future<void> takeOver() async {
+    if (_closed || _sessionRef == 0) return;
+    try {
+      await _link.request<ClaimedMessage>(
+        (id) => ClaimMessage(id, _sessionRef, takeOver: true),
+        const Duration(seconds: 10),
+      );
+    } on HostLinkException catch (e) {
+      if (!_notices.isClosed) _notices.add(e.message);
     }
   }
 
   void write(Uint8List bytes) {
-    if (_closed || bytes.isEmpty) return;
-    _send(InputMessage(_sessionRef, bytes));
+    if (_closed || bytes.isEmpty || _sessionRef == 0) return;
+    _link.send(InputMessage(_sessionRef, bytes));
   }
 
   /// Nothing before the host names the session: ref 0 is refused. [matchGrid]
   /// says the size once it has.
   void resize(int columns, int rows) {
     if (_closed || _sessionRef == 0) return;
-    _send(ResizeMessage(_sessionRef, columns, rows));
+    _link.send(ResizeMessage(_sessionRef, columns, rows));
   }
 
   /// Tells the host the pane's grid when [attachment] found the session at
   /// another: a pane is laid out before its link exists to carry the resize.
+  /// A pane that does not drive says it too: the host keeps it for a claim.
   void matchGrid(HostAttachment attachment, int columns, int rows) {
-    if (!attachment.holdsWriteToken) return;
     if (attachment.columns == columns && attachment.rows == rows) return;
     resize(columns, rows);
   }
@@ -251,145 +311,90 @@ class HostPaneLink {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    await _subscription?.cancel();
-    // Closing our end is the disconnect. The host frees the write token and
-    // keeps the session running — that is the whole point.
-    await _channel.close();
-    // Not awaited: closing a single-subscription controller nobody has listened
-    // to never completes, and a pane that failed before its first frame is
-    // exactly that case.
-    if (!_output.isClosed) unawaited(_output.close());
-    for (final completer in _pending.values) {
-      if (!completer.isCompleted) {
-        completer.completeError(
-          const HostLinkException('The link closed first.'),
-        );
-      }
+    _ackTimer?.cancel();
+    await _frames?.cancel();
+    if (_owns) {
+      // Closing our end is the disconnect: the host frees the write token and
+      // keeps the session running.
+      await _link.close();
+    } else if (_sessionRef != 0) {
+      _link.detach(_sessionRef);
     }
-    _pending.clear();
+    if (!_output.isClosed) unawaited(_output.close());
     await _notices.close();
+    await _presence.close();
   }
 
-  void _listen() {
-    _subscription = _channel.stdout.listen(
-      _onBytes,
-      onError: (Object error) => _fail(HostLinkException('$error')),
-      onDone: () => _fail(const HostLinkException('The host channel closed.')),
-    );
+  void _onFrame(HostMessage message) {
+    switch (message) {
+      case OutputMessage():
+        if (!_output.isClosed) _output.add(message.bytes);
+        lastOffset = message.nextOffset;
+        _acknowledge();
+      case ScreenMessage():
+        // Ahead of the output that follows it, so the terminal is rebuilt
+        // before those bytes land — and again for a pane that fell behind.
+        if (!_output.isClosed) _output.add(message.bytes);
+        lastOffset = message.offset;
+        _ackedOffset = message.offset;
+      case ExitedMessage():
+        if (!_exit.isCompleted) {
+          _exit.complete(
+            HostSessionEnd(message.exitCode, message.reason, message.observedAt),
+          );
+        }
+      case PresenceMessage():
+        final presence = HostPresence(
+          holder: message.holder,
+          viewers: message.viewers,
+          sizedFor: message.sizedFor,
+          columns: message.columns,
+          rows: message.rows,
+          me: _link.clientId,
+        );
+        _lastPresence = presence;
+        if (!_presence.isClosed) _presence.add(presence);
+      case ErrorMessage(:final code, :final message):
+        // A refused keystroke is shown by the presence cover, not typed
+        // into the screen once per key.
+        if (code == ProtocolErrorCode.writeRefused &&
+            _lastPresence?.heldElsewhere == true) {
+          break;
+        }
+        if (!_notices.isClosed) _notices.add(message);
+      default:
+        break;
+    }
   }
 
-  void _onBytes(Uint8List chunk) {
-    final List<Frame> frames;
-    try {
-      frames = _parser.add(chunk);
-    } on FrameFormatException catch (e) {
-      _fail(
-        HostLinkException('The host sent something unreadable: ${e.message}'),
-      );
+  /// Tells the host how far this pane has rendered, so it sends more.
+  void _acknowledge() {
+    if (!_link.acksOutput) return;
+    if (lastOffset - _ackedOffset >= _ackEvery) {
+      _sendAck();
       return;
     }
-    for (final frame in frames) {
-      final HostMessage message;
-      try {
-        message = decodeMessage(frame);
-      } on Object catch (e) {
-        _fail(HostLinkException('The host sent something unreadable: $e'));
-        return;
-      }
-      switch (message) {
-        case OutputMessage():
-          // Bytes straight through, and the offset recorded so a reconnect
-          // asks for exactly what comes next.
-          if (!_output.isClosed) _output.add(message.bytes);
-          lastOffset = message.nextOffset;
-        case ScreenMessage():
-          // Ahead of the output on the same stream, so the terminal is rebuilt
-          // before the bytes that follow it land.
-          if (!_output.isClosed) _output.add(message.bytes);
-          lastOffset = message.offset;
-        case ExitedMessage():
-          if (!_exit.isCompleted) {
-            _exit.complete(
-              HostSessionEnd(
-                message.exitCode,
-                message.reason,
-                message.observedAt,
-              ),
-            );
-          }
-        case ErrorMessage():
-          final waiting = _pending.remove(message.requestId);
-          if (waiting != null && !waiting.isCompleted) {
-            waiting.completeError(
-              HostLinkException(message.message, code: message.code),
-            );
-          } else if (message.requestId == 0 &&
-              message.code == ProtocolErrorCode.badRequest &&
-              _pending.isNotEmpty) {
-            // A frame the host could not read — an older host meeting a type
-            // it predates — answers id 0 and hangs up. That is the answer to
-            // what is waiting, not a generic "the channel closed".
-            _fail(HostLinkException(message.message, code: message.code));
-            return;
-          } else if (!_notices.isClosed) {
-            // Unsolicited: a refused write, most often.
-            _notices.add(message.message);
-          }
-        case WelcomeMessage(:final requestId):
-        case AttachedMessage(:final requestId):
-        case SessionsMessage(:final requestId):
-        case ClosedMessage(:final requestId):
-        case ClaimedMessage(:final requestId):
-          _pending.remove(requestId)?.complete(message);
-        default:
-          break;
-      }
-    }
+    _ackTimer ??= Timer(const Duration(milliseconds: 30), _sendAck);
   }
 
-  void _fail(HostLinkException error) {
+  void _sendAck() {
+    _ackTimer?.cancel();
+    _ackTimer = null;
+    if (_closed || lastOffset <= _ackedOffset) return;
+    _ackedOffset = lastOffset;
+    _link.send(OutputAckMessage(_sessionRef, lastOffset));
+  }
+
+  /// The ref's stream ended: the link went, or the attachment was let go.
+  void _refEnded() => _fail(_link.closeReason ?? 'The host channel closed.');
+
+  void _fail(String reason) {
     if (_closed) return;
     _closed = true;
-    for (final completer in _pending.values) {
-      if (!completer.isCompleted) completer.completeError(error);
-    }
-    _pending.clear();
+    _ackTimer?.cancel();
     if (!_output.isClosed) _output.close();
     if (!_notices.isClosed) _notices.close();
-  }
-
-  void _send(HostMessage message) {
-    try {
-      _channel.add(message.toFrame().encode());
-    } on Object {
-      // The channel went away; onDone or onError will report it once.
-    }
-  }
-
-  Future<T> _request<T extends HostMessage>(
-    HostMessage Function(int requestId) build,
-    Duration bound,
-  ) {
-    final id = ++_requestId;
-    final completer = Completer<HostMessage>();
-    _pending[id] = completer;
-    _send(build(id));
-    // A bound on an answer over a network. Nothing asks twice.
-    return completer.future
-        .timeout(
-          bound,
-          onTimeout: () {
-            _pending.remove(id);
-            throw HostLinkException(
-              'The host did not answer in ${_describe(bound)}.',
-              // A bound that expired is a reading of how busy the machine was,
-              // and callers that would otherwise act on it as "nobody is there"
-              // need to be able to tell the two apart.
-              timedOut: true,
-            );
-          },
-        )
-        .then((message) => message as T);
+    if (!_presence.isClosed) _presence.close();
   }
 }
 
@@ -401,21 +406,3 @@ class HostSessionEnd {
   final String reason;
   final DateTime observedAt;
 }
-
-class HostLinkException implements Exception {
-  const HostLinkException(this.message, {this.timedOut = false, this.code});
-  final String message;
-
-  /// The host's refusal code, when the host said something at all.
-  final ProtocolErrorCode? code;
-
-  /// Whether the bound expired rather than the host saying something.
-  final bool timedOut;
-
-  @override
-  String toString() => message;
-}
-
-/// Seconds read better than `0:00:05.000000`, and a sub-second bound needs ms.
-String _describe(Duration bound) =>
-    bound.inSeconds >= 1 ? '${bound.inSeconds}s' : '${bound.inMilliseconds}ms';

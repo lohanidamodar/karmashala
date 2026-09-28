@@ -116,12 +116,31 @@ enum Capability {
   /// Read the desktop's agent accounts' usage limits — who is signed in, and
   /// how close each is to its limit. Its own bit: a phone paired before this
   /// existed is refused, in words, for ever.
-  viewUsage('view_usage', 1 << 9);
+  viewUsage('view_usage', 1 << 9),
+
+  /// Be a **desktop client** of this server (slice 5e): switch the sealed
+  /// channel to the host protocol — panes, the data API, the lifecycle feed.
+  /// Granted only by name (`pair --grants desktop`), never by "all".
+  desktopClient('desktop_client', 1 << 10),
+
+  /// As a desktop client, administer the server: `serverCall` (its config,
+  /// devices, agents) and renaming, granting or revoking paired devices.
+  serverAdmin('server_admin', 1 << 11),
+
+  /// As a desktop client, be asked — and answer — the server's SSH questions
+  /// (host keys, passwords, passphrases). Off unless granted: a secret typed
+  /// on another machine crosses the network, if sealed.
+  sshPrompts('ssh_prompts', 1 << 12);
 
   const Capability(this.wire, this.bit);
 
   final String wire;
   final int bit;
+
+  /// Granted only when named: what makes a pairing a desktop's, not a
+  /// phone's. "all" leaves these out.
+  bool get privileged =>
+      this == desktopClient || this == serverAdmin || this == sshPrompts;
 
   static Capability? tryParse(String wire) => _byWire[wire];
 
@@ -140,8 +159,11 @@ class CapabilitySet {
 
   static const CapabilitySet none = CapabilitySet(0);
 
-  /// Everything this build knows about — the most a pairing can grant here.
-  static final CapabilitySet all = CapabilitySet.of(Capability.values);
+  /// Everything a phone may be granted — every capability this build knows
+  /// but the [Capability.privileged] ones, which are granted by name.
+  static final CapabilitySet all = CapabilitySet.of(
+    Capability.values.where((c) => !c.privileged),
+  );
 
   final int bits;
 
@@ -339,6 +361,15 @@ enum FrameType {
   /// `p.watching`. No capability: it is about the phone's own stream, and a
   /// bit would exclude every phone already paired. Never answered.
   streamAck('stream.ack', origin: FrameOrigin.companion),
+
+  /// Switch this sealed channel to the host protocol (slice 5e): once
+  /// answered, every sealed frame either way carries host-protocol bytes, and
+  /// the server serves this link as a desktop client.
+  hostAttach(
+    'host.attach',
+    origin: FrameOrigin.companion,
+    capability: Capability.desktopClient,
+  ),
 
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),

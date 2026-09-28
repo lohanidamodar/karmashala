@@ -14,6 +14,9 @@ String capabilityLabel(Capability capability) => switch (capability) {
   Capability.viewActivity => 'See what is running',
   Capability.sendAttachment => 'Send files',
   Capability.viewUsage => 'See usage limits',
+  Capability.desktopClient => 'Use as a desktop client',
+  Capability.serverAdmin => 'Administer this server',
+  Capability.sshPrompts => 'Answer SSH questions',
 };
 
 /// The bits this build knows how to show. Anything outside it — a grant made

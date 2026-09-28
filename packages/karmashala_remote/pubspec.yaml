@@ -22,6 +22,10 @@ dependencies:
   # close codes — shared with the relay server rather than repeated here.
   karmashala_relay_protocol:
     path: ../../relay/protocol
+  # A desktop client's sealed link as the byte channel its host protocol
+  # link runs over (slice 5e). Pure Dart, and nothing of the server.
+  karmashala_host_protocol:
+    path: ../karmashala_host_protocol
 
 dev_dependencies:
   lints: ^6.1.0

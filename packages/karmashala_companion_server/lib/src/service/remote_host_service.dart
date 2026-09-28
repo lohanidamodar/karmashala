@@ -43,6 +43,7 @@ class RemoteHostService {
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
     this.onDevicesChanged,
+    this.onHostLink,
     this.onLog,
   }) : _now = now ?? DateTime.now,
        _relayFactory = relayFactory ?? _defaultRelayFactory,
@@ -235,6 +236,10 @@ class RemoteHostService {
 
   /// Fired when the device list changed (paired, revoked, seen).
   final void Function()? onDevicesChanged;
+
+  /// Serves a desktop client whose sealed channel switched to the host
+  /// protocol (slice 5e). Null refuses every `host.attach`.
+  void Function(SealedHostLink link)? onHostLink;
   final void Function(String message)? onLog;
 
   final Map<String, _DeviceRuntime> _runtimes = {};
@@ -929,6 +934,16 @@ class _DeviceRuntime {
     if (current == null || current.revoked) return;
 
     if (LinkHello.tryDecode(frame) != null) {
+      final current = _active;
+      if (current != null &&
+          current.generation == generation &&
+          current.host != null) {
+        // A desktop client dialled again inside a generation its byte stream
+        // already used: that stream cannot resume, so the generation goes
+        // and the client probes forward to a fresh one.
+        current.host!.close('the client connected again');
+        return;
+      }
       await _activate(generation, transport, announce: true);
       peerLive = true;
       return;
@@ -951,6 +966,12 @@ class _DeviceRuntime {
       await _retireGeneration(generation);
       return;
     }
+    final host = active.host;
+    if (host != null) {
+      peerLive = true;
+      host.receive(opened);
+      return;
+    }
     final Envelope envelope;
     try {
       envelope = Envelope.fromBytes(opened.plaintext, accept: VersionRange.any);
@@ -960,7 +981,71 @@ class _DeviceRuntime {
     }
     peerLive = true;
     service.devices.updateLastSeen(device.id, service._now().toUtc());
+    if (envelope.type == FrameType.hostAttach.wire) {
+      await _attachHost(active, envelope, opened.sequence);
+      return;
+    }
     await active.api.handleEnvelope(envelope);
+  }
+
+  /// Switches [active] to the host protocol for a desktop client (slice 5e):
+  /// answered once in the envelope, then every frame is host bytes. A pairing
+  /// without [Capability.desktopClient] is refused in words.
+  Future<void> _attachHost(
+    _ActiveLink active,
+    Envelope envelope,
+    int sequence,
+  ) async {
+    final serve = service.onHostLink;
+    String? refusal;
+    var code = ErrorCode.notPermitted;
+    if (!device.capabilities.has(Capability.desktopClient)) {
+      refusal =
+          'this pairing is not a desktop client\'s: pair again with the '
+          'desktop grant';
+    } else if (serve == null) {
+      refusal = 'this server takes no desktop clients';
+      code = ErrorCode.internal;
+    }
+    if (refusal != null) {
+      await _sealAndSend(active, FrameType.error, envelope.id, {
+        'code': code.wire,
+        'message': refusal,
+      });
+      return;
+    }
+    await _sealAndSend(active, FrameType.result, envelope.id, const {
+      'attached': true,
+    });
+    final link = SealedHostLink(
+      channel: active.channel,
+      sendSealed: (sealed) => active.transport.send(sealed),
+      nextReceiveSequence: sequence + 1,
+      deviceId: device.id,
+      deviceName: device.name,
+      capabilities: device.capabilities,
+    );
+    active.host = link;
+    unawaited(
+      link.done.then((_) {
+        _chain = _chain.then((_) => _hostEnded(active));
+      }),
+    );
+    serve!(link);
+  }
+
+  /// A desktop client's byte stream is over: its generation cannot carry
+  /// another, so it is retired and the socket under it closed — the client
+  /// dials the next one.
+  Future<void> _hostEnded(_ActiveLink active) async {
+    if (_closed || !identical(_active, active)) return;
+    final transport = active.transport;
+    await _retireGeneration(active.generation);
+    try {
+      await transport.close();
+    } on Object {
+      // Already gone.
+    }
   }
 
   /// Tracks whether the transport carrying the active link is up. Only a
@@ -970,7 +1055,14 @@ class _DeviceRuntime {
     _liveWatch?.cancel();
     _watchedTransport = transport;
     _liveWatch = transport.states.listen((state) {
-      if (state != TransportState.connected) peerLive = false;
+      if (state == TransportState.connected) return;
+      peerLive = false;
+      // A byte stream cannot resume on another socket: frames queued while
+      // this one was down would arrive with a gap.
+      final active = _active;
+      if (active != null && identical(active.transport, transport)) {
+        active.host?.close('the connection dropped');
+      }
     });
   }
 
@@ -1046,6 +1138,8 @@ class _DeviceRuntime {
     Map<String, Object?> payload,
   ) async {
     if (_closed || _active != active) return false;
+    // A desktop client's link carries host bytes only.
+    if (active.host != null) return false;
     if (_isNews(type, id)) {
       switch (active.flow.admit()) {
         case StreamAdmission.send:
@@ -1117,6 +1211,7 @@ class _DeviceRuntime {
   Future<void> close() async {
     _closed = true;
     peerLive = false;
+    _active?.host?.close('the device runtime closed');
     // Staged attachment bytes belong to this link. Nothing outside it can name
     // the upload, so a `.part` that outlives it is bytes nobody will quote.
     try {
@@ -1161,6 +1256,9 @@ class _ActiveLink {
 
   /// Per generation, like the sequences it counts.
   final StreamFlow flow;
+
+  /// Set once a desktop client switched this link to the host protocol.
+  SealedHostLink? host;
 
   /// What the phone last said about looking, or null when it never has.
   bool? watchingSaid;

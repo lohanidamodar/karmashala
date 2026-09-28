@@ -126,6 +126,10 @@ class DaemonCompanion implements CompanionHandler {
         : CompanionAttachmentStore(Directory(p.join(directory, 'attachments')));
   }
 
+  /// Serves a desktop client whose sealed channel switched to the host
+  /// protocol (slice 5e); set by `serve` once its host server exists.
+  void Function(SealedHostLink link)? onHostLink;
+
   final AppDatabase database;
   final SessionRegistry registry;
   final String hostName;
@@ -729,6 +733,7 @@ class DaemonCompanion implements CompanionHandler {
       relayFactory: _relayFactory,
       pushPost: _pushPost,
       onDevicesChanged: _devicesChanged,
+      onHostLink: (link) => onHostLink?.call(link),
       onLog: onLog,
     );
     _service = started;

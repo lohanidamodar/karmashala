@@ -16,6 +16,10 @@ enum DataRefusalCode {
   /// over a file changed on disk since it was read (`files.write`).
   conflict,
 
+  /// This link may not ask it: a client on another machine whose pairing
+  /// does not grant it (slice 5e).
+  denied,
+
   /// The server tried and failed.
   failed;
 
@@ -35,6 +39,9 @@ class DataRefused implements Exception {
 
   const DataRefused.unavailable(String message)
     : this(DataRefusalCode.unavailable, message);
+
+  const DataRefused.denied(String message)
+    : this(DataRefusalCode.denied, message);
 
   final DataRefusalCode code;
   final String message;

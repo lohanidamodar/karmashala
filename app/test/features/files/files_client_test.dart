@@ -50,6 +50,31 @@ void main() {
     expect(server.filesWork.kinds, ['files.read', 'files.read']);
   });
 
+  test('an upload goes in 1 MiB pieces, however the file is read, and '
+      'lands where the server says (slice 5e)', () async {
+    final bytes = List<int>.generate(2 * kFileChunkBytes + 7, (i) => i % 253);
+    // Read in odd-sized pieces, as a file stream hands them over.
+    final content = Stream.fromIterable([
+      for (var at = 0; at < bytes.length; at += 300000)
+        bytes.sublist(at, at + 300000 < bytes.length ? at + 300000 : bytes.length),
+    ]);
+    final landed = await files.upload(
+      'shot.png',
+      bytes.length,
+      content,
+      directory: here(''),
+    );
+    expect(landed.path, here('shot.png').path);
+    expect(File(landed.path).readAsBytesSync(), bytes);
+    expect(server.filesWork.kinds, [
+      'files.upload.begin',
+      'files.upload.chunk',
+      'files.upload.chunk',
+      'files.upload.chunk',
+      'files.upload.commit',
+    ]);
+  });
+
   test('a head is one ask, and stops at the end of a short file', () async {
     File(here('a.txt').path).writeAsStringSync('abc');
     expect(utf8.decode(await files.read(here('a.txt'), length: 8192)), 'abc');

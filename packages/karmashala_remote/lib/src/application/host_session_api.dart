@@ -579,6 +579,13 @@ class HostSessionApi {
           if (seq is int && seq >= 0) {
             onStreamAck?.call(seq, watching is bool ? watching : null);
           }
+        case FrameType.hostAttach:
+          // The device runtime switches the link before this is reached.
+          await _error(
+            envelope.id,
+            ErrorCode.internal,
+            'this server takes no desktop clients',
+          );
         // Host-only types cannot reach here: sentBy refused them above.
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:

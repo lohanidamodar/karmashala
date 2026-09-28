@@ -47,6 +47,8 @@ export 'src/companion/local_relay.dart';
 export 'src/companion/registry_screens.dart';
 export 'src/store/store_probe.dart';
 export 'src/transport/socket_transport.dart';
+export 'src/transport/link_trust.dart';
+export 'src/transport/sealed_transport.dart';
 export 'src/transport/transport.dart';
 export 'src/agents/server_agents.dart';
 export 'src/server/admin_commands.dart';

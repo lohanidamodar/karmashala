@@ -32,7 +32,72 @@ void main() {
     );
     expect(MessageType.stopCheck.code, 0xf0);
     expect(MessageType.stopCheckAnswer.code, 0xf1);
-    expect(kProtocolVersion, 30);
+    expect(kProtocolVersion, 31);
+  });
+
+  T roundTrip<T extends HostMessage>(HostMessage message) =>
+      decodeMessage(FrameParser().add(message.toFrame().encode()).single) as T;
+
+  test('5e\'s frames: outputAck and presence by ref, hello features, a '
+      'claim that takes over, a refusal on a ref', () {
+    expect(MessageType.outputAck.code, 0x3e);
+    expect(MessageType.presence.code, 0x3f);
+    final ack = roundTrip<OutputAckMessage>(
+      const OutputAckMessage(4, 0x10000000000),
+    );
+    expect((ack.sessionRef, ack.offset), (4, 0x10000000000));
+    final presence = roundTrip<PresenceMessage>(
+      const PresenceMessage(
+        sessionRef: 2,
+        holder: 'laptop',
+        viewers: ['desk', 'phone'],
+        sizedFor: 'laptop',
+        columns: 120,
+        rows: 40,
+      ),
+    );
+    expect(presence.holder, 'laptop');
+    expect(presence.viewers, ['desk', 'phone']);
+    expect((presence.columns, presence.rows), (120, 40));
+    final nobody = roundTrip<PresenceMessage>(
+      const PresenceMessage(
+        sessionRef: 2,
+        holder: null,
+        viewers: [],
+        sizedFor: null,
+        columns: 80,
+        rows: 24,
+      ),
+    );
+    expect(nobody.holder, isNull);
+    expect(nobody.sizedFor, isNull);
+    expect(
+      roundTrip<HelloMessage>(
+        const HelloMessage(
+          requestId: 1,
+          clientId: 'c',
+          features: HelloMessage.acksOutput,
+        ),
+      ).ackingOutput,
+      isTrue,
+    );
+    expect(
+      roundTrip<ClaimMessage>(
+        const ClaimMessage(3, 9, takeOver: true),
+      ).takeOver,
+      isTrue,
+    );
+    expect(
+      roundTrip<ErrorMessage>(
+        const ErrorMessage(
+          0,
+          ProtocolErrorCode.writeRefused,
+          'x',
+          sessionRef: 7,
+        ),
+      ).sessionRef,
+      7,
+    );
   });
 
   test('an install reading crosses JSON whole, its deploy and platform '

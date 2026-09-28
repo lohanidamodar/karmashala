@@ -19,6 +19,7 @@ import '../application/terminal_capture.dart';
 import '../application/terminal_paste.dart';
 import 'terminal_copy_text.dart';
 import 'terminal_file_drop.dart';
+import 'terminal_presence.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../application/terminal_recording_controller.dart';
 import '../application/terminal_theme_controller.dart';

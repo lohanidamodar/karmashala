@@ -34,7 +34,7 @@ class ServerSsh {
   }) : _data = data {
     prompts = SshPrompts(
       tell: data.announce,
-      canAsk: () => data.hasSubscribers,
+      canAsk: () => data.hasPromptAnswerers,
       wait: promptWait,
     );
     final keys = EnvironmentPrivateKeyReader(

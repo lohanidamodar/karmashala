@@ -27,9 +27,10 @@ class PairingDialog extends ConsumerStatefulWidget {
 }
 
 class _PairingDialogState extends ConsumerState<PairingDialog> {
-  /// Granted at pairing time; everything this build knows by default, and
-  /// every one of them untickable before the code is generated.
-  final Set<Capability> _granted = {...Capability.values};
+  /// Granted at pairing time: a phone's grants by default, and every one of
+  /// them untickable before the code is generated. The desktop grants
+  /// (another machine's app, slice 5e) are ticked only on purpose.
+  final Set<Capability> _granted = {...CapabilitySet.all.granted};
 
   /// Saved in [initState]: `ref` is unusable inside [dispose].
   late final RemoteAccessController _access;

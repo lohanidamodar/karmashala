@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -255,7 +257,10 @@ void main() {
       pane.dispose();
       await pane.reaped;
 
-      expect(channel.closed, isTrue);
+      // The link is the app's, shared by its panes (slice 5e): a pane lets go
+      // of its own attachment and nothing more.
+      expect(channel.all<DetachMessage>().single.sessionRef, 1);
+      expect(channel.closed, isFalse);
       expect(
         channel.received.whereType<CloseMessage>(),
         isEmpty,
@@ -611,6 +616,84 @@ void main() {
 
       expect(screenOf(pane), contains('DEBRIS'));
       expect(channel.all<ResizeMessage>(), isEmpty, reason: 'no nudge');
+    });
+  });
+
+  group('one link, many panes (slice 5e)', () {
+    HostTerminalInstance attached(PaneAccess access, String id) {
+      access.liveSessions.add('karmashala_local_$id');
+      final pane = HostTerminalInstance(
+        id: id,
+        title: 'Local',
+        profileId: 'zsh',
+        access: access,
+        sessionId: 'karmashala_local_$id',
+      );
+      pane.terminal.resize(80, 24);
+      addTearDown(pane.dispose);
+      return pane;
+    }
+
+    test('two panes on one server share one channel, each on its own ref',
+        () async {
+      final access = PaneAccess(readyDeployment());
+      final first = attached(access, 'p1');
+      final second = attached(access, 'p2');
+      await settle();
+
+      final channel = access.channels.single;
+      expect(channel.all<HelloMessage>(), hasLength(1));
+      expect(channel.all<AttachMessage>().map((a) => a.sessionId), [
+        'karmashala_local_p1',
+        'karmashala_local_p2',
+      ]);
+      channel
+        ..pushOutput(0, 'ONE', ref: 1)
+        ..pushOutput(0, 'TWO', ref: 2);
+      await settle();
+      expect(screenOf(first), contains('ONE'));
+      expect(screenOf(first), isNot(contains('TWO')));
+      expect(screenOf(second), contains('TWO'));
+
+      first.terminal.textInput('x');
+      expect(channel.all<InputMessage>().single.sessionRef, 1);
+    });
+
+    test('what the server says about who types reaches the pane, and Take '
+        'over asks for the token', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = attached(access, 'p1');
+      await settle();
+      final channel = access.channels.single;
+      channel.push(
+        const PresenceMessage(
+          sessionRef: 1,
+          holder: 'laptop',
+          viewers: ['karmashala'],
+          sizedFor: 'laptop',
+          columns: 160,
+          rows: 50,
+        ),
+      );
+      await settle();
+      expect(pane.presence.value!.heldElsewhere, isTrue);
+      expect(pane.presence.value!.sizedElsewhere, isTrue);
+
+      unawaited(pane.takeOver());
+      await settle();
+      final claim = channel.all<ClaimMessage>().single;
+      expect(claim.takeOver, isTrue);
+      expect(claim.sessionRef, 1);
+    });
+
+    test('output is acknowledged as it is rendered', () async {
+      final access = PaneAccess(readyDeployment());
+      attached(access, 'p1');
+      await settle();
+      final channel = access.channels.single;
+      channel.pushOutput(0, 'hello');
+      await settle();
+      expect(channel.all<OutputAckMessage>().last.offset, 5);
     });
   });
 

@@ -18,4 +18,5 @@ export 'src/transport/lan_transport.dart';
 export 'src/transport/relay_transport.dart';
 export 'src/transport/remote_transport.dart';
 export 'src/transport/sealed_channel.dart';
+export 'src/transport/sealed_host_link.dart';
 export 'src/transport/stream_flow.dart';

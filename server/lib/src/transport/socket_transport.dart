@@ -7,9 +7,15 @@ import 'transport.dart';
 /// A client on a unix domain socket. The host's own listener today; the same
 /// class serves the local stage unchanged (see transport.dart).
 class SocketHostConnection implements HostConnection {
-  SocketHostConnection(this._socket, this.description);
+  SocketHostConnection(this._socket, this.description)
+    // A write to a peer that has gone fails later, on the socket's `done`,
+    // not in [add]: handled here once, so a client that hangs up while its
+    // last frames are queued (an exit sent after the final byte) is the read
+    // loop's to notice, never an uncaught error in the host.
+    : _done = _socket.done.then<void>((_) {}, onError: (Object _) {});
 
   final Socket _socket;
+  final Future<void> _done;
 
   @override
   final String description;
@@ -36,7 +42,7 @@ class SocketHostConnection implements HostConnection {
   }
 
   @override
-  Future<void> get done => _socket.done.catchError((Object _) => _socket);
+  Future<void> get done => _done;
 }
 
 class UnixSocketHostListener implements HostListener {

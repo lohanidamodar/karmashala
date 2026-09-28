@@ -11,6 +11,7 @@ import '../../environments/presentation/toolchains_section.dart';
 import '../../flutter_apps/presentation/flutter_sdk_section.dart';
 import '../../git/presentation/worktree_setup_page.dart';
 import '../../notes/presentation/notes_settings_section.dart';
+import '../../remote/presentation/machines_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
 import '../../snippets/presentation/snippets_settings_page.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
@@ -113,6 +114,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.flutterSdk => const FlutterSdkSection(),
   SettingsAnchor.buildTooling => const ToolchainsSection(),
   SettingsAnchor.knownHosts => const KnownHostsSection(),
+  SettingsAnchor.machines => const MachinesSection(),
   SettingsAnchor.remoteAccess => const RemoteAccessSection(),
   SettingsAnchor.debugMode => const DebugModeSection(),
   SettingsAnchor.logFile => const LogFileSection(),

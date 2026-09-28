@@ -362,7 +362,7 @@ void main() {
           host.add(
             WelcomeMessage(
               requestId: 1,
-              protocolVersion: 1,
+              protocolVersion: kProtocolVersion,
               hostVersion: 'old',
               operatingSystem: 'linux',
               architecture: 'x64',
@@ -406,7 +406,7 @@ void main() {
           host.add(
             WelcomeMessage(
               requestId: 1,
-              protocolVersion: 1,
+              protocolVersion: kProtocolVersion,
               hostVersion: 'new',
               operatingSystem: 'linux',
               architecture: 'x64',

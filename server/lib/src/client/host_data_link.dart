@@ -3,27 +3,28 @@ import 'dart:io';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
+import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import '../transport/socket_transport.dart';
 import '../transport/transport.dart';
+import 'connection_channel.dart';
 
-/// A client's data API on a host, over the host protocol: its own
-/// connection, saying `hello` and never `watch`, so it can be dialled before
-/// anything else the client does and marks no session lost.
+/// A client's data API on a host, over the host protocol: on the client's
+/// one link ([onLink], slice 5e), or a connection of its own ([connect],
+/// [over]) that says `hello` and never `watch`, so it marks no session lost.
 class HostDataLink implements DataEndpoint {
-  HostDataLink._(this._connection);
+  HostDataLink._(this._link, this._owns);
 
-  final HostConnection _connection;
-  final _parser = FrameParser();
+  final HostClientLink _link;
+  final bool _owns;
   final _changes = StreamController<DataChanges>();
   final _pending = <int, _Pending>{};
   final _done = Completer<void>();
-  final _welcome = Completer<HostMessage>();
-  StreamSubscription<List<int>>? _incoming;
+  StreamSubscription<HostMessage>? _messages;
   var _lastId = 0;
 
   /// What the host said about itself on the handshake.
-  late final WelcomeMessage welcome;
+  WelcomeMessage get welcome => _link.welcome;
 
   /// Null when nothing is listening at [socketPath]. Throws [DataRefused]
   /// ([DataRefusalCode.unavailable]) when something answers but refuses the
@@ -54,36 +55,29 @@ class HostDataLink implements DataEndpoint {
     String clientId = 'karmashala-data',
     Duration answerWithin = const Duration(seconds: 10),
   }) async {
-    final link = HostDataLink._(connection);
+    final HostClientLink link;
     try {
-      await link._start(clientId, answerWithin);
-    } on Object {
-      await link.close();
-      rethrow;
-    }
-    return link;
-  }
-
-  Future<void> _start(String clientId, Duration within) async {
-    _incoming = _connection.incoming.listen(
-      _onBytes,
-      onError: (Object error) => _end('$error'),
-      onDone: () => _end('the Karmashala server closed the link'),
-      cancelOnError: true,
-    );
-    _connection.add(
-      HelloMessage(requestId: 1, clientId: clientId).toFrame().encode(),
-    );
-    final HostMessage answer;
-    try {
-      answer = await _welcome.future.timeout(within);
-    } on TimeoutException {
-      throw const DataRefused.unavailable(
-        'the Karmashala server did not answer',
+      link = await HostClientLink.open(
+        ConnectionChannel(connection),
+        clientId: clientId,
+        features: 0,
+        bound: answerWithin,
+      );
+    } on HostLinkException catch (error) {
+      throw DataRefused.unavailable(
+        error.timedOut ? 'the Karmashala server did not answer' : error.message,
       );
     }
-    if (answer is ErrorMessage) throw DataRefused.unavailable(answer.message);
-    welcome = answer as WelcomeMessage;
+    return HostDataLink._(link, true).._listen();
+  }
+
+  /// The data API on a client's shared [link]; [close] leaves the link up.
+  static HostDataLink onLink(HostClientLink link) =>
+      HostDataLink._(link, false).._listen();
+
+  void _listen() {
+    _messages = _link.messages.listen(_onMessage);
+    unawaited(_link.done.then((_) => _end(_link.closeReason ?? 'closed')));
   }
 
   @override
@@ -104,20 +98,7 @@ class HostDataLink implements DataEndpoint {
     final id = ++_lastId;
     final pending = _Pending<R>(request);
     _pending[id] = pending;
-    try {
-      _connection.add(
-        DataRequestMessage(
-          DataEnvelope.request(id, request),
-        ).toFrame().encode(),
-      );
-    } on Object {
-      _pending.remove(id);
-      return Future.error(
-        const DataRefused.unavailable(
-          'the link to the Karmashala server is closed',
-        ),
-      );
-    }
+    _link.send(DataRequestMessage(DataEnvelope.request(id, request)));
     return pending.answer.future;
   }
 
@@ -141,50 +122,21 @@ class HostDataLink implements DataEndpoint {
           return;
         }
         _streams[id] = controller;
-        _sendQuietly(
+        _link.send(
           DataStreamOpenMessage(DataStreamEnvelope.open(id, source, key)),
         );
       },
       onCancel: () {
         if (_streams.remove(id) != null) {
-          _sendQuietly(DataStreamCloseMessage(DataStreamEnvelope.close(id)));
+          _link.send(DataStreamCloseMessage(DataStreamEnvelope.close(id)));
         }
       },
     );
     return controller.stream;
   }
 
-  void _sendQuietly(HostMessage message) {
-    try {
-      _connection.add(message.toFrame().encode());
-    } on Object {
-      // The link is going; `_end` closes every stream.
-    }
-  }
-
-  void _onBytes(List<int> chunk) {
-    final List<Frame> frames;
-    try {
-      frames = _parser.add(chunk);
-    } on FrameFormatException catch (e) {
-      _end(e.message);
-      return;
-    }
-    for (final frame in frames) {
-      final HostMessage message;
-      try {
-        message = decodeMessage(frame);
-      } on WireFormatException {
-        continue;
-      }
-      _onMessage(message);
-    }
-  }
-
   void _onMessage(HostMessage message) {
     switch (message) {
-      case WelcomeMessage() || ErrorMessage() when !_welcome.isCompleted:
-        _welcome.complete(message);
       case DataAnswerMessage(:final envelope):
         final id = DataEnvelope.answerId(envelope);
         if (id != null) _pending.remove(id)?.complete(envelope);
@@ -213,9 +165,9 @@ class HostDataLink implements DataEndpoint {
   }
 
   void _end(String reason) {
-    if (!_welcome.isCompleted) {
-      _welcome.completeError(DataRefused.unavailable(reason));
-    }
+    if (_done.isCompleted) return;
+    unawaited(_messages?.cancel());
+    _messages = null;
     for (final pending in _pending.values) {
       pending.fail(DataRefused.unavailable(reason));
     }
@@ -227,15 +179,13 @@ class HostDataLink implements DataEndpoint {
       unawaited(stream.close());
     }
     if (!_changes.isClosed) unawaited(_changes.close());
-    if (!_done.isCompleted) _done.complete();
+    _done.complete();
   }
 
   @override
   Future<void> close() async {
-    await _incoming?.cancel();
-    _incoming = null;
     _end('closed');
-    await _connection.close();
+    if (_owns) await _link.close();
   }
 }
 

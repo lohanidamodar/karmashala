@@ -1,25 +1,35 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_host/lifecycle_client.dart' as wire;
+import 'package:karmashala_host_protocol/host_access.dart'
+    show HostSessionAccess;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart'
+    show SharedHostLinks;
 
 import 'host_lifecycle_source.dart';
 import 'relayed_agent_hook.dart';
 
-/// The lifecycle feed of the session host on this machine, over its socket.
-class LocalHostLifecycleSource implements HostLifecycleSource {
-  const LocalHostLifecycleSource(this.socketPath);
+/// The lifecycle feed of the server this window is a client of — this
+/// machine's or one elsewhere — on the one link its panes and data share.
+class ServerLifecycleSource implements HostLifecycleSource {
+  const ServerLifecycleSource(this.access);
 
-  final String socketPath;
+  final HostSessionAccess access;
 
   @override
   Future<HostLifecycleFeed?> open({List<String> runByClient = const []}) async {
-    final watch = await wire.HostLifecycleWatch.connect(
-      socketPath,
-      runByClient: runByClient,
-    );
-    if (watch == null) return null;
+    final wire.HostLifecycleWatch watch;
+    try {
+      watch = await wire.HostLifecycleWatch.onLink(
+        await SharedHostLinks.linkTo(access),
+        runByClient: runByClient,
+      );
+    } on SocketException {
+      return null;
+    }
     final observedAt = watch.snapshotObservedAt.toUtc();
     return HostLifecycleFeed(
       snapshot: [

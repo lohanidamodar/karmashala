@@ -225,8 +225,39 @@ class FakeFilesWork {
           if (links != null && links.isEmpty) _watchers.remove(path);
         }
         return const DataAck();
+      case FilesUploadBegin(
+        :final environmentId,
+        :final directory,
+        :final fileName,
+      ):
+        final id = 'upload-${_uploads.length + 1}';
+        _uploads[id] = (
+          directory ?? await _space(environmentId).home(),
+          fileName,
+          BytesBuilder(),
+        );
+        return id;
+      case FilesUploadChunk(:final uploadId, :final bytes):
+        _uploads[uploadId]!.$3.add(bytes);
+        return const DataAck();
+      case FilesUploadCommit(:final environmentId, :final uploadId):
+        final (directory, name, bytes) = _uploads.remove(uploadId)!;
+        final space = _space(environmentId);
+        final target = space.child(directory, name);
+        await space.write(
+          target,
+          bytes.takeBytes(),
+          expect: const WriteExpectation.any(),
+        );
+        uploaded.add(target);
+        return target;
     }
   }
+
+  final _uploads = <String, (EnvironmentPath, String, BytesBuilder)>{};
+
+  /// Where each finished upload landed (slice 5e).
+  final uploaded = <EnvironmentPath>[];
 
   /// What the server tells after its own write: the path and its folder.
   Future<void> _moved(EnvironmentPath path) async {

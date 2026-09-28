@@ -20,7 +20,7 @@ typedef HostedRunPaneFactory =
 
 final hostedRunPaneFactoryProvider = Provider<HostedRunPaneFactory>(
   (ref) => ({required String id, required String title}) {
-    final access = ref.read(localHostSessionAccessProvider);
+    final access = ref.read(serverAccessProvider);
     if (access == null) return null;
     return HostTerminalInstance(
       id: id,
@@ -61,7 +61,7 @@ final restoredPaneFactoryProvider = Provider<RestoredPaneFactory>(
         AgentPaneLaunch? agentLaunch,
         Terminal? adoptTerminal,
       }) {
-        if (ref.read(localHostSessionAccessProvider) == null) return null;
+        if (ref.read(serverAccessProvider) == null) return null;
         return _serverPane(
           ref,
           id: id,
@@ -122,7 +122,7 @@ TerminalInstance _serverPane(
   final title = agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label;
   final profileId = agentLaunch?.profileId ?? profile.id;
   final directory = workingDirectory ?? agentLaunch?.workingDirectory;
-  final access = ref.read(localHostSessionAccessProvider);
+  final access = ref.read(serverAccessProvider);
   if (access == null) {
     return ErrorTerminalInstance(
       id: id,

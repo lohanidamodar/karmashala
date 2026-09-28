@@ -170,13 +170,17 @@ $_configFlagsUsage''',
 karmashala_host pair — open a pairing window at the running server and print
 its code and QR, then wait until a device pairs or the window closes.
 
-  --capabilities=<list|all>   what the device may do (default all)
+  --grants=<list|all>         what the device may do (default all: a phone's
+                              grants). Another machine's desktop app:
+                              --grants=desktop (add ,admin to let it administer
+                              this server, ,ssh to answer its SSH questions)
+  --capabilities=<list|all>   the same, by its older name
   --relay=<url>               meet the phone at this relay, for this window
   --name=<label>              the name the paired device gets
   --address=<host[:port]>     where the phone dials (makes the QR a host invite)
   --no-color                  draw the QR without colour
 ''',
-    valueFlags: {'capabilities', 'relay', 'name', 'address'},
+    valueFlags: {'grants', 'capabilities', 'relay', 'name', 'address'},
     switches: {'no-color'},
     run: (args, out, err, env) =>
         runPair(args, out: out, err: err, environment: env),
