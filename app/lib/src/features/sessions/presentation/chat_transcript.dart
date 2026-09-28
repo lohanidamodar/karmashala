@@ -906,7 +906,11 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
           : '${toolDisplayName(newest.name)}  $subject';
       glyph = _toolIcon(newest.name);
     } else {
-      label = describeToolRun(run);
+      // How long it took first, then what it did (spec §5): the time is the
+      // part of a folded turn nobody could otherwise see.
+      final worked = describeWorkedFor(run);
+      final did = describeToolRun(run);
+      label = worked == null ? did : '$worked · $did';
       detail = null;
       glyph = null;
     }

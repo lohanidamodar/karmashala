@@ -180,6 +180,32 @@ ToolKind toolKindOf(String name) {
   return _kindByName[name.toLowerCase()] ?? ToolKind.other;
 }
 
+/// `Worked for 2m 12s` — how long a run took, from its first timestamped call
+/// to its last. Null when fewer than two calls carry a time, or they span less
+/// than a second: a duration nobody recorded is not shown as zero.
+String? describeWorkedFor(Iterable<ChatMessage> messages) {
+  DateTime? first;
+  DateTime? last;
+  for (final message in messages) {
+    final at = message.at;
+    if (at == null) continue;
+    if (first == null || at.isBefore(first)) first = at;
+    if (last == null || at.isAfter(last)) last = at;
+  }
+  if (first == null || last == null) return null;
+  final span = last.difference(first);
+  if (span.inSeconds < 1) return null;
+  final minutes = span.inMinutes;
+  final seconds = span.inSeconds % 60;
+  final hours = span.inHours;
+  final text = hours > 0
+      ? '${hours}h ${minutes % 60}m'
+      : minutes > 0
+      ? '${minutes}m ${seconds}s'
+      : '${seconds}s';
+  return 'Worked for $text';
+}
+
 /// `Ran 8 commands, read 12 files, edited 3 files · 1 failed` — what a run did,
 /// by kind, in the order each kind first appeared. Files are counted once each
 /// however often they were touched; everything else is counted per call.

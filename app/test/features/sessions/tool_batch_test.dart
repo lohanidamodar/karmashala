@@ -508,4 +508,50 @@ void main() {
       expect(shown('lib/one.dart'), findsNothing);
     });
   });
+  group('how long a run took', () {
+    final start = DateTime.utc(2026, 9, 28, 10);
+    ChatMessage at(Duration offset) => ChatMessage(
+      role: 'tool',
+      text: 'Bash',
+      at: start.add(offset),
+      tool: const ToolActivity(name: 'Bash', output: 'done'),
+    );
+
+    test('from the first timestamped call to the last', () {
+      expect(
+        describeWorkedFor([
+          at(Duration.zero),
+          at(const Duration(minutes: 1)),
+          at(const Duration(minutes: 2, seconds: 12)),
+        ]),
+        'Worked for 2m 12s',
+      );
+    });
+
+    test('seconds alone under a minute, hours and minutes past an hour', () {
+      expect(
+        describeWorkedFor([at(Duration.zero), at(const Duration(seconds: 9))]),
+        'Worked for 9s',
+      );
+      expect(
+        describeWorkedFor([
+          at(Duration.zero),
+          at(const Duration(hours: 1, minutes: 4, seconds: 30)),
+        ]),
+        'Worked for 1h 4m',
+      );
+    });
+
+    test('says nothing it did not record, and no zero', () {
+      expect(describeWorkedFor([tool('Bash'), tool('Read')]), isNull);
+      expect(describeWorkedFor([at(Duration.zero)]), isNull);
+      expect(
+        describeWorkedFor([
+          at(Duration.zero),
+          at(const Duration(milliseconds: 400)),
+        ]),
+        isNull,
+      );
+    });
+  });
 }
