@@ -47,6 +47,11 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (isSettingsPane(paneId)) {
       return showing ? const SettingsTabView() : const SizedBox.shrink();
     }
+    // The same gate: a device pane off screen would keep its live view and its
+    // polling of adb going for nobody.
+    if (isDevicePane(paneId)) {
+      return showing ? const DevicePane() : const SizedBox.shrink();
+    }
     // No `showing` gate: the stack keeps every mounted tab alive, and an
     // editor rebuilt on every switch would lose the caret and the scroll. Its
     // file is watched by the server, so no editor polls.

@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 
 import '../../../app/shell/workbench_tabs.dart';
 import '../../environments/application/environment_providers.dart';
@@ -35,3 +36,11 @@ void openFilesTabHere(WidgetRef ref) {
 String? _thisMachine(WidgetRef ref) =>
     ref.read(localEnvironmentProvider)?.id ??
     ref.read(browsableEnvironmentsProvider).firstOrNull?.id;
+
+/// The pane id of the browser [openFilesTabHere] opens, or null when there is
+/// no machine to browse.
+String? filesHerePaneId(WidgetRef ref) {
+  final here = _thisMachine(ref);
+  if (here == null) return null;
+  return filesPaneId(leftEnvironmentId: here, rightEnvironmentId: here);
+}

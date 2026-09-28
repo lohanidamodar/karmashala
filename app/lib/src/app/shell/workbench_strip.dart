@@ -57,39 +57,50 @@ class _TabStrip extends ConsumerWidget {
         color: candidate.isEmpty
             ? SurfaceTones.of(context).chrome
             : StateLayers.subtle(scheme),
-        child: Row(
-          children: [
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) => _TabRail(
-                  tabs: tabs,
-                  width: constraints.maxWidth,
-                  activeIndex: tabs.indexWhere((tab) => tab.active),
-                  // The toolbar's own verb: a second way to make a tab would be
-                  // a second place to decide the profile and the directory.
-                  onNewTab: () {
-                    final terminal = TerminalActions(ref);
-                    terminal.open(terminal.defaultProfile());
-                  },
-                  // The one place in the strip no chip can offer: the room
-                  // after the last tab is how a tab is made last.
-                  onMoveTabToEnd: (tabId) {
-                    // From another group it is a move; from this one it is an
-                    // order along the same strip.
-                    if (group != null &&
-                        sessions.canMoveTabToGroup(tabId, group)) {
-                      sessions.moveTabToGroup(tabId, group, index: tabs.length);
-                    } else {
-                      sessions.reorderTab(tabId, tabs.length - 1);
-                    }
-                  },
+        child: LayoutBuilder(
+          builder: (context, strip) => Row(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) => _TabRail(
+                    tabs: tabs,
+                    width: constraints.maxWidth,
+                    activeIndex: tabs.indexWhere((tab) => tab.active),
+                    // The toolbar's own verb: a second way to make a tab would be
+                    // a second place to decide the profile and the directory.
+                    onNewTab: () {
+                      final terminal = TerminalActions(ref);
+                      terminal.open(terminal.defaultProfile());
+                    },
+                    // The one place in the strip no chip can offer: the room
+                    // after the last tab is how a tab is made last.
+                    onMoveTabToEnd: (tabId) {
+                      // From another group it is a move; from this one it is an
+                      // order along the same strip.
+                      if (group != null &&
+                          sessions.canMoveTabToGroup(tabId, group)) {
+                        sessions.moveTabToGroup(
+                          tabId,
+                          group,
+                          index: tabs.length,
+                        );
+                      } else {
+                        sessions.reorderTab(tabId, tabs.length - 1);
+                      }
+                    },
+                  ),
                 ),
               ),
-            ),
-            // Nothing else. Every verb that used to sit here is in the title
-            // bar now — seven repeated in a 286px group overflowed the bar.
-            const SizedBox(width: Insets.xs),
-          ],
+              // One verb only: Split ▾, which is about *this* group. Every other
+              // verb is in the title bar — seven repeated in a 286px group
+              // overflowed the bar.
+              // Only where a tab still fits beside it: a split at its floor is
+              // too narrow to split again anyway.
+              if (group != null && strip.maxWidth >= kSplitButtonRoom)
+                WorkbenchSplitButton(groupId: group),
+              const SizedBox(width: Insets.xs),
+            ],
+          ),
         ),
       ),
     );

@@ -45,6 +45,7 @@ import 'quick_open/quick_open_list.dart';
 import 'tab_picker.dart';
 import 'workbench_conversation.dart';
 import 'workbench_tabs.dart';
+import 'workbench_split.dart';
 import 'tab_strip_metrics.dart';
 
 // Re-exported so `workbench.dart` stays the one import for the tab strip.

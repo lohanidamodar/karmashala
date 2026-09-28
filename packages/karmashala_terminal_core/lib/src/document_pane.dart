@@ -21,6 +21,13 @@ bool isDocumentPane(String paneId) => paneId.startsWith(kDocumentPanePrefix);
 /// Whether [paneId] is the Settings document.
 bool isSettingsPane(String paneId) => paneId == kSettingsPaneId;
 
+/// The Devices pane as a tab: this machine's phones and emulators. One, like
+/// Settings — the devices are the machine's, not the tab's.
+const String kDevicePaneId = '${kDocumentPanePrefix}device';
+
+/// Whether [paneId] is the Devices document.
+bool isDevicePane(String paneId) => paneId == kDevicePaneId;
+
 /// The prefix an open file's pane id carries. The host path follows it: the id
 /// is the whole model, so restore rebuilds the buffer by reading that file.
 const String kEditorPanePrefix = '${kDocumentPanePrefix}file:';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
+import 'package:karmashala_device_pane/providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -63,6 +64,8 @@ void main() {
           (ref) async => const <SystemTerminal>[],
         ),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+        // The Devices pane a split can open must not look for a real SDK.
+        androidSdkProvider.overrideWith((ref) async => null),
         // One branch name per session, so each bar's own reading is legible in
         // the rendered tree.
         sessionDeliveryProvider.overrideWith(
@@ -528,6 +531,81 @@ void main() {
         reason: 'the group that was not asked about kept its tab',
       );
       expect(find.text('branch-s1'), findsNothing);
+    });
+  });
+  group('Split ▾', () {
+    Future<void> pick(WidgetTester tester, String label) async {
+      // The first group's: with two, each strip has its own.
+      await tester.tap(
+        find
+            .byTooltip(
+              'Split — open a terminal, a session, Files or Devices beside',
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+    }
+
+    List<List<String>> groupPanes() {
+      final state = container.read(terminalSessionsControllerProvider);
+      return [
+        for (final group in state.workspace!.groups)
+          [
+            for (final tabId in group.panes)
+              ...state.tabs
+                  .where((tab) => tab.id == tabId)
+                  .expand((tab) => tab.layout.panes),
+          ],
+      ];
+    }
+
+    testWidgets('opens the Devices pane beside the group', (tester) async {
+      openSessionTab('s1');
+      await pump(tester);
+
+      await pick(tester, 'Devices');
+
+      final groups = groupPanes();
+      expect(groups, hasLength(2));
+      expect(groups.last, [kDevicePaneId]);
+      expect(find.text('Devices'), findsWidgets);
+    });
+
+    testWidgets('a second Devices split moves the one tab, not a copy', (
+      tester,
+    ) async {
+      openSessionTab('s1');
+      await pump(tester);
+      await pick(tester, 'Devices');
+      // Back to the session's group, and split it again.
+      terminals().focusGroup(
+        container
+            .read(terminalSessionsControllerProvider)
+            .workspace!
+            .groups
+            .first
+            .id,
+      );
+      await tester.pumpAndSettle();
+
+      await pick(tester, 'Devices');
+
+      final devices = groupPanes()
+          .expand((panes) => panes)
+          .where((pane) => pane == kDevicePaneId);
+      expect(devices, hasLength(1));
+    });
+
+    testWidgets('an empty split leaves the new group empty', (tester) async {
+      openSessionTab('s1');
+      await pump(tester);
+
+      await pick(tester, 'Empty split down');
+
+      expect(groupPanes(), hasLength(2));
+      expect(find.text('Empty group'), findsOneWidget);
     });
   });
 }
