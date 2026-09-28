@@ -48,7 +48,9 @@ jobs:
           echo "Releasing $tag"
 
   build-windows:
-    needs: prepare
+    # The Linux hosts ship inside the installer, beside the app, where the
+    # server looks for what it deploys to SSH boxes (host_bundles.dart).
+    needs: [prepare, build-host-linux]
     runs-on: windows-latest
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
@@ -59,7 +61,9 @@ jobs:
         with:
           channel: stable
       - run: flutter config --enable-windows-desktop
-      - run: flutter pub get
+      # The lock file as committed: a fresh resolution on a runner has dropped
+      # packages the app needs (zmodem, quiver, equatable, 2026-09-27).
+      - run: flutter pub get --enforce-lockfile
       - name: Build Windows release
         working-directory: app
         run: flutter build windows --release --dart-define=KARMASHALA_VERSION=${{ env.VERSION }}
@@ -84,6 +88,12 @@ jobs:
           # keeps its SQLite at ..\lib, so it is copied whole.
           dart build cli -t server/bin/karmashala_host.dart -o build/host-windows
           Copy-Item -Recurse -Force build/host-windows/bundle app/build/windows/x64/runner/Release/host
+      # The Linux hosts the `build-host-linux` job built, into the install
+      # folder: without them the server answers `noBinary` to every SSH box.
+      - uses: actions/download-artifact@v4
+        with:
+          name: host-linux
+          path: app/build/windows/x64/runner/Release
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
@@ -124,7 +134,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - run: flutter pub get
+      # The lock file as committed: a fresh resolution on a runner has dropped
+      # packages the app needs (zmodem, quiver, equatable, 2026-09-27).
+      - run: flutter pub get --enforce-lockfile
       - name: Build the session host bundles
         run: |
           set -euo pipefail
@@ -137,6 +149,12 @@ jobs:
             tar -czf "build/artifacts/karmashala_host-$VERSION-linux-$arch.tar.gz" \
               -C "build/host-linux-$arch/bundle" .
           done
+      # For the desktop jobs that ship them (Windows, Linux).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-linux
+          path: build/artifacts/karmashala_host-*-linux-*.tar.gz
+          if-no-files-found: error
       - name: Upload the host bundles to the release
         uses: softprops/action-gh-release@v2
         with:
@@ -159,7 +177,9 @@ jobs:
         with:
           channel: stable
       - run: flutter config --enable-macos-desktop
-      - run: flutter pub get
+      # The lock file as committed: a fresh resolution on a runner has dropped
+      # packages the app needs (zmodem, quiver, equatable, 2026-09-27).
+      - run: flutter pub get --enforce-lockfile
       - name: Build, bundle, sign and package
         run: tool/build_release.sh
       - name: Name the DMG for the release
@@ -175,7 +195,7 @@ jobs:
           files: build/artifacts/Karmashala-macOS-${{ env.VERSION }}.dmg
 
   build-linux:
-    needs: prepare
+    needs: [prepare, build-host-linux]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
@@ -191,7 +211,9 @@ jobs:
         with:
           channel: stable
       - run: flutter config --enable-linux-desktop
-      - run: flutter pub get
+      # The lock file as committed: a fresh resolution on a runner has dropped
+      # packages the app needs (zmodem, quiver, equatable, 2026-09-27).
+      - run: flutter pub get --enforce-lockfile
       - name: Build Linux release
         working-directory: app
         run: flutter build linux --release --dart-define=KARMASHALA_VERSION=${{ needs.prepare.outputs.version }}
@@ -203,6 +225,11 @@ jobs:
           dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart -o "$bundle/karmashala_mcp"
           dart build cli -t server/bin/karmashala_host.dart -o build/host-linux-app
           cp -R build/host-linux-app/bundle "$bundle/host"
+      # The deployable hosts beside the app, as the Windows installer has them.
+      - uses: actions/download-artifact@v4
+        with:
+          name: host-linux
+          path: app/build/linux/x64/release/bundle
       - name: Archive Linux build
         run: |
           mkdir -p build/artifacts
