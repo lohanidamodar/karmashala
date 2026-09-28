@@ -99,6 +99,7 @@ IconData? documentIconFor(TerminalTab tab) {
   if (isDiffPane(paneId)) return AppIcons.gitDiff;
   if (isNotePane(paneId)) return AppIcons.note;
   if (isFilesPane(paneId)) return AppIcons.folderOpen;
+  if (isBrowserPane(paneId)) return AppIcons.globe;
   return null;
 }
 

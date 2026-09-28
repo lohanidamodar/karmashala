@@ -57,6 +57,11 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (isDevicePane(paneId)) {
       return showing ? const DevicePane() : const SizedBox.shrink();
     }
+    // The same gate: off screen it would follow the attached page's state for
+    // nobody. The controller outlives it, so coming back loses no connection.
+    if (isBrowserPane(paneId)) {
+      return showing ? const BrowserPane() : const SizedBox.shrink();
+    }
     // No `showing` gate: the stack keeps every mounted tab alive, and an
     // editor rebuilt on every switch would lose the caret and the scroll. Its
     // file is watched by the server, so no editor polls.

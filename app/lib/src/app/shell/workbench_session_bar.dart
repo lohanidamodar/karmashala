@@ -48,9 +48,15 @@ class _SessionBar extends ConsumerWidget {
         : group == null
         ? null
         : ref.watch(workspaceGroupSessionIdProvider(group));
-    // A shell tab with nothing selected has neither a session to describe nor a
-    // surface to switch to, and an empty bar would be 30 pixels of nothing.
-    if (sessionId == null && selected == null) return const SizedBox.shrink();
+    // A shell tab with nothing selected has no session to describe, so it gets
+    // the shell's own line (board A2 `active.isShell`) — and a tab with no
+    // shell either (a document, an empty region) gets no bar: an empty one
+    // would be 30 pixels of nothing.
+    if (sessionId == null && selected == null) {
+      final shellPane = group == null ? null : shellStatusPaneOf(ref, group);
+      if (shellPane == null) return const SizedBox.shrink();
+      return _PaneFoot(child: ShellStatusLine(paneId: shellPane));
+    }
 
     // Whether the bar has been told what it is describing yet: only "never had
     // an answer for *this* session" counts, so a refresh moves nothing.
@@ -161,6 +167,33 @@ class _SessionBar extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The foot of a pane whose status line is not a session's — a plain shell's.
+/// The session bar's own surface, height and Zen treatment, so switching
+/// between a shell tab and an agent tab does not move the pane above it.
+class _PaneFoot extends ConsumerWidget {
+  const _PaneFoot({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final zen = ref.watch(terminalMaximizedProvider);
+    final tones = SurfaceTones.of(context);
+    return _ZenDimmed(
+      dim: zen,
+      child: Container(
+        constraints: BoxConstraints(
+          minHeight: zen ? Chrome.paneStrip : Chrome.tabStrip,
+        ),
+        color: zen ? tones.term : tones.chrome,
+        padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 2),
+        alignment: AlignmentDirectional.centerStart,
+        child: child,
+      ),
     );
   }
 }

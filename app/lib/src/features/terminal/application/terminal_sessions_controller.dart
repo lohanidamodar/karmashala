@@ -41,6 +41,7 @@ import 'terminal_layout_providers.dart';
 import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';
 import 'terminal_profiles.dart';
+import 'browser_document_pane.dart';
 
 // `part`s rather than libraries because privacy in Dart is per library: every
 // verb below writes the fields declared here.
