@@ -29,6 +29,7 @@ import 'general_pages.dart';
 import 'keyboard_section.dart';
 import 'permissions_page.dart';
 import 'settings_catalog.dart';
+import 'settings_layout.dart';
 import 'side_panel_items_section.dart';
 import 'terminal_pages.dart';
 import 'tools_page.dart';
@@ -39,6 +40,11 @@ import 'watch_set_section.dart';
 /// it. The title is drawn on the page itself (spec §3, page titles): scrolled
 /// away from the list, or under the narrow picker, a page still says what it
 /// is.
+///
+/// Measures its own width once — it sits in the page's scroll view, never
+/// under intrinsics — and hands "narrow" down through [SettingsNarrowScope],
+/// so a split-pane page gets a smaller title and tighter gaps and its sections
+/// and cards follow without measuring themselves.
 class SettingsPageBody extends StatelessWidget {
   const SettingsPageBody({required this.page, super.key});
 
@@ -47,34 +53,47 @@ class SettingsPageBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Semantics(
-          header: true,
-          child: Text(
-            page.label,
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = SettingsLayout.isNarrow(constraints.maxWidth, scaler);
+        return SettingsNarrowScope(
+          narrow: narrow,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                header: true,
+                child: Text(
+                  page.label,
+                  style:
+                      (narrow
+                              ? theme.textTheme.titleMedium
+                              : theme.textTheme.titleLarge)
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: Insets.xs),
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: narrow ? Insets.lg : Insets.xl,
+                ),
+                child: Text(
+                  page.description,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              for (final anchor in page.anchors)
+                SettingsAnchorTarget(
+                  anchor: anchor,
+                  child: settingsSectionFor(anchor),
+                ),
+            ],
           ),
-        ),
-        const SizedBox(height: Insets.xs),
-        Padding(
-          padding: const EdgeInsets.only(bottom: Insets.xl),
-          child: Text(
-            page.description,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        for (final anchor in page.anchors)
-          SettingsAnchorTarget(
-            anchor: anchor,
-            child: settingsSectionFor(anchor),
-          ),
-      ],
+        );
+      },
     );
   }
 }
