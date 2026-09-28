@@ -1,3 +1,6 @@
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show ApprovalAnswerRequest, SessionPromptRefusal;
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show InboxChanged;
 import 'package:karmashala_notifications/attention.dart';
@@ -11,6 +14,7 @@ import '../../../core/probe/probe_mode.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../sessions/application/session_prompt_answers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
@@ -18,6 +22,8 @@ import '../data/desktop_notification_presenter.dart';
 import 'attention_presenter.dart';
 import 'notification_dispatcher.dart';
 import 'session_statuses.dart';
+
+final _log = AppLogger.named('notifications');
 
 final notificationSettingsRepositoryProvider =
     Provider<NotificationSettingsRepository>((ref) {
@@ -133,6 +139,28 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
         imported: payload.imported,
       );
       ref.read(windowRaiseRequestProvider.notifier).bump();
+    },
+    // The toast's Allow once / Deny ([kApprovalNotificationActions]), answered
+    // as the dock answers: the guarded path refuses once the prompt is gone,
+    // so a toast clicked late types nothing. With the app in the background
+    // there is nobody to tell about a refusal; the toast just goes.
+    onAction: (payload, action) async {
+      if (payload.imported || action > 1) return;
+      try {
+        await ref
+            .read(sessionPromptAnswersProvider)
+            .answer(
+              ApprovalAnswerRequest(
+                sessionId: payload.openId,
+                approve: action == 0,
+              ),
+            );
+      } on SessionPromptRefusal catch (refusal) {
+        _log.info(
+          'A notification answer for ${payload.openId} was not sent: '
+          '${refusal.message}',
+        );
+      }
     },
   );
   ref.onDispose(presenter.dispose);

@@ -7,6 +7,7 @@ import 'package:karmashala_core/util.dart';
 
 import '../domain/hosted_agent_status.dart';
 import '../domain/status_evidence.dart';
+import 'tool_asks.dart';
 
 /// **What the agent in each session a host holds is doing**, kept from the two
 /// things the host sees for itself: every hook the agent fires, and the screen
@@ -25,7 +26,8 @@ class HostedStatusKeeper {
     required this.agents,
     this.clock = const SystemClock(),
     Duration hookFreshness = const Duration(minutes: 5),
-  }) : _reports = AgentHookReports() {
+  }) : _reports = AgentHookReports(),
+       _asks = ToolAskTracker(agents: agents) {
     _receiver = AgentHookReceiver(
       registry: agents,
       reports: _reports,
@@ -45,6 +47,10 @@ class HostedStatusKeeper {
   late final AgentHookReceiver _receiver;
   late final AgentStatusService _service;
   final _sessions = <String, _Kept>{};
+
+  /// The tool call each conversation last announced: what an open prompt is
+  /// asking about, carried on its status for the ask dock.
+  final ToolAskTracker _asks;
 
   /// Every session row whose status is kept.
   Iterable<String> get tracked => _sessions.keys;
@@ -121,12 +127,16 @@ class HostedStatusKeeper {
     required String event,
     required String body,
     DateTime? receivedAt,
-  }) => _receiver.handle(
-    agentId: agentId,
-    event: event,
-    body: body,
-    observedAt: receivedAt,
-  );
+  }) {
+    final report = _receiver.handle(
+      agentId: agentId,
+      event: event,
+      body: body,
+      observedAt: receivedAt,
+    );
+    _asks.hook(agentId: agentId, event: event, body: body, report: report);
+    return report;
+  }
 
   /// Folds a classified hook into [sessionId]'s status; the new status when
   /// its evidence moved, else null. [body] is read again only for a question,
@@ -211,12 +221,18 @@ class HostedStatusKeeper {
         next.hasOpenQuestion && next.source == AgentStatusSource.hook;
     if (!hookQuestion) kept.question = null;
     final before = kept.status;
+    // The call an open prompt asks about, and when the wait began.
+    final decorated = _asks.decorate(
+      before: before.report,
+      next: next,
+      now: now,
+    );
     final moved =
-        !sameStatusEvidence(before.report, next) ||
+        !sameStatusEvidence(before.report, decorated) ||
         before.question?.toolUseId != kept.question?.toolUseId;
     kept.status = HostedAgentStatus(
       sessionId: kept.sessionId,
-      report: next,
+      report: decorated,
       question: kept.question,
     );
     return moved ? kept.status : null;

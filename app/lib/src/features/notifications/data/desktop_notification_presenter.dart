@@ -10,8 +10,11 @@ import 'package:karmashala_notifications/toasts.dart';
 /// Desktop OS notifications, via `local_notifier`. Windows toasts need the app
 /// to own a Start Menu shortcut with its AUMID; macOS and Linux are untested.
 class DesktopNotificationPresenter implements NotificationPresenter {
-  DesktopNotificationPresenter({this.onActivated, AppLogger? logger})
-    : _logger = logger ?? AppLogger.named('notifications');
+  DesktopNotificationPresenter({
+    this.onActivated,
+    this.onAction,
+    AppLogger? logger,
+  }) : _logger = logger ?? AppLogger.named('notifications');
 
   /// How many delivered notifications to keep alive. `local_notifier` registers
   /// every [LocalNotification] as a listener and never drops it.
@@ -22,6 +25,12 @@ class DesktopNotificationPresenter implements NotificationPresenter {
 
   /// Called with the payload of a clicked notification, if it carried one.
   final void Function(NotificationPayload payload)? onActivated;
+
+  /// Called with the payload and the index of a pressed button, for a
+  /// request that carried [NotificationRequest.actions]. `local_notifier`
+  /// draws them on Windows (WinToast) and macOS; where it cannot, the toast
+  /// simply has none and a click still opens the session.
+  final void Function(NotificationPayload payload, int action)? onAction;
 
   final AppLogger _logger;
   final Queue<LocalNotification> _delivered = Queue();
@@ -57,6 +66,15 @@ class DesktopNotificationPresenter implements NotificationPresenter {
       );
       if (payload != null && onActivated != null) {
         notification.onClick = () => onActivated!(payload);
+      }
+      final act = onAction;
+      if (payload != null && act != null && request.actions.isNotEmpty) {
+        notification
+          ..actions = [
+            for (final label in request.actions)
+              LocalNotificationAction(text: label),
+          ]
+          ..onClickAction = (index) => act(payload, index);
       }
       await notification.show();
       _retire(notification);

@@ -54,6 +54,7 @@ class ServerSessionStatus {
     this.heldByHost,
     this.hostStatusFor,
     this.log,
+    this.toolAsks,
     this.stateFileSource = const AgentStateFileStatusSource(),
     this.probeBudget = kStatusProbeBudget,
     this.probeConcurrency = kStatusProbeConcurrency,
@@ -89,6 +90,11 @@ class ServerSessionStatus {
 
   /// Edges only — a line a cycle would repeat every 1.2 s is never written.
   final void Function(String message)? log;
+
+  /// The tool call each conversation last announced, fed by whoever takes the
+  /// hooks: what an open prompt asks about, carried on its status for the ask
+  /// dock. Null carries none.
+  final ToolAskTracker? toolAsks;
 
   final AgentStateFileStatusSource stateFileSource;
   final int probeBudget;
@@ -202,7 +208,11 @@ class ServerSessionStatus {
     tracked.hook = hook;
     tracked.wantsProbe = false;
     tracked.publish(
-      statusService.compose(query: query, now: now, hook: hook),
+      _asked(
+        tracked,
+        statusService.compose(query: query, now: now, hook: hook),
+        now,
+      ),
       now,
     );
     if (sameStatusEvidence(before, tracked.report)) return;
@@ -431,6 +441,8 @@ class ServerSessionStatus {
         waiting: said?.waiting ?? AgentWaitKind.unrecorded,
         ending: said?.ending,
         failureReason: said?.failureReason,
+        toolAsk: said?.toolAsk,
+        waitingSince: said?.waitingSince,
       ),
       now,
     );
@@ -451,15 +463,27 @@ class ServerSessionStatus {
             sessionId: query.sessionId,
           );
     tracked.publish(
-      statusService.compose(
-        query: query,
-        now: now,
-        hook: tracked.hook,
-        state: state,
+      _asked(
+        tracked,
+        statusService.compose(
+          query: query,
+          now: now,
+          hook: tracked.hook,
+          state: state,
+        ),
+        now,
       ),
       now,
     );
   }
+
+  /// [next] with the call an open prompt asks about and when its wait began,
+  /// carried over from what [tracked] said before while the wait goes on.
+  AgentStatusReport _asked(
+    _Tracked tracked,
+    AgentStatusReport next,
+    DateTime now,
+  ) => toolAsks?.decorate(before: tracked.report, next: next, now: now) ?? next;
 
   /// Resolves transcript paths for everything still missing one, with one
   /// walk shared by all of them.

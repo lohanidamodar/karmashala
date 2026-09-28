@@ -58,6 +58,11 @@ Map<String, Object?> reportToJson(AgentStatusReport report) => {
   'waiting': report.waiting.name,
   if (report.ending case final ending?) 'ending': ending.name,
   'failureReason': ?report.failureReason,
+  // Both optional and additive: an older reader ignores them, and a report
+  // from an older writer reads back without them.
+  if (report.toolAsk case final ask?) 'toolAsk': ask.toJson(),
+  if (report.waitingSince case final since?)
+    'waitingSince': since.toUtc().toIso8601String(),
 };
 
 AgentStatusReport? reportFromJson(Object? json) {
@@ -89,6 +94,8 @@ AgentStatusReport? reportFromJson(Object? json) {
         AgentWaitKind.unrecorded,
     ending: _byName(AgentSessionEnding.values, json['ending']),
     failureReason: json['failureReason'] as String?,
+    toolAsk: AgentToolAsk.fromJson(json['toolAsk']),
+    waitingSince: _time(json['waitingSince']),
   );
 }
 

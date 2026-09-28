@@ -22,3 +22,4 @@ export 'src/service/prompt_answering.dart';
 export 'src/service/prompt_answers.dart';
 export 'src/service/prompt_terminals.dart';
 export 'src/service/question_typist.dart';
+export 'src/service/tool_asks.dart';

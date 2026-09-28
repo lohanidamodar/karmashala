@@ -27,12 +27,20 @@ class PendingNotification {
   String toString() => 'PendingNotification($session, ${reason.name})';
 }
 
+/// The buttons on a toast for one session's open prompt (spec §5, "Needs
+/// you"): index 0 approves, index 1 denies — the dock's Allow once and Deny,
+/// answered through the same guarded path, which refuses once the prompt has
+/// gone. Only where a prompt is positively open ([AgentWaitKind.approval]):
+/// on an agent merely at its own input, Allow would be an Enter into it.
+const List<String> kApprovalNotificationActions = ['Allow once', 'Deny'];
+
 /// What to hand the OS: a single toast.
 class NotificationRequest {
   const NotificationRequest({
     required this.title,
     required this.body,
     this.payload,
+    this.actions = const [],
   });
 
   final String title;
@@ -41,6 +49,11 @@ class NotificationRequest {
   /// Opaque data carried back when the toast is clicked; see
   /// [NotificationPayload].
   final String? payload;
+
+  /// Buttons on the toast, by label; the index of the one pressed is handed
+  /// back with [payload]. Empty for all but one session's open prompt — see
+  /// [kApprovalNotificationActions].
+  final List<String> actions;
 
   @override
   String toString() => 'NotificationRequest($title, $body)';
@@ -100,6 +113,12 @@ class NotificationCoalescer {
           openId: only.session.openId,
           imported: only.session.imported,
         ).encode(),
+        actions:
+            only.reason == NotificationReason.needsInput &&
+                only.waiting == AgentWaitKind.approval &&
+                !only.session.imported
+            ? kApprovalNotificationActions
+            : const [],
       );
     }
 

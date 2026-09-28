@@ -7,7 +7,7 @@ import 'package:agent_cli/read.dart' show ImportedSession;
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
-    show HostedAgentStatus;
+    show HostedAgentStatus, ToolAskTracker;
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -76,6 +76,7 @@ class DaemonAttention {
       hostStatusFor: (session) => agentStatus.statusOf(session.openId),
       interval: statusInterval,
       log: log,
+      toolAsks: ToolAskTracker(agents: agents),
     );
     attention = ServerAttention(
       status: status,
@@ -121,13 +122,21 @@ class DaemonAttention {
   /// One hook the server took, folded in now: the report the agent's
   /// adapter reads off it, then the session it names.
   void hook(AgentHookEvent hook) {
+    final body = jsonEncode(hook.body);
     final report = receiver.handle(
       agentId: hook.agent,
       event: hook.event,
-      body: jsonEncode(hook.body),
+      body: body,
       observedAt: hook.receivedAt,
     );
     if (report.sessionId.isEmpty) return;
+    // Before the status is recomposed, so a prompt reads the call it is for.
+    status.toolAsks?.hook(
+      agentId: hook.agent,
+      event: hook.event,
+      body: body,
+      report: report,
+    );
     status.hookReported(AgentSessionKey(report.agentId, report.sessionId));
   }
 

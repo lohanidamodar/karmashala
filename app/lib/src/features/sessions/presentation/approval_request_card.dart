@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
@@ -17,6 +18,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../remote/application/remote_approval_bindings.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
+import '../application/session_message_typist.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
@@ -167,6 +169,8 @@ class _MenuOr extends ConsumerStatefulWidget {
     required this.orElse,
     this.docked = false,
     this.menus,
+    this.rules,
+    this.dockedAsk,
   });
 
   final String sessionId;
@@ -180,6 +184,18 @@ class _MenuOr extends ConsumerStatefulWidget {
   /// How the agent draws its menus — which option means yes and which no, so
   /// the dock can fill the one and mark the other. Null names neither.
   final AgentMenuSupport? menus;
+
+  /// The agent's own approve and deny keys, named on the options they are
+  /// honestly the same as.
+  final AgentApprovalRules? rules;
+
+  /// Docked, the structured ask's answers for [menu] — or null when [menu] is
+  /// not the prompt the ask is about, which then draws as its own options.
+  final Widget? Function(
+    AgentScreenMenu menu,
+    Future<void> Function(int option) choose,
+  )?
+  dockedAsk;
 
   @override
   ConsumerState<_MenuOr> createState() => _MenuOrState();
@@ -233,9 +249,32 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
     final menu = _menu;
     if (menu == null) return widget.orElse;
     if (widget.docked) {
+      final asked = widget.dockedAsk?.call(
+        menu,
+        (option) => _choose(menu, option),
+      );
+      if (asked != null) return asked;
+      final menus = widget.menus;
+      final affirmative = menus?.affirmativeIn(menu);
+      final negative = menus?.negativeIn(menu);
+      final approve = widget.rules?.approve;
+      final deny = widget.rules?.deny;
       return _DockMenu(
         menu: menu,
-        affirmative: widget.menus?.affirmativeIn(menu),
+        affirmative: affirmative,
+        // A key cap only where the key is honestly the same answer: Enter
+        // on the option already highlighted, and the agent's cancel where
+        // it declines safely.
+        affirmativeKey: affirmative == menu.highlighted && approve != null
+            ? _keyName(approve.keys)
+            : null,
+        negative: negative,
+        negativeKey:
+            negative != null &&
+                deny != null &&
+                (menus?.cancelDeclinesIn(menu) ?? false)
+            ? _keyName(deny.keys)
+            : null,
         sessionId: widget.sessionId,
         onChoose: (option) => _choose(menu, option),
       );
@@ -580,11 +619,18 @@ const double _dockButtonHeight = 28;
 const double _dockInnerRadius = 7;
 const double _dockGap = 10;
 
+/// The board's 12.5px button label, a half step above `labelMedium`.
+const double _dockButtonFontSize = 12.5;
+
 /// **The ask dock** (spec §5, board N1): an amber panel above the pane's
 /// status line saying who asks, where, in the agent's own words, and the
 /// answers one click away — then "Answer in the terminal" for anything the
-/// buttons cannot say. It never words the request itself: the header names
-/// the kind of ask, the box quotes the agent.
+/// buttons cannot say. When the agent's hook named the call it asks about
+/// ([AgentStatusReport.toolAsk], Claude Code), the header says what it wants
+/// and what it touches and the box holds the exact command; otherwise it
+/// never words the request itself — the header names the kind of ask and the
+/// box quotes the agent's screen (Codex, Antigravity). Either way, how long
+/// it has waited ticks at the right.
 class _AskDock extends ConsumerWidget {
   const _AskDock({
     required this.sessionId,
@@ -610,14 +656,69 @@ class _AskDock extends ConsumerWidget {
     final attention = SemanticColors.of(context).attention;
     final waiting = report.waiting;
     final project = ref.read(sessionProjectNameProvider)(sessionId);
+    // The call the prompt is about, when the agent's hook named it: then the
+    // header says what it wants, the box holds the exact command, and the
+    // answers are the board's. Otherwise the agent's own screen is quoted.
+    final ask = waiting == AgentWaitKind.approval ? report.toolAsk : null;
+    final summary = ask == null ? null : summarizeToolAsk(ask);
+    final muted = [
+      if (summary != null && summary.touches.isNotEmpty)
+        summary.touches.join(', '),
+      if (project != null) 'in $project',
+    ].join(' · ');
 
     final quoted = _DockQuote(report: report, agentName: agentName);
+    final Widget? command = summary == null || summary.subject.isEmpty
+        ? null
+        : _DockBox(
+            text: summary.subject,
+            danger: summary.isCommand ? summary.danger : const [],
+          );
+    Widget askAnswers(
+      AgentScreenMenu? menu,
+      Future<void> Function(int option)? choose,
+    ) => _ToolAskAnswers(
+      key: const ValueKey('dock-tool-ask'),
+      sessionId: sessionId,
+      agentName: agentName,
+      rules: rules,
+      menus: menus,
+      menu: menu,
+      choose: choose,
+      command: command,
+    );
     final Widget body = switch (waiting) {
+      AgentWaitKind.approval when canAnswer && summary != null => _MenuOr(
+        sessionId: sessionId,
+        agentName: agentName,
+        docked: true,
+        menus: menus,
+        rules: rules,
+        // Only the prompt a call raises — never folder trust or an MCP
+        // server's offer, which draw as their own options.
+        dockedAsk: (menu, choose) =>
+            (menus?.cancelDeclinesIn(menu) ?? false)
+            ? askAnswers(menu, choose)
+            : null,
+        orElse: askAnswers(null, null),
+      ),
+      AgentWaitKind.approval when summary != null => _DockColumn(
+        children: [
+          ?command,
+          _DockNote(
+            note:
+                'This session has no live terminal here, so it cannot be '
+                'answered from Karmashala.',
+            sessionId: sessionId,
+          ),
+        ],
+      ),
       AgentWaitKind.approval when canAnswer => _MenuOr(
         sessionId: sessionId,
         agentName: agentName,
         docked: true,
         menus: menus,
+        rules: rules,
         orElse: _DockColumn(
           children: [
             quoted,
@@ -684,27 +785,37 @@ class _AskDock extends ConsumerWidget {
                 color: attention,
               ),
               const SizedBox(width: Insets.sm),
-              Flexible(
-                child: Text(
-                  waiting == AgentWaitKind.question
-                      ? '$agentName is asking you a question'
-                      : '$agentName is asking permission',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: density.rowTitle(theme, strong: true),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        summary != null
+                            ? '$agentName wants to ${summary.action}'
+                            : waiting == AgentWaitKind.question
+                            ? '$agentName is asking you a question'
+                            : '$agentName is asking permission',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: density.rowTitle(theme, strong: true),
+                      ),
+                    ),
+                    if (muted.isNotEmpty) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: Text(
+                          muted,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: density.muted(theme),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (project != null) ...[
-                const SizedBox(width: Insets.sm),
-                Flexible(
-                  child: Text(
-                    'in $project',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: density.muted(theme),
-                  ),
-                ),
-              ],
+              const SizedBox(width: Insets.sm),
+              _WaitingFor(since: report.waitingSince),
             ],
           ),
           const SizedBox(height: _dockGap),
@@ -760,35 +871,57 @@ class _DockQuote extends StatelessWidget {
 /// A block of terminal rows on the terminal's tone: scrolled rather than
 /// re-wrapped, because they were drawn aligned to the agent's own columns.
 class _DockBox extends StatelessWidget {
-  const _DockBox({required this.text});
+  const _DockBox({required this.text, this.danger = const []});
 
   final String text;
+
+  /// `[start, end)` spans of [text] drawn in the failure colour — the part of
+  /// a command that deletes, pushes or elevates (board N1's red `rm -rf`).
+  final List<(int, int)> danger;
 
   /// About seven rows; a longer prompt scrolls inside the dock.
   static const _maxHeight = 132.0;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: Insets.sm),
-    decoration: BoxDecoration(
-      color: SurfaceTones.of(context).term,
-      borderRadius: BorderRadius.circular(_dockInnerRadius),
-    ),
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: _maxHeight),
-      child: SingleChildScrollView(
+  Widget build(BuildContext context) {
+    final style = MonoStyles.body.copyWith(
+      color: Theme.of(context).colorScheme.onSurface,
+    );
+    final failure = SemanticColors.of(context).failure;
+    final spans = <TextSpan>[];
+    var at = 0;
+    for (final (start, end) in danger) {
+      // Spans come from the text they mark; a stale one is simply not drawn.
+      if (start < at || end > text.length || start >= end) continue;
+      if (start > at) spans.add(TextSpan(text: text.substring(at, start)));
+      spans.add(
+        TextSpan(
+          text: text.substring(start, end),
+          style: TextStyle(color: failure),
+        ),
+      );
+      at = end;
+    }
+    if (at < text.length) spans.add(TextSpan(text: text.substring(at)));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: Insets.sm),
+      decoration: BoxDecoration(
+        color: SurfaceTones.of(context).term,
+        borderRadius: BorderRadius.circular(_dockInnerRadius),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: _maxHeight),
         child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SelectableText(
-            text,
-            style: MonoStyles.body.copyWith(
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: danger.isEmpty
+                ? SelectableText(text, style: style)
+                : SelectableText.rich(TextSpan(style: style, children: spans)),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// The keys the agent named, as the board's buttons: yes filled amber with
@@ -873,6 +1006,349 @@ class _DockAnswers extends ConsumerWidget {
   }
 }
 
+/// How long the dock waits for the prompt to close after a deny before it
+/// types the reason — the words belong in the composer the deny returns to,
+/// never in the menu.
+const Duration _promptClosePatience = Duration(milliseconds: 1500);
+
+/// **The answers to a structured ask** (board N1): the exact command, then
+/// Allow once, Always allow `<prefix>` when the agent's menu offers it, Deny,
+/// Deny and say why…, and the way to the terminal. Every answer goes through
+/// the paths the rest of the dock uses — approve and deny by the agent's own
+/// keys (a menu by the option they mean), Always allow by the option chosen,
+/// the reason typed as any message is — so nothing here types a key of its
+/// own.
+class _ToolAskAnswers extends ConsumerStatefulWidget {
+  const _ToolAskAnswers({
+    required this.sessionId,
+    required this.agentName,
+    required this.rules,
+    required this.menus,
+    required this.menu,
+    required this.choose,
+    required this.command,
+    super.key,
+  });
+
+  final String sessionId;
+  final String agentName;
+  final AgentApprovalRules rules;
+  final AgentMenuSupport? menus;
+
+  /// The prompt on the screen, when it can be read — the only source of the
+  /// "always" option.
+  final AgentScreenMenu? menu;
+  final Future<void> Function(int option)? choose;
+
+  /// The exact command or path, or null when the call names none.
+  final Widget? command;
+
+  @override
+  ConsumerState<_ToolAskAnswers> createState() => _ToolAskAnswersState();
+}
+
+class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
+  final _reason = TextEditingController();
+  final _reasonFocus = FocusNode();
+  bool _sayingWhy = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    _reasonFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _answer({required bool approve}) async {
+    if (_busy) return;
+    final answers = ref.read(sessionPromptAnswersProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await answers.answer(
+        ApprovalAnswerRequest(sessionId: widget.sessionId, approve: approve),
+      );
+    } on SessionPromptRefusal catch (refusal) {
+      // Only a refusal is reported: the agent's own screen is the
+      // acknowledgement of one that landed.
+      messenger.showSnackBar(SnackBar(content: Text(_refused(refusal))));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _always(int option) async {
+    final choose = widget.choose;
+    if (_busy || choose == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await choose(option);
+    } on GatewayException catch (refusal) {
+      messenger.showSnackBar(SnackBar(content: Text(refusal.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Denies with the agent's own deny, then types [why] into the composer
+  /// the deny hands back and presses Enter — through the one typist every
+  /// message goes through, which reads the send back off the screen. Read
+  /// before the first await: a deny ends the ask, and this dock with it.
+  Future<void> _denyAndSay() async {
+    final why = _reason.text.trim();
+    if (_busy || why.isEmpty) return;
+    final sessionId = widget.sessionId;
+    final answers = ref.read(sessionPromptAnswersProvider);
+    final typist = ref.read(sessionMessageTypistProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await answers.answer(
+        ApprovalAnswerRequest(sessionId: sessionId, approve: false),
+      );
+    } on SessionPromptRefusal catch (refusal) {
+      messenger.showSnackBar(SnackBar(content: Text(_refused(refusal))));
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
+    final deadline = DateTime.now().add(_promptClosePatience);
+    while (answers.menuOnScreen(sessionId) != null &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    try {
+      if (!await typist.send(sessionId, why)) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Denied, but the session has no live terminal to type the '
+              'reason into.',
+            ),
+          ),
+        );
+      }
+    } on SessionPromptRefusal catch (refusal) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Denied, but ${refusal.message}')),
+      );
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  static String _refused(SessionPromptRefusal refusal) =>
+      refusal.noTerminal || refusal.notFound
+      ? 'That session is no longer running, so the key was not sent.'
+      : 'Nothing was sent: ${refusal.message}.';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final approve = widget.rules.approve;
+    final deny = widget.rules.deny;
+    final menu = widget.menu;
+    final always = menu == null || widget.choose == null
+        ? null
+        : _alwaysOption(menu, widget.menus);
+    final idle = !_busy;
+    return _DockColumn(
+      children: [
+        ?widget.command,
+        _DockButtonRow(
+          sessionId: widget.sessionId,
+          buttons: [
+            if (approve != null)
+              _DockButton(
+                key: const ValueKey('dock-allow-once'),
+                label: 'Allow once',
+                keyHint: _keyName(approve.keys),
+                tooltip: approve.effect,
+                primary: true,
+                onPressed: idle ? () => _answer(approve: true) : null,
+              ),
+            if (always != null)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: _DockButton(
+                  key: const ValueKey('dock-always-allow'),
+                  label: always.label,
+                  detail: always.detail,
+                  tooltip: menu!.options[always.index],
+                  onPressed: idle ? () => _always(always.index) : null,
+                ),
+              ),
+            if (deny != null) ...[
+              _DockButton(
+                key: const ValueKey('dock-deny'),
+                label: 'Deny',
+                keyHint: _keyName(deny.keys),
+                tooltip: deny.effect,
+                onPressed: idle ? () => _answer(approve: false) : null,
+              ),
+              _DockButton(
+                key: const ValueKey('dock-deny-say-why'),
+                label: 'Deny and say why…',
+                tooltip:
+                    'Denies, then types your reason into ${widget.agentName} '
+                    'and sends it',
+                onPressed: idle
+                    ? () {
+                        setState(() => _sayingWhy = true);
+                        _reasonFocus.requestFocus();
+                      }
+                    : null,
+              ),
+            ],
+          ],
+        ),
+        if (_sayingWhy && deny != null)
+          CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape): () =>
+                  setState(() => _sayingWhy = false),
+            },
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('dock-deny-reason'),
+                    controller: _reason,
+                    focusNode: _reasonFocus,
+                    autofocus: true,
+                    enabled: idle,
+                    style: theme.textTheme.bodyMedium,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText:
+                          'Tell ${widget.agentName} what to do instead',
+                    ),
+                    onSubmitted: (_) => _denyAndSay(),
+                  ),
+                ),
+                const SizedBox(width: Insets.sm),
+                _DockButton(
+                  key: const ValueKey('dock-deny-send'),
+                  label: 'Deny and send',
+                  keyHint: 'Enter',
+                  primary: true,
+                  onPressed: idle ? _denyAndSay : null,
+                ),
+                const SizedBox(width: Insets.sm),
+                _DockButton(
+                  label: 'Cancel',
+                  keyHint: 'Esc',
+                  onPressed: () => setState(() => _sayingWhy = false),
+                ),
+              ],
+            ),
+          ),
+        if (widget.rules.isEmpty)
+          Text(
+            '${widget.agentName} has not told us which keys answer its '
+            'prompts, so answer it in the terminal.',
+            style: UiDensity.of(context).muted(theme),
+          ),
+      ],
+    );
+  }
+}
+
+/// The option of [menu] that approves **and keeps approving** — a second
+/// "yes" beside the one Allow once picks (Claude Code's "Yes, and don't ask
+/// again for `git push` commands in …") — with the button's words for it, or
+/// null when the menu offers none.
+({int index, String label, String? detail})? _alwaysOption(
+  AgentScreenMenu menu,
+  AgentMenuSupport? menus,
+) {
+  if (menus == null) return null;
+  final once = menus.affirmativeIn(menu);
+  bool any(List<String> patterns, String option) => patterns.any(
+    (p) => RegExp(p, caseSensitive: false).hasMatch(option),
+  );
+  for (var i = 0; i < menu.options.length; i++) {
+    final option = menu.options[i];
+    if (i == once ||
+        !any(menus.affirmative, option) ||
+        any(menus.negative, option)) {
+      continue;
+    }
+    final prefix = RegExp(
+      r"don.t ask again for (.+?) commands?\b",
+      caseSensitive: false,
+    ).firstMatch(option)?.group(1);
+    if (prefix != null) {
+      final cleaned = prefix
+          .replaceAll('`', '')
+          .replaceAll(RegExp(r':\*$'), '')
+          .trim();
+      return (
+        index: i,
+        label: 'Always allow',
+        detail: cleaned == 'this' ? 'this command' : cleaned,
+      );
+    }
+    if (RegExp(r'accept edits|all edits', caseSensitive: false)
+        .hasMatch(option)) {
+      return (index: i, label: 'Always allow', detail: 'edits');
+    }
+    // Some other standing yes: in the agent's own words.
+    return (index: i, label: option, detail: null);
+  }
+  return null;
+}
+
+/// "waiting 42s", counted from when the wait began — or, when the status
+/// could not say, from when this dock first showed it — and ticking.
+class _WaitingFor extends StatefulWidget {
+  const _WaitingFor({required this.since});
+
+  final DateTime? since;
+
+  @override
+  State<_WaitingFor> createState() => _WaitingForState();
+}
+
+class _WaitingForState extends State<_WaitingFor> {
+  final DateTime _shown = DateTime.now().toUtc();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final since = widget.since ?? _shown;
+    var waited = DateTime.now().toUtc().difference(since.toUtc());
+    if (waited.isNegative) waited = Duration.zero;
+    final seconds = waited.inSeconds % 60;
+    final minutes = waited.inMinutes % 60;
+    final age = waited.inHours > 0
+        ? '${waited.inHours}h ${minutes}m'
+        : waited.inMinutes > 0
+        ? '${waited.inMinutes}m ${seconds}s'
+        : '${waited.inSeconds}s';
+    return Text(
+      'waiting $age',
+      key: const ValueKey('dock-waiting'),
+      maxLines: 1,
+      style: UiDensity.of(context).muted(Theme.of(context)),
+    );
+  }
+}
+
 /// A menu the agent drew, as one button per option in its own words: the
 /// option that means yes filled amber, the rest on the raised tone. One
 /// press answers — the button names the option, and the answer path moves
@@ -884,12 +1360,23 @@ class _DockMenu extends StatefulWidget {
     required this.affirmative,
     required this.sessionId,
     required this.onChoose,
+    this.affirmativeKey,
+    this.negative,
+    this.negativeKey,
   });
 
   final AgentScreenMenu menu;
 
   /// The option that means yes, drawn filled; null when none can be named.
   final int? affirmative;
+
+  /// The key cap on [affirmative], when that key alone would pick it.
+  final String? affirmativeKey;
+
+  /// The option that means no, and the key cap on it when the agent's cancel
+  /// is the same answer.
+  final int? negative;
+  final String? negativeKey;
   final String sessionId;
   final Future<void> Function(int option) onChoose;
 
@@ -932,6 +1419,14 @@ class _DockMenuState extends State<_DockMenu> {
                 child: _DockButton(
                   key: ValueKey('dock-menu-option-$i'),
                   label: menu.options[i],
+                  keyHint: i == widget.affirmative
+                      ? widget.affirmativeKey
+                      : i == widget.negative
+                      ? widget.negativeKey
+                      : null,
+                  // An option in the agent's own words can run long; it
+                  // wraps rather than ending mid-word (the tooltip keeps it).
+                  wrap: true,
                   tooltip: i == menu.highlighted
                       ? '${menu.options[i]}\nHighlighted in the terminal — '
                             'what Enter alone would pick'
@@ -1021,15 +1516,24 @@ class _DockButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.keyHint,
+    this.detail,
     this.tooltip,
     this.primary = false,
+    this.wrap = false,
     super.key,
   });
 
   final String label;
   final String? keyHint;
+
+  /// A literal after the label in the terminal's hand — the command prefix
+  /// "Always allow" would stop asking about.
+  final String? detail;
   final String? tooltip;
   final bool primary;
+
+  /// Whether a long label wraps to a second line rather than ending in "…".
+  final bool wrap;
   final VoidCallback? onPressed;
 
   @override
@@ -1045,15 +1549,22 @@ class _DockButton extends StatelessWidget {
       attention,
     );
     final hint = keyHint;
+    final more = detail;
     final button = FilledButton(
       style: FilledButton.styleFrom(
         backgroundColor: primary ? attention : tones.selected,
         foregroundColor: primary ? ink : scheme.onSurface,
         minimumSize: const Size(0, _dockButtonHeight),
-        padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.xs,
+        ),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
+        // Standard, not compact: compact takes eight pixels off the minimum
+        // height, which drew the board's 28px buttons at about 22.
+        visualDensity: VisualDensity.standard,
         textStyle: theme.textTheme.labelMedium?.copyWith(
+          fontSize: _dockButtonFontSize,
           fontWeight: FontWeight.w500,
         ),
         shape: RoundedRectangleBorder(
@@ -1065,8 +1576,25 @@ class _DockButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
-            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Text(
+              label,
+              maxLines: wrap ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
+          if (more != null && more.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                more,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: MonoStyles.small.copyWith(
+                  color: primary ? ink : scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
           if (hint != null) ...[
             const SizedBox(width: 6),
             _KeyCap(

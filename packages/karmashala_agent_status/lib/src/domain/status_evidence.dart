@@ -11,6 +11,8 @@ bool sameStatusEvidence(AgentStatusReport a, AgentStatusReport b) =>
     a.sourceModifiedAt == b.sourceModifiedAt &&
     a.agentId == b.agentId &&
     a.sessionId == b.sessionId &&
+    a.waitingSince == b.waitingSince &&
+    (a.toolAsk == null ? b.toolAsk == null : a.toolAsk!.sameCallAs(b.toolAsk)) &&
     _sameLines(a.evidence, b.evidence);
 
 bool _sameLines(List<String> a, List<String> b) {
