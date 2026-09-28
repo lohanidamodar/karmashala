@@ -213,89 +213,112 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       detailBuilder: widget.detailBuilder,
     );
 
-    return LayoutBuilder(
-      builder: (context, constraints) => Column(
-        children: [
-          // Its own traversal group so its stops cannot interleave with the
-          // footer's: tabbing below the fold scrolls the list under the policy.
-          Expanded(
-            child: FocusTraversalGroup(
-              child: total == 0
-                  ? _ChatEmptyState(hint: widget.emptyHint)
-                  : Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: Chrome.chatWidth,
-                        ),
-                        child: _TranscriptNow(
-                          now: DateTime.now(),
-                          // One selection over every built row: a drag runs
-                          // from one message into the next.
-                          child: TranscriptSelectionArea(
-                            child: ListView.builder(
-                              controller: _scroll,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: Insets.md,
-                                vertical: Insets.sm,
-                              ),
-                              itemCount: rows.length + lead,
-                              findChildIndexCallback: (key) => indexOfKey[key],
-                              itemBuilder: (context, index) {
-                                if (lead == 1 && index == 0) {
-                                  return SelectionContainer.disabled(
-                                    child: Center(
-                                      child: TextButton.icon(
-                                        onPressed: () => setState(
-                                          () => _shown = math.min(
-                                            _shown + _page,
-                                            total,
+    // The conversation sits on the terminal's tone (board N2), so switching a
+    // pane between its two views changes what is drawn, not the room it is in.
+    return ColoredBox(
+      color: SurfaceTones.of(context).term,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = chatGutterFor(constraints.maxWidth);
+          return Column(
+            children: [
+              // Its own traversal group so its stops cannot interleave with the
+              // footer's: tabbing below the fold scrolls the list under the policy.
+              Expanded(
+                child: FocusTraversalGroup(
+                  child: total == 0
+                      ? _ChatEmptyState(hint: widget.emptyHint)
+                      : Align(
+                          alignment: Alignment.topCenter,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: Chrome.chatWidth,
+                            ),
+                            child: _TranscriptNow(
+                              now: DateTime.now(),
+                              // One selection over every built row: a drag runs
+                              // from one message into the next.
+                              child: TranscriptSelectionArea(
+                                child: ListView.builder(
+                                  controller: _scroll,
+                                  // The pane's whole width (owner, 2026-09-28),
+                                  // with a gutter so no word touches its edge.
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: gutter,
+                                    vertical: Insets.xl,
+                                  ),
+                                  itemCount: rows.length + lead,
+                                  findChildIndexCallback: (key) =>
+                                      indexOfKey[key],
+                                  itemBuilder: (context, index) {
+                                    if (lead == 1 && index == 0) {
+                                      return SelectionContainer.disabled(
+                                        child: Center(
+                                          child: TextButton.icon(
+                                            onPressed: () => setState(
+                                              () => _shown = math.min(
+                                                _shown + _page,
+                                                total,
+                                              ),
+                                            ),
+                                            icon: const Icon(AppIcons.caretUp),
+                                            label: Text(
+                                              'Load $start earlier message'
+                                              '${start == 1 ? '' : 's'}',
+                                            ),
                                           ),
                                         ),
-                                        icon: const Icon(AppIcons.caretUp),
-                                        label: Text(
-                                          'Load $start earlier message'
-                                          '${start == 1 ? '' : 's'}',
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }
-                                final row = rows[index - lead];
-                                if (!row.isBatch) return rowAt(row.from);
-                                return _ToolBatchTile(
-                                  key: keyOf(row),
-                                  messages: visible,
-                                  row: row,
-                                  rowAt: rowAt,
-                                );
-                              },
+                                      );
+                                    }
+                                    final row = rows[index - lead];
+                                    if (!row.isBatch) return rowAt(row.from);
+                                    return _ToolBatchTile(
+                                      key: keyOf(row),
+                                      messages: visible,
+                                      row: row,
+                                      rowAt: rowAt,
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-            ),
-          ),
-          if (widget.footer != null)
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: constraints.maxHeight * kTranscriptFooterShare,
-              ),
-              child: Align(
-                alignment: Alignment.topCenter,
-                heightFactor: 1,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: Chrome.chatWidth),
-                  child: widget.footer!,
                 ),
               ),
-            ),
-        ],
+              if (widget.footer != null)
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: constraints.maxHeight * kTranscriptFooterShare,
+                  ),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    heightFactor: 1,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: Chrome.chatWidth,
+                      ),
+                      // The same gutter as the messages: the activity line and
+                      // the composer's left edge line up with the words above.
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: gutter),
+                        child: widget.footer!,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
+
+/// The side gutter of the chat column at [width]: the board's 24px where the
+/// pane has room for it, and less in a side-panel-narrow pane, where 48px of
+/// the 240 would be a fifth of the conversation.
+double chatGutterFor(double width) => width < 480 ? Insets.md : Insets.xl;
 
 /// `mcp__server__tool` as `server · tool`; any other name as it came.
 String toolDisplayName(String name) {
@@ -515,8 +538,9 @@ class _ChatMessageTile extends StatelessWidget {
   final Widget? detail;
 
   /// **One rhythm for every role**: two adjacent messages are always
-  /// `Insets.sm` apart. What marks a turn is the user card's fill, not air.
-  static const _tileMargin = EdgeInsets.symmetric(vertical: Insets.xs);
+  /// `Insets.lg` apart — the board's 18px gap, on the spacing scale. With no
+  /// name row above each message any more, air is what separates them.
+  static const _tileMargin = EdgeInsets.symmetric(vertical: Insets.sm);
 
   @override
   Widget build(BuildContext context) {
@@ -559,14 +583,13 @@ List<Widget> _messageActions(VoidCallback? onSaveNote, String copyText) => [
   _CopyButton(text: copyText),
 ];
 
-/// Glyph, eyebrow, age and actions: the one header row every role draws. The
-/// eyebrow and age give way before the actions do.
+/// Glyph, eyebrow and actions: a tool card's header row. The user's and the
+/// agent's turns have none (board N2); their age and actions show on hover.
 class _MessageHeader extends StatelessWidget {
   const _MessageHeader({
     required this.icon,
     required this.label,
     required this.color,
-    this.at,
     this.fullLabel,
     this.badge,
     this.actions = const [],
@@ -575,7 +598,6 @@ class _MessageHeader extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  final DateTime? at;
 
   /// The untruncated name, offered as a tooltip when [label] shortens it.
   final String? fullLabel;
@@ -586,7 +608,6 @@ class _MessageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final at = this.at;
     // The shared header at the pointer's sizes, its defaults.
     return TranscriptRoleHeader(
       icon: icon,
@@ -594,8 +615,139 @@ class _MessageHeader extends StatelessWidget {
       color: color,
       fullLabel: fullLabel,
       badge: badge,
-      meta: at == null ? null : _MessageAge(at: at),
       actions: actions,
+    );
+  }
+}
+
+/// A turn's age and its actions, drawn only while the pointer is over the turn
+/// or focus is inside it (board N2: no name row above a message). Always laid
+/// out and always in the semantics tree, so the row never shifts when it shows
+/// and a screen reader or a keyboard user reaches Copy without hovering.
+class _TurnMeta extends StatelessWidget {
+  const _TurnMeta({
+    required this.shown,
+    required this.at,
+    required this.actions,
+  });
+
+  final bool shown;
+  final DateTime? at;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final at = this.at;
+    return SelectionContainer.disabled(
+      child: AnimatedOpacity(
+        opacity: shown ? 1 : 0,
+        duration: Motion.of(context).fast,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (at != null) ...[
+              _MessageAge(at: at),
+              const SizedBox(width: Insets.xs),
+            ],
+            ...actions,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A turn's body with its [_TurnMeta] beside it: at the end of the row where
+/// the pane is wide, so the meta costs no height, and under the body where it
+/// is narrow, so it costs the words none of their width.
+class _TurnWithMeta extends StatefulWidget {
+  const _TurnWithMeta({
+    required this.body,
+    required this.at,
+    required this.actions,
+    this.alignEnd = false,
+  });
+
+  final Widget body;
+  final DateTime? at;
+  final List<Widget> actions;
+
+  /// The user's side: the body hugs the end and the meta sits before it.
+  final bool alignEnd;
+
+  @override
+  State<_TurnWithMeta> createState() => _TurnWithMetaState();
+}
+
+/// Its own hover and focus state, so a pointer crossing a turn redraws that
+/// turn's meta and never reaches the row cache above it.
+class _TurnWithMetaState extends State<_TurnWithMeta> {
+  /// Below this the meta goes under the body rather than beside it.
+  static const _wideTurn = 480.0;
+
+  bool _hovered = false;
+  bool _focused = false;
+
+  void _set({bool? hovered, bool? focused}) {
+    final h = hovered ?? _hovered;
+    final f = focused ?? _focused;
+    if (h == _hovered && f == _focused) return;
+    setState(() {
+      _hovered = h;
+      _focused = f;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = _TurnMeta(
+      shown: _hovered || _focused,
+      at: widget.at,
+      actions: widget.actions,
+    );
+    final end = widget.alignEnd;
+    return MouseRegion(
+      onEnter: (_) => _set(hovered: true),
+      onExit: (_) => _set(hovered: false),
+      // Listens for a descendant taking focus; never a stop of its own.
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (focused) => _set(focused: focused),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < _wideTurn) {
+              return Column(
+                crossAxisAlignment: end
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [widget.body, meta],
+              );
+            }
+            return Row(
+              mainAxisAlignment: end
+                  ? MainAxisAlignment.end
+                  : MainAxisAlignment.start,
+              crossAxisAlignment: end
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: end
+                  // Flexible: at the narrow end of wide the bubble's share
+                  // plus the meta can exceed the row, and the bubble gives.
+                  ? [
+                      meta,
+                      const SizedBox(width: Insets.xs),
+                      Flexible(child: widget.body),
+                    ]
+                  : [
+                      Expanded(child: widget.body),
+                      const SizedBox(width: Insets.sm),
+                      meta,
+                    ],
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -611,48 +763,54 @@ class _UserMessageCard extends StatelessWidget {
   final VoidCallback? onSaveNote;
   final PathLinkCallback? onPathTap;
 
+  /// The accent's share of the bubble's fill. Board N2 draws `#1c2230` on the
+  /// `#0c0c0e` terminal tone with a `#7aa2f7` accent: 15% of the accent, in
+  /// every channel. Derived, so a different accent tints its own bubble.
+  static const _tintAlpha = 0.15;
+
+  /// Board N2's `14 14 4 14`: the small corner points at the sender's side.
+  static const _corners = BorderRadius.only(
+    topLeft: Radius.circular(Radii.lg),
+    topRight: Radius.circular(Radii.lg),
+    bottomLeft: Radius.circular(Radii.lg),
+    bottomRight: Radius.circular(Insets.xs),
+  );
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // A bubble on the right, tinted with the accent (spec §5): the agent's
     // turn is plain text on the left, so whose turn it is reads at a glance.
     final tint = Color.alphaBlend(
-      scheme.primary.withValues(alpha: StateLayers.selectedAlpha),
-      SurfaceTones.of(context).raised,
-    );
-    final bubble = TranscriptTurnFrame(
-      fill: tint,
-      padding: const EdgeInsets.symmetric(
-        horizontal: Insets.md,
-        vertical: Insets.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _MessageHeader(
-            icon: AppIcons.userCircle,
-            label: 'You',
-            color: scheme.primary,
-            at: message.at,
-            actions: _messageActions(onSaveNote, message.text),
-          ),
-          const SizedBox(height: Insets.xs),
-          MarkdownMessage(
-            message.text,
-            onPathTap: onPathTap,
-            selectable: false,
-          ),
-        ],
-      ),
+      scheme.primary.withValues(alpha: _tintAlpha),
+      SurfaceTones.of(context).term,
     );
     return LayoutBuilder(
-      builder: (context, constraints) => Align(
-        alignment: AlignmentDirectional.centerEnd,
-        child: ConstrainedBox(
+      builder: (context, constraints) => _TurnWithMeta(
+        alignEnd: true,
+        at: message.at,
+        actions: _messageActions(onSaveNote, message.text),
+        body: ConstrainedBox(
+          // A share of the pane rather than the board's 560px: the column is
+          // the pane's whole width now, and the gutter says whose turn it is.
           constraints: BoxConstraints(
             maxWidth: constraints.maxWidth * Chrome.chatBubbleShare,
           ),
-          child: bubble,
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: tint, borderRadius: _corners),
+            child: Padding(
+              // Board N2: 10 by 14.
+              padding: const EdgeInsets.symmetric(
+                horizontal: Radii.lg,
+                vertical: Radii.md,
+              ),
+              child: MarkdownMessage(
+                message.text,
+                onPathTap: onPathTap,
+                selectable: false,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -674,33 +832,26 @@ class _AgentMessageBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final (thinking, cleanText) = splitThinking(
       message.text,
       explicit: message.thinking,
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // A bare glyph, sized and spaced exactly like the user row's. The
-        // 20px bordered circle it replaced outranked its own row.
-        _MessageHeader(
-          icon: AppIcons.robot,
-          label: 'Agent',
-          color: scheme.onSurface,
-          at: message.at,
-          actions: _messageActions(onSaveNote, cleanText),
-        ),
-        const SizedBox(height: Insets.xs),
-        if (thinking != null && thinking.isNotEmpty) ...[
-          ThinkingAccordion(thinking: thinking),
-          const SizedBox(height: Insets.xs),
+    // Plain text, no bubble and no name row (board N2): the agent's words are
+    // the page, and the user's tinted bubbles are what mark the turns.
+    return _TurnWithMeta(
+      at: message.at,
+      actions: _messageActions(onSaveNote, cleanText),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (thinking != null && thinking.isNotEmpty) ...[
+            ThinkingAccordion(thinking: thinking),
+            const SizedBox(height: Insets.xs),
+          ],
+          MarkdownMessage(cleanText, onPathTap: onPathTap, selectable: false),
+          ?detail,
         ],
-        // Flush with the eyebrow above it: the 2px indent was too small to
-        // read as one and enough to stop the body lining up with the glyph.
-        MarkdownMessage(cleanText, onPathTap: onPathTap, selectable: false),
-        ?detail,
-      ],
+      ),
     );
   }
 }
@@ -883,34 +1034,37 @@ class _ToolBatchTile extends StatefulWidget {
 
 class _ToolBatchTileState extends State<_ToolBatchTile> {
   bool _open = false;
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final tones = SurfaceTones.of(context);
     final row = widget.row;
     final run = widget.messages.sublist(row.from, row.to);
-    final style = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
+    // Board N2's fold line: 12.5px, muted, turning to the foreground under
+    // the pointer along with its wash.
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: _hovered ? scheme.onSurface : scheme.onSurfaceVariant,
     );
+    final strong = muted?.copyWith(color: scheme.onSurface);
 
     final String label;
+    final InlineSpan labelSpan;
     final String? detail;
     final IconData? glyph;
     if (row.live) {
       final newest = run.last.tool!;
       final subject = newest.subject?.split('\n').first;
       label = 'Working';
+      labelSpan = TextSpan(text: label, style: strong);
       detail = subject == null || subject.isEmpty
           ? toolDisplayName(newest.name)
           : '${toolDisplayName(newest.name)}  $subject';
       glyph = _toolIcon(newest.name);
     } else {
-      // How long it took first, then what it did (spec §5): the time is the
-      // part of a folded turn nobody could otherwise see.
-      final worked = describeWorkedFor(run);
-      final did = describeToolRun(run);
-      label = worked == null ? did : '$worked · $did';
+      (label, labelSpan) = _settledLabel(run, strong: strong, muted: muted);
       detail = null;
       glyph = null;
     }
@@ -919,7 +1073,7 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
         : null;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      padding: const EdgeInsets.symmetric(vertical: Insets.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -930,75 +1084,312 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
               label: [label, ?detail, ?earlier].join('. '),
               child: InkWell(
                 onTap: () => setState(() => _open = !_open),
+                onHover: (hovered) => setState(() => _hovered = hovered),
+                hoverColor: tones.hover,
                 borderRadius: BorderRadius.circular(Radii.sm),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Insets.sm,
-                    vertical: Insets.xs,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _open ? AppIcons.caretDown : AppIcons.caretRight,
-                        size: Chrome.iconAction,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: Insets.xs),
-                      if (glyph != null) ...[
+                child: ConstrainedBox(
+                  // Board N2: one 26px line, however many calls it stands for.
+                  constraints: const BoxConstraints(minHeight: Chrome.row),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                    child: Row(
+                      children: [
                         Icon(
-                          glyph,
+                          _open ? AppIcons.caretDown : AppIcons.caretRight,
                           size: Chrome.iconSmall,
-                          color: scheme.tertiary,
+                          color: muted?.color,
                         ),
-                        const SizedBox(width: Insets.xs),
-                      ],
-                      Flexible(
-                        flex: detail == null ? 1 : 0,
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: style?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      if (detail != null) ...[
-                        const SizedBox(width: Insets.xs),
-                        Expanded(
-                          child: Text(
-                            detail,
+                        const SizedBox(width: Insets.sm),
+                        if (glyph != null) ...[
+                          // A still glyph, not a spinner: the activity line
+                          // under the transcript already spins for the turn.
+                          Icon(
+                            glyph,
+                            size: Chrome.iconSmall,
+                            color: SemanticColors.of(context).working,
+                          ),
+                          const SizedBox(width: Insets.xs),
+                        ],
+                        Flexible(
+                          flex: detail == null ? 1 : 0,
+                          child: Text.rich(
+                            labelSpan,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: MonoStyles.label.copyWith(
-                              color: scheme.onSurface,
+                          ),
+                        ),
+                        if (detail != null) ...[
+                          const SizedBox(width: Insets.sm),
+                          Expanded(
+                            child: Text(
+                              detail,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: MonoStyles.body.copyWith(
+                                color: muted?.color,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                      if (earlier != null) ...[
-                        const SizedBox(width: Insets.xs),
-                        Flexible(
-                          child: Text(
-                            earlier,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: style,
+                        ],
+                        if (earlier != null) ...[
+                          const SizedBox(width: Insets.sm),
+                          Flexible(
+                            child: Text(
+                              earlier,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: muted,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
           if (_open)
-            for (var i = row.from; i < row.to; i++) widget.rowAt(i)
+            // Board N2: the calls indented under the line, on a 1px rule.
+            Padding(
+              padding: const EdgeInsets.only(
+                left: Insets.lg + Insets.hair * 2,
+                top: Insets.hair * 2,
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(color: scheme.outlineVariant),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: Insets.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = row.from; i < row.to; i++)
+                        _ToolCallLine(
+                          message: widget.messages[i],
+                          card: () => widget.rowAt(i),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            )
           else
             for (final i in row.pinned) widget.rowAt(i),
         ],
       ),
     );
   }
+}
+
+/// A settled run's line as board N2 writes it — `Worked for 2m 12s · read 4
+/// files · ran 3 commands` — with the first phrase in the foreground and the
+/// rest muted. Returns the plain text too, for the semantics label.
+///
+/// With no duration the sentence is [describeToolRun]'s own, commas and all,
+/// and only its first phrase is lifted: the words do not change with the
+/// colouring, so the plain text reads the same to a finder and a reader.
+(String, InlineSpan) _settledLabel(
+  List<ChatMessage> run, {
+  required TextStyle? strong,
+  required TextStyle? muted,
+}) {
+  final worked = describeWorkedFor(run);
+  final did = describeToolRun(run);
+  if (worked != null) {
+    final rest = did.isEmpty
+        ? ''
+        : ' · ${did[0].toLowerCase()}${did.substring(1).replaceAll(', ', ' · ')}';
+    return (
+      '$worked$rest',
+      TextSpan(
+        children: [
+          TextSpan(text: worked, style: strong),
+          TextSpan(text: rest, style: muted),
+        ],
+      ),
+    );
+  }
+  final cut = [
+    did.indexOf(', '),
+    did.indexOf(' · '),
+  ].where((i) => i > 0).fold<int>(did.length, math.min);
+  return (
+    did,
+    TextSpan(
+      children: [
+        TextSpan(text: did.substring(0, cut), style: strong),
+        TextSpan(text: did.substring(cut), style: muted),
+      ],
+    ),
+  );
+}
+
+/// Commands whose passing is a result worth colouring: a test, analyze, lint
+/// or check run. Anything else that exits cleanly only says how much it wrote.
+final _checkCommand = RegExp(
+  r'\b(test|tests|analy[sz]e|lint|check|checks|verify)\b',
+);
+
+/// One call inside an opened run (board N2): its glyph, its path or command
+/// in mono, and what came of it at the far end. A click opens the full card
+/// under it, output and all — the line is the index, the card the page.
+class _ToolCallLine extends StatefulWidget {
+  const _ToolCallLine({required this.message, required this.card});
+
+  final ChatMessage message;
+
+  /// The call's full row, built only once it is opened.
+  final Widget Function() card;
+
+  @override
+  State<_ToolCallLine> createState() => _ToolCallLineState();
+}
+
+class _ToolCallLineState extends State<_ToolCallLine> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final semantic = SemanticColors.of(context);
+    final message = widget.message;
+    final tool = message.tool!;
+    final kind = toolKindOf(tool.name);
+    final subject = tool.subject?.split('\n').first.trim();
+    final named = switch (kind) {
+      ToolKind.read ||
+      ToolKind.edit ||
+      ToolKind.patch ||
+      ToolKind.command ||
+      ToolKind.search => false,
+      _ => true,
+    };
+    final what = subject == null || subject.isEmpty
+        ? toolDisplayName(tool.name)
+        : named
+        ? '${toolDisplayName(tool.name)}  $subject'
+        : subject;
+    final (result, resultColour) = _resultOf(
+      message,
+      kind,
+      subject: subject,
+      failure: semantic.failure,
+      passed: semantic.idle,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SelectionContainer.disabled(
+          child: Semantics(
+            button: true,
+            expanded: _open,
+            label: '$what, $result',
+            excludeSemantics: true,
+            child: InkWell(
+              onTap: () => setState(() => _open = !_open),
+              hoverColor: SurfaceTones.of(context).hover,
+              borderRadius: BorderRadius.circular(Radii.sm),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: Chrome.row),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _kindIcon(kind),
+                        size: Chrome.iconSmall,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: Insets.sm),
+                      Expanded(
+                        child: Text(
+                          what,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: MonoStyles.body.copyWith(
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Insets.sm),
+                      Text(
+                        result,
+                        maxLines: 1,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: resultColour ?? scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_open)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Insets.xs),
+            child: widget.card(),
+          ),
+      ],
+    );
+  }
+}
+
+/// The glyph for what a call did, by the same kinds the fold line counts.
+IconData _kindIcon(ToolKind kind) => switch (kind) {
+  ToolKind.command => AppIcons.terminal,
+  ToolKind.read => AppIcons.file,
+  ToolKind.edit => AppIcons.pencilSimple,
+  ToolKind.patch => AppIcons.gitDiff,
+  ToolKind.search => AppIcons.magnifyingGlass,
+  ToolKind.webSearch || ToolKind.webFetch => AppIcons.globe,
+  ToolKind.delegate => AppIcons.robot,
+  ToolKind.plan => AppIcons.listChecks,
+  ToolKind.question => AppIcons.question,
+  ToolKind.mcp || ToolKind.other => AppIcons.gearSix,
+};
+
+/// What came of one call, as the right end of its line says it: a failure in
+/// the failure colour, a passing check in the healthy one, and otherwise the
+/// plain fact the record holds — never a success nobody recorded.
+(String, Color?) _resultOf(
+  ChatMessage message,
+  ToolKind kind, {
+  required String? subject,
+  required Color failure,
+  required Color passed,
+}) {
+  final tool = message.tool!;
+  if (tool.isError) return ('failed', failure);
+  if (message.pending) return ('running', null);
+  final output = tool.output?.trimRight() ?? '';
+  final lines = output.isEmpty ? 0 : '\n'.allMatches(output).length + 1;
+  final more = tool.outputTruncated ? '+' : '';
+  String counted(String one, String many) =>
+      lines == 1 && more.isEmpty ? '1 $one' : '$lines$more $many';
+  return switch (kind) {
+    ToolKind.read => ('read', null),
+    ToolKind.edit => ('edited', null),
+    ToolKind.patch => ('applied', null),
+    ToolKind.search =>
+      lines == 0 ? ('no matches', null) : (counted('match', 'matches'), null),
+    ToolKind.command when subject != null && _checkCommand.hasMatch(subject) =>
+      ('passed ✓', passed),
+    ToolKind.command =>
+      lines == 0 ? ('no output', null) : (counted('line', 'lines'), null),
+    ToolKind.webSearch => ('searched', null),
+    ToolKind.webFetch => ('fetched', null),
+    ToolKind.plan => ('updated', null),
+    ToolKind.question => ('answered', null),
+    ToolKind.delegate || ToolKind.mcp || ToolKind.other => ('done', null),
+  };
 }
 
 /// Keeps this message as a note, in one tap: its own words, nothing summarised

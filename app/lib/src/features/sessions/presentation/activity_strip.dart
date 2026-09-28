@@ -12,9 +12,13 @@ import '../application/session_activity_providers.dart';
 /// **What this session is doing right now**, pinned above the composer: summary
 /// and elapsed only. Silent when idle, but never silent about a blind spot.
 class ActivityStrip extends ConsumerStatefulWidget {
-  const ActivityStrip({required this.sessionId, super.key});
+  const ActivityStrip({required this.sessionId, this.onStop, super.key});
 
   final String sessionId;
+
+  /// Stops the running turn — board N2's `Stop · Esc` pill. Null draws no
+  /// pill: only a host that owns the Esc binding and the pane may offer it.
+  final VoidCallback? onStop;
 
   @override
   ConsumerState<ActivityStrip> createState() => _ActivityStripState();
@@ -83,6 +87,12 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
     final elapsed = formatElapsed(oldest.ageAt(now));
     final trailing = single != null ? elapsed : 'oldest $elapsed';
 
+    // Board N2's live line: a spinner, muted "what · how long", and a small
+    // Stop pill — a line of the conversation, not a boxed widget over it.
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final onStop = widget.onStop;
     return Semantics(
       // Deliberately not a live region: the elapsed time changes every second,
       // and a screen reader announcing it every second would be unusable.
@@ -90,48 +100,95 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
           ? '${single.isSubagent ? 'Subagent' : 'Tool'} running: '
                 '${single.summary}, $elapsed'
           : '$label, oldest $elapsed',
-      child: Tooltip(
-        message: [
-          for (final call in running)
-            '${call.isSubagent ? 'Subagent ' : ''}${call.summary} · '
-                '${formatElapsed(call.ageAt(now))}',
-        ].join('\n'),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: Insets.xs,
-          ),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(Radii.sm),
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              // The app's own "working" glyph and colour, so this and the
-              // status badge cannot describe one session in two languages.
-              if (subagents > 0)
-                Icon(AppIcons.robot, size: Chrome.iconSmall, color: colour)
-              else
-                WorkingSpinner(size: Chrome.iconSmall, color: colour),
-              const SizedBox(width: Insets.xs),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: MonoStyles.small.copyWith(
-                    color: theme.colorScheme.onSurface,
-                  ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
+        child: Row(
+          children: [
+            Flexible(
+              child: Tooltip(
+                message: [
+                  for (final call in running)
+                    '${call.isSubagent ? 'Subagent ' : ''}${call.summary} · '
+                        '${formatElapsed(call.ageAt(now))}',
+                ].join('\n'),
+                child: Row(
+                  children: [
+                    // The app's own "working" glyph and colour, so this and
+                    // the status badge cannot describe one session in two
+                    // languages.
+                    if (subagents > 0)
+                      Icon(
+                        AppIcons.robot,
+                        size: Chrome.iconSmall,
+                        color: colour,
+                      )
+                    else
+                      WorkingSpinner(size: Chrome.iconSmall, color: colour),
+                    const SizedBox(width: Insets.sm),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: muted,
+                      ),
+                    ),
+                    Text(' · ', style: muted),
+                    Text(trailing, maxLines: 1, style: muted),
+                  ],
                 ),
               ),
+            ),
+            if (onStop != null) ...[
               const SizedBox(width: Insets.sm),
-              Text(
-                trailing,
-                style: theme.textTheme.labelSmall?.copyWith(color: colour),
-              ),
+              _StopPill(onPressed: onStop),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Board N2's `Stop · Esc`: a small outlined pill, the key named on it because
+/// it is the faster way and nothing else in the chat says so.
+class _StopPill extends StatelessWidget {
+  const _StopPill({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Semantics(
+      // Its own node: merged into the strip's, the strip would read as a
+      // button and its label would gain this one.
+      container: true,
+      button: true,
+      label: 'Stop the running turn (Esc)',
+      excludeSemantics: true,
+      child: Tooltip(
+        message: 'Stop the running turn — types Esc into its terminal',
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(Radii.sm),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: Insets.hair * 2,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(Radii.sm),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Text(
+              'Stop · Esc',
+              maxLines: 1,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
           ),
         ),
       ),
@@ -154,21 +211,13 @@ class _BlindSpotLine extends StatelessWidget {
       label: activityBlindSpotSentence(spot),
       child: Tooltip(
         message: activityBlindSpotDetail(spot),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: Insets.xs,
-          ),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(Radii.sm),
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-          ),
+        // Unboxed, like the running line it stands in for (board N2).
+        child: Padding(
+          padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
           child: Row(
             children: [
               Icon(AppIcons.question, size: Chrome.iconSmall, color: colour),
-              const SizedBox(width: Insets.xs),
+              const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
                   activityBlindSpotSentence(spot),

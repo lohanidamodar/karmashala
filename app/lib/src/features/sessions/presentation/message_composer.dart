@@ -10,6 +10,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/primitives.dart';
+import 'package:karmashala_ui/menus.dart';
 
 /// How many lines of [style] fit [height], between 1 and 12. Unbounded means
 /// the composer's full twelve.
@@ -38,8 +39,23 @@ class _Attachment {
   final Uint8List bytes;
 }
 
+/// One entry of the composer's snippets menu: what it is called, and the text
+/// it puts in the box. Plain values, so the composer knows nothing of where
+/// the library lives.
+class ComposerSnippet {
+  const ComposerSnippet({required this.label, required this.text});
+
+  final String label;
+  final String text;
+}
+
 /// The session message box: text plus image attachments. On send the images are
 /// saved and their paths appended, so the agent can read them.
+///
+/// Board N2 draws it as **one object**: the attachment chips, the text, and a
+/// toolbar of attach, snippets and a round send, inside one rounded card. It
+/// holds nothing else — mode, model and the view switch are the pane's status
+/// line's (owner, 2026-09-28: one place per control).
 class MessageComposer extends StatefulWidget {
   const MessageComposer({
     required this.onSend,
@@ -47,6 +63,7 @@ class MessageComposer extends StatefulWidget {
     this.enabled = true,
     this.chips = const [],
     this.controller,
+    this.snippets,
     super.key,
   });
 
@@ -63,6 +80,10 @@ class MessageComposer extends StatefulWidget {
   /// The text box's controller, when the caller needs to put something in it.
   /// Supplied means owned: the caller disposes it, else the composer does.
   final TextEditingController? controller;
+
+  /// The snippets the toolbar's menu offers, read each time it opens. Null
+  /// hides the button: a host with no library has nothing to offer.
+  final List<ComposerSnippet> Function()? snippets;
 
   @override
   State<MessageComposer> createState() => _MessageComposerState();
@@ -240,12 +261,30 @@ class _MessageComposerState extends State<MessageComposer> {
     }
   }
 
+  /// Puts a snippet's text where the caret is, replacing any selection, and
+  /// leaves it unsent: a snippet is a start on a message, not a message.
+  void _insertSnippet(String text) {
+    final value = _input.value;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : value.text.length;
+    final end = selection.isValid ? selection.end : value.text.length;
+    _input.value = TextEditingValue(
+      text: value.text.replaceRange(start, end, text),
+      selection: TextSelection.collapsed(offset: start + text.length),
+    );
+    _focusNode.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final canType = widget.enabled && !_busy;
     final textScaler = MediaQuery.textScalerOf(context);
+    final snippets = widget.snippets;
+    final hintStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -290,9 +329,21 @@ class _MessageComposerState extends State<MessageComposer> {
                   // The wrapper above already spends `Insets.sm` vertically;
                   // a second helping here paid twice.
                   contentPadding: EdgeInsets.zero,
-                  hintText: widget.hintText,
-                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                  // Board N2: the prompt, then the keys in a dimmer voice.
+                  // Two texts in a wrap rather than one span, so a narrow pane
+                  // puts the keys on the next line instead of clipping them.
+                  hint: Wrap(
+                    children: [
+                      Text(widget.hintText, style: hintStyle),
+                      Text(
+                        ' (Enter sends · Shift Enter new line)',
+                        style: hintStyle?.copyWith(
+                          color: scheme.onSurfaceVariant.withValues(
+                            alpha: _dimAlpha,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -307,6 +358,12 @@ class _MessageComposerState extends State<MessageComposer> {
               child: _ComposerToolbar(
                 chips: widget.chips,
                 onAttach: canType ? _attach : null,
+                snippets: snippets == null
+                    ? null
+                    : _SnippetsButton(
+                        snippets: snippets,
+                        onPicked: canType ? _insertSnippet : null,
+                      ),
                 send: _SendButton(
                   input: _input,
                   attachments: _attachments,
@@ -319,74 +376,69 @@ class _MessageComposerState extends State<MessageComposer> {
         );
         return SingleChildScrollView(
           primary: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Divider(height: 1),
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: Chrome.chatWidth,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(Insets.sm),
-                    // Only the border listens to focus: a click into the box
-                    // must not rebuild the field it landed in.
-                    child: ListenableBuilder(
-                      listenable: _focusNode,
-                      builder: (context, child) => AnimatedContainer(
-                        duration: Motion.of(context).fast,
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(Radii.lg),
-                          // The accent border is the whole focus signal. The
-                          // 1.0→1.5 width it also grew relaid the composer
-                          // out on every focus.
-                          border: Border.all(
-                            color: _focusNode.hasFocus
-                                ? scheme.primary
-                                : scheme.outlineVariant,
-                          ),
-                        ),
-                        child: child,
-                      ),
-                      child: body,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Chrome.chatWidth),
+            child: Padding(
+              // No side padding: the chat's gutter already places it, so its
+              // edges line up with the messages above (board N2).
+              padding: const EdgeInsets.only(bottom: Insets.md),
+              // Only the ring listens to focus: a click into the box must not
+              // rebuild the field it landed in.
+              child: ListenableBuilder(
+                listenable: _focusNode,
+                builder: (context, child) => AnimatedContainer(
+                  duration: Motion.of(context).fast,
+                  decoration: BoxDecoration(
+                    color: SurfaceTones.of(context).raised,
+                    borderRadius: BorderRadius.circular(_radius),
+                    // Board N2's 1px ring; the accent is the whole focus
+                    // signal. The 1.0→1.5 width it also grew relaid the
+                    // composer out on every focus.
+                    border: Border.all(
+                      color: _focusNode.hasFocus
+                          ? scheme.primary
+                          : scheme.outlineVariant,
                     ),
                   ),
+                  child: child,
                 ),
+                child: body,
               ),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
+  /// Board N2's card corner: 12px, between the row radius and the dialog's.
+  static const _radius = Radii.md + Insets.hair * 2;
+
+  /// The key hint's share of the muted colour: board N2's `--dim` under
+  /// `--mut`, as a fraction rather than a second grey.
+  static const _dimAlpha = 0.7;
+
   /// Everything but the text lines, near enough to size the box by: guessing
   /// low costs a few pixels of scroll, never an overflow.
   double _chromeHeight(double width, TextScaler textScaler) {
-    // Divider, card padding and border, the text's own padding, the toolbar.
+    // Bottom padding, the ring, the text's own padding, the toolbar.
     var height =
-        1 + 2 * Insets.sm + 2 + 2 * Insets.sm + Chrome.control + Insets.sm;
-    final toolbarWidth =
-        math.min(width, Chrome.chatWidth) - 4 * Insets.sm - 2;
+        Insets.md + 2 + 2 * Insets.sm + _SendButton.diameter + Insets.sm;
+    final toolbarWidth = width - 2 * Insets.sm - 2;
     if (widget.chips.isNotEmpty &&
         toolbarWidth <= _ComposerToolbar.rowMinWidth) {
       height += Insets.xs + Chrome.control;
     }
     if (_attachments.isNotEmpty) {
-      height +=
-          Insets.sm +
-          _Thumbnail.extent +
-          Insets.xs +
-          textScaler.scale(11) * 1.5;
+      height += Insets.sm + _AttachmentChip.height;
     }
     return height;
   }
 }
 
-/// The thumbnails, and the one line explaining where the files went. Drawn
-/// always, it cost 31 of the composer's 113px for a usually-false sentence.
+/// The attachments as board N2 draws them: a row of pills, each an image
+/// glyph, the file's name and a remove button. Where the files go is the
+/// pill's tooltip — a sentence under them, always drawn, cost 31px.
 class _AttachmentStrip extends StatelessWidget {
   const _AttachmentStrip({required this.attachments, required this.onRemove});
 
@@ -394,45 +446,87 @@ class _AttachmentStrip extends StatelessWidget {
   final ValueChanged<int> onRemove;
 
   @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 0),
+    child: Wrap(
+      spacing: Insets.xs,
+      runSpacing: Insets.xs,
+      children: [
+        for (var i = 0; i < attachments.length; i++)
+          _AttachmentChip(
+            name: attachments[i].file.uri.pathSegments.last,
+            onRemove: () => onRemove(i),
+          ),
+      ],
+    ),
+  );
+}
+
+class _AttachmentChip extends StatelessWidget {
+  const _AttachmentChip({required this.name, required this.onRemove});
+
+  final String name;
+  final VoidCallback onRemove;
+
+  /// The pill's height, which the composer's sizing counts.
+  static const height = Chrome.control;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: Insets.sm,
-            runSpacing: Insets.sm,
-            children: [
-              for (var i = 0; i < attachments.length; i++)
-                _Thumbnail(
-                  bytes: attachments[i].bytes,
-                  onRemove: () => onRemove(i),
-                ),
-            ],
-          ),
-          const SizedBox(height: Insets.xs),
-          Text(
-            'Saved to a temp folder and sent to the agent as file paths.',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+    final scheme = theme.colorScheme;
+    final muted = scheme.onSurfaceVariant;
+    return Tooltip(
+      message: 'Saved to a temp folder and sent to the agent as a file path.',
+      child: Container(
+        height: height,
+        padding: const EdgeInsets.only(left: Insets.sm),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Radii.sm),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(AppIcons.image, size: Chrome.iconSmall, color: muted),
+            const SizedBox(width: Insets.xs),
+            ConstrainedBox(
+              // A long generated name gives way before the remove button.
+              constraints: const BoxConstraints(maxWidth: 200),
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: muted),
+              ),
             ),
-          ),
-        ],
+            IconButton(
+              tooltip: 'Remove',
+              iconSize: Chrome.iconSmall,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(
+                minWidth: height,
+                minHeight: height,
+              ),
+              padding: EdgeInsets.zero,
+              color: muted,
+              icon: const Icon(AppIcons.x),
+              onPressed: onRemove,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Attach, the session's chips, and send. At a pane's narrowest the three
-/// cannot share a row, so the chips take one to themselves.
+/// Attach, snippets, any chips a host adds, and the round send at the far
+/// end. At a pane's narrowest the chips take a row to themselves.
 class _ComposerToolbar extends StatelessWidget {
   const _ComposerToolbar({
     required this.chips,
     required this.onAttach,
+    required this.snippets,
     required this.send,
   });
 
@@ -442,27 +536,27 @@ class _ComposerToolbar extends StatelessWidget {
 
   /// Null while the composer cannot take input.
   final VoidCallback? onAttach;
+
+  /// The snippets button, when the host offers a library.
+  final Widget? snippets;
   final Widget send;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final attach = IconButton(
-        tooltip: 'Attach image (or paste with Ctrl+V)',
-        onPressed: onAttach,
-        // `VisualDensity.compact` is already the app-wide default; restating it
-        // subtracted its 8px twice and left both buttons 18 logical pixels tall.
-        style: IconButton.styleFrom(
-          visualDensity: VisualDensity.standard,
-          minimumSize: const Size.square(Chrome.control),
+      final tools = [
+        _ToolbarIconButton(
+          tooltip: 'Attach image (or paste with Ctrl+V)',
+          icon: AppIcons.image,
+          onPressed: onAttach,
         ),
-        icon: const Icon(AppIcons.image),
-      );
+        ?snippets,
+      ];
 
-      if (constraints.maxWidth > rowMinWidth) {
+      if (constraints.maxWidth > rowMinWidth || chips.isEmpty) {
         return Row(
           children: [
-            attach,
+            ...tools,
             if (chips.isNotEmpty)
               Expanded(
                 child: Padding(
@@ -485,24 +579,105 @@ class _ComposerToolbar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [attach, const Spacer(), send]),
-          if (chips.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.xs),
-              child: Wrap(
-                spacing: Insets.xs,
-                runSpacing: Insets.xs,
-                children: chips,
-              ),
+          Row(children: [...tools, const Spacer(), send]),
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Wrap(
+              spacing: Insets.xs,
+              runSpacing: Insets.xs,
+              children: chips,
             ),
+          ),
         ],
       );
     },
   );
 }
 
+/// A quiet toolbar glyph (board N2's 26 by 22 tab button): muted, a wash
+/// under the pointer, no fill of its own.
+class _ToolbarIconButton extends StatelessWidget {
+  const _ToolbarIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  /// Shared with the snippets menu button, which is not an [IconButton].
+  static ButtonStyle styleOf(BuildContext context) => IconButton.styleFrom(
+    // `VisualDensity.compact` is already the app-wide default; restating it
+    // subtracted its 8px twice and left the button 18 logical pixels tall.
+    visualDensity: VisualDensity.standard,
+    minimumSize: const Size.square(Chrome.control),
+    foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(Radii.sm),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    style: styleOf(context),
+    iconSize: Chrome.icon,
+    icon: Icon(icon),
+  );
+}
+
+/// The snippet library as a menu, read when it opens. Picking one types it
+/// into the box at the caret, unsent.
+class _SnippetsButton extends StatelessWidget {
+  const _SnippetsButton({required this.snippets, required this.onPicked});
+
+  final List<ComposerSnippet> Function() snippets;
+
+  /// Null while the composer cannot take input.
+  final ValueChanged<String>? onPicked;
+
+  @override
+  Widget build(BuildContext context) {
+    final onPicked = this.onPicked;
+    return PopupMenuButton<String>(
+      tooltip: 'Insert a snippet',
+      enabled: onPicked != null,
+      onSelected: onPicked,
+      itemBuilder: (context) {
+        final list = snippets();
+        if (list.isEmpty) {
+          return [
+            DesktopMenuItem<String>(
+              value: '',
+              label: 'No snippets yet — add them in Settings › Snippets',
+              icon: AppIcons.code,
+              enabled: false,
+            ),
+          ];
+        }
+        return [
+          for (final snippet in list)
+            DesktopMenuItem<String>(
+              value: snippet.text,
+              label: snippet.label,
+              icon: AppIcons.code,
+            ),
+        ];
+      },
+      icon: const Icon(AppIcons.code),
+      iconSize: Chrome.icon,
+      // The same quiet glyph as Attach beside it.
+      style: _ToolbarIconButton.styleOf(context),
+    );
+  }
+}
+
 /// Send, and the one thing in the composer that knows what has been typed. Its
-/// own widget so a keystroke rebuilds a 26px button, not the composer.
+/// own widget so a keystroke rebuilds one button, not the composer. Board N2
+/// draws it as a round accent button at the toolbar's far end.
 class _SendButton extends StatelessWidget {
   const _SendButton({
     required this.input,
@@ -510,6 +685,9 @@ class _SendButton extends StatelessWidget {
     required this.busy,
     required this.onSend,
   });
+
+  /// Board N2's 30px circle.
+  static const diameter = 30.0;
 
   final TextEditingController input;
   final List<_Attachment> attachments;
@@ -534,73 +712,21 @@ class _SendButton extends StatelessWidget {
               ? 'Sending…'
               : 'Send (Enter) · Shift + Enter for a new line',
           onPressed: onSend,
+          iconSize: Chrome.iconAction,
           style: IconButton.styleFrom(
             visualDensity: VisualDensity.standard,
-            minimumSize: const Size.square(Chrome.control),
+            padding: EdgeInsets.zero,
+            fixedSize: const Size.square(diameter),
+            minimumSize: const Size.square(diameter),
+            shape: const CircleBorder(),
             backgroundColor: ready
                 ? scheme.primary
                 : scheme.surfaceContainerHighest,
             foregroundColor: ready ? scheme.onPrimary : scheme.onSurfaceVariant,
           ),
-          icon: busy
-              ? const InlineSpinner()
-              : const Icon(AppIcons.paperPlaneRight),
+          icon: busy ? const InlineSpinner() : const Icon(AppIcons.arrowUp),
         );
       },
-    );
-  }
-}
-
-class _Thumbnail extends StatelessWidget {
-  const _Thumbnail({required this.bytes, required this.onRemove});
-  final Uint8List bytes;
-  final VoidCallback onRemove;
-
-  static const _image = 56.0;
-
-  /// How far the remove button hangs past the image's corner.
-  static const _overhang = 6.0;
-
-  /// The thumbnail's full height, overhang included.
-  static const extent = _image + _overhang;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // The overhang is padding inside the Stack rather than a negative offset
-    // out of it: a Stack only hit-tests its own bounds, so the part of the
-    // button drawn outside them could not be clicked.
-    return Stack(
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: _overhang, right: _overhang),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            child: Image.memory(
-              bytes,
-              width: _image,
-              height: _image,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-        Positioned(
-          top: 0,
-          right: 0,
-          child: IconButton(
-            tooltip: 'Remove',
-            iconSize: Chrome.iconAction,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-            padding: EdgeInsets.zero,
-            style: IconButton.styleFrom(
-              backgroundColor: scheme.surfaceContainerHighest,
-            ),
-            icon: const Icon(AppIcons.x),
-            onPressed: onRemove,
-          ),
-        ),
-      ],
     );
   }
 }

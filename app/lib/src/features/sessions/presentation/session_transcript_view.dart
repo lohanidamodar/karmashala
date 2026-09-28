@@ -3,13 +3,14 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../automations/presentation/scheduled_resume_chip.dart';
+import '../../snippets/application/snippet_providers.dart';
+import '../application/session_activity_providers.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/side_panel_state.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
@@ -40,11 +41,9 @@ import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
 import 'activity_strip.dart';
-import 'agent_status_badge.dart';
 import 'chat_transcript.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';
-import 'session_repositories_bar.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -263,11 +262,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     if (!outcome.ok) _say(outcome.error!);
   }
 
-  Future<void> _stop() async {
-    await ref.read(sessionEngineProvider).stop(widget.sessionId);
-    ref.publishSessionChange(SessionChange.statusChanged(widget.sessionId));
-  }
-
   @override
   Widget build(BuildContext context) {
     // Only this session's row. The transcript of one conversation says nothing
@@ -290,45 +284,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
     final footer = _footerFor(active);
 
+    // **No header** (board N2, owner 2026-09-28): the conversation starts right
+    // under the tab strip. The tab already names the session and shows its
+    // state, and the pane's status line — the same in both views — holds the
+    // session's controls; a second row of them here was two places for one.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // No title and no back button: the workbench tab above already names
-        // and closes the session, and the strip's toggle switches the view.
-        SizedBox(
-          // Grows with the text: the badge's label follows the text scale.
-          height: Chrome.tabStripOf(context),
-          child: LayoutBuilder(
-            builder: (context, header) => Row(
-              children: [
-                const SizedBox(width: Insets.md),
-                AgentStatusBadge(sessionId: widget.sessionId, showLabel: true),
-                const Spacer(),
-                // The first to go in a side-panel-wide pane: the session bar's
-                // chip and the row menu still reach it there.
-                if (header.maxWidth >=
-                    WidthClass.scaleBreakpoint(
-                      _resumeButtonMinWidth,
-                      MediaQuery.textScalerOf(context),
-                    ))
-                  ScheduledResumeButton(sessionId: widget.sessionId),
-                // On the header rather than in the composer's chip row: a recap
-                // costs a turn, so it sits with the other deliberate acts.
-                _RecapButton(sessionId: widget.sessionId),
-                _OpenInTerminalButton(sessionId: widget.sessionId),
-                if (active)
-                  IconButton(
-                    tooltip: 'Stop session',
-                    icon: const Icon(AppIcons.stopCircle),
-                    onPressed: _stop,
-                  ),
-                const SizedBox(width: Insets.xs),
-              ],
-            ),
-          ),
-        ),
-        SessionRepositoriesBar(sessionId: widget.sessionId),
-        const Divider(height: 1),
         Expanded(
           child: LayoutBuilder(
             builder: (context, box) => Column(
@@ -448,56 +410,105 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   Widget _footerFor(bool active) {
     if (_footer != null && _footerActive == active) return _footer!;
     _footerActive = active;
-    return _footer =
-        // The delivery strip sits on the composer's channel: its prompt
-        // actions send through `continueSession`.
-        LayoutBuilder(
-          builder: (context, box) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // The strips scroll among themselves in whatever the
-              // composer leaves; none of them may push the box away.
-              Flexible(
-                child: SingleChildScrollView(
-                  primary: false,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // The ask, the delivery facts, Ship and the notices
-                      // are the pane's status bar's, in both views; the
-                      // chat keeps only what is its own. Directly above
-                      // the box: "what is it doing right now" was only
-                      // answerable by scrolling to the end.
-                      ActivityStrip(sessionId: widget.sessionId),
-                    ],
+    return _footer = Actions(
+      actions: {_StopTurnIntent: _StopTurnAction(this)},
+      child: Shortcuts(
+        // Board N2's "Stop · Esc": Esc in the composer stops the running turn.
+        // Only while one runs — the action is disabled otherwise, so the key
+        // falls through to whatever else Esc means there.
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.escape): _StopTurnIntent(),
+        },
+        child: _footerBody(active),
+      ),
+    );
+  }
+
+  /// Whether this session has a call in flight: what makes Esc a stop.
+  bool get _turnRunning => ref
+      .read(sessionOutstandingCallsProvider(widget.sessionId))
+      .calls
+      .isNotEmpty;
+
+  /// Stops the running turn the way its CLI's own terminal would: an Esc
+  /// typed into the agent's pane. Said, not silent, when there is no live
+  /// pane to type it into.
+  void _interruptTurn() {
+    final paneId = sessionTerminalPane(ref, widget.sessionId);
+    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+    final live =
+        paneId != null &&
+        ref.read(terminalSessionsControllerProvider).livenessOf(paneId).isLive;
+    final instance = paneId == null ? null : terminals.instanceFor(paneId);
+    if (!live || instance == null) {
+      _say('No live terminal runs this session, so there is nothing to stop.');
+      return;
+    }
+    instance.terminal.textInput('\x1b');
+  }
+
+  /// The snippet library, as the composer's menu lists it.
+  List<ComposerSnippet> _snippets() => [
+    for (final snippet in ref.read(commandSnippetsProvider))
+      ComposerSnippet(label: snippet.label, text: snippet.command),
+  ];
+
+  /// The activity line over the composer. The delivery strip sits on the
+  /// composer's channel: its prompt actions send through `continueSession`.
+  Widget _footerBody(bool active) {
+    return LayoutBuilder(
+      builder: (context, box) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The strips scroll among themselves in whatever the
+          // composer leaves; none of them may push the box away.
+          Flexible(
+            child: SingleChildScrollView(
+              primary: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // The ask, the delivery facts, Ship and the notices
+                  // are the pane's status bar's, in both views; the
+                  // chat keeps only what is its own. Directly above
+                  // the box: "what is it doing right now" was only
+                  // answerable by scrolling to the end.
+                  ActivityStrip(
+                    sessionId: widget.sessionId,
+                    onStop: _interruptTurn,
                   ),
-                ),
+                ],
               ),
-              ConstrainedBox(
-                // A long draft may not crowd an approval out of sight.
-                constraints: BoxConstraints(
-                  maxHeight: box.maxHeight * _composerShare,
-                ),
-                child: MessageComposer(
-                  controller: _composer,
-                  // Attachments and the message, nothing else: mode, model
-                  // and stats are on the pane's status bar (owner, 2026-09-28).
-                  chips: const [],
-                  hintText: active
-                      // No emoji: the old hint named a 🖼 that is nowhere
-                      // in the composer; the attach tooltip does.
-                      ? 'Message the agent…'
-                      : 'Type to continue this session…',
-                  onSend: (text) => ref
-                      .read(sessionActionsProvider)
-                      .continueSession(widget.sessionId, text),
-                ),
-              ),
-            ],
+            ),
           ),
-        );
+          ConstrainedBox(
+            // A long draft may not crowd an approval out of sight.
+            constraints: BoxConstraints(
+              maxHeight: box.maxHeight * _composerShare,
+            ),
+            child: MessageComposer(
+              controller: _composer,
+              // Attachments and the message, nothing else: mode, model
+              // and stats are on the pane's status bar (owner, 2026-09-28).
+              chips: const [],
+              // Read when the menu opens, never watched: the footer is
+              // built once, and the library changing must not rebuild it.
+              snippets: _snippets,
+              hintText: active
+                  // No emoji: the old hint named a 🖼 that is nowhere
+                  // in the composer; the attach tooltip does.
+                  ? 'Message the agent…'
+                  : 'Type to continue this session…',
+              onSend: (text) => ref
+                  .read(sessionActionsProvider)
+                  .continueSession(widget.sessionId, text),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// What to say when there is nothing to render. Each branch reads the same
@@ -603,14 +614,55 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   }
 }
 
-/// The narrowest header, at 1x text, with room for the resume clock beside
-/// the status badge and the other three actions.
-const double _resumeButtonMinWidth = 320;
+/// Esc in the chat's footer: stop the running turn.
+class _StopTurnIntent extends Intent {
+  const _StopTurnIntent();
+}
 
-/// The header's Recap action: asks this session's own CLI what it concluded.
-/// Inert while it answers — a second press spends a second turn.
-class _RecapButton extends ConsumerWidget {
-  const _RecapButton({required this.sessionId});
+/// Enabled only while a call is in flight, so an idle Esc is not consumed —
+/// and never reaches the agent, where a stray one clears or rewinds its input.
+class _StopTurnAction extends Action<_StopTurnIntent> {
+  _StopTurnAction(this._view);
+
+  final _SessionTranscriptViewState _view;
+
+  @override
+  bool isEnabled(_StopTurnIntent intent) => _view.mounted && _view._turnRunning;
+
+  @override
+  Object? invoke(_StopTurnIntent intent) {
+    _view._interruptTurn();
+    return null;
+  }
+}
+
+/// Stops a session this app's engine runs. It stood in the chat view's header,
+/// which is gone (board N2); public so the pane's status line can take it.
+class StopSessionButton extends ConsumerWidget {
+  const StopSessionButton({required this.sessionId, super.key});
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.read(sessionEngineProvider).isActive(sessionId)) {
+      return const SizedBox.shrink();
+    }
+    return IconButton(
+      tooltip: 'Stop session',
+      icon: const Icon(AppIcons.stopCircle),
+      onPressed: () async {
+        await ref.read(sessionEngineProvider).stop(sessionId);
+        ref.publishSessionChange(SessionChange.statusChanged(sessionId));
+      },
+    );
+  }
+}
+
+/// The Recap action: asks this session's own CLI what it concluded. Inert
+/// while it answers — a second press spends a second turn. It stood in the
+/// chat view's header, which is gone; public so the status line can take it.
+class SessionRecapButton extends ConsumerWidget {
+  const SessionRecapButton({required this.sessionId, super.key});
   final String sessionId;
 
   @override
@@ -628,10 +680,11 @@ class _RecapButton extends ConsumerWidget {
   }
 }
 
-/// A header action that opens the session in one of the installed external
-/// terminals (Windows Terminal, WezTerm, …), running its agent in the repo.
-class _OpenInTerminalButton extends ConsumerWidget {
-  const _OpenInTerminalButton({required this.sessionId});
+/// Opens the session in one of the installed external terminals (Windows
+/// Terminal, WezTerm, …), running its agent in the repo. It stood in the chat
+/// view's header, which is gone; public so the status line can take it.
+class OpenSessionInSystemTerminalButton extends ConsumerWidget {
+  const OpenSessionInSystemTerminalButton({required this.sessionId, super.key});
   final String sessionId;
 
   @override
