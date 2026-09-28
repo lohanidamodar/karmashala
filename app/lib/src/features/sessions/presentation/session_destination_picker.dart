@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_git/repositories.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../workspaces/data/workspace_data.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../workspaces/application/workspaces_controller.dart';
+import 'filter_menu_field.dart';
 
 /// Where a session is about to run. **A project is not the unit a session runs
 /// in — a checkout is**, so [checkout] is the answer and the project the route.
@@ -37,8 +40,8 @@ final defaultSessionDestinationProvider = Provider<SessionDestination?>((ref) {
   );
 });
 
-/// Two dropdowns that say **where** a session will run: a project, then a
-/// checkout. Flat would be 69 rows for one project. Recorded worktrees only.
+/// Two filterable menus ([FilterMenuField]) that say **where** a session will
+/// run: a project, then a checkout. Flat would be 69 rows for one project. Recorded worktrees only.
 class SessionDestinationPicker extends ConsumerWidget {
   const SessionDestinationPicker({
     required this.destination,
@@ -94,8 +97,8 @@ class SessionDestinationPicker extends ConsumerWidget {
         }
       }
     }
-    // A dropdown value not among its items is an assertion, and there is one
-    // honest way there: the chosen worktree's main checkout is unrecorded.
+    // The chosen checkout is always offered, so the field never draws it as
+    // unchosen. One honest way it would be missing: the chosen worktree's main checkout is unrecorded.
     if (checkout != null && !offered.any((o) => o.$1.id == checkout.id)) {
       offered.add((checkout, false));
     }
@@ -103,81 +106,89 @@ class SessionDestinationPicker extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: projects.any((p) => p.id == destination.projectId)
-              ? destination.projectId
-              : null,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Project'),
-          items: [
+        // A filterable menu, not a dropdown: forty projects made the old
+        // dropdown a window-high list with no way to type towards one.
+        FilterMenuField<String?>(
+          label: 'Project',
+          entries: [
             for (final project in projects)
-              DropdownMenuItem(
+              FilterMenuEntry(
                 value: project.id,
-                child: Text(project.name, overflow: TextOverflow.ellipsis),
+                label: project.name,
+                // Two projects can share a name; the machine and folder tell
+                // them apart, and typing either narrows the list.
+                detail:
+                    '${ref.watch(environmentLabelForIdProvider(project.root.environmentId))}'
+                    '  ·  ${project.root.path}',
+                icon: AppIcons.folder,
               ),
           ],
-          onChanged: enabled
-              ? (id) {
-                  if (id == null) return;
-                  onChanged(
-                    SessionDestination(
-                      projectId: id,
-                      // The project's own first parent checkout, by the rule
-                      // the side panel leads with — never a stale row.
-                      checkout: ref
-                          .read(checkoutsInProjectProvider(id))
-                          .firstOrNull,
-                    ),
-                  );
-                }
-              : null,
+          // A project the scope no longer lists draws as "Choose a project"
+          // rather than asserting, as a dropdown value outside its items did.
+          selected: destination.projectId,
+          enabled: enabled,
+          filterHint: 'Filter projects',
+          emptyLabel: 'Choose a project',
+          onSelected: (id) {
+            if (id == null || id == destination.projectId) return;
+            onChanged(
+              SessionDestination(
+                projectId: id,
+                // The project's own first parent checkout, by the rule the
+                // side panel leads with — never a stale row.
+                checkout: ref.read(checkoutsInProjectProvider(id)).firstOrNull,
+              ),
+            );
+          },
         ),
         const SizedBox(height: Insets.md),
         if (offered.isEmpty)
           Text(kNowhereToRunIn, style: Theme.of(context).textTheme.bodySmall)
         else
-          DropdownButtonFormField<String>(
-            // Keyed by the project: after a project change a `FormField`'s kept
-            // value names a checkout no longer in the items, which asserts.
+          FilterMenuField<String?>(
+            // Keyed by the project, so the menu and its filter start afresh
+            // for each project's checkouts.
             key: ValueKey('checkout-in-${destination.projectId}'),
-            initialValue: checkout?.id,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Checkout'),
-            items: [
+            label: 'Checkout',
+            entries: [
               for (final (repository, isWorktree) in offered)
-                DropdownMenuItem(
+                FilterMenuEntry(
                   value: repository.id,
-                  child: Text(
-                    _label(
-                      repository,
-                      isWorktree: isWorktree,
-                      branch: labels?[repository.id]?.branch,
-                      within: root == null
-                          ? null
-                          : relativeSubPath(root, repository.path),
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  label: _label(
+                    repository,
+                    isWorktree: isWorktree,
+                    branch: labels?[repository.id]?.branch,
+                    within: root == null
+                        ? null
+                        : relativeSubPath(root, repository.path),
                   ),
+                  icon: isWorktree ? AppIcons.gitBranch : AppIcons.folder,
                 ),
             ],
-            onChanged: enabled
-                ? (id) {
-                    final picked = offered.firstWhere((o) => o.$1.id == id).$1;
-                    onChanged(
-                      SessionDestination(
-                        projectId: destination.projectId,
-                        checkout: picked,
-                      ),
-                    );
-                  }
-                : null,
+            selected: checkout?.id,
+            enabled: enabled,
+            filterHint: 'Filter checkouts',
+            emptyLabel: 'Choose a checkout',
+            onSelected: (id) {
+              final picked = offered
+                  .where((o) => o.$1.id == id)
+                  .firstOrNull
+                  ?.$1;
+              if (picked == null) return;
+              onChanged(
+                SessionDestination(
+                  projectId: destination.projectId,
+                  checkout: picked,
+                ),
+              );
+            },
           ),
       ],
     );
   }
 
-  /// One line, because a dropdown item is one line: the name, then whatever
-  /// tells two clones apart — a branch for a worktree, a sub-path for a clone.
+  /// One line, because the closed field draws only the label: the name, then
+  /// whatever tells two clones apart — a branch for a worktree, a sub-path for a clone.
   String _label(
     Repository repository, {
     required bool isWorktree,
