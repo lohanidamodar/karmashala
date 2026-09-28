@@ -95,8 +95,9 @@ Color _toneColor(BuildContext context, UsageTone tone) {
 String _shortName(String agentId) =>
     AgentRegistry.builtIn.displayNameFor(agentId).split(' ').first;
 
-/// The card a chip opens: every window of the account, its history and notes,
-/// with a refresh and the way to the full usage page.
+/// The card a chip opens: the account, its machines and their switchers, every
+/// window with its pace, the week with its forecast, and the notes —
+/// with a refresh that waits, and the ways to the Usage tab and its settings.
 Widget _accountCard(
   BuildContext context,
   WidgetRef ref,
@@ -111,7 +112,7 @@ Widget _accountCard(
     environmentId: account.latest.environmentId,
     environmentIds: account.environmentIds,
     // Each button gives up its tail rather than the card its edge: a large text
-    // size must not push either out of a 300px card.
+    // size must not push any of them out of the fixed-width card.
     footer: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
