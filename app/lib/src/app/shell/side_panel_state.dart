@@ -8,7 +8,6 @@ enum SidePanelSurface {
   /// pending, in one list, whichever pane owns the thing that is waiting.
   inbox('Inbox', drawsOwnHeader: true),
   changes('Changes', drawsOwnHeader: true, scopedToRepository: true),
-  github('GitHub', drawsOwnHeader: true, scopedToRepository: true),
   files('Files', drawsOwnHeader: true, scopedToRepository: true),
   device('Device'),
   browser('Browser'),
@@ -23,7 +22,9 @@ enum SidePanelSurface {
   media('Media'),
 
   /// Named for what it holds. "Info" said nothing, so nobody opened it — and
-  /// the branch and worktree list nobody could find lives in here.
+  /// the branch and worktree list nobody could find lives in here. GitHub's
+  /// pull requests and issues too, since 2026-09-28: they describe the same
+  /// checkout, and a pane of their own was blank without a GitHub remote.
   repository('Repository', scopedToRepository: true),
 
   /// **The agent's own plan**, read out of the record it writes for itself, and

@@ -1,6 +1,7 @@
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
+import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/picked_checkouts.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';

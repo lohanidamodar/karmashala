@@ -305,19 +305,37 @@ class ServerGit implements GitWork {
             ),
       };
 
+  /// The three parts read side by side, each failing on its own: one `.wait`
+  /// over all three turned a repository with issues switched off into a pane
+  /// with nothing in it.
   Future<GitHubOverview> _overview(CheckoutRef checkout) async {
     final gh = checkouts.gitHubFor(checkout);
     final path = checkouts.pathOf(checkout);
     final (repository, pullRequests, issues) = await (
-      gh.getRepository(path),
-      gh.listPullRequests(path),
-      gh.listIssues(path),
+      _part(() => gh.getRepository(path)),
+      _part(() => gh.listPullRequests(path)),
+      _part(() => gh.listIssues(path)),
     ).wait;
     return GitHubOverview(
-      repository: repository,
-      pullRequests: pullRequests,
-      issues: issues,
+      repository: repository.value,
+      pullRequests: pullRequests.value ?? const [],
+      issues: issues.value ?? const [],
+      repositoryFailure: repository.failure,
+      pullRequestsFailure: pullRequests.failure,
+      issuesFailure: issues.failure,
     );
+  }
+
+  static Future<({T? value, String? failure})> _part<T>(
+    Future<T> Function() read,
+  ) async {
+    try {
+      return (value: await read(), failure: null);
+    } on GitHubException catch (e) {
+      return (value: null, failure: e.message);
+    } on Object catch (e) {
+      return (value: null, failure: '$e');
+    }
   }
 
   /// [branch]'s pull request, the repository's merge settings and review

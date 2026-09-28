@@ -397,6 +397,16 @@ void main() {
       roundTrip(const GitHubOverviewOf(at), const GitHubOverview()).repository,
       isNull,
     );
+    final partial = roundTrip(
+      const GitHubOverviewOf(at),
+      const GitHubOverview(
+        pullRequests: [PullRequest(number: 1, title: 't', state: 'OPEN')],
+        issuesFailure: 'the repository has issues switched off',
+      ),
+    );
+    expect(partial.pullRequests.single.number, 1);
+    expect(partial.issuesFailure, 'the repository has issues switched off');
+    expect(partial.pullRequestsFailure, isNull);
 
     final reading = roundTrip(
       const GitHubPullRequest(at, branch: 'work'),

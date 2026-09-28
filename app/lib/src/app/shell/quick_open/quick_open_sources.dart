@@ -931,7 +931,8 @@ class QuickOpenSources {
           icon: AppIcons.gitMerge,
           keywords: ['#${pr.number}', 'pull request'],
           weight: _githubWeight,
-          onSelect: () => dismiss(() => panel.select(SidePanelSurface.github)),
+          onSelect: () =>
+              dismiss(() => panel.select(SidePanelSurface.repository)),
         ),
       for (final issue in facts.issues)
         QuickOpenItem(
@@ -943,7 +944,8 @@ class QuickOpenSources {
           icon: AppIcons.warningCircle,
           keywords: ['#${issue.number}', 'issue'],
           weight: _githubWeight,
-          onSelect: () => dismiss(() => panel.select(SidePanelSurface.github)),
+          onSelect: () =>
+              dismiss(() => panel.select(SidePanelSurface.repository)),
         ),
     ];
   }

@@ -7,7 +7,8 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
-import 'package:karmashala/src/features/github/presentation/github_view.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/github/presentation/github_section.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 import 'package:karmashala_device_pane/ports.dart';
 import 'package:karmashala_device_pane/providers.dart';
@@ -259,20 +260,24 @@ void main() {
       );
     });
 
-    testWidgets('GitHubView when gh fails', (tester) async {
+    testWidgets('the GitHub section when gh fails', (tester) async {
       await expectSurvivesWindowMatrix(
         tester,
         build: () => ProviderScope(
           overrides: [
+            selectedCheckoutGitTroubleProvider.overrideWith((ref) => null),
+            githubReachProvider.overrideWith(
+              (ref) => (kind: GitHubReachKind.gitHub, host: 'github.com'),
+            ),
             githubRepositoryProvider.overrideWith((ref) async => null),
             githubPullRequestsProvider.overrideWith(
               (ref) async => throw Exception('gh not authenticated'),
             ),
             githubIssuesProvider.overrideWith((ref) async => const []),
           ],
-          child: sidePanel(const GitHubView()),
+          child: sidePanel(const GitHubSection()),
         ),
-        because: 'an error banner and an empty list share 240px',
+        because: 'a failure note and an empty list share 240px',
       );
     });
   });

@@ -332,12 +332,17 @@ final class PullRequestReading {
 }
 
 /// A repository's page on the forge: its metadata, open pull requests and
-/// open issues.
+/// open issues — each read on its own, so one `gh` refusal (issues switched
+/// off, a rate limit) does not blank the other two. A part that could not be
+/// read says why in its `…Failure`, and its value is then empty.
 final class GitHubOverview {
   const GitHubOverview({
     this.repository,
     this.pullRequests = const [],
     this.issues = const [],
+    this.repositoryFailure,
+    this.pullRequestsFailure,
+    this.issuesFailure,
   });
 
   /// Null when `gh` knows no repository there.
@@ -345,7 +350,19 @@ final class GitHubOverview {
   final List<PullRequest> pullRequests;
   final List<Issue> issues;
 
+  /// Why [repository] could not be read, in `gh`'s or the server's words.
+  final String? repositoryFailure;
+
+  /// Why [pullRequests] could not be read.
+  final String? pullRequestsFailure;
+
+  /// Why [issues] could not be read.
+  final String? issuesFailure;
+
   Map<String, Object?> toJson() => {
+    'repositoryFailure': ?repositoryFailure,
+    'pullRequestsFailure': ?pullRequestsFailure,
+    'issuesFailure': ?issuesFailure,
     if (repository case final r?)
       'repository': {
         'nameWithOwner': r.nameWithOwner,
@@ -372,6 +389,9 @@ final class GitHubOverview {
   };
 
   static GitHubOverview fromJson(Map<String, Object?> json) => GitHubOverview(
+    repositoryFailure: json['repositoryFailure'] as String?,
+    pullRequestsFailure: json['pullRequestsFailure'] as String?,
+    issuesFailure: json['issuesFailure'] as String?,
     repository: switch (json['repository']) {
       final Map<Object?, Object?> r => GitHubRepo(
         nameWithOwner: r['nameWithOwner']! as String,

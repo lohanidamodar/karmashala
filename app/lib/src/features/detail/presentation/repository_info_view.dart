@@ -14,44 +14,14 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../git/application/changes_providers.dart';
+import '../../git/application/remote_links.dart';
+import '../../github/presentation/github_section.dart';
 import 'package:karmashala_git/git.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../git/presentation/worktree_browse.dart';
 import '../../git/presentation/worktree_create_dialog.dart';
 import '../../sessions/application/delivery_providers.dart';
-
-/// The browsable `https://` URL for a git remote, or null when there is not
-/// one — `git@host:owner/repo.git` is scp syntax and `Uri.parse` misreads it.
-String? webUrlForRemote(String remote) {
-  final value = remote.trim();
-  if (value.isEmpty) return null;
-
-  String strip(String path) =>
-      path.endsWith('.git') ? path.substring(0, path.length - 4) : path;
-  bool looksLikeHost(String host) =>
-      host.contains('.') && RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(host);
-
-  // scp syntax: [user@]host:path — the shape `git clone` prints for SSH
-  // remotes, and the one `Uri` cannot read.
-  final scp = RegExp(r'^(?:[^@/]+@)?([^/:]+):(?!//)(.+)$').firstMatch(value);
-  if (scp != null) {
-    final host = scp.group(1)!;
-    final path = strip(scp.group(2)!).replaceFirst(RegExp(r'^/+'), '');
-    if (!looksLikeHost(host) || path.isEmpty) return null;
-    return 'https://$host/$path';
-  }
-
-  final uri = Uri.tryParse(value);
-  if (uri == null || !looksLikeHost(uri.host) || uri.path.isEmpty) return null;
-  return switch (uri.scheme) {
-    'http' ||
-    'https' ||
-    'ssh' ||
-    'git' => 'https://${uri.host}${strip(uri.path)}',
-    _ => null,
-  };
-}
 
 /// What the app knows about the current project and repository. Everything
 /// here is a control: the remote links, the branch copies, a path opens.
@@ -96,6 +66,10 @@ class RepositoryInfoView extends ConsumerWidget {
           _Field(label: 'Environment', value: repo.path.environmentId),
           const Divider(height: Insets.md),
           const _GitDetails(),
+          // GitHub belongs to the same checkout, so it lives here rather than
+          // in a pane of its own that said nothing when there was no remote.
+          const SizedBox(height: Insets.md),
+          const GitHubSection(),
         ] else ...[
           const Divider(height: Insets.md),
           Text(

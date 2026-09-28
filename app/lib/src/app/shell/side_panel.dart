@@ -20,7 +20,6 @@ import '../../features/detail/presentation/verification_view.dart';
 import 'package:karmashala_device_pane/pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
-import '../../features/github/presentation/github_view.dart';
 import '../../features/media/presentation/session_media_panel.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/notes/application/notes_providers.dart';
@@ -71,7 +70,6 @@ class SidePanel extends ConsumerWidget {
   static IconData iconFor(SidePanelSurface surface) => switch (surface) {
     SidePanelSurface.inbox => AppIcons.tray,
     SidePanelSurface.changes => AppIcons.gitDiff,
-    SidePanelSurface.github => AppIcons.gitMerge,
     SidePanelSurface.files => AppIcons.folder,
     SidePanelSurface.device => AppIcons.deviceMobile,
     SidePanelSurface.verification => AppIcons.checkCircle,
@@ -415,7 +413,6 @@ class _SidePanelBody extends ConsumerWidget {
   Widget _surfaceBody(SidePanelSurface surface) => switch (surface) {
     SidePanelSurface.inbox => const AttentionInboxView(),
     SidePanelSurface.changes => _ChangesSurface(),
-    SidePanelSurface.github => const GitHubView(),
     SidePanelSurface.files => const FileExplorerView(),
     SidePanelSurface.device => const DevicePane(),
     SidePanelSurface.browser => const BrowserPane(),

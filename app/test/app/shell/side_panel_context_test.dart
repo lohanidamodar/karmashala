@@ -145,7 +145,6 @@ void main() {
       },
       {
         SidePanelSurface.changes,
-        SidePanelSurface.github,
         SidePanelSurface.files,
         SidePanelSurface.repository,
       },

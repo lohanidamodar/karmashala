@@ -15,8 +15,6 @@ import 'package:karmashala/src/features/file_explorer/presentation/file_explorer
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
-import 'package:karmashala/src/features/github/application/github_providers.dart';
-import 'package:karmashala/src/features/github/presentation/github_view.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -122,21 +120,6 @@ void main() {
     );
     const placeholder = PanePlaceholder(message: 'Nothing.');
     expect(placeholder, isNot(isA<ConsumerWidget>()));
-  });
-
-  testWidgets('GitHub — was 38px of padding with no ground', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          githubPullRequestsProvider.overrideWith((ref) async => const []),
-          githubIssuesProvider.overrideWith((ref) async => const []),
-        ],
-        child: host(const GitHubView()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expectHouseHeader(tester, 'GitHub');
-    expect(find.text('GITHUB'), findsOneWidget);
   });
 
   testWidgets('Files — was 36px of padding with no ground', (tester) async {
@@ -430,15 +413,12 @@ void main() {
     );
   });
 
-  testWidgets('the three rebuilt surfaces survive the window matrix', (
-    tester,
-  ) async {
+  // GitHub was the third; it is a section of the Repository pane now.
+  testWidgets('the rebuilt surfaces survive the window matrix', (tester) async {
     await expectSurvivesWindowMatrix(
       tester,
       build: () => ProviderScope(
         overrides: [
-          githubPullRequestsProvider.overrideWith((ref) async => const []),
-          githubIssuesProvider.overrideWith((ref) async => const []),
           ...explorerOverrides(r'C:\src\app', const {}),
           repositoryChangesProvider.overrideWith(
             (ref) async => const <FileChange>[],
@@ -456,7 +436,6 @@ void main() {
             body: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: 240, child: GitHubView()),
                 SizedBox(width: 240, child: FileExplorerView()),
                 Expanded(child: ChangesView(repositoryName: 'app')),
               ],
@@ -464,7 +443,7 @@ void main() {
           ),
         ),
       ),
-      because: 'all three now draw the fixed-height house header',
+      because: 'both now draw the fixed-height house header',
     );
   });
 }
