@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
@@ -19,6 +18,7 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_actions.dart';
 import 'karmashala_about_dialog.dart';
 import 'quick_open/quick_open.dart';
+import 'shell_menu_items.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 import 'side_panel.dart';
@@ -145,68 +145,63 @@ class _ClearAndReimportDialog extends StatelessWidget {
   );
 }
 
-/// The window's three menus in a row.
-class ShellMenuBar extends ConsumerWidget {
-  const ShellMenuBar({super.key});
+/// **The window's menus behind one glyph** (UI overhaul board A2): the title
+/// bar carries the logo and the quick panel, not three menu titles, so
+/// Workspace, View and Tools are submenus of this one button — drawn like
+/// every other menu in the app (see `shell_menu_items.dart`).
+///
+/// [icon] is `≡` in the title bar; the compact bar passes another glyph,
+/// because its areas button already wears `≡` beside it.
+class ShellMenuButton extends ConsumerWidget {
+  const ShellMenuButton({
+    this.icon = AppIcons.list,
+    this.extent = Chrome.control,
+    super.key,
+  });
 
-  /// The menu titles sit at the tab chips' size, weight and colour: they are
-  /// chrome, not a heading over it, so full contrast only under the pointer.
-  static ButtonStyle titleStyle(ColorScheme scheme) => ButtonStyle(
-    foregroundColor: WidgetStateProperty.resolveWith(
-      (states) =>
-          states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.focused) ||
-              states.contains(WidgetState.pressed)
-          ? scheme.onSurface
-          : scheme.onSurfaceVariant,
-    ),
-    minimumSize: const WidgetStatePropertyAll(Size(0, Chrome.control)),
-    padding: const WidgetStatePropertyAll(
-      EdgeInsets.symmetric(horizontal: Insets.sm),
-    ),
-  );
+  final IconData icon;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final actions = ShellMenuActions(context, ref);
-    final style = titleStyle(Theme.of(context).colorScheme);
-    return MenuBar(
-      children: [
-        WorkspaceMenu(actions, style: style),
-        ViewMenu(actions, style: style),
-        ToolsMenu(actions, style: style),
-      ],
-    );
-  }
-}
-
-/// The same three menus behind one glyph, for a row too narrow for their
-/// titles.
-class ShellOverflowMenu extends ConsumerWidget {
-  const ShellOverflowMenu({super.key});
+  /// The square the glyph sits in: [Chrome.control] in the title bar, the
+  /// compact bar's larger button there.
+  final double extent;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Bound to this button, which outlives the menu: an item's own context is
+    // gone by the time its verb runs.
     final actions = ShellMenuActions(context, ref);
     final scheme = Theme.of(context).colorScheme;
     return MenuAnchor(
+      style: shellMenuPanelStyle(context),
       menuChildren: [
         WorkspaceMenu(actions),
         ViewMenu(actions),
         ToolsMenu(actions),
       ],
-      builder: (context, controller, _) => IconButton(
-        tooltip: 'Menu',
-        constraints: const BoxConstraints.tightFor(
-          width: Chrome.control,
-          height: Chrome.control,
+      builder: (context, controller, _) => Tooltip(
+        message: 'Menu',
+        child: Semantics(
+          button: true,
+          expanded: controller.isOpen,
+          label: 'Menu',
+          excludeSemantics: true,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            onTap: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+            child: SizedBox(
+              width: extent,
+              height: extent,
+              child: Icon(
+                icon,
+                size: Chrome.icon,
+                color: controller.isOpen
+                    ? scheme.onSurface
+                    : scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         ),
-        padding: EdgeInsets.zero,
-        iconSize: Chrome.icon,
-        color: scheme.onSurfaceVariant,
-        icon: const Icon(AppIcons.dotsThreeVertical),
-        onPressed: () =>
-            controller.isOpen ? controller.close() : controller.open(),
       ),
     );
   }
@@ -214,74 +209,71 @@ class ShellOverflowMenu extends ConsumerWidget {
 
 /// New project and session, go to, the CLI-store scans, and quit.
 class WorkspaceMenu extends StatelessWidget {
-  const WorkspaceMenu(this.actions, {this.style, super.key});
+  const WorkspaceMenu(this.actions, {super.key});
 
   final ShellMenuActions actions;
-  final ButtonStyle? style;
 
   @override
-  Widget build(BuildContext context) => SubmenuButton(
-    style: style,
+  Widget build(BuildContext context) => ShellSubmenu(
+    label: 'Workspace',
+    icon: AppIcons.folders,
     menuChildren: [
-      MenuItemButton(
-        leadingIcon: const Icon(AppIcons.folderPlus),
-        shortcut: commandActivator(LogicalKeyboardKey.keyN, shift: true),
-        onPressed: actions.newProject,
-        child: const Text('New project'),
-      ),
-      MenuItemButton(
-        leadingIcon: const Icon(AppIcons.chatCircleDots),
-        shortcut: commandActivator(LogicalKeyboardKey.keyN),
+      ShellMenuItem(
+        label: 'New session',
+        icon: AppIcons.chatCircleDots,
+        shortcut: shellCommandLabel('session.new'),
         onPressed: actions.newSession,
-        child: const Text('New session'),
       ),
-      const Divider(height: 1),
-      MenuItemButton(
-        leadingIcon: const Icon(AppIcons.magnifyingGlass),
-        shortcut: commandActivator(LogicalKeyboardKey.keyK),
+      ShellMenuItem(
+        label: 'New project',
+        icon: AppIcons.folderPlus,
+        shortcut: shellCommandLabel('project.new'),
+        onPressed: actions.newProject,
+      ),
+      const ShellMenuDivider(),
+      ShellMenuItem(
+        label: 'Go to…',
+        icon: AppIcons.magnifyingGlass,
+        shortcut: shellCommandLabel('quickOpen.show'),
         onPressed: actions.goTo,
-        child: const Text('Go to…'),
       ),
-      const Divider(height: 1),
-      MenuItemButton(
+      const ShellMenuDivider(),
+      const ShellMenuHeader('CLI sessions'),
+      ShellMenuItem(
+        label: 'Detect CLI sessions',
         // `globe` is the Browser surface; scanning the CLI stores for sessions
         // is a search, not the web.
-        leadingIcon: const Icon(AppIcons.listMagnifyingGlass),
+        icon: AppIcons.listMagnifyingGlass,
         // No chord: this is the scan you run a handful of times in a
         // workspace's life, and every chord left is one a shell can use.
         onPressed: actions.detectCliSessions,
-        child: const Text('Detect CLI sessions'),
       ),
-      MenuItemButton(
-        leadingIcon: const Icon(AppIcons.arrowsClockwise),
+      ShellMenuItem(
+        label: 'Clear projects and re-import',
+        icon: AppIcons.arrowsClockwise,
         // Unbound on purpose: rare *and* half destructive is the shape of
         // thing that should cost a deliberate trip through a menu.
         onPressed: actions.clearAndReimport,
-        child: const Text('Clear projects and re-import'),
       ),
-      const Divider(height: 1),
-      MenuItemButton(
-        leadingIcon: const Icon(AppIcons.power),
-        // ⌘Q on macOS only, written out rather than reached through
-        // `commandActivator`: off a Mac that becomes Ctrl+Q, which is XON.
-        shortcut: commandKeyIsMeta
-            ? const SingleActivator(LogicalKeyboardKey.keyQ, meta: true)
-            : null,
+      const ShellMenuDivider(),
+      ShellMenuItem(
+        label: 'Quit',
+        icon: AppIcons.power,
+        // ⌘Q on macOS only, where `MainFlutterWindow` catches it natively;
+        // off a Mac it would be Ctrl+Q, which is XON, so nothing is shown.
+        shortcut: commandKeyIsMeta ? '⌘Q' : null,
         onPressed: actions.quit,
-        child: const Text('Quit'),
       ),
     ],
-    child: const Text('Workspace'),
   );
 }
 
-/// What the window shows: the sidebar, the context panel and its surfaces, and
-/// Zen.
+/// What the window shows: the sidebar, the context panel and its surfaces, the
+/// terminal's verbs, and Zen.
 class ViewMenu extends ConsumerWidget {
-  const ViewMenu(this.actions, {this.style, super.key});
+  const ViewMenu(this.actions, {super.key});
 
   final ShellMenuActions actions;
-  final ButtonStyle? style;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -292,36 +284,37 @@ class ViewMenu extends ConsumerWidget {
       ),
       notesEnabled: ref.watch(notesEnabledProvider),
     );
-    return SubmenuButton(
-      style: style,
+    return ShellSubmenu(
+      label: 'View',
+      icon: AppIcons.eye,
       menuChildren: [
         _ExplorerCheckItem(actions),
         _SidePanelCheckItem(actions),
-        _SidePanelItemsSubmenu(actions),
-        const Divider(height: 1),
+        _FocusModeCheckItem(actions),
+        const ShellMenuDivider(),
         // The Inbox is an area of the activity strip; the menu names the chord
         // that reaches it, which it has had since it was bound.
-        MenuItemButton(
-          leadingIcon: const Icon(AppIcons.tray),
-          shortcut: commandActivator(LogicalKeyboardKey.keyA, shift: true),
+        ShellMenuItem(
+          label: 'Inbox',
+          icon: AppIcons.tray,
+          shortcut: shellCommandLabel('attention.toggleInbox'),
           onPressed: () => showShellArea(ref, ShellArea.inbox),
-          child: const Text('Inbox'),
         ),
         // The terminal's verbs left the title bar (spec §4: find, usage and
         // nothing else); each keeps its chord, and here its name.
-        _TerminalSubmenu(),
+        _TerminalSubmenu(actions),
+        const ShellMenuDivider(),
         // The surfaces the context panel can show, so every tool is reachable
-        // from the menu bar. They stay bare: more chords is more keys taken.
+        // from the menu. They stay bare: more chords is more keys taken.
+        const ShellMenuHeader('Context panel'),
         for (final surface in surfaces)
-          MenuItemButton(
-            leadingIcon: Icon(SidePanel.iconFor(surface)),
+          ShellMenuItem(
+            label: surface.label,
+            icon: SidePanel.iconFor(surface),
             onPressed: hasRoom ? () => actions.showSurface(surface) : null,
-            child: Text(surface.label),
           ),
-        const Divider(height: 1),
-        _FocusModeCheckItem(actions),
+        _SidePanelItemsSubmenu(actions),
       ],
-      child: const Text('View'),
     );
   }
 }
@@ -332,15 +325,16 @@ class _ExplorerCheckItem extends ConsumerWidget {
   final ShellMenuActions actions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => CheckboxMenuButton(
-    value: ref.watch(
+  Widget build(BuildContext context, WidgetRef ref) => ShellMenuItem(
+    label: 'Sidebar',
+    icon: AppIcons.treeStructure,
+    checked: ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     ),
-    // Ctrl+Shift+B, not Ctrl+B: a menu should teach the chord that works
-    // everywhere, and Ctrl+B belongs to tmux inside a pane.
-    shortcut: commandActivator(LogicalKeyboardKey.keyB, shift: true),
-    onChanged: (_) => actions.toggleExplorer(),
-    child: const Text('Sidebar'),
+    // The chord that works everywhere — Ctrl+Shift+B, not the Ctrl+B that
+    // belongs to tmux inside a pane (the skip-shell chord wins the label).
+    shortcut: shellCommandLabel('view.toggleExplorer'),
+    onPressed: actions.toggleExplorer,
   );
 }
 
@@ -352,13 +346,16 @@ class _SidePanelCheckItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hasRoom = ref.watch(sidePanelRoomProvider);
-    return CheckboxMenuButton(
-      value: ref.watch(
+    return ShellMenuItem(
+      label: hasRoom ? 'Context panel' : 'Context panel  ·  $kSidePanelNoRoom',
+      icon: AppIcons.sidebarSimple,
+      checked: ref.watch(
         visibleSidePanelProvider.select((panel) => panel != null),
       ),
-      shortcut: commandActivator(LogicalKeyboardKey.digit3),
-      onChanged: hasRoom ? (_) => actions.toggleSidePanel() : null,
-      child: Text(hasRoom ? 'Context panel' : 'Context panel  ·  $kSidePanelNoRoom'),
+      // The chord the title bar's side-panel toggle names. The menu used to
+      // draw Ctrl+3, which is the third activity-strip area, not this.
+      shortcut: shellCommandLabel('view.toggleSidePanel'),
+      onPressed: hasRoom ? actions.toggleSidePanel : null,
     );
   }
 }
@@ -380,24 +377,25 @@ class _SidePanelItemsSubmenu extends ConsumerWidget {
       ),
       notesEnabled: ref.watch(notesEnabledProvider),
     );
-    return SubmenuButton(
-      leadingIcon: const Icon(AppIcons.sidebarSimple),
+    return ShellSubmenu(
+      label: 'Tools in More',
+      icon: AppIcons.dotsThree,
       menuChildren: [
         for (final surface in surfaces)
-          CheckboxMenuButton(
-            value: !hidden.contains(surface),
+          ShellMenuCheckItem(
+            label: surface.label,
+            icon: SidePanel.iconFor(surface),
+            checked: !hidden.contains(surface),
             onChanged: (visible) =>
-                actions.setSurfaceHidden(surface, hidden: visible != true),
-            child: Text(surface.label),
+                actions.setSurfaceHidden(surface, hidden: !visible),
           ),
-        const Divider(height: 1),
-        MenuItemButton(
-          leadingIcon: const Icon(AppIcons.arrowCounterClockwise),
+        const ShellMenuDivider(),
+        ShellMenuItem(
+          label: 'Show all',
+          icon: AppIcons.arrowCounterClockwise,
           onPressed: hidden.isEmpty ? null : actions.showAllSurfaces,
-          child: const Text('Show all'),
         ),
       ],
-      child: const Text('Tools in More'),
     );
   }
 }
@@ -408,79 +406,83 @@ class _FocusModeCheckItem extends ConsumerWidget {
   final ShellMenuActions actions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => CheckboxMenuButton(
-    value: ref.watch(terminalMaximizedProvider),
-    shortcut: commandActivator(LogicalKeyboardKey.backslash),
-    onChanged: (_) => actions.toggleFocusMode(),
-    child: const Text('Zen'),
+  Widget build(BuildContext context, WidgetRef ref) => ShellMenuItem(
+    label: 'Zen',
+    icon: AppIcons.arrowsOutSimple,
+    checked: ref.watch(terminalMaximizedProvider),
+    // Zen's own chord (spec §5), as the title bar's toggle names it: the
+    // older Ctrl+\ still works, but a shell reads it as SIGQUIT.
+    shortcut: shellCommandLabel('view.toggleFocusMode'),
+    onPressed: actions.toggleFocusMode,
   );
 }
 
 /// Settings and About.
 class ToolsMenu extends StatelessWidget {
-  const ToolsMenu(this.actions, {this.style, super.key});
+  const ToolsMenu(this.actions, {super.key});
 
   final ShellMenuActions actions;
-  final ButtonStyle? style;
 
   @override
-  Widget build(BuildContext context) => SubmenuButton(
-    style: style,
+  Widget build(BuildContext context) => ShellSubmenu(
+    label: 'Tools',
+    icon: AppIcons.squaresFour,
     menuChildren: [
-      MenuItemButton(
-        leadingIcon: const Icon(AppIcons.gearSix),
+      ShellMenuItem(
+        label: 'Settings',
+        icon: AppIcons.gearSix,
         // `Ctrl+,` / `⌘,` is the settings chord on every platform, and unlike
         // most Ctrl keys it is not one a shell claims.
-        shortcut: commandActivator(LogicalKeyboardKey.comma),
+        shortcut: shellCommandLabel('settings.open'),
         onPressed: actions.openSettings,
-        child: const Text('Settings'),
       ),
-      const Divider(height: 1),
-      MenuItemButton(
-        leadingIcon: const Icon(AppIcons.info),
+      const ShellMenuDivider(),
+      ShellMenuItem(
+        label: 'About Karmashala',
+        icon: AppIcons.info,
         // No chord: a dialog you open once, to copy a build line into a bug
         // report.
         onPressed: actions.about,
-        child: const Text('About Karmashala'),
       ),
     ],
-    child: const Text('Tools'),
   );
 }
 
 /// The focused terminal's own verbs: find in its scrollback, the snippets, and
-/// the commands it has run.
+/// the commands it has run. Takes the host's [actions]: its own context lives
+/// in the menu, and is gone by the time a dialog needs it.
 class _TerminalSubmenu extends ConsumerWidget {
-  const _TerminalSubmenu();
+  const _TerminalSubmenu(this.actions);
+
+  final ShellMenuActions actions;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hasTabs = ref.watch(
       terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
     );
-    final actions = ShellMenuActions(context, ref);
-    return SubmenuButton(
-      leadingIcon: const Icon(AppIcons.terminal),
+    return ShellSubmenu(
+      label: 'Terminal',
+      icon: AppIcons.terminal,
       menuChildren: [
-        MenuItemButton(
-          leadingIcon: const Icon(AppIcons.magnifyingGlass),
-          shortcut: commandActivator(LogicalKeyboardKey.keyF, shift: true),
+        ShellMenuItem(
+          label: 'Find in scrollback',
+          icon: AppIcons.magnifyingGlass,
+          shortcut: shellCommandLabel('terminal.find'),
           onPressed: hasTabs ? actions.findInScrollback : null,
-          child: const Text('Find in scrollback'),
         ),
-        MenuItemButton(
-          leadingIcon: const Icon(AppIcons.bookBookmark),
-          shortcut: commandActivator(LogicalKeyboardKey.keyS, shift: true),
+        ShellMenuItem(
+          label: 'Command snippets',
+          icon: AppIcons.bookBookmark,
+          shortcut: shellCommandLabel('quickOpen.snippets'),
           onPressed: hasTabs ? actions.commandSnippets : null,
-          child: const Text('Command snippets'),
         ),
-        MenuItemButton(
-          leadingIcon: const Icon(AppIcons.clockCounterClockwise),
+        ShellMenuItem(
+          label: 'Commands run here…',
+          icon: AppIcons.clockCounterClockwise,
           onPressed: hasTabs ? actions.commandsRun : null,
-          child: const Text('Commands run here…'),
         ),
       ],
-      child: const Text('Terminal'),
     );
   }
 }
