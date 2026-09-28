@@ -13,6 +13,7 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'app_shell.dart' show ShellWidth;
 import 'native_menus.dart';
+import 'shell_compact_bar.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_menus.dart';
 import 'shell_shortcuts.dart';
@@ -21,6 +22,8 @@ import 'side_panel_state.dart';
 /// **The title bar** (UI overhaul spec §4): the menus, the quick panel field
 /// in the middle, each account's usage, then New and the window's toggles.
 /// The terminal's own verbs moved to View ▸ Terminal and their chords.
+/// Under 600 px (§5, Compact) the menus are one glyph, the strip another, and
+/// a tab switcher stands where the field and the usage were.
 class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   const ShellTitleBar({this.height = Chrome.titleBar, super.key});
 
@@ -70,14 +73,36 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
         // Its own width, not the window's: the row is what has to fit.
         child: LayoutBuilder(
           builder: (context, constraints) {
+            // The window's class, not the row's: the row is a few pixels
+            // narrower, and the bar must agree with the body below it about
+            // whether the strip is still there.
             final compactToolbar = ShellWidth.of(
-              constraints.maxWidth,
+              MediaQuery.sizeOf(context).width,
             ).isCompact;
             final folded = foldsMenus(
               constraints.maxWidth,
               textScaler,
               compactToolbar: compactToolbar,
             );
+            // One column under 600 (spec §5): the strip is gone, so its
+            // glyphs fold in beside the menu glyph, and the tab switcher
+            // takes the quick panel's place — usage too, which has no room.
+            if (compactToolbar) {
+              return Row(
+                children: [
+                  if (!useNativeMenus) const ShellOverflowMenu(),
+                  const ShellAreasMenuButton(),
+                  const SizedBox(width: Insets.xs),
+                  const Expanded(child: ShellTabSwitcher()),
+                  const _BarDivider(),
+                  const _NewButton(key: ValueKey('title-bar-new')),
+                  const _RestoredSessionsBadge(),
+                  const _BackgroundSessionsBadge(),
+                  const _FocusModeToggle(),
+                  const _SidePanelToggle(),
+                ],
+              );
+            }
             // The strip carries the areas and Settings now (UI overhaul spec
             // §4); the menus stay while the row has room for their titles.
             return Row(

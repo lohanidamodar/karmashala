@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'ask_toasts.dart';
+import 'narrow_overlay.dart';
 import 'zen_bar.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
@@ -23,6 +23,7 @@ import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/sessions/application/quit_resume_launch.dart';
 import '../../features/sessions/presentation/quit_sessions_dialog.dart';
+import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/terminal/application/client_intents.dart';
 import '../../features/terminal/application/client_presence.dart';
@@ -43,25 +44,36 @@ export 'shell_title_bar.dart' show ShellTitleBar;
 
 /// Width classes for the desktop shell, in one place (see `CLAUDE.md` §6):
 /// branching on width, never platform, is what keeps "responsive" a property.
+/// The breakpoints are the UI overhaul spec's (§5, "Narrow and Zen").
 enum ShellWidth {
-  /// One pane at a time, chosen with a selector. The context panel stays
-  /// closed: the title bar's toggle has nowhere to put it.
+  /// Under 600: one column. The strip folds into a menu in the title bar,
+  /// which trades its menus, quick panel and usage for a tab switcher; an area
+  /// or the context panel opens full width over the workbench. Asks still dock.
   compact,
 
-  /// Explorer beside the workbench. An open context panel gets what the
-  /// workbench floor leaves, or is not drawn (see [ShellLayout]).
+  /// 600–839: the strip stays, but the sidebar and the context panel open
+  /// over the workbench as sheets — there is no width left to share.
   medium,
 
-  /// Everything at its natural width.
+  /// 840 and up: sidebar, workbench and context panel side by side. An open
+  /// panel gets what the workbench floor leaves, or is not drawn
+  /// (see [ShellLayout]).
   expanded;
 
+  static const compactBelow = 600.0;
+  static const mediumBelow = 840.0;
+
   static ShellWidth of(double width) {
-    if (width < 760) return ShellWidth.compact;
-    if (width < 1180) return ShellWidth.medium;
+    if (width < compactBelow) return ShellWidth.compact;
+    if (width < mediumBelow) return ShellWidth.medium;
     return ShellWidth.expanded;
   }
 
   bool get isCompact => this == ShellWidth.compact;
+
+  /// Whether the sidebar and the context panel are sheets over the workbench
+  /// rather than columns beside it.
+  bool get overlays => this != ShellWidth.expanded;
 }
 
 /// The desktop shell: Explorer · Workbench · side panel, over a status bar.
@@ -99,6 +111,92 @@ class _AppShellState extends ConsumerState<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(sidePanelRoomProvider.notifier).report(hasRoom);
     });
+  }
+
+  /// The width class the last layout found; null before the first.
+  ShellWidth? _widthClass;
+
+  /// What the side-by-side layout had open when the window narrowed, given
+  /// back when it widens again. Narrowing folds both (spec §5: "the sidebar
+  /// folds"): a sidebar left open would land on top of the workbench the
+  /// moment the window crossed a breakpoint, which nobody asked for.
+  bool _wideSidebarOpen = true;
+  SidePanelSurface? _widePanel;
+
+  bool get _overlays => _widthClass?.overlays ?? false;
+
+  /// Notes the width class of this layout and, on crossing between side by
+  /// side and sheets, folds or restores the sidebar and panel after the frame
+  /// (a provider cannot be written mid-build). Returns whether this layout is
+  /// the one that folds them, so it can draw them closed already.
+  bool _trackWidthClass(ShellWidth next) {
+    final previous = _widthClass;
+    _widthClass = next;
+    if (previous == next) return false;
+    final folding = next.overlays && !(previous?.overlays ?? false);
+    final unfolding = !next.overlays && (previous?.overlays ?? false);
+    if (!folding && !unfolding) return false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final sidebarOpen = ref.read(shellControllerProvider).explorerPaneVisible;
+      final shell = ref.read(shellControllerProvider.notifier);
+      final panel = ref.read(sidePanelProvider.notifier);
+      if (folding) {
+        _wideSidebarOpen = sidebarOpen;
+        _widePanel = ref.read(sidePanelProvider);
+        if (sidebarOpen) shell.toggleExplorerPane();
+        if (_widePanel != null) panel.collapse();
+      } else {
+        if (sidebarOpen != _wideSidebarOpen) shell.toggleExplorerPane();
+        if (_widePanel case final surface?
+            when ref.read(sidePanelProvider) == null) {
+          panel.show(surface);
+        }
+        _widePanel = null;
+      }
+    });
+    return folding;
+  }
+
+  /// Closes the sheets over the workbench — the answer to Esc, a click
+  /// outside, or a pick that sends the user to the workbench. Does nothing
+  /// side by side, where nothing covers anything.
+  void _dismissSheets({bool sidebar = true, bool panel = true}) {
+    if (!_overlays) return;
+    if (sidebar && ref.read(shellControllerProvider).explorerPaneVisible) {
+      ref.read(shellControllerProvider.notifier).toggleExplorerPane();
+    }
+    if (panel && ref.read(sidePanelProvider) != null) {
+      ref.read(sidePanelProvider.notifier).collapse();
+    }
+  }
+
+  /// Sheets take turns: two at once would leave the workbench a sliver
+  /// between them, so opening one closes the other.
+  void _listenForSheets() {
+    ref.listen(shellControllerProvider.select((s) => s.explorerPaneVisible), (
+      was,
+      open,
+    ) {
+      if (was == false && open) _dismissSheets(sidebar: false);
+    });
+    ref.listen(sidePanelProvider, (was, now) {
+      if (was == null && now != null) _dismissSheets(panel: false);
+    });
+    // A pick that sends the user to the workbench — a row, a tab, the chord
+    // that hands focus back — is done with the sidebar, so it folds again.
+    ref.listen(shellControllerProvider.select((s) => s.focusedPane), (_, pane) {
+      if (pane == ShellPane.detail) _dismissSheets(panel: false);
+    });
+    ref.listen(selectedSessionIdProvider, (_, _) {
+      _dismissSheets(panel: false);
+    });
+    ref.listen(
+      terminalSessionsControllerProvider.select(
+        (s) => (s.activeTab?.id, s.activeTab?.focusedPaneId),
+      ),
+      (_, _) => _dismissSheets(),
+    );
   }
 
   /// Removes the before-quit guards this shell registered.
@@ -171,6 +269,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // no editor tab is on screen. Listened rather than watched: its state is a
     // tab's business, not the shell's.
     ref.listen(editorAutoSaveProvider, (_, _) {});
+    _listenForSheets();
     // Focus mode: the workbench takes the window.
     final zen = ref.watch(terminalMaximizedProvider);
     final explorerWidth = ref.watch(
@@ -205,48 +304,58 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = ShellWidth.of(constraints.maxWidth);
-              // The strip is always there outside focus mode; what is left
-              // is what the sidebar, workbench and panel share.
+              final folding = _trackWidthClass(width);
+              final overlays = width.overlays;
+              // The strip is there outside focus mode, except at compact
+              // widths, where it is a menu in the title bar; what is left is
+              // what the sidebar, workbench and panel share.
+              final stripShown = !zen && !width.isCompact;
               final available =
-                  constraints.maxWidth - (zen ? 0 : kActivityStripWidth);
-              // At compact widths the Explorer and the workbench take turns
-              // in the same column.
-              final showExplorer = width.isCompact
-                  ? shell.focusedPane == ShellPane.explorer
-                  : shell.explorerPaneVisible;
+                  constraints.maxWidth -
+                  (stripShown ? kActivityStripWidth : 0);
+              // Drawn closed on the layout that folds them, so a narrowing
+              // window never flashes a sheet it is about to take away.
+              final sidebarOpen = !folding && shell.explorerPaneVisible;
               // Measured as if focus mode were off: it hides the panel too,
-              // and leaving it must not find the selection dropped.
-              final panelFits = ShellLayout.panelFits(
-                available: available,
-                explorerColumn: showExplorer && !width.isCompact,
-              );
+              // and leaving it must not find the selection dropped. A sheet
+              // needs only its own minimum; a column needs the floor beside.
+              final panelFits = overlays
+                  ? available >= ShellLayout.panelMin
+                  : ShellLayout.panelFits(
+                      available: available,
+                      explorerColumn: shell.explorerPaneVisible,
+                    );
               _reportPanelRoom(panelFits);
+              final panelOpen =
+                  !zen && !folding && SidePanel.openSurface(ref) != null;
               final layout = ShellLayout.allocate(
                 available: available,
-                explorerColumn: !zen && showExplorer && !width.isCompact,
-                panelOpen: !zen && SidePanel.openSurface(ref) != null,
+                explorerColumn: !zen && !overlays && sidebarOpen,
+                panelOpen: !overlays && panelOpen,
                 explorerWidth: _explorerDrag ?? explorerWidth,
                 panelWidth: _panelDrag ?? panelWidth,
               );
               final row = Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (!zen) const ShellActivityStrip(),
-                  if (!zen && showExplorer)
-                    width.isCompact
-                        ? const Expanded(child: ShellSidebar())
-                        : ResizableColumn(
-                            width: layout.explorerWidth!,
-                            semanticLabel: 'Resize Explorer width',
-                            onResize: (value) => setState(
-                              () => _explorerDrag = layout.clampExplorer(value),
-                            ),
-                            onResizeEnd: _saveExplorerWidth,
-                            child: const ShellSidebar(),
-                          ),
-                  if (!width.isCompact || !showExplorer)
-                    const Expanded(child: WorkbenchView()),
-                  if (!zen)
+                  if (stripShown) const ShellActivityStrip(),
+                  if (!zen && !overlays && sidebarOpen)
+                    ResizableColumn(
+                      width: layout.explorerWidth!,
+                      semanticLabel: 'Resize Explorer width',
+                      onResize: (value) => setState(
+                        () => _explorerDrag = layout.clampExplorer(value),
+                      ),
+                      onResizeEnd: _saveExplorerWidth,
+                      child: const ShellSidebar(),
+                    ),
+                  // Keyed, so a strip or a column coming and going around it
+                  // moves the workbench rather than building a new one.
+                  const Expanded(
+                    key: ValueKey('shell-workbench'),
+                    child: WorkbenchView(),
+                  ),
+                  if (!zen && !overlays)
                     SidePanel(
                       bodyWidth: layout.panelWidth,
                       hasRoom: panelFits,
@@ -256,31 +365,39 @@ class _AppShellState extends ConsumerState<AppShell> {
                     ),
                 ],
               );
-              return Column(
+              return Stack(
                 children: [
-                  Expanded(
-                    // Asks from sessions not on screen float over the
-                    // workbench's corner, above its status lines.
-                    child: Stack(
-                      children: [
-                        Positioned.fill(child: row),
-                        const Positioned(
-                          right: Insets.lg,
-                          bottom: Insets.xl * 2,
-                          child: ShellAskToasts(),
-                        ),
-                        if (zen)
-                          const Positioned(
-                            top: Insets.sm,
-                            left: 0,
-                            right: 0,
-                            child: Center(child: ShellZenBar()),
-                          ),
-                      ],
+                  Positioned.fill(child: row),
+                  if (!zen && overlays)
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      left: stripShown ? kActivityStripWidth : 0,
+                      right: 0,
+                      child: _sheets(
+                        compact: width.isCompact,
+                        available: available,
+                        sidebarOpen: sidebarOpen,
+                        panelOpen: panelOpen && panelFits,
+                        explorerWidth: _explorerDrag ?? explorerWidth,
+                        panelWidth: _panelDrag ?? panelWidth,
+                      ),
                     ),
+                  // Asks from sessions not on screen float over the
+                  // workbench's corner, above its status lines — and above a
+                  // sheet, because an ask still docks at every width.
+                  const Positioned(
+                    right: Insets.lg,
+                    bottom: Insets.xl * 2,
+                    child: ShellAskToasts(),
                   ),
-                  if (width.isCompact && !zen)
-                    _CompactPaneSelector(shell: shell),
+                  if (zen)
+                    const Positioned(
+                      top: Insets.sm,
+                      left: 0,
+                      right: 0,
+                      child: Center(child: ShellZenBar()),
+                    ),
                 ],
               );
             },
@@ -289,42 +406,91 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     );
   }
-}
 
-/// At compact widths there is only room for one pane, so a selector says which.
-class _CompactPaneSelector extends ConsumerWidget {
-  const _CompactPaneSelector({required this.shell});
+  /// The workbench width a medium sheet always leaves uncovered on its far
+  /// side: a strip of the workbench to click back to, and a reminder it is
+  /// still there.
+  static const _sheetClearance = Insets.xxl * 2;
 
-  final ShellState shell;
+  /// The sidebar and the context panel as sheets over the workbench (spec §5).
+  /// Medium: each at its saved width, still resizable, capped to leave
+  /// [_sheetClearance] of workbench showing. Compact: full width — one column.
+  Widget _sheets({
+    required bool compact,
+    required double available,
+    required bool sidebarOpen,
+    required bool panelOpen,
+    required double explorerWidth,
+    required double panelWidth,
+  }) {
+    double fit(double wanted, double least, double most) {
+      final cap = (available - _sheetClearance).clamp(least, most);
+      return wanted.clamp(least, cap);
+    }
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final controller = ref.read(shellControllerProvider.notifier);
-    return Container(
-      height: Chrome.tabStripOf(context) + Insets.sm,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: SurfaceTones.of(context).chrome,
-        border: Border(top: BorderSide(color: SurfaceTones.of(context).line)),
-      ),
-      child: SegmentedButton<ShellPane>(
-        segments: const [
-          ButtonSegment(
-            value: ShellPane.explorer,
-            icon: Icon(AppIcons.treeStructure, size: Chrome.iconSmall),
-            label: Text('Explorer'),
+    final sidebarWidth = compact
+        ? available
+        : fit(explorerWidth, ShellLayout.explorerMin, ShellLayout.explorerMax);
+    final panelBody = compact
+        ? available
+        : fit(panelWidth, ShellLayout.panelMin, ShellLayout.panelMax);
+    return Stack(
+      children: [
+        if (sidebarOpen || panelOpen)
+          Positioned.fill(child: ShellOverlayScrim(onDismiss: _dismissSheets)),
+        Positioned(
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: sidebarWidth,
+          child: ShellSlideOver(
+            open: sidebarOpen,
+            fromStart: true,
+            onDismiss: () => _dismissSheets(panel: false),
+            child: compact
+                ? const ShellSidebar()
+                : ResizableColumn(
+                    width: sidebarWidth,
+                    semanticLabel: 'Resize Explorer width',
+                    onResize: (value) => setState(
+                      () => _explorerDrag = fit(
+                        value,
+                        ShellLayout.explorerMin,
+                        ShellLayout.explorerMax,
+                      ),
+                    ),
+                    onResizeEnd: _saveExplorerWidth,
+                    child: const ShellSidebar(),
+                  ),
           ),
-          ButtonSegment(
-            value: ShellPane.detail,
-            icon: Icon(AppIcons.terminal, size: Chrome.iconSmall),
-            label: Text('Workbench'),
+        ),
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: panelBody,
+          child: ShellSlideOver(
+            open: panelOpen,
+            fromStart: false,
+            // The panel draws nothing once collapsed; see [animateOut].
+            animateOut: false,
+            onDismiss: () => _dismissSheets(sidebar: false),
+            child: SidePanel(
+              bodyWidth: panelOpen ? panelBody : null,
+              onResize: compact
+                  ? null
+                  : (value) => setState(
+                      () => _panelDrag = fit(
+                        value,
+                        ShellLayout.panelMin,
+                        ShellLayout.panelMax,
+                      ),
+                    ),
+              onResizeEnd: compact ? null : _savePanelWidth,
+            ),
           ),
-        ],
-        showSelectedIcon: false,
-        selected: {shell.focusedPane},
-        onSelectionChanged: (selection) =>
-            controller.focusPane(selection.first),
-      ),
+        ),
+      ],
     );
   }
 }
