@@ -769,13 +769,14 @@ class _BarAction extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final enabled = onPressed != null;
-    // The fill is the emphasis, so a primary that cannot be pressed keeps its
-    // weight and loses its container rather than pretending to be ready.
-    final filled = primary && enabled;
+    // The mockup's pill: a hairline and no fill. The primary is the accent's
+    // ink, not a container — a filled button in a 30px status line shouted
+    // over the pane. One that cannot be pressed keeps its weight only.
+    final accent = primary && enabled;
     final foreground = !enabled
         ? scheme.onSurfaceVariant
-        : filled
-        ? scheme.onPrimaryContainer
+        : accent
+        ? scheme.primary
         : scheme.onSurface;
     return Tooltip(
       message: tooltip,
@@ -793,12 +794,9 @@ class _BarAction extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(Radii.sm),
-              color: filled ? scheme.primaryContainer : null,
               // The same box either way, so promoting an action moves nothing
-              // beside it: the border only changes colour.
-              border: Border.all(
-                color: filled ? scheme.primaryContainer : scheme.outlineVariant,
-              ),
+              // beside it.
+              border: Border.all(color: scheme.outlineVariant),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

@@ -397,13 +397,13 @@ class _ViewToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // No padding of its own: the bar spaces its own row. The border is on the
-    // decoration, which reserves its pixel where a `ClipRRect` would not.
+    // The mockup's switch: a raised well with the chosen half lifted in the
+    // selection tone — no outline.
     return Container(
       clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(1),
       decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
+        color: SurfaceTones.of(context).raised,
         borderRadius: BorderRadius.circular(Radii.sm),
       ),
       child: Row(
@@ -455,7 +455,7 @@ class _ViewToggleHalf extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final colour = selected ? scheme.primary : scheme.onSurfaceVariant;
+    final colour = selected ? scheme.onSurface : scheme.onSurfaceVariant;
     return Tooltip(
       message: tooltip,
       child: Semantics(
@@ -471,7 +471,12 @@ class _ViewToggleHalf extends StatelessWidget {
               horizontal: Insets.sm,
               vertical: kBarControlPad,
             ),
-            color: selected ? StateLayers.selected(scheme) : Colors.transparent,
+            decoration: BoxDecoration(
+              color: selected
+                  ? SurfaceTones.of(context).selected
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(Radii.sm - 1),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
