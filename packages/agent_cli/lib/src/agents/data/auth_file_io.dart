@@ -479,21 +479,13 @@ class RemoteAgentHomes {
   /// `CODEX_HOME` on that host, when set.
   final String? codexHome;
 
-  /// `.credentials.json` — `$CLAUDE_CONFIG_DIR`, or `~/.claude`.
-  String get claudeCredentialsFile => p.posix.join(
-    claudeConfigDir ?? p.posix.join(home, '.claude'),
-    '.credentials.json',
-  );
-
-  /// `.claude.json` — inside `$CLAUDE_CONFIG_DIR` when it is set, else beside
-  /// `~/.claude` in the home directory. Claude Code keys both on the one
-  /// variable.
-  String get claudeConfigFile =>
-      p.posix.join(claudeConfigDir ?? home, '.claude.json');
-
-  /// `auth.json` — `$CODEX_HOME`, or `~/.codex`.
-  String get codexAuthFile =>
-      p.posix.join(codexHome ?? p.posix.join(home, '.codex'), 'auth.json');
+  /// The value of [name] on that host, when [remoteAgentHomesScript] asks for
+  /// it and it is set there.
+  String? variable(String name) => switch (name) {
+    'CLAUDE_CONFIG_DIR' => claudeConfigDir,
+    'CODEX_HOME' => codexHome,
+    _ => null,
+  };
 }
 
 /// The probe that asks a remote host for its home and the agents' overrides.

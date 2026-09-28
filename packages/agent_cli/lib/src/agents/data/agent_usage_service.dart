@@ -4,7 +4,6 @@ import 'package:meta/meta.dart';
 
 import '../../util/clock.dart';
 import '../../cli_detection/data/cli_store.dart';
-import '../../environments/environment_kind.dart';
 import '../../environments/execution_environment.dart';
 import '../adapter/agent_usage_endpoint.dart';
 import '../domain/agent_installation.dart';
@@ -12,6 +11,7 @@ import '../domain/agent_registry.dart';
 import '../domain/agent_usage.dart';
 import '../domain/usage_failure.dart';
 import '../claude_code/claude_auth_service.dart';
+import './agent_home_locator.dart';
 import './usage_exception.dart';
 import './usage_http.dart';
 import './usage_throttle.dart';
@@ -47,7 +47,7 @@ class AgentUsageService {
          clock: clock,
        ),
        _keychain = keychain ?? claudeKeychain,
-       _hostIsMacOS = hostIsMacOS ?? Platform.isMacOS,
+       _homes = AgentHomeLocator(storeLocator, hostIsMacOS: hostIsMacOS),
        _throttle = throttle ?? UsageThrottle(clock: clock);
 
   final CliStoreLocator storeLocator;
@@ -66,11 +66,10 @@ class AgentUsageService {
   /// test can count the spawns this service causes.
   final ClaudeKeychainCache _keychain;
 
-  /// Whether this machine keeps Claude's credential in a Keychain rather than a
-  /// file. Injected for the reason `CliStoreLocator.environment` is: the branch
-  /// it selects has to be testable from the platform that does not have one, or
-  /// it is only ever exercised on the owner's own machine.
-  final bool _hostIsMacOS;
+  /// Where each installation's files are, and how to read them. Takes
+  /// `hostIsMacOS` for the reason `CliStoreLocator.environment` is injected:
+  /// the Keychain branch has to be testable off a Mac.
+  final AgentHomeLocator _homes;
 
   /// The last reading taken for this account, however old, or null if none was
   /// taken in this run.
@@ -217,35 +216,26 @@ class AgentUsageService {
         kind: UsageFailureKind.notAsked,
       );
     }
-    final stores = await storeLocator.locate(environments);
-    CliStore? store;
-    for (final s in stores) {
-      if (s.environmentId == installation.environmentId) {
-        store = s;
-        break;
-      }
-    }
-    if (store == null) {
+    // The same home the Accounts page reads, so an SSH installation is read on
+    // its own host rather than refused for having no local store.
+    final home = await _homes.homeFor(
+      agentId,
+      installation.environmentId,
+      environments,
+    );
+    if (home == null) {
       throw UsageException(
         'Could not locate the store for ${describeEnvironmentId(installation.environmentId)}.',
         kind: UsageFailureKind.notAsked,
       );
     }
-
-    // The separator has to match the paths the store locator produced, which
-    // it picks from the environment's kind. Joining with the Windows context
-    // whatever the host turned `/Users/me/.codex` into `/Users/me/.codex\auth.json`
-    // — a file that cannot exist — so a signed-in account reported itself
-    // signed out and usage could never be read on a Mac.
-    final kind = environments
-        .where((e) => e.id == store!.environmentId)
-        .map((e) => e.kind)
-        .firstOrNull;
     return endpoint.read(
       UsageReadContext(
-        storeHome: store.homeFor(agentId),
-        paths: storePathContextFor(kind),
-        localMacHost: _hostIsMacOS && kind != null && isLocalHost(kind),
+        storeHome: home.path,
+        paths: home.paths,
+        localMacHost: home.localMacHost,
+        homeFromVariable: home.fromVariable,
+        io: home.io,
         http: _http,
         clock: clock,
         keychain: _keychain,

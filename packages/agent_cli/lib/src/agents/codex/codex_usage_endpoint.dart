@@ -24,6 +24,7 @@ class CodexUsageEndpoint implements AgentUsageEndpoint {
     }
     final auth = await readUsageCredential(
       context.paths.join(home, 'auth.json'),
+      io: context.io,
     );
     final tokens = auth?['tokens'];
     final token = tokens is Map<String, dynamic>

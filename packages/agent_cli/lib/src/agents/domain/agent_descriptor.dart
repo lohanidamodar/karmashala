@@ -20,10 +20,14 @@ part 'agent_descriptor/agent_resume_support.dart';
 /// all, is the agent adapter's `AgentStore`. A home with no store capability
 /// behind it is located and listed, and read as nothing.
 class AgentStoreSpec {
-  const AgentStoreSpec({required this.homeDirectoryName});
+  const AgentStoreSpec({required this.homeDirectoryName, this.homeVariable});
 
   /// Directory name under the environment's home, e.g. `.claude`.
   final String homeDirectoryName;
+
+  /// The variable that moves the home elsewhere when set, e.g.
+  /// `CLAUDE_CONFIG_DIR`. Asked of an SSH host; see `RemoteAgentHomes`.
+  final String? homeVariable;
 }
 
 /// The best status source an agent supports. The status service falls back down

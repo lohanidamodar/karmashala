@@ -392,7 +392,10 @@ const claudeCodeDescriptor = AgentDescriptor(
           '["sonnet","opus","haiku","fable","best",…] allowlist',
     ),
   ),
-  store: AgentStoreSpec(homeDirectoryName: '.claude'),
+  store: AgentStoreSpec(
+    homeDirectoryName: '.claude',
+    homeVariable: 'CLAUDE_CONFIG_DIR',
+  ),
   statusStrategy: AgentStatusStrategy.hooks,
   hooks: AgentHookSpec(
     configFileName: 'settings.json',

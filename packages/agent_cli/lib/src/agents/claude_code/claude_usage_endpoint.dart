@@ -1,4 +1,3 @@
-import '../../util/json_file.dart';
 import '../adapter/agent_usage_endpoint.dart';
 import '../data/usage_credentials.dart';
 import '../data/usage_exception.dart';
@@ -29,13 +28,16 @@ class ClaudeUsageEndpoint implements AgentUsageEndpoint {
         kind: UsageFailureKind.notAsked,
       );
     }
-    final ctx = context.paths;
+    final files = claudeFilesIn(
+      home,
+      context.paths,
+      fromVariable: context.homeFromVariable,
+    );
 
     // Read email from .claude.json if available
     String? email;
-    final configFile = ctx.join(ctx.dirname(home), '.claude.json');
     // Only the email comes from here; a broken config costs the label, not the reading.
-    final config = (await readJsonObjectFile(configFile)).object;
+    final config = (await context.io.readJsonObject(files.config)).object;
     final oauthAccount = config?['oauthAccount'];
     if (oauthAccount is Map<String, dynamic>) {
       email = oauthAccount['emailAddress'] as String?;
@@ -44,7 +46,8 @@ class ClaudeUsageEndpoint implements AgentUsageEndpoint {
     // in the login Keychain. Same object, different cupboard.
     if (!context.localMacHost) {
       final creds = await readUsageCredential(
-        ctx.join(home, '.credentials.json'),
+        files.credentials,
+        io: context.io,
       );
       return _usage(context, _tokenIn(creds), email: email);
     }

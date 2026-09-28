@@ -26,7 +26,7 @@ class AntigravityUsageEndpoint implements AgentUsageEndpoint {
       throw UsageException('No Antigravity store for this install.');
     }
     final tokenFile = context.paths.join(home, 'antigravity-oauth-token');
-    final auth = await readUsageCredential(tokenFile);
+    final auth = await readUsageCredential(tokenFile, io: context.io);
     final tokenObj = auth?['token'];
     final token = tokenObj is Map<String, dynamic>
         ? tokenObj['access_token'] as String?

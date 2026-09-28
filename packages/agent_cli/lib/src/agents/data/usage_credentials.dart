@@ -1,13 +1,16 @@
 import 'dart:convert';
 
-import '../../util/json_file.dart';
 import '../domain/usage_failure.dart';
+import 'auth_file_io.dart';
 import 'usage_exception.dart';
 
-/// The credential file's object, or null when it is absent. One that is there
-/// and unusable is said so, not reported as "not signed in".
-Future<Map<String, dynamic>?> readUsageCredential(String path) async {
-  final read = await readJsonObjectFile(path);
+/// The credential file's object, read through [io], or null when it is absent.
+/// One that is there and unusable is said so, not reported as "not signed in".
+Future<Map<String, dynamic>?> readUsageCredential(
+  String path, {
+  AuthFileIo io = const LocalAuthFileIo(),
+}) async {
+  final read = await io.readJsonObject(path);
   if (read.failure case final failure?) {
     throw UsageException(failure, kind: UsageFailureKind.auth);
   }

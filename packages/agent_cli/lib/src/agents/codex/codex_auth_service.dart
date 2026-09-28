@@ -4,11 +4,10 @@ import '../../util/clock.dart';
 import '../domain/agent_ids.dart';
 import '../../util/id_generator.dart';
 import '../../cli_detection/data/cli_store.dart';
-import '../../environments/environment_kind.dart';
 import '../../environments/execution_environment.dart';
-import '../../process/command_runner.dart';
 import '../domain/agent_installation.dart';
 import './codex_account.dart';
+import '../data/agent_home_locator.dart';
 import '../data/auth_file_io.dart';
 
 export '../data/auth_file_io.dart';
@@ -25,10 +24,9 @@ class CodexAuthException implements Exception {
 typedef CodexAuthLocation = ({String path, AuthFileIo io});
 
 class CodexAuthLocator {
-  CodexAuthLocator(this._stores);
-  final CliStoreLocator _stores;
+  CodexAuthLocator(CliStoreLocator stores) : _homes = AgentHomeLocator(stores);
 
-  final Map<String, RemoteAgentHomes> _remoteHomes = {};
+  final AgentHomeLocator _homes;
 
   /// The path alone. See [locationFor], which also says how to reach it.
   Future<String?> authPathFor(
@@ -47,72 +45,14 @@ class CodexAuthLocator {
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
-    final remote = environments
-        .where(
-          (e) =>
-              e.id == installation.environmentId &&
-              e.kind == EnvironmentKind.ssh,
-        )
-        .firstOrNull;
-    if (remote != null) return _remoteLocation(remote);
-
-    for (final store in await _stores.locate(environments)) {
-      if (store.environmentId != installation.environmentId ||
-          store.homeFor(AgentIds.codex) == null) {
-        continue;
-      }
-      final environment = environments
-          .where((e) => e.id == store.environmentId)
-          .firstOrNull;
-      return (
-        path: storePathContextFor(
-          environment?.kind,
-        ).join(store.homeFor(AgentIds.codex)!, 'auth.json'),
-        io: environment == null
-            ? const LocalAuthFileIo()
-            : storeAuthFileIo(
-                environment: environment,
-                environments: environments,
-                runnerFor: _stores.runnerFor,
-                translator: _stores.translator,
-              ),
-      );
-    }
-    return null;
-  }
-
-  Future<CodexAuthLocation> _remoteLocation(
-    ExecutionEnvironment environment,
-  ) async {
-    const unresolved = '~/.codex/auth.json';
-    final CommandRunner runner;
-    try {
-      runner = _stores.runnerFor(environment.id);
-    } on Object catch (e) {
-      return (
-        path: unresolved,
-        io: RefusingAuthFileIo(
-          'Karmashala has no connection to ${environment.name} ($e).',
-        ),
-      );
-    }
-    var homes = _remoteHomes[environment.id];
-    if (homes == null) {
-      try {
-        homes = await resolveRemoteAgentHomes(
-          runner,
-          environmentName: environment.name,
-        );
-      } on AuthFileIoException catch (e) {
-        // Not cached, so a host that comes back is picked up on the next read.
-        return (path: unresolved, io: RefusingAuthFileIo(e.message));
-      }
-      _remoteHomes[environment.id] = homes;
-    }
-    return (
-      path: homes.codexAuthFile,
-      io: RemoteAuthFileIo(runner: runner, environmentName: environment.name),
+    final home = await _homes.homeFor(
+      AgentIds.codex,
+      installation.environmentId,
+      environments,
     );
+    final codexHome = home?.path;
+    if (home == null || codexHome == null) return null;
+    return (path: home.paths.join(codexHome, 'auth.json'), io: home.io);
   }
 }
 

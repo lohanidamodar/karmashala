@@ -4,18 +4,18 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 
 import 'package:logging/logging.dart';
+import 'package:path/path.dart' as p;
 import '../../util/clock.dart';
 import '../../util/json_object_splice.dart';
 import '../../util/describe_age.dart';
 import '../../util/id_generator.dart';
 import '../../cli_detection/data/cli_store.dart';
-import '../../environments/environment_kind.dart';
-import '../../process/command_runner.dart';
 import '../../environments/execution_environment.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_ids.dart';
 import './claude_account.dart';
 import './claude_auth_snapshot.dart';
+import '../data/agent_home_locator.dart';
 import '../data/auth_file_io.dart';
 
 export '../data/auth_file_io.dart';
@@ -69,23 +69,17 @@ class ClaudeAuthException implements Exception {
   String toString() => 'ClaudeAuthException: $message';
 }
 
-/// Resolves the credential/config file locations for a Claude installation by
-/// reusing [CliStoreLocator], which already maps each environment's `.claude`
-/// home to a form this host can read — `%USERPROFILE%` for Windows, the
-/// `\\wsl.localhost\…` UNC form for WSL, and an ordinary POSIX path on macOS
-/// and Linux.
-///
-/// An SSH environment is not one of those: its `.claude` is on the remote disk,
-/// which [CliStoreLocator] deliberately does not reach. Its paths are asked of
-/// the host itself — its `$HOME`, or `CLAUDE_CONFIG_DIR` when set there — and
-/// come with a [RemoteAuthFileIo] that reads and writes them over that
-/// environment's runner.
+/// Resolves the credential/config file locations for a Claude installation
+/// from its `.claude` home, which [AgentHomeLocator] finds: the form this host
+/// can read for Windows, WSL, macOS and Linux, and on an SSH host the host's
+/// own `$HOME`, or `CLAUDE_CONFIG_DIR` when set there, with a
+/// [RemoteAuthFileIo] that reads and writes them over that environment's
+/// runner.
 class ClaudeAuthLocator {
-  ClaudeAuthLocator(this._storeLocator);
+  ClaudeAuthLocator(CliStoreLocator storeLocator)
+    : _homes = AgentHomeLocator(storeLocator);
 
-  final CliStoreLocator _storeLocator;
-
-  final Map<String, RemoteAgentHomes> _remoteHomes = {};
+  final AgentHomeLocator _homes;
 
   /// Returns the paths for [installation], or `null` if the environment's
   /// `.claude` home could not be resolved.
@@ -97,94 +91,48 @@ class ClaudeAuthLocator {
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
-    final remote = environments
-        .where(
-          (e) =>
-              e.id == installation.environmentId &&
-              e.kind == EnvironmentKind.ssh,
-        )
-        .firstOrNull;
-    if (remote != null) return _remotePaths(remote);
-
-    final stores = await _storeLocator.locate(environments);
-    for (final store in stores) {
-      if (store.environmentId != installation.environmentId) continue;
-      final claudeHome = store.homeFor(AgentIds.claudeCode);
-      if (claudeHome == null) return null;
-      final environment = environments
-          .where((e) => e.id == store.environmentId)
-          .firstOrNull;
-      final kind = environment?.kind;
-      // The separator has to match the path the store locator produced, which
-      // is the same choice `CliStoreLocator` itself makes. Joining with the
-      // Windows context unconditionally turned `/Users/me/.claude` into
-      // `/Users/me\.claude.json` — a file that cannot exist, so the config read
-      // came back null and every Mac account reported itself signed out.
-      final ctx = storePathContextFor(kind);
-      return ClaudeAuthPaths(
-        environmentId: store.environmentId,
-        credentialsFile: ctx.join(claudeHome, '.credentials.json'),
-        // `.claude.json` sits next to the `.claude` directory, in the home dir.
-        configFile: ctx.join(ctx.dirname(claudeHome), '.claude.json'),
-        // Only the local Mac: a WSL or SSH environment keeps its own file, and
-        // this host's Keychain has nothing to say about it.
-        credentialsInKeychain:
-            Platform.isMacOS && kind != null && isLocalHost(kind),
-        io: environment == null
-            ? const LocalAuthFileIo()
-            : storeAuthFileIo(
-                environment: environment,
-                environments: environments,
-                runnerFor: _storeLocator.runnerFor,
-                translator: _storeLocator.translator,
-              ),
-      );
-    }
-    return null;
-  }
-
-  Future<ClaudeAuthPaths> _remotePaths(ExecutionEnvironment environment) async {
-    final CommandRunner runner;
-    try {
-      runner = _storeLocator.runnerFor(environment.id);
-    } on Object catch (e) {
-      return _refused(
-        environment,
-        'Karmashala has no connection to ${environment.name} ($e).',
-      );
-    }
-    var homes = _remoteHomes[environment.id];
-    if (homes == null) {
-      try {
-        homes = await resolveRemoteAgentHomes(
-          runner,
-          environmentName: environment.name,
-        );
-      } on AuthFileIoException catch (e) {
-        // Not cached: the next read asks again, so a host that comes back is
-        // picked up without a restart.
-        return _refused(environment, e.message);
-      }
-      _remoteHomes[environment.id] = homes;
-    }
+    final home = await _homes.homeFor(
+      AgentIds.claudeCode,
+      installation.environmentId,
+      environments,
+    );
+    final claudeHome = home?.path;
+    if (home == null || claudeHome == null) return null;
+    final files = claudeFilesIn(
+      claudeHome,
+      home.paths,
+      fromVariable: home.fromVariable,
+    );
     return ClaudeAuthPaths(
-      environmentId: environment.id,
-      credentialsFile: homes.claudeCredentialsFile,
-      configFile: homes.claudeConfigFile,
-      io: RemoteAuthFileIo(runner: runner, environmentName: environment.name),
+      environmentId: home.environmentId,
+      credentialsFile: files.credentials,
+      configFile: files.config,
+      // Only the local Mac: a WSL or SSH environment keeps its own file, and
+      // this host's Keychain has nothing to say about it.
+      credentialsInKeychain: home.localMacHost,
+      io: home.io,
     );
   }
-
-  static ClaudeAuthPaths _refused(
-    ExecutionEnvironment environment,
-    String reason,
-  ) => ClaudeAuthPaths(
-    environmentId: environment.id,
-    credentialsFile: '~/.claude/.credentials.json',
-    configFile: '~/.claude.json',
-    io: RefusingAuthFileIo(reason),
-  );
 }
+
+/// Claude Code's two files for the `.claude` home [claudeHome]:
+/// `.credentials.json` inside it, and `.claude.json` inside it when
+/// `CLAUDE_CONFIG_DIR` moved it ([fromVariable]), else beside it in the home
+/// directory.
+///
+/// [paths] must be the rules [claudeHome] is spelled in: joining a POSIX home
+/// with the Windows context names `/Users/me\.claude.json`, which cannot exist.
+({String credentials, String config}) claudeFilesIn(
+  String claudeHome,
+  p.Context paths, {
+  bool fromVariable = false,
+}) => (
+  credentials: paths.join(claudeHome, '.credentials.json'),
+  config: paths.join(
+    fromVariable ? claudeHome : paths.dirname(claudeHome),
+    '.claude.json',
+  ),
+);
 
 /// Reads, captures, and switches Claude Code accounts by manipulating the
 /// credential and config files directly.

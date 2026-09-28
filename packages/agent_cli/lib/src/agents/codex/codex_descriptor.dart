@@ -431,7 +431,10 @@ const codexDescriptor = AgentDescriptor(
       pickerCommand: '/model',
     ),
   ),
-  store: AgentStoreSpec(homeDirectoryName: '.codex'),
+  store: AgentStoreSpec(
+    homeDirectoryName: '.codex',
+    homeVariable: 'CODEX_HOME',
+  ),
   // **Codex has hooks**, and they are the only source that can say a turn
   // started. The backlog recorded this agent as configurable only through TOML;
   // it also reads `$CODEX_HOME/hooks.json`, in the same shape this app already
