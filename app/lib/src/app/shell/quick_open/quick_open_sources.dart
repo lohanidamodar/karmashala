@@ -227,8 +227,8 @@ class QuickOpenSources {
           onSelect: () => FanOutDialog.show(context),
         ),
       ..._resumeCommands(),
-      // Listed as verbs, not places: "Notes · Side panel" only answers if you
-      // already know the name. Each opens its surface on the way.
+      // Listed as verbs, not places: "Notes · Context panel" only answers if
+      // you already know the name. Each opens its surface on the way.
       if (ref.read(notesEnabledProvider))
         _command(
           'New note…',
@@ -291,13 +291,13 @@ class QuickOpenSources {
       // have somewhere to act: always offered and usually inert is noise.
       ..._splitCommands(),
       _command(
-        'Toggle Explorer',
+        'Toggle sidebar',
         icon: AppIcons.treeStructure,
         shortcut: shellCommandLabel('view.toggleExplorer'),
         onSelect: shell.toggleExplorerPane,
       ),
       _command(
-        'Toggle side panel',
+        'Toggle context panel',
         icon: AppIcons.sidebarSimple,
         shortcut: shellCommandLabel('view.toggleSidePanel'),
         onSelect: panel.toggle,
@@ -308,7 +308,7 @@ class QuickOpenSources {
       ))
         _command(
           surface.label,
-          subtitle: 'Side panel',
+          subtitle: 'Context panel',
           icon: SidePanel.iconFor(surface),
           onSelect: () => panel.select(surface),
         ),

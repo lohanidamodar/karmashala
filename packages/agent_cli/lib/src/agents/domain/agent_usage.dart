@@ -48,7 +48,7 @@ class UsageWindow {
 /// **What every surface says about a window nothing measured.**
 ///
 /// One phrase in one place, because a percentage — and its absence — has to
-/// mean the same thing in the status bar, in Settings and in a fan-out.
+/// mean the same thing on the title bar's chips, in Settings and in a fan-out.
 const String kUsageNoQuotaReported = 'no quota reported';
 
 /// A usage snapshot for one agent account: the quota windows plus when it was

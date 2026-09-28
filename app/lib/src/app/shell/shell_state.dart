@@ -1,11 +1,11 @@
 import 'package:riverpod/riverpod.dart';
 
-/// The two logical panes of the desktop shell: the Explorer tree (projects and
-/// their sessions) and the Detail view.
+/// The two logical panes of the desktop shell: the sidebar (`explorer`, named
+/// for the Explorer panel it replaced) and the workbench (`detail`).
 enum ShellPane { explorer, detail }
 
 /// UI state for the desktop shell: which pane currently has focus and whether
-/// the (collapsible) explorer pane is shown.
+/// the (collapsible) sidebar is shown.
 class ShellState {
   const ShellState({
     this.focusedPane = ShellPane.explorer,

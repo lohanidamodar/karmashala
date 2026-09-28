@@ -91,7 +91,7 @@ final class CloseTerminalTab extends ClientIntent {
   };
 }
 
-/// Point the Explorer, the diff view and the side panel at checkout
+/// Point the sidebar, the diff view and the context panel at checkout
 /// [repositoryId].
 final class SelectCheckout extends ClientIntent {
   const SelectCheckout(this.repositoryId);

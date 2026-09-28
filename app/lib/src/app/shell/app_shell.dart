@@ -76,8 +76,10 @@ enum ShellWidth {
   bool get overlays => this != ShellWidth.expanded;
 }
 
-/// The desktop shell: Explorer · Workbench · side panel, over a status bar.
-/// Terminal-primary, so the terminal is the middle of the window, not a dock.
+/// The desktop shell (UI overhaul spec §4): title bar, activity strip,
+/// sidebar and workbench, with the context panel on demand and no global
+/// status bar. Terminal-primary, so the terminal is the middle of the window,
+/// not a dock.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -270,7 +272,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // tab's business, not the shell's.
     ref.listen(editorAutoSaveProvider, (_, _) {});
     _listenForSheets();
-    // Focus mode: the workbench takes the window.
+    // Zen: the workbench takes the window.
     final zen = ref.watch(terminalMaximizedProvider);
     final explorerWidth = ref.watch(
       settingsControllerProvider.select((s) => s.explorerPaneWidth),
@@ -306,7 +308,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               final width = ShellWidth.of(constraints.maxWidth);
               final folding = _trackWidthClass(width);
               final overlays = width.overlays;
-              // The strip is there outside focus mode, except at compact
+              // The strip is there outside Zen, except at compact
               // widths, where it is a menu in the title bar; what is left is
               // what the sidebar, workbench and panel share.
               final stripShown = !zen && !width.isCompact;
@@ -316,7 +318,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               // Drawn closed on the layout that folds them, so a narrowing
               // window never flashes a sheet it is about to take away.
               final sidebarOpen = !folding && shell.explorerPaneVisible;
-              // Measured as if focus mode were off: it hides the panel too,
+              // Measured as if Zen were off: it hides the panel too,
               // and leaving it must not find the selection dropped. A sheet
               // needs only its own minimum; a column needs the floor beside.
               final panelFits = overlays
@@ -496,7 +498,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 }
 
 /// How the shell's width is shared out. The workbench's floor is met first,
-/// then the context panel's width, then the Explorer's; a panel that cannot
+/// then the context panel's width, then the sidebar's; a panel that cannot
 /// fit beside the floor is not drawn rather than crush the workbench.
 @immutable
 class ShellLayout {
@@ -507,7 +509,7 @@ class ShellLayout {
     required this.panelMaxWidth,
   });
 
-  /// The least the workbench is given beside an open Explorer and side panel.
+  /// The least the workbench is given beside an open sidebar and context panel.
   static const workbenchFloor = 360.0;
 
   static const explorerMin = 200.0;
@@ -515,7 +517,8 @@ class ShellLayout {
   static const panelMin = 240.0;
   static const panelMax = 620.0;
 
-  /// The Explorer column's width; null when there is no column to size.
+  /// The sidebar column's width; null when there is no column to size. Named
+  /// `explorer` for the panel the sidebar replaced; the settings keys kept it.
   final double? explorerWidth;
   final double explorerMaxWidth;
 
@@ -561,7 +564,7 @@ class ShellLayout {
     );
   }
 
-  /// Whether an open side panel would get a body beside the workbench floor.
+  /// Whether an open context panel would get a body beside the workbench floor.
   static bool panelFits({
     required double available,
     required bool explorerColumn,

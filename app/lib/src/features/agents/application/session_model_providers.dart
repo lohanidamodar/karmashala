@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../sessions/application/session_launcher.dart';
-import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -98,13 +97,3 @@ final sessionModelProvider = Provider.autoDispose
             : ref.watch(agentModelSupportProvider(agentId)),
       );
     });
-
-/// The same, for the session the app chrome is following: the status bar shows
-/// the session you are looking at, and **nothing at all** when there is none.
-final focusedSessionModelProvider = Provider.autoDispose<SessionModelState?>((
-  ref,
-) {
-  final sessionId = ref.watch(focusedSessionIdProvider);
-  if (sessionId == null) return null;
-  return ref.watch(sessionModelProvider(sessionId));
-});

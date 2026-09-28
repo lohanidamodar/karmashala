@@ -352,8 +352,8 @@ class _CountBadgeButton extends StatelessWidget {
   }
 }
 
-/// A title-bar glyph, drawn like a rail button so the two places in the chrome
-/// where an icon means "show me this" look like one control.
+/// A title-bar glyph, drawn like an activity-strip button so the two places in
+/// the chrome where an icon means "show me this" look like one control.
 class _ChromeToggle extends StatelessWidget {
   const _ChromeToggle({
     required this.icon,

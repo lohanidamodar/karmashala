@@ -5,7 +5,7 @@ part of 'terminal_sessions_controller.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 /// What a tab and a pane are **called**, and how strong a tab's liveness is —
-/// one place, so the strip, the picker, the region headers and the status bar
+/// one place, so the strip, the picker, the region headers and the status line
 /// agree by construction. The precedence order is stated on `_titleForPane`.
 extension TerminalPaneTitles on TerminalSessionsController {
   /// The label shown on tab [tabId]: the focused pane's title while the tab is

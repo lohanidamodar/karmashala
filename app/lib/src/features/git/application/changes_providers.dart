@@ -240,7 +240,7 @@ final repoRemoteUrlProvider = FutureProvider.autoDispose<String?>((ref) async {
 }, retry: _retryOnlyRealFailures);
 
 /// Recent commits on the branch the viewed checkout has out — follows the
-/// browse, unlike the branch and remote above, which the status bar reads.
+/// browse, unlike the branch and remote above, which the status line reads.
 final recentCommitsProvider = FutureProvider.autoDispose<List<GitCommit>>((
   ref,
 ) async {

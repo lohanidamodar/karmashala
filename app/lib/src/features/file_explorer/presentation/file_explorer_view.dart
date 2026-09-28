@@ -40,7 +40,7 @@ class FileExplorerView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final root = ref.watch(fileTreeRootProvider);
     // The header stays in the empty state: this surface draws its own, so a bare
-    // placeholder left the panel with no title and no way out but the rail glyph.
+    // placeholder left the panel with no title and no way out.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

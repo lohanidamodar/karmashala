@@ -309,21 +309,7 @@ String _modelMarkLimit(SessionModelState state) => state.support.switchesLive
           'is running, so this is what the next launch uses — a change made '
           'since this session started is not true of the process now.';
 
-/// [ModelChip] following the focused session. `const` where it is placed, so a
-/// row rebuild cannot rebuild the chip, nor a model change the row.
-class FocusedModelChip extends ConsumerWidget {
-  const FocusedModelChip({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => _buildModelChip(
-    context,
-    ref,
-    ref.watch(focusedSessionModelProvider),
-    maxLabelWidth: 72,
-  );
-}
-
-/// The shared body of the two placements: a state in, a chip or nothing out.
+/// The body of [SessionModelChip]: a state in, a chip or nothing out.
 Widget _buildModelChip(
   BuildContext context,
   WidgetRef ref,

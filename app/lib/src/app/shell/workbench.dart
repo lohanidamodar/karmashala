@@ -113,14 +113,14 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // A restored layout can put an agent pane on screen before anything is
-      // selected; the side panel should describe that session.
+      // selected; the context panel should describe that session.
       if (active != null) ref.read(sessionContextProvider).follow(active);
       if (selected != null) _showSurfaceFor(_shownPane, selected);
       _hostSelection();
     });
   }
 
-  /// Records the group the Explorer's selection was opened into. Only ever
+  /// Records the group the sidebar's selection was opened into. Only ever
   /// *recorded* — see [selectionHostGroupProvider].
   void _hostSelection() {
     final selected =
@@ -177,7 +177,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 
   @override
   Widget build(BuildContext context) {
-    // Picking a session in the Explorer is a request to work *in* it. A listener
+    // Picking a session in the sidebar is a request to work *in* it. A listener
     // rather than a build-time branch, so a switch to the conversation sticks.
     ref.listen(selectedSessionIdProvider, (_, next) {
       if (next != null) _openSession(next);
@@ -207,8 +207,8 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       ),
       (_, _) => _followSessionPane(),
     );
-    // The side panel describes the session you are in — driven by the pane on
-    // screen, not the selection, so activating another tab moves it too.
+    // The context panel describes the session you are in — driven by the pane
+    // on screen, not the selection, so activating another tab moves it too.
     ref.listen(activePaneSessionIdProvider, (_, next) {
       final context = ref.read(sessionContextProvider);
       // A shell tab follows no *session*, and saying so matters: a checkout
@@ -225,7 +225,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     );
     // **Where the pane on screen is working, now** — an agent's hook cwd, a
     // shell's OSC 7, or the directory the session was launched in. A click in
-    // the Explorer outranks it until you move panes.
+    // the sidebar outranks it until you move panes.
     ref.listen(focusedDirectoryProvider, (_, next) {
       if (next == null) return;
       if (ref.read(explorerFollowHoldProvider)) return;

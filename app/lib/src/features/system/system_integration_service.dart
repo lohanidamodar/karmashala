@@ -549,7 +549,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   void _openAttention(int index) {
     if (index < 0 || index >= _pending.length) return;
     // Through the inbox, so opening from the tray marks the item seen and the
-    // badge, the rail and the status bar all drop by one together.
+    // tray badge and the activity strip's badges all drop by one together.
     _container.read(attentionInboxProvider.notifier).open(_pending[index]);
     unawaited(_raiseWindow());
   }

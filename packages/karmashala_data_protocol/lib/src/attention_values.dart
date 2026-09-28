@@ -52,7 +52,7 @@ final class SessionStatusEntry {
 
 /// How much of the watch set the server's last status cycle reached.
 /// Coverage is guaranteed by construction; this exists so it can be seen
-/// (Settings › the watch set).
+/// (Settings › Diagnostics › Session watching).
 final class WatchCoverage {
   const WatchCoverage({
     required this.tracked,

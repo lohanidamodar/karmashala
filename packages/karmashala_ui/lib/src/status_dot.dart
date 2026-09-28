@@ -25,7 +25,7 @@ class StatusDot extends StatelessWidget {
   final String? tooltip;
 
   /// The ground the dot is punched out of, when it sits on something it would
-  /// otherwise disappear into — a badge over a rail glyph. Drawn inside the
+  /// otherwise disappear into — a badge over a strip glyph. Drawn inside the
   /// [Chrome.dot] box, so the dot's footprint never changes.
   final Color? ring;
 

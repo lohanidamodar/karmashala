@@ -16,7 +16,7 @@ const double _sessionFactsScrollWidth = 240;
 const double _sessionModelLabelWidth = 72;
 
 /// The chrome under the surface: what belongs to the session on screen. It
-/// speaks for the *focused pane's* session, never the Explorer's selection.
+/// speaks for the *focused pane's* session, never the sidebar's selection.
 class _SessionBar extends ConsumerWidget {
   const _SessionBar({
     required this.groupId,

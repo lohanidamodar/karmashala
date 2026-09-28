@@ -358,7 +358,7 @@ class AttentionInbox {
     }
 
     // Identity when nothing moved: a poll every five seconds must not rebuild
-    // the status bar, the panel and the tray for saying the same thing again.
+    // the strip badges, the panel and the tray for saying the same thing again.
     if (added.isEmpty && retired.isEmpty && rebound.isEmpty) return this;
     return _index([
       // Reversed, because the last addition ends up first in the tray menu.

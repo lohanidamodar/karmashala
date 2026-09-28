@@ -645,7 +645,7 @@ class Motion {
   /// Expand and collapse, the composer's morph, a scroll to a row.
   static const base = Duration(milliseconds: 180);
 
-  /// Sheets, dialogs, the side panel: in slower than out.
+  /// Sheets, dialogs, the context panel: in slower than out.
   static const emphasisIn = Duration(milliseconds: 300);
   static const emphasisOut = Duration(milliseconds: 200);
 
@@ -680,11 +680,11 @@ class MotionDurations {
 }
 
 /// Fixed heights for the desktop chrome, in logical pixels, sized for a mouse.
-/// Collected so the title bar, tab strip, rail and status bar stay in proportion.
+/// Collected so the title bar, tab strip and pane chrome stay in proportion.
 class Chrome {
   const Chrome._();
 
-  /// The workbench tab strip, the side panel's header and every pane header.
+  /// The workbench tab strip, the context panel's header and every pane header.
   static const tabStrip = 30.0;
 
   /// The menu-bar row at the top of the window — deliberately *the same* row as
@@ -695,11 +695,10 @@ class Chrome {
   /// the region header read as "an extra tab that doesn't do anything".
   static const paneStrip = 24.0;
 
-  /// The status bar along the bottom of the window.
+  /// A one-line footer strip: the logs panel's footer, the context panel's
+  /// context strip, quick open's hint row. Named for the global status bar it
+  /// was first drawn for, which the UI overhaul removed (spec §2).
   static const statusBar = 22.0;
-
-  /// The side panel's icon rail — the only chrome the panel keeps when closed.
-  static const rail = 34.0;
 
   /// A dense list row (explorer tree, palette results).
   static const row = 26.0;
@@ -723,7 +722,7 @@ class Chrome {
   static const chatBubbleShare = 0.85;
 
   /// One level of a file tree's indentation, narrower than [Insets.lg]: a 16px
-  /// step runs a deep path off the side of a side panel.
+  /// step runs a deep path off the side of the context panel.
   static const treeIndent = 14.0;
 
   /// How far a tree line with no row of its own clears the disclosure column, on
@@ -753,7 +752,7 @@ class Chrome {
 
   /// The glyph in an empty state: the one picture on a surface with nothing on
   /// it. Big enough to read as an illustration rather than as chrome, small
-  /// enough to still fit the side panel at its 240px minimum.
+  /// enough to still fit the context panel at its 240px minimum.
   static const iconHero = 28.0;
 
   /// The label on a tab chip. Fixed rather than scaled, and named here for that

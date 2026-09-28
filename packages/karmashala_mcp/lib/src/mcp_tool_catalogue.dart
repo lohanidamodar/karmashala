@@ -79,7 +79,7 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'project_update': McpToolAnnotations(idempotent: true, movesAttention: false),
   // Running it twice over an unchanged directory changes nothing.
   'project_rescan': McpToolAnnotations(idempotent: true, movesAttention: false),
-  // Repoints the Explorer, the diff view and the side panel together.
+  // Repoints the sidebar, the diff view and the context panel together.
   'select_checkout': McpToolAnnotations(idempotent: true, movesAttention: true),
   // Not idempotent: the second call finds its own first in the way.
   'worktree_create': McpToolAnnotations(movesAttention: false),

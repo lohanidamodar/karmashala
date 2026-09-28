@@ -223,7 +223,7 @@ class _GitTroubleNote extends StatelessWidget {
 }
 
 /// The branch the selected checkout has out, and its remote — both describe
-/// the **checkout**, so browsing a diff does not move the status bar.
+/// the **checkout**, so browsing a diff does not move the pane status line.
 class _BranchAndRemote extends ConsumerWidget {
   const _BranchAndRemote();
 

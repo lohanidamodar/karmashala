@@ -161,7 +161,7 @@ final attentionInboxProvider =
       AttentionInboxController.new,
     );
 
-/// The one attention count in the app — the status bar, the rail badge and the
+/// The one attention count in the app — the activity strip's badges and the
 /// tray all read this, so they cannot disagree.
 final attentionCountProvider = Provider<int>(
   (ref) => ref.watch(attentionInboxProvider).unseen,

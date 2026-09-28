@@ -33,10 +33,12 @@ enum ContextTab {
   };
 }
 
-/// The surfaces the right-hand side panel can show.
+/// The surfaces the context panel can show (spec §4). Named `SidePanel` for the
+/// right-hand side panel and its rail, which the context panel replaced.
 enum SidePanelSurface {
-  /// First on the rail because it is the thing you check first: everything
-  /// pending, in one list, whichever pane owns the thing that is waiting.
+  /// First because it is the thing you check first: everything pending, in one
+  /// list, whichever pane owns the thing that is waiting. Also an area of the
+  /// activity strip.
   inbox('Inbox', drawsOwnHeader: true),
   changes('Changes', drawsOwnHeader: true, scopedToRepository: true),
   files('Files', drawsOwnHeader: true, scopedToRepository: true),
@@ -84,7 +86,7 @@ enum SidePanelSurface {
   agentContext('Context'),
 
   /// The app's own log tail. Hidden unless debug mode is on: a diagnostic, not
-  /// a tool, and a rail glyph nobody needs is in the way of the daily ones.
+  /// a tool, and an entry nobody needs is in the way of the daily ones.
   logs('Logs', requiresDebugMode: true);
 
   const SidePanelSurface(
@@ -174,8 +176,8 @@ class SidePanelController extends Notifier<SidePanelSurface?> {
   /// open, or every control would claim a body nobody can see.
   bool get _hasRoom => ref.read(sidePanelRoomProvider);
 
-  /// Clicking the open surface's icon closes the panel; clicking another
-  /// switches to it. The same gesture does both jobs, as in every editor rail.
+  /// Choosing the open surface again closes the panel; choosing another
+  /// switches to it. The same gesture does both jobs, as in every editor.
   void select(SidePanelSurface surface) {
     if (!_hasRoom) return;
     if (state == surface) {
@@ -219,11 +221,13 @@ final sidePanelProvider =
       SidePanelController.new,
     );
 
-/// Why the side panel cannot open right now, worded for a tooltip or a menu.
+/// Why the context panel cannot open right now, worded for a tooltip or a
+/// menu. Its words still say "side panel": tests quote them (see the UI
+/// overhaul plan, stage 12).
 const kSidePanelNoRoom = 'Widen the window to open the side panel';
 
-/// Whether the window has room for the side panel's body. The shell writes it
-/// from its layout; true until the shell has measured.
+/// Whether the window has room for the context panel's body. The shell writes
+/// it from its layout; true until the shell has measured.
 class SidePanelRoomController extends Notifier<bool> {
   @override
   bool build() => true;
@@ -237,7 +241,7 @@ final sidePanelRoomProvider = NotifierProvider<SidePanelRoomController, bool>(
   SidePanelRoomController.new,
 );
 
-/// The surface the side panel is actually showing: null when collapsed, and
+/// The surface the context panel is actually showing: null when collapsed, and
 /// null when a selection is kept but the window is too narrow to draw it.
 final visibleSidePanelProvider = Provider<SidePanelSurface?>(
   (ref) =>

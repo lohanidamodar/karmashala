@@ -281,7 +281,7 @@ const _digits = [
 
 List<ShellChord> _buildChords() => [
   ShellChord(
-    // J for jump: A, B, K and N are already the side panel's own surfaces.
+    // J for jump: A, B, K and N already open context panel surfaces.
     activator: commandActivator(LogicalKeyboardKey.keyJ, shift: true),
     intent: OpenNextWaitingIntent(),
     command: 'attention.nextWaiting',

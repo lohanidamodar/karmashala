@@ -275,8 +275,8 @@ class WorkspaceMenu extends StatelessWidget {
   );
 }
 
-/// What the window shows: the Explorer, the side panel and its surfaces, and
-/// focus mode.
+/// What the window shows: the sidebar, the context panel and its surfaces, and
+/// Zen.
 class ViewMenu extends ConsumerWidget {
   const ViewMenu(this.actions, {this.style, super.key});
 
@@ -340,7 +340,7 @@ class _ExplorerCheckItem extends ConsumerWidget {
     // everywhere, and Ctrl+B belongs to tmux inside a pane.
     shortcut: commandActivator(LogicalKeyboardKey.keyB, shift: true),
     onChanged: (_) => actions.toggleExplorer(),
-    child: const Text('Explorer'),
+    child: const Text('Sidebar'),
   );
 }
 
@@ -363,8 +363,9 @@ class _SidePanelCheckItem extends ConsumerWidget {
   }
 }
 
-/// The rail's checklist without a mouse: the same list its right-click opens.
-/// Hiding changes a preference, not the panel, so it needs no room.
+/// Which tools the context panel's More tab lists — the same list as Settings
+/// › Appearance › Sidebar & context panel. Hiding changes a preference, not
+/// the panel, so it needs no room.
 class _SidePanelItemsSubmenu extends ConsumerWidget {
   const _SidePanelItemsSubmenu(this.actions);
 
