@@ -134,113 +134,44 @@ void main() {
     });
   });
 
-  group('parseAntigravityUsage', () {
-    // **What `loadCodeAssist` actually carries.** `allowedTiers` names the
-    // tiers the account is allowed — `id`, `name`, `description` — and nothing
-    // in the reply counts anything: no used/limit pair, no remaining, no reset.
-    // So the windows it produces are labels, and the percent every surface
-    // draws is absent rather than zero.
-    test('names each tier and claims no quota for it', () {
-      final expiry = DateTime.utc(2026, 7, 28, 13);
-      final usage = parseAntigravityUsage(
-        {
-          'allowedTiers': [
-            {
-              'id': 'standard-tier',
-              'name': 'Gemini Code Assist',
-              'description': 'Unlimited coding assistant',
-            },
-            {'id': 'legacy-tier', 'name': 'Code Assist (legacy)'},
-          ],
-        },
-        now,
-        email: 'dev@google.com',
-        tokenExpiry: expiry,
-      );
-
-      expect(usage.email, 'dev@google.com');
-      expect(usage.windows.map((w) => w.label).toList(), [
-        'Gemini Code Assist',
-        'Code Assist (legacy)',
-      ]);
-      expect(
-        usage.windows.map((w) => w.percent),
-        everyElement(isNull),
-        reason: 'nothing measured these, and 0.0 said something else',
-      );
-      expect(usage.isEmpty, isFalse, reason: 'the tiers themselves are known');
-    });
-
-    test('the token expiry is the account\'s, not a window\'s reset', () {
-      // It used to be written into `resetsAt`, so the app said a quota it had
-      // never read would reset the moment the user's sign-in lapsed. Two
-      // different facts, and only one of them puts a number back to zero.
-      final expiry = DateTime.utc(2026, 7, 28, 13);
-      final usage = parseAntigravityUsage(
-        {
-          'allowedTiers': [
-            {'id': 'standard-tier', 'name': 'Gemini Code Assist'},
-          ],
-        },
-        now,
-        tokenExpiry: expiry,
-      );
-
-      expect(usage.tokenExpiresAt, expiry);
-      expect(usage.windows.single.resetsAt, isNull);
-      expect(
-        usage.windows.single.span,
-        isNull,
-        reason: 'a tier is not a period, so it cannot bound the ask rate',
-      );
-    });
-
-    test(
-      'falls back to default Code Assist window when allowedTiers is empty',
-      () {
-        final usage = parseAntigravityUsage({}, now, email: 'test@example.com');
-        expect(usage.windows.single.label, 'Gemini Code Assist');
-        expect(usage.windows.single.percent, isNull);
-        expect(usage.email, 'test@example.com');
-      },
-    );
-  });
-
   group('parseAntigravityQuota', () {
-    test('the quota summary: each bucket is a window, its span read off its '
-        'name, its percent what is used', () {
+    // The shape `retrieveUserQuotaSummary` answers, as read 2026-09-28.
+    Map<String, dynamic> bucket(
+      String id,
+      String window,
+      num left, [
+      String? reset,
+    ]) => {
+      'bucketId': id,
+      'displayName': window == '5h'
+          ? 'Five Hour Limit Remaining'
+          : 'Weekly Limit Remaining',
+      'window': window,
+      'remainingFraction': left,
+      'resetTime': ?reset,
+    };
+
+    test('each group\'s buckets are windows named for group and period, '
+        'their percent what is used', () {
       final usage = parseAntigravityQuota(
         {
-          'response': {
-            'groups': [
-              {
-                'displayName': 'Gemini',
-                'buckets': [
-                  {
-                    'bucketId': 'gemini-session',
-                    'displayName': 'Gemini Session',
-                    'remaining': {'remainingFraction': 0.75},
-                    'resetTime': '2026-07-28T14:00:00Z',
-                  },
-                  {
-                    'bucketId': 'gemini-weekly',
-                    'displayName': 'Gemini Weekly',
-                    'remaining': {'remainingFraction': 0.4},
-                    'resetTime': '2026-08-01T00:00:00Z',
-                  },
-                ],
-              },
-              {
-                'displayName': 'Claude + GPT',
-                'buckets': [
-                  {
-                    'displayName': 'Claude + GPT Session',
-                    'remaining': {'remainingFraction': 1},
-                  },
-                ],
-              },
-            ],
-          },
+          'groups': [
+            {
+              'displayName': 'Gemini Models',
+              'buckets': [
+                bucket('gemini-weekly', 'weekly', 0.75, '2026-08-01T00:00:00Z'),
+                bucket('gemini-5h', '5h', 1, '2026-07-28T14:00:00Z'),
+              ],
+            },
+            {
+              'displayName': 'Claude and GPT models',
+              'buckets': [
+                bucket('3p-weekly', 'weekly', 0.4),
+                bucket('3p-5h', '5h', 0),
+              ],
+            },
+          ],
+          'description': 'Usage limits…',
         },
         now,
         email: 'dev@google.com',
@@ -250,40 +181,30 @@ void main() {
       expect(usage!.email, 'dev@google.com');
       expect(
         [for (final w in usage.windows) w.label],
-        ['Gemini Session', 'Gemini Weekly', 'Claude + GPT Session'],
+        [
+          'Gemini · weekly',
+          'Gemini · 5-hour',
+          'Claude + GPT · weekly',
+          'Claude + GPT · 5-hour',
+        ],
       );
-      expect([for (final w in usage.windows) w.percent], [25, 60, 0]);
-      expect(usage.windows[0].span, kUsageFiveHourWindow);
-      expect(usage.windows[1].span, kUsageSevenDayWindow);
-      expect(usage.windows[0].resetsAt, DateTime.utc(2026, 7, 28, 14));
+      expect([for (final w in usage.windows) w.percent], [25, 0, 60, 100]);
+      expect(
+        [for (final w in usage.windows) w.span],
+        [
+          kUsageSevenDayWindow,
+          kUsageFiveHourWindow,
+          kUsageSevenDayWindow,
+          kUsageFiveHourWindow,
+        ],
+      );
+      expect(usage.windows[0].resetsAt, DateTime.utc(2026, 8, 1));
       expect(usage.windows[2].resetsAt, isNull);
     });
 
-    test('per-model buckets: one window per model, at no known span', () {
-      final usage = parseAntigravityQuota({
-        'buckets': [
-          {
-            'modelId': 'gemini-3-pro',
-            'remainingFraction': 0.9,
-            'resetTime': '2026-07-28T14:00:00Z',
-            'tokenType': 'REQUESTS',
-          },
-          {'modelId': 'gemini-3-flash', 'remainingFraction': 0.5},
-        ],
-      }, now);
-
-      expect(
-        [for (final w in usage!.windows) w.label],
-        ['gemini-3-pro', 'gemini-3-flash'],
-      );
-      expect(usage.windows[0].percent, closeTo(10, 0.001));
-      expect(usage.windows[1].percent, 50);
-      expect(usage.windows.every((w) => w.span == null), isTrue);
-    });
-
-    test('a reply with neither shape is not a reading', () {
+    test('a reply with no bucket is not a reading', () {
       expect(parseAntigravityQuota({'allowedTiers': []}, now), isNull);
-      expect(parseAntigravityQuota({'buckets': []}, now), isNull);
+      expect(parseAntigravityQuota({'groups': []}, now), isNull);
     });
   });
 

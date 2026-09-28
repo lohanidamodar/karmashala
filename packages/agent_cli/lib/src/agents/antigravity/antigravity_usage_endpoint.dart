@@ -6,17 +6,19 @@ import '../data/usage_throttle.dart'
 import '../domain/agent_usage.dart';
 
 /// Antigravity's usage, authorised with the OAuth token `agy` keeps in its
-/// store: the quota buckets `retrieveUserQuotaSummary` / `retrieveUserQuota`
-/// report ([parseAntigravityQuota]), and only when neither answers the tiers
-/// `loadCodeAssist` names, which measure nothing ([parseAntigravityUsage]).
+/// store: the quota buckets `retrieveUserQuotaSummary` reports
+/// ([parseAntigravityQuota]).
+///
+/// The service answers only a caller that says it is the Antigravity IDE
+/// ([kAntigravityClientHeaders]). Without that it refuses the quota with
+/// `SUBSCRIPTION_REQUIRED`, and the only thing left to read is the tier list
+/// `loadCodeAssist` gives, which names "Gemini Code Assist" and counts
+/// nothing. A refusal is reported as one, never as that tier.
 class AntigravityUsageEndpoint implements AgentUsageEndpoint {
   const AntigravityUsageEndpoint();
 
   static final _tokenInfoUrl = Uri.parse(
     'https://oauth2.googleapis.com/tokeninfo',
-  );
-  static final _codeAssistUrl = Uri.parse(
-    'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',
   );
 
   @override
@@ -69,12 +71,13 @@ class AntigravityUsageEndpoint implements AgentUsageEndpoint {
     final headers = {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
+      ...kAntigravityClientHeaders,
     };
     final now = context.clock.nowUtc();
 
-    // The quota itself, as `agy` and the Antigravity app read it: the summary
-    // (5-hour and weekly buckets) and then the per-model buckets, each from
-    // the daily host first — the production one pins every meter at 100%.
+    // The daily host first, as the Antigravity app asks; the production one
+    // answers the same summary when the daily one does not.
+    UsageException? refused;
     for (final url in _quotaUrls) {
       try {
         final json = await context.http.postJson(url, headers, const {});
@@ -85,37 +88,41 @@ class AntigravityUsageEndpoint implements AgentUsageEndpoint {
           tokenExpiry: tokenExpiry,
         );
         if (usage != null) return usage;
-      } on UsageException {
-        // Any refusal moves on to the next source: the tier read below is the
-        // one that has always answered, and a refused sign-in is said there.
+        refused = UsageException('Antigravity reported no quota buckets.');
+      } on UsageException catch (e) {
+        refused = e;
       }
     }
-
-    // Last: the tiers the account may use, which name a plan and count nothing.
-    final json = await context.http.postJson(_codeAssistUrl, headers, const {});
-    return parseAntigravityUsage(
-      json,
-      now,
-      email: email,
-      tokenExpiry: tokenExpiry,
-    );
+    throw refused!;
   }
 
   static final _quotaUrls = [
-    for (final method in ['retrieveUserQuotaSummary', 'retrieveUserQuota'])
-      for (final host in [
-        'daily-cloudcode-pa.googleapis.com',
-        'cloudcode-pa.googleapis.com',
-      ])
-        Uri.parse('https://$host/v1internal:$method'),
+    for (final host in [
+      'daily-cloudcode-pa.googleapis.com',
+      'cloudcode-pa.googleapis.com',
+    ])
+      Uri.parse('https://$host/v1internal:retrieveUserQuotaSummary'),
   ];
 }
 
-/// **Antigravity's quota**, from either reply the service gives: the summary's
-/// `groups[].buckets[]` (named windows — `Gemini Session`, `Gemini Weekly`,
-/// `Claude + GPT Session` …) or `retrieveUserQuota`'s per-model `buckets[]`.
-/// A bucket reports what is *left*; a window says what is *used*. Null when
-/// the reply holds no bucket at all, so the caller asks the next source.
+/// What the Antigravity IDE says of itself on every Cloud Code call. The
+/// quota endpoints answer only a caller that sends it.
+const Map<String, String> kAntigravityClientHeaders = {
+  'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Antigravity/1.0.0 Chrome/138.0.7204.235 '
+      'Electron/37.3.1 Safari/537.36',
+  'X-Goog-Api-Client': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
+  'Client-Metadata':
+      '{"ideType":"ANTIGRAVITY","platform":"WINDOWS","pluginType":"GEMINI"}',
+};
+
+/// **Antigravity's quota**, from `retrieveUserQuotaSummary`: model groups
+/// (`Gemini Models`, `Claude and GPT models`), each with a `5h` and a
+/// `weekly` bucket. A bucket reports what is *left*; a window says what is
+/// *used*. Each window is named for its group and its period — every bucket
+/// is called "… Limit Remaining", so the bucket's own name tells none apart.
+/// Null when the reply holds no bucket at all.
 AgentUsage? parseAntigravityQuota(
   Map<String, dynamic> json,
   DateTime now, {
@@ -131,39 +138,32 @@ AgentUsage? parseAntigravityQuota(
     for (final group in groups.whereType<Map<String, dynamic>>()) {
       final buckets = group['buckets'];
       if (buckets is! List) continue;
+      final groupName = _groupName(group['displayName'] as String?);
       for (final bucket in buckets.whereType<Map<String, dynamic>>()) {
-        final remaining = bucket['remaining'];
-        final label =
-            bucket['displayName'] as String? ??
-            bucket['bucketId'] as String? ??
-            group['displayName'] as String? ??
-            _antigravityTier;
+        final span = _spanOf(bucket);
+        final period = switch (span) {
+          kUsageFiveHourWindow => '5-hour',
+          kUsageSevenDayWindow => 'weekly',
+          _ =>
+            bucket['window'] as String? ??
+                bucket['displayName'] as String? ??
+                bucket['bucketId'] as String?,
+        };
+        final left = bucket['remainingFraction'];
+        final reset = bucket['resetTime'];
         windows.add(
-          _quotaWindow(
-            label,
-            remaining is Map<String, dynamic>
-                ? remaining['remainingFraction']
-                : bucket['remainingFraction'],
-            bucket['resetTime'] ??
-                (remaining is Map<String, dynamic>
-                    ? remaining['resetTime']
-                    : null),
-            span: _spanOf(label),
+          UsageWindow(
+            label: [groupName, period].whereType<String>().join(' · '),
+            percent: left is num
+                ? ((1 - left.toDouble()) * 100).clamp(0, 100).toDouble()
+                : null,
+            resetsAt: reset is String
+                ? DateTime.tryParse(reset)?.toUtc()
+                : null,
+            span: span,
           ),
         );
       }
-    }
-  }
-  final buckets = json['buckets'];
-  if (windows.isEmpty && buckets is List) {
-    for (final bucket in buckets.whereType<Map<String, dynamic>>()) {
-      windows.add(
-        _quotaWindow(
-          bucket['modelId'] as String? ?? _antigravityTier,
-          bucket['remainingFraction'],
-          bucket['resetTime'],
-        ),
-      );
     }
   }
   if (windows.isEmpty) return null;
@@ -175,76 +175,31 @@ AgentUsage? parseAntigravityQuota(
   );
 }
 
-UsageWindow _quotaWindow(
-  String label,
-  Object? remainingFraction,
-  Object? resetTime, {
-  Duration? span,
-}) {
-  final left = remainingFraction is num ? remainingFraction.toDouble() : null;
-  return UsageWindow(
-    label: label,
-    percent: left == null ? null : ((1 - left) * 100).clamp(0, 100).toDouble(),
-    resetsAt: resetTime is String
-        ? DateTime.tryParse(resetTime)?.toUtc()
-        : null,
-    span: span,
-  );
+/// A group's name without the words that only pad it: `Gemini Models` is
+/// Gemini, `Claude and GPT models` is Claude + GPT.
+String? _groupName(String? name) {
+  if (name == null) return null;
+  final short = name
+      .replaceAll(RegExp(r'\s+models?$', caseSensitive: false), '')
+      .replaceAll(' and ', ' + ')
+      .trim();
+  return short.isEmpty ? name : short;
 }
 
-/// A bucket's period, read off its name: a session is the 5-hour window, a
-/// week the 7-day one. Anything else is a model-scoped limit with no period.
-Duration? _spanOf(String label) {
-  final name = label.toLowerCase();
-  if (name.contains('session') || name.contains('5-hour')) {
+/// A bucket's period, as its `window` names it (`5h`, `weekly`), else read
+/// off its id or name. Anything else has no period we know.
+Duration? _spanOf(Map<String, dynamic> bucket) {
+  final said = [
+    bucket['window'],
+    bucket['bucketId'],
+    bucket['displayName'],
+  ].whereType<String>().join(' ').toLowerCase();
+  if (said.contains('5h') ||
+      said.contains('five hour') ||
+      said.contains('5-hour') ||
+      said.contains('session')) {
     return kUsageFiveHourWindow;
   }
-  if (name.contains('week')) return kUsageSevenDayWindow;
+  if (said.contains('week')) return kUsageSevenDayWindow;
   return null;
 }
-
-/// Parses Antigravity / Gemini Code Assist's `loadCodeAssist` response.
-///
-/// **The reply carries no quota.** What it is read for is `allowedTiers`, a
-/// list whose entries name the tiers the account is allowed — `id`, `name`,
-/// `description`. Nothing in it counts anything: no used/limit pair, no
-/// remaining, no reset. So each tier becomes a window with a label and no
-/// [UsageWindow.percent], and every surface says so in words. It used to become
-/// `percent: 0.0`, which is how a pane on Antigravity came to draw a confident
-/// `0%` for something nothing had measured. Should the endpoint ever start
-/// reporting a count, read it here — an absent percent is what "we have not
-/// seen one" looks like, and it is meant to be replaced by a real reading
-/// rather than by a zero.
-///
-/// [tokenExpiry] is the OAuth token's own `expiry`, read from the store beside
-/// the access token. It is the account's, not a window's, and is reported as
-/// itself — writing it into `resetsAt` had the app claiming a quota it had
-/// never read would reset when the user's sign-in lapsed.
-AgentUsage parseAntigravityUsage(
-  Map<String, dynamic> json,
-  DateTime now, {
-  String? email,
-  DateTime? tokenExpiry,
-}) {
-  final windows = <UsageWindow>[];
-  final tiers = json['allowedTiers'];
-  if (tiers is List && tiers.isNotEmpty) {
-    for (final tier in tiers) {
-      if (tier is Map<String, dynamic>) {
-        windows.add(
-          UsageWindow(label: tier['name'] as String? ?? _antigravityTier),
-        );
-      }
-    }
-  }
-  if (windows.isEmpty) windows.add(const UsageWindow(label: _antigravityTier));
-  return AgentUsage(
-    windows: windows,
-    fetchedAt: now,
-    email: email,
-    tokenExpiresAt: tokenExpiry,
-  );
-}
-
-/// What a tier is called when the reply names none.
-const String _antigravityTier = 'Gemini Code Assist';

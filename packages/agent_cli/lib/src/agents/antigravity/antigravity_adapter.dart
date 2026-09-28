@@ -19,8 +19,8 @@ import 'antigravity_usage_endpoint.dart';
 
 /// **Antigravity CLI (`agy`)**, behind the one boundary: a store that yields
 /// identity without content, a conversation id learned after the fact from the
-/// directory it ran in, and a usage endpoint that names tiers and measures
-/// nothing. No stats, no file-change record, no pictures, no account
+/// directory it ran in, and the quota summary the Antigravity IDE reads. No
+/// stats, no file-change record, no pictures, no account
 /// switching — each degrades rather than guesses.
 class AntigravityAdapter extends AgentAdapter {
   /// [descriptor] is Antigravity's own unless a caller — a test, typically —
