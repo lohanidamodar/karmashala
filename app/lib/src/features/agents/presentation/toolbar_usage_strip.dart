@@ -125,7 +125,11 @@ Widget _accountCard(
               onLeave?.call();
               openUsageTab(ref, accountId: usageAccountId(account));
             },
-            child: const Text('Usage details', overflow: TextOverflow.ellipsis),
+            // Short words: three buttons share a 344px card.
+            child: const Tooltip(
+              message: 'Usage details: this account in the Usage tab',
+              child: Text('Details', overflow: TextOverflow.ellipsis),
+            ),
           ),
         ),
         Flexible(
@@ -134,9 +138,9 @@ Widget _accountCard(
               onLeave?.call();
               openSettingsTab(ref, anchor: SettingsAnchor.usage);
             },
-            child: const Text(
-              'Usage settings',
-              overflow: TextOverflow.ellipsis,
+            child: const Tooltip(
+              message: 'Usage settings',
+              child: Text('Settings', overflow: TextOverflow.ellipsis),
             ),
           ),
         ),

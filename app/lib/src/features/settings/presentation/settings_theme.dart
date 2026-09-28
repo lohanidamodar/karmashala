@@ -123,6 +123,11 @@ class SettingsControlsTheme extends StatelessWidget {
     );
     return Theme(
       data: theme.copyWith(
+        // DropdownButtonFormField draws its value in titleMedium (16px) when
+        // given no style; on a settings page that is the control text, so
+        // every dropdown matches the board's 26px fields. Nothing on these
+        // pages uses titleMedium otherwise.
+        textTheme: theme.textTheme.copyWith(titleMedium: controlText),
         inputDecorationTheme: theme.inputDecorationTheme.copyWith(
           isDense: true,
           filled: true,
