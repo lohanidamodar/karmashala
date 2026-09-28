@@ -24,25 +24,59 @@ class AttentionInboxView extends ConsumerWidget {
     final controller = ref.read(attentionInboxProvider.notifier);
     final now = ref.watch(clockProvider).nowUtc();
 
+    // Two groups (spec §4): what waits on an answer, then everything else.
+    final asks = [
+      for (final item in inbox.items)
+        if (item.kind == InboxItemKind.needsApproval) item,
+    ];
+    final updates = [
+      for (final item in inbox.items)
+        if (item.kind != InboxItemKind.needsApproval) item,
+    ];
+    final rows = <Widget>[
+      if (asks.isNotEmpty) _GroupLabel('Needs you', count: asks.length),
+      for (final item in asks) row(item, controller, now),
+      if (updates.isNotEmpty) _GroupLabel('Updates', count: updates.length),
+      for (final item in updates) row(item, controller, now),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PaneHeader(
-          icon: AppIcons.warningCircle,
-          title: inbox.unseen == 0 ? 'Inbox' : 'Inbox  ·  ${inbox.unseen} new',
-          actions: [
-            if (!inbox.isEmpty)
-              TextButton(
-                onPressed: controller.markAllSeen,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  textStyle: theme.textTheme.labelSmall,
+        // The same header every sidebar area has: its name, then its verbs.
+        SizedBox(
+          height: 40,
+          child: Padding(
+            padding: const EdgeInsets.only(left: Insets.lg, right: Insets.xs),
+            child: Row(
+              children: [
+                Text(
+                  'Inbox',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                child: const Text('Mark all read'),
-              ),
-          ],
+                if (inbox.unseen > 0) ...[
+                  const SizedBox(width: Insets.sm),
+                  Text(
+                    '${inbox.unseen} new',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                if (!inbox.isEmpty)
+                  IconButton(
+                    tooltip: 'Mark all read',
+                    icon: const Icon(AppIcons.check),
+                    onPressed: inbox.unseen == 0
+                        ? null
+                        : controller.markAllSeen,
+                  ),
+              ],
+            ),
+          ),
         ),
         Expanded(
           child: inbox.isEmpty
@@ -53,21 +87,54 @@ class AttentionInboxView extends ConsumerWidget {
                   // the answer, not decoration.
                   iconColor: SemanticColors.of(context).idle,
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-                  itemCount: inbox.items.length,
-                  itemBuilder: (context, index) {
-                    final item = inbox.items[index];
-                    return _InboxRow(
-                      item: item,
-                      now: now,
-                      onOpen: () => controller.open(item),
-                      onDismiss: () => controller.dismiss(item.id),
-                    );
-                  },
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: Insets.sm),
+                  children: rows,
                 ),
         ),
       ],
+    );
+  }
+
+  Widget row(
+    InboxItem item,
+    AttentionInboxController controller,
+    DateTime now,
+  ) => _InboxRow(
+    key: ValueKey(item.id),
+    item: item,
+    now: now,
+    onOpen: () => controller.open(item),
+    onDismiss: () => controller.dismiss(item.id),
+  );
+}
+
+/// A group's name over its rows, as the Sessions list draws its groups.
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel(this.label, {required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.labelSmall
+        ?.merge(Chrome.groupLabel)
+        .copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Insets.lg,
+        Insets.md,
+        Insets.lg,
+        Insets.xs,
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(label.toUpperCase(), style: style)),
+          Text('$count', style: style),
+        ],
+      ),
     );
   }
 }
@@ -131,6 +198,7 @@ class _ContinueAction extends StatelessWidget {
 class _InboxRow extends ConsumerWidget {
   const _InboxRow({
     required this.item,
+    super.key,
     required this.now,
     required this.onOpen,
     required this.onDismiss,
@@ -184,7 +252,7 @@ class _InboxRow extends ConsumerWidget {
 }
 
 /// What the row draws, with every decision already made.
-class _InboxRowContent extends StatelessWidget {
+class _InboxRowContent extends StatefulWidget {
   const _InboxRowContent({
     required this.item,
     required this.now,
@@ -198,83 +266,115 @@ class _InboxRowContent extends StatelessWidget {
   final VoidCallback onDismiss;
 
   @override
+  State<_InboxRowContent> createState() => _InboxRowContentState();
+}
+
+class _InboxRowContentState extends State<_InboxRowContent> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final now = widget.now;
+    final canContinue = widget.canContinue;
+    final onDismiss = widget.onDismiss;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final look = inboxKindAppearance(item.kind, SemanticColors.of(context));
+    final semantic = SemanticColors.of(context);
+    final tones = SurfaceTones.of(context);
+    final look = inboxKindAppearance(item.kind, semantic);
     // Seen items stay in the list but stop shouting — an approval you have
     // read is still an approval you have not answered.
     final muted = item.seen;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.md,
-        Insets.xs,
-        Insets.xs,
-        Insets.xs,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              look.icon,
-              size: Chrome.icon,
-              color: muted ? scheme.onSurfaceVariant : look.color,
+    final ask = item.kind == InboxItemKind.needsApproval;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Container(
+        decoration: BoxDecoration(
+          color: ask && !muted ? tones.attentionSurface : null,
+          border: Border(
+            left: BorderSide(
+              width: 2,
+              color: ask ? semantic.attention : Colors.transparent,
             ),
           ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
-                    color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
-                  ),
-                ),
-                Text(
-                  '${item.kind.label}  ·  '
-                  '${describeAge(now.difference(item.at))}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    letterSpacing: 0,
-                  ),
-                ),
-                // The source's own words, when it gave any. Two lines:
-                // enough to decide without opening the session.
-                if (item.detail case final detail?)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      detail,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          Insets.md,
+          Insets.sm,
+          Insets.xs,
+          Insets.sm,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                look.icon,
+                size: Chrome.icon,
+                color: muted ? scheme.onSurfaceVariant : look.color,
+              ),
+            ),
+            const SizedBox(width: Insets.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
+                      color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
                     ),
                   ),
-              ],
+                  Text(
+                    '${item.kind.label}  ·  '
+                    '${describeAge(now.difference(item.at))}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  // The source's own words, when it gave any. Two lines:
+                  // enough to decide without opening the session.
+                  if (item.detail case final detail?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        detail,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          // Only a follow-up: every other kind belongs to a session still
-          // there to be talked to, so opening the row deals with it.
-          if (canContinue) _ContinueAction(sessionId: item.session.openId),
-          IconButton(
-            tooltip: 'Dismiss',
-            iconSize: Chrome.iconAction,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(AppIcons.x),
-            onPressed: onDismiss,
-          ),
-        ],
+            // Only a follow-up: every other kind belongs to a session still
+            // there to be talked to, so opening the row deals with it.
+            if (canContinue) _ContinueAction(sessionId: item.session.openId),
+            // Under the pointer only: a column of x's down the list was louder
+            // than the items. The right-click menu has it too.
+            Visibility.maintain(
+              visible: _hovered,
+              child: IconButton(
+                tooltip: 'Dismiss',
+                iconSize: Chrome.iconAction,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(AppIcons.x),
+                onPressed: onDismiss,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
