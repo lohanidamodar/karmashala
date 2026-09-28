@@ -139,10 +139,9 @@ class HostDeployer {
     // the protocol check above passes while the protocol holds — so a machine
     // keeps the first host it was ever given until something replaces it.
     // **Not** a version comparison: `hostVersion` is the host package's own
-    // constant and is the same string in every build, while the app's version
-    // is only in the filename. What identifies a build is the path it runs
-    // from. Replacing one costs every session it holds, so it is replaced only
-    // when it holds none.
+    // constant and names only the release, the same in every build of it.
+    // What identifies a build is the path it runs from. Replacing one costs
+    // every session it holds, so it is replaced only when it holds none.
     var stale = '';
     final runningPath = restarted ? null : await _runningServePath(home);
     // The files under a running `serve` were just replaced; it goes on running
