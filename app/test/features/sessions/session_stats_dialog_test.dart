@@ -697,4 +697,60 @@ void main() {
       );
     });
   });
+  group('the context chip', () {
+    Future<List<String>> pumpChip(
+      WidgetTester tester,
+      SessionStats? stats,
+    ) async {
+      final taps = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SessionStatsChip(
+                stats: stats,
+                onTap: () => taps.add('stats'),
+              ),
+            ),
+          ),
+        ),
+      );
+      return taps;
+    }
+
+    testWidgets('says how full the window is, and opens the stats', (
+      tester,
+    ) async {
+      final taps = await pumpChip(
+        tester,
+        const SessionStats(
+          source: SessionStatsSource.localStore,
+          lastPromptTokens: 124000,
+          contextWindow: 200000,
+        ),
+      );
+      expect(find.text('62% context'), findsOneWidget);
+      await tester.tap(find.text('62% context'));
+      expect(taps, ['stats']);
+    });
+
+    testWidgets('says Stats where the window was never written', (
+      tester,
+    ) async {
+      await pumpChip(
+        tester,
+        const SessionStats(
+          source: SessionStatsSource.localStore,
+          lastPromptTokens: 124000,
+        ),
+      );
+      expect(find.text('Stats'), findsOneWidget);
+      expect(find.textContaining('context'), findsNothing);
+    });
+
+    testWidgets('says Stats before the numbers are read', (tester) async {
+      await pumpChip(tester, null);
+      expect(find.text('Stats'), findsOneWidget);
+    });
+  });
 }

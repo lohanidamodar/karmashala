@@ -8,10 +8,13 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/presentation/usage_window_meter.dart';
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/usage.dart';
 import '../application/session_providers.dart';
 import '../application/session_signals.dart';
 import '../application/session_stats_providers.dart';
+import '../application/session_status_providers.dart';
 import 'agent_status_badge.dart';
 import 'session_stats_sections.dart';
 
@@ -112,7 +115,7 @@ class SessionStatsBody extends StatelessWidget {
         Text(
           'Counts only — no cost estimate, and not a bill: these are what '
           'the agents wrote down, which can differ from what a vendor charges. '
-          'Live quota is in the status bar.',
+          'Live quota is on the title bar.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -374,8 +377,13 @@ class _Notice extends StatelessWidget {
   }
 }
 
-/// The composer's stats control, in [MessageComposer]'s `chips` slot because
-/// the question is about *this* session. Hidden where a store records nothing.
+/// **The context chip** (spec §5): how full this session's context window was
+/// at its newest request — a small bar and "62% context" — opening Session
+/// stats. Says "Stats" where the agent records counts but not the window, and
+/// is hidden where its store records nothing.
+///
+/// Read when it appears and again as each turn ends, never on a timer: the
+/// numbers come from the agent's own record on disk.
 class SessionStatsButton extends ConsumerWidget {
   const SessionStatsButton({required this.sessionId, super.key});
 
@@ -387,45 +395,20 @@ class SessionStatsButton extends ConsumerWidget {
     // CLI conversation is a write to this row.
     ref.watchSession(sessionId);
     if (!_recordsStats(ref)) return const SizedBox.shrink();
-
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Tooltip(
-      message:
-          'Turns, tokens and tool calls for this session, counted from '
-          'the agent\u2019s own record',
-      child: InkWell(
-        onTap: () => SessionStatsDialog.show(context, sessionId),
-        borderRadius: BorderRadius.circular(Radii.sm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: 3,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                AppIcons.listMagnifyingGlass,
-                size: Chrome.iconSmall,
-                color: scheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: Insets.xs),
-              Text(
-                'Stats',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    // A turn that ends is when the window's fill changes.
+    ref.listen(
+      agentSessionStatusProvider(sessionId).select((r) => r.value?.status),
+      (previous, next) {
+        if (previous != null &&
+            previous != next &&
+            next == AgentActivityStatus.idle) {
+          ref.invalidate(sessionStatsProvider(sessionId));
+        }
+      },
+    );
+    return SessionStatsChip(
+      stats: ref.watch(sessionStatsProvider(sessionId)).value?.stats,
+      onTap: () => SessionStatsDialog.show(context, sessionId),
     );
   }
 
@@ -441,6 +424,105 @@ class SessionStatsButton extends ConsumerWidget {
     if (agentId == null) return false;
     return agentStoreRecordsStats(
       ref.read(agentRegistryProvider).adapterFor(agentId),
+    );
+  }
+}
+
+/// [SessionStatsButton] from values: the context fill when [stats] records
+/// both the newest prompt and the window, "Stats" otherwise.
+class SessionStatsChip extends StatelessWidget {
+  const SessionStatsChip({required this.stats, required this.onTap, super.key});
+
+  final SessionStats? stats;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = this.stats;
+    final fill = stats == null ? null : contextFill(stats);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final label = fill == null ? 'Stats' : '${(fill * 100).round()}% context';
+    final tooltip = fill == null
+        ? 'Turns, tokens and tool calls for this session, counted from '
+              'the agent\u2019s own record'
+        : 'The newest request filled ${(fill * 100).round()}% of the '
+              'context window (${formatCompactCount(stats!.lastPromptTokens!)} '
+              'of ${formatCompactCount(stats.contextWindow!)} tokens). '
+              'Opens Session stats.';
+
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Insets.sm,
+            vertical: 3,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (fill == null)
+                Icon(
+                  AppIcons.listMagnifyingGlass,
+                  size: Chrome.iconSmall,
+                  color: scheme.onSurfaceVariant,
+                )
+              else
+                _ContextBar(fill: fill),
+              const SizedBox(width: Insets.xs),
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The chip's meter: a short track filled to [fill], in the usage severity
+/// colours, so a nearly full window reads as a warning at a glance.
+class _ContextBar extends StatelessWidget {
+  const _ContextBar({required this.fill});
+
+  final double fill;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final clamped = fill.clamp(0.0, 1.0);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(Radii.pill),
+      child: SizedBox(
+        width: 24,
+        height: 4,
+        child: Stack(
+          children: [
+            Positioned.fill(child: ColoredBox(color: scheme.outlineVariant)),
+            FractionallySizedBox(
+              widthFactor: clamped,
+              heightFactor: 1,
+              child: ColoredBox(
+                color: usageSeverityColor(
+                  context,
+                  usageSeverityFor(clamped * 100),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -228,8 +228,9 @@ final sessionStatsServiceProvider = Provider<SessionStatsService>(
   (ref) => SessionStatsService(ref),
 );
 
-/// A session's stats, computed once per dialog opening: an on-demand question,
-/// not a poll, and subscribed to **this row only**.
+/// A session's stats: computed when the dialog opens or the status line's
+/// context chip appears, and again when that chip sees a turn end — an
+/// on-demand question, never a poll, subscribed to **this row only**.
 final sessionStatsProvider = FutureProvider.autoDispose
     .family<SessionStatsView, String>((ref, sessionId) {
       ref.watchSession(sessionId);
