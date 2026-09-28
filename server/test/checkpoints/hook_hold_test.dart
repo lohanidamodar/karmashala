@@ -12,7 +12,7 @@ import 'package:test/test.dart';
 import 'checkpoint_fixtures.dart';
 
 /// **The server holds a tool for its checkpoint**: a `PreToolUse` is answered
-/// only once the session's queued captures are done — at most the hold, and
+/// only once the session's queued snapshots are taken — at most the hold, and
 /// on expiry the turn's late before-turn snapshot says so on its own row.
 /// No app is asked.
 void main() {
@@ -33,8 +33,22 @@ void main() {
           'tool_name': 'Bash',
           'tool_input': {'command': 'ls'},
         });
+        // The tool runs the moment the hook answers. The before-turn tree was
+        // written before that; its row may be recorded just after.
+        File(p.join(w.hub, 'written-by-the-tool.txt')).writeAsStringSync('x');
+        await w.settle();
         expect(w.reasons(), ['turnStart']);
-        expect(w.rows().single.label, isNull, reason: 'the hold was met');
+        final before = w.rows().single;
+        expect(before.label, isNull, reason: 'the hold was met');
+        expect(
+          blobIn(
+            before.repository.path,
+            before.treeSha,
+            'written-by-the-tool.txt',
+          ),
+          isEmpty,
+          reason: 'the snapshot was taken before the tool ran',
+        );
       },
       skip: hasGit ? false : 'git is not on PATH',
     );
@@ -45,8 +59,8 @@ void main() {
         final file = p.join(w.app, 'main.txt');
         await w.hook('UserPromptSubmit', {'prompt': 'Change the app'});
         await w.hook('PreToolUse', w.edit(file));
-        // The tool runs only once the hook has answered.
-        expect(w.ofRepo(w.app), hasLength(1));
+        // The tool runs only once the hook has answered — by then the clone's
+        // tree is written, whenever its row lands.
         File(file).writeAsStringSync('one\nTWO\nthree\n');
         await w.hook('Stop');
         await w.untilCheckpoints(w.app, 2);
@@ -213,10 +227,16 @@ void main() {
           'tool_input': {'command': 'ls'},
         });
         expect(status, HttpStatus.ok);
+        expect(
+          took,
+          greaterThanOrEqualTo(w.runners.delay),
+          reason: 'held while its snapshot ran `git add`',
+        );
+        expect(took, lessThan(kCheckpointHookHold));
+        await w.settle();
         expect(w.reasons(), [
           'turnStart',
-        ], reason: 'answered once it existed; log: ${w.log}');
-        expect(took, lessThan(kCheckpointHookHold));
+        ], reason: 'recorded once its tree was; log: ${w.log}');
         expect(w.rows().single.label, isNull);
         expect(relayed.map((h) => h.event), ['UserPromptSubmit', 'PreToolUse']);
       },

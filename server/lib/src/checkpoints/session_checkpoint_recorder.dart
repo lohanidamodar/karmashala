@@ -55,6 +55,11 @@ class ServerCheckpointRecorder {
   void Function(String sessionId)? onTurnEnded;
   final Map<String, Future<void>> _queues = {};
 
+  /// Per session, done once every queued task has taken its snapshots: what a
+  /// held tool waits for ([settled]). The rest of a capture — the commit, the
+  /// ref, what changed — runs after the tool is released, still in order.
+  final Map<String, Future<void>> _snapshots = {};
+
   /// The turn in progress per session, which all of its checkpoints carry.
   final Map<String, _Turn> _current = {};
 
@@ -112,14 +117,23 @@ class ServerCheckpointRecorder {
       // and no hold of *this* turn can be forgotten, and none of the last
       // turn's can be inherited.
       if (edge == TurnEdge.started) _released.remove(sessionId);
-      unawaited(_serial(sessionId, () => _captureTurn(sessionId, edge)));
+      unawaited(
+        _serialSnapshotting(
+          sessionId,
+          (snapshotted) => _captureTurn(sessionId, edge, snapshotted),
+        ),
+      );
     } on Object catch (error) {
       _log('checkpoint recorder skipped a status move of $sessionId: $error');
     }
   }
 
-  /// Completes when [sessionId]'s queued captures have, so a hook about to let
-  /// a tool write can hold it until the before-turn checkpoint exists.
+  /// Completes when [sessionId]'s queued captures have taken their snapshots,
+  /// so a hook about to let a tool write can hold it until the before-turn
+  /// tree is written. Only the snapshot is waited for: recording it as a
+  /// checkpoint cannot be changed by the tool, and on Windows (git ~30 ms a
+  /// call) waiting for the whole capture of two repositories ran past the
+  /// hold under load.
   ///
   /// **The wait for the queue to be joined is the point.** A turn's edge can
   /// be queued a few event-loop turns after the hook that caused it arrived
@@ -133,7 +147,7 @@ class ServerCheckpointRecorder {
     var quiet = 0;
     for (var pass = 0; pass < _settlePasses && quiet < _settleQuiet; pass++) {
       await Future<void>.delayed(Duration.zero);
-      final queued = _queues[sessionId];
+      final queued = _snapshots[sessionId];
       if (queued == null) {
         quiet++;
         continue;
@@ -180,7 +194,7 @@ class ServerCheckpointRecorder {
   void noteTouched(String sessionId) {
     if (_closed || !_turns.inTurn(sessionId)) return;
     unawaited(
-      _serial(sessionId, () async {
+      _serialSnapshotting(sessionId, (snapshotted) async {
         final turn = _current[sessionId];
         if (turn == null) return;
         final found = await targets.of(
@@ -189,21 +203,25 @@ class ServerCheckpointRecorder {
           cwd: hints.cwdOf(sessionId),
         );
         final started = _startedIn[sessionId] ??= <String>{};
-        for (final repo in found) {
-          if (!started.add(_keyOf(repo))) continue;
-          await _captureOne(
-            sessionId,
-            repo,
-            CheckpointReason.turnStart,
-            turn,
-            'before turn ${turn.number} first changed it',
-          );
-        }
+        await _captureAll(
+          sessionId,
+          [
+            for (final repo in found)
+              if (started.add(_keyOf(repo))) repo,
+          ],
+          CheckpointReason.turnStart,
+          turn,
+          snapshotted,
+        );
       }),
     );
   }
 
-  Future<void> _captureTurn(String sessionId, TurnEdge edge) async {
+  Future<void> _captureTurn(
+    String sessionId,
+    TurnEdge edge,
+    void Function() snapshotted,
+  ) async {
     if (_closed) return;
     final starting = edge == TurnEdge.started;
     final settings = this.settings;
@@ -227,17 +245,16 @@ class ServerCheckpointRecorder {
       _skip(sessionId, 'it has no repository to checkpoint');
       return;
     }
-    final started = starting ? (_startedIn[sessionId] = <String>{}) : null;
-    for (final repo in found) {
-      started?.add(_keyOf(repo));
-      await _captureOne(
-        sessionId,
-        repo,
-        starting ? CheckpointReason.turnStart : CheckpointReason.turn,
-        turn,
-        starting ? 'before turn ${turn.number}' : 'after turn ${turn.number}',
-      );
+    if (starting) {
+      _startedIn[sessionId] = {for (final repo in found) _keyOf(repo)};
     }
+    await _captureAll(
+      sessionId,
+      found,
+      starting ? CheckpointReason.turnStart : CheckpointReason.turn,
+      turn,
+      snapshotted,
+    );
     final keep = settings.keepPerRepository;
     if (!starting && keep != null) {
       for (final repo in found) {
@@ -246,44 +263,63 @@ class ServerCheckpointRecorder {
     }
   }
 
-  Future<void> _captureOne(
+  /// Checkpoints each of [repos]: every snapshot first, then [snapshotted] —
+  /// which lets a held tool go — and only then the recording of each.
+  Future<void> _captureAll(
     String sessionId,
-    EnvironmentPath repo,
+    List<EnvironmentPath> repos,
     CheckpointReason reason,
     _Turn turn,
-    String when,
+    void Function() snapshotted,
   ) async {
-    if (_closed) return;
-    final unsupported = service.unsupportedReason(repo);
-    if (unsupported != null) {
-      _skip(sessionId, unsupported, repo: repo);
-      return;
-    }
-    try {
-      final checkpoint = await service.capture(
-        repo,
-        sessionId: sessionId,
-        reason: reason,
-        turn: turn.number,
-        prompt: turn.prompt,
-      );
-      _clearSkip(sessionId);
-      _lastLogged.remove(_logKey(sessionId, repo));
-      if (checkpoint == null) return;
-      // **Asked now, not before the capture.** What makes a before-turn
-      // snapshot untrustworthy is the tool having been released *by the time
-      // it was taken* — and the hold can give up while this very capture is
-      // running `git add -A`. A row written before the give-up is genuinely
-      // before the edit and is left alone.
-      if (reason == CheckpointReason.turnStart &&
-          _released.contains(sessionId)) {
-        await service.records.relabel(
-          checkpoint.id,
-          lateTurnStartLabel(turn.number),
-        );
+    final taken = <({EnvironmentPath repo, String tree, bool late})>[];
+    for (final repo in repos) {
+      if (_closed) break;
+      final unsupported = service.unsupportedReason(repo);
+      if (unsupported != null) {
+        _skip(sessionId, unsupported, repo: repo);
+        continue;
       }
-    } on Object catch (error) {
-      _skip(sessionId, 'capturing ${repo.path} failed: $error', repo: repo);
+      try {
+        final tree = await service.snapshot(repo);
+        // **Asked now, once the tree is written.** What makes a before-turn
+        // snapshot untrustworthy is the tool having been released *by the
+        // time it was taken* — and the hold can give up while this very
+        // snapshot is running `git add -A`. A tree written before the give-up
+        // is genuinely before the edit and is left alone.
+        taken.add((
+          repo: repo,
+          tree: tree,
+          late: _released.contains(sessionId),
+        ));
+      } on Object catch (error) {
+        _skip(sessionId, 'capturing ${repo.path} failed: $error', repo: repo);
+      }
+    }
+    snapshotted();
+    for (final (:repo, :tree, :late) in taken) {
+      if (_closed) return;
+      try {
+        final checkpoint = await service.recordTree(
+          repo,
+          tree,
+          sessionId: sessionId,
+          reason: reason,
+          turn: turn.number,
+          prompt: turn.prompt,
+        );
+        _clearSkip(sessionId);
+        _lastLogged.remove(_logKey(sessionId, repo));
+        if (checkpoint == null) continue;
+        if (reason == CheckpointReason.turnStart && late) {
+          await service.records.relabel(
+            checkpoint.id,
+            lateTurnStartLabel(turn.number),
+          );
+        }
+      } on Object catch (error) {
+        _skip(sessionId, 'capturing ${repo.path} failed: $error', repo: repo);
+      }
     }
   }
 
@@ -346,13 +382,37 @@ class ServerCheckpointRecorder {
   Future<T> queued<T>(String sessionId, Future<T> Function() task) =>
       _serial(sessionId, task);
 
-  Future<T> _serial<T>(String sessionId, Future<T> Function() task) {
+  Future<T> _serial<T>(String sessionId, Future<T> Function() task) =>
+      _serialSnapshotting(sessionId, (_) => task());
+
+  /// [_serial], for a [task] that says when its snapshots are taken (calling
+  /// the function it is given) before it is done: what [settled] waits for.
+  /// A task that never says is taken to have snapshotted when it ends.
+  Future<T> _serialSnapshotting<T>(
+    String sessionId,
+    Future<T> Function(void Function() snapshotted) task,
+  ) {
     final previous = _queues[sessionId] ?? Future<void>.value();
-    final result = previous.then((_) => task());
+    final snapped = Completer<void>();
+    void snapshotted() {
+      if (!snapped.isCompleted) snapped.complete();
+    }
+
+    final result = previous.then((_) => task(snapshotted));
     final tail = result.then<void>((_) {}, onError: (Object _) {});
+    tail.whenComplete(snapshotted);
     _queues[sessionId] = tail;
     tail.whenComplete(() {
       if (identical(_queues[sessionId], tail)) _queues.remove(sessionId);
+    });
+    // A task starts only once the one before it has ended, so its own
+    // snapshot is the last of every queued before it.
+    final snapshots = snapped.future;
+    _snapshots[sessionId] = snapshots;
+    snapshots.whenComplete(() {
+      if (identical(_snapshots[sessionId], snapshots)) {
+        _snapshots.remove(sessionId);
+      }
     });
     return result;
   }

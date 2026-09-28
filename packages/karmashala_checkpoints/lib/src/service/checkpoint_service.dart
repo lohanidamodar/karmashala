@@ -119,12 +119,47 @@ class CheckpointService {
     bool evenIfUnchanged = false,
     int? turn,
     String? prompt,
+  }) async => recordTree(
+    repo,
+    await snapshot(repo),
+    sessionId: sessionId,
+    reason: reason,
+    label: label,
+    evenIfUnchanged: evenIfUnchanged,
+    turn: turn,
+    prompt: prompt,
+  );
+
+  /// Where each repository's private index lives, as git named it. Asked once
+  /// per repository: two `rev-parse` calls on every snapshot were a quarter of
+  /// the time an agent's first tool is held for it (~30 ms a call on Windows).
+  final Map<String, CheckpointGitDirs> _dirs = {};
+
+  /// **The half of a capture that has to happen before a tool runs**: what
+  /// [repo]'s working tree is now, written as a tree object. Answers its sha;
+  /// [recordTree] makes it a checkpoint, and can wait.
+  Future<String> snapshot(EnvironmentPath repo) async {
+    final git = _gitFor(repo);
+    final key = '${repo.environmentId}\u0000${repo.path}';
+    final dirs = _dirs[key] ??= await git.checkpointDirs(repo);
+    await git.ensureCheckpointDirs(repo, dirs);
+    return git.writeWorkingTree(repo, dirs);
+  }
+
+  /// Records [tree], a [snapshot] of [repo], as a checkpoint of [sessionId]:
+  /// the commit, the ref that keeps it, and what changed. `null` when the tree
+  /// is byte-for-byte the previous checkpoint.
+  Future<Checkpoint?> recordTree(
+    EnvironmentPath repo,
+    String tree, {
+    required String sessionId,
+    CheckpointReason reason = CheckpointReason.turn,
+    String? label,
+    bool evenIfUnchanged = false,
+    int? turn,
+    String? prompt,
   }) async {
     final git = _gitFor(repo);
-    final dirs = await git.checkpointDirs(repo);
-    await git.ensureCheckpointDirs(repo, dirs);
-    final tree = await git.writeWorkingTree(repo, dirs);
-
     final previous = latestCheckpointIn(
       await records.forSession(sessionId),
       repository: repo,
