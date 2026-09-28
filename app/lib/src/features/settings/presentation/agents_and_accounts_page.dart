@@ -2,6 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_ui/icons.dart';
@@ -11,6 +12,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/workbench_tabs.dart' show openUsageTab;
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
+import '../../agents/application/agent_latest_versions_controller.dart';
 import '../../agents/application/agent_model_catalog_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_redetect_controller.dart';
@@ -246,12 +248,15 @@ class _AgentBlockState extends ConsumerState<AgentBlock> {
   }
 }
 
-typedef _Run = Future<void> Function(Future<void> Function() action, String done);
+typedef _Run =
+    Future<void> Function(Future<void> Function() action, String done);
 
 /// **A machine per row** (board "· machines"): where the agent is installed,
-/// its version with a flag when another machine runs a newer one, and the
-/// account that install is signed in to — a pill that switches it, or
-/// **Capture** when the sign-in is an account not saved yet.
+/// its version with a flag when it is behind the agent's latest release (or
+/// another machine's version), and the account that install is signed in to —
+/// a pill that switches it, or **Capture** when the sign-in is an account not
+/// saved yet. Then the latest release itself, when the agent declares where
+/// to read it.
 class _Machines extends ConsumerWidget {
   const _Machines({
     required this.agentId,
@@ -281,6 +286,13 @@ class _Machines extends ConsumerWidget {
           install.id: store.signIn(ref, install).asData?.value.savedId,
     };
     final newest = _newestVersion(installs);
+    final latest = ref.watch(agentLatestVersionsProvider).latestOf(agentId);
+    final latestSource = ref
+        .watch(agentRegistryProvider)
+        .byId(agentId)
+        ?.launch
+        .selfUpdate
+        .latestVersion;
     final environments = ref.watch(environmentsControllerProvider);
     final missing = [
       for (final environment in environments)
@@ -302,12 +314,30 @@ class _Machines extends ConsumerWidget {
             install: install,
             store: store,
             saved: saved,
-            newest: newest,
+            updateTo: agentUpdateTarget(
+              install,
+              latest: latest,
+              newestOnMachines: newest,
+            ),
             usage: usageAccounts
                 .where((a) => a.environmentIds.contains(install.environmentId))
                 .firstOrNull,
             busy: busy,
             run: run,
+          ),
+        if (installs.isNotEmpty && (latestSource?.isKnown ?? false))
+          _LatestRelease(
+            agentId: agentId,
+            source: latestSource!,
+            anyBehind: installs.any(
+              (install) =>
+                  agentUpdateTarget(
+                    install,
+                    latest: latest,
+                    newestOnMachines: newest,
+                  ) !=
+                  null,
+            ),
           ),
         if (installs.isEmpty)
           SettingsRow(
@@ -330,17 +360,15 @@ class _Machines extends ConsumerWidget {
                 onPressed: busy
                     ? null
                     : () async {
-                        final picked = await showDesktopMenuUnder<_Saved>(
-                          anchor,
-                          [
-                            for (final account in saved)
-                              DesktopMenuItem(
-                                value: account,
-                                label: account.describe,
-                                icon: AppIcons.userCircle,
-                              ),
-                          ],
-                        );
+                        final picked =
+                            await showDesktopMenuUnder<_Saved>(anchor, [
+                              for (final account in saved)
+                                DesktopMenuItem(
+                                  value: account,
+                                  label: account.describe,
+                                  icon: AppIcons.userCircle,
+                                ),
+                            ]);
                         if (picked == null) return;
                         await run(() async {
                           for (final install in installs) {
@@ -363,7 +391,7 @@ class _MachineRow extends ConsumerWidget {
     required this.install,
     required this.store,
     required this.saved,
-    required this.newest,
+    required this.updateTo,
     required this.usage,
     required this.busy,
     required this.run,
@@ -373,8 +401,9 @@ class _MachineRow extends ConsumerWidget {
   final _AccountStore? store;
   final List<_Saved> saved;
 
-  /// The newest version any machine runs, to flag this one against.
-  final String? newest;
+  /// The version this install is behind — the agent's latest release or
+  /// another machine's, whichever is newer — or null when it is current.
+  final String? updateTo;
 
   /// The usage account this machine's reading belongs to, for an agent whose
   /// accounts this app does not save.
@@ -394,26 +423,22 @@ class _MachineRow extends ConsumerWidget {
       install,
       now: ref.watch(clockProvider).nowUtc(),
     );
-    final newest = this.newest;
-    final behind =
-        newest != null &&
-        install.version != null &&
-        _compareVersions(install.version!, newest) < 0;
+    final updateTo = this.updateTo;
     final store = this.store;
     final signIn = store?.signIn(ref, install);
     final current = signIn?.asData?.value;
-    final unsaved = current != null && current.signedIn && current.savedId == null
+    final unsaved =
+        current != null && current.signedIn && current.savedId == null
         ? current
         : null;
     final help = Text.rich(
       TextSpan(
         children: [
           TextSpan(text: version ?? 'version not read'),
-          if (behind)
-            // An install behind another machine's is the one update this page
-            // can see; there is no registry check to compare against.
+          if (updateTo != null)
+            // Words as well as the colour: the flag must read without it.
             TextSpan(
-              text: ' · update to $newest',
+              text: ' · update to $updateTo',
               style: TextStyle(color: semantic.attention),
             ),
           if (unsaved != null)
@@ -586,12 +611,11 @@ class _Accounts extends ConsumerWidget {
     // Readings for an account nobody saved: signed in somewhere, so it has
     // limits worth seeing, but it is not in the pool yet.
     for (final usage in usageAccounts) {
-      if (saved.any(
-        (s) => s.email != null && usageFor(s.email) == usage,
-      )) {
+      if (saved.any((s) => s.email != null && usageFor(s.email) == usage)) {
         continue;
       }
-      final where = 'On ${_list([for (final id in usage.environmentIds) label(id)])}';
+      final where =
+          'On ${_list([for (final id in usage.environmentIds) label(id)])}';
       entries.add(
         _AccountEntry(
           title: usage.email ?? 'Signed-in account',
@@ -767,7 +791,8 @@ class _AccountEntry extends ConsumerWidget {
     switch (picked) {
       case 'refresh' when usage != null:
         await run(
-          () => ref.read(usageReadingsProvider).refresh(usage.latest.accountKey),
+          () =>
+              ref.read(usageReadingsProvider).refresh(usage.latest.accountKey),
           'Read $title’s usage.',
         );
       case 'open' when usage != null:
@@ -805,7 +830,8 @@ class _AgentBehaviour extends ConsumerWidget {
         if (modelKnown)
           SettingsRow(
             label: 'Default model',
-            help: 'Where a new session starts; one that picks its own keeps it.',
+            help:
+                'Where a new session starts; one that picks its own keeps it.',
             stackedFit: SettingsControlFit.start,
             control: ModelPicker(
               options: modelOptionsFor(
@@ -814,7 +840,8 @@ class _AgentBehaviour extends ConsumerWidget {
                 support: ref.watch(agentModelSupportProvider(id)),
               ),
               selected: selected,
-              onChanged: (choice) => controller.setDefaultModel(id, choice.modelId),
+              onChanged: (choice) =>
+                  controller.setDefaultModel(id, choice.modelId),
             ),
           ),
         if (blocked != null)
@@ -844,7 +871,8 @@ class _AgentBehaviour extends ConsumerWidget {
                 selection: selection,
                 support: support,
                 labelled: false,
-                onChanged: (mode) => controller.setNewSessionPermission(id, mode),
+                onChanged: (mode) =>
+                    controller.setNewSessionPermission(id, mode),
               ),
             ),
         if (support.isKnown && support.isDangerous(selection))
@@ -876,7 +904,8 @@ class UsageAndLimitsSection extends ConsumerWidget {
           ),
           SettingsRow(
             label: 'Usage over time',
-            help: 'Every account’s windows, their history, and what spent them.',
+            help:
+                'Every account’s windows, their history, and what spent them.',
             control: OutlinedButton(
               onPressed: () => openUsageTab(ref),
               child: const Text('Open Usage tab'),
@@ -893,36 +922,107 @@ class UsageAndLimitsSection extends ConsumerWidget {
 String _list(List<String> items) => switch (items.length) {
   0 => '',
   1 => items.single,
-  _ =>
-    '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}',
+  _ => '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}',
 };
 
 /// The newest of [installs]' versions, or null when fewer than two machines
 /// have one — a flag needs something to be behind.
 String? _newestVersion(List<AgentInstallation> installs) {
-  final versions = [
-    for (final install in installs)
-      ?install.version,
-  ];
+  final versions = [for (final install in installs) ?install.version];
   if (versions.length < 2) return null;
-  return versions.reduce((a, b) => _compareVersions(a, b) >= 0 ? a : b);
+  return versions.reduce((a, b) => compareAgentVersions(a, b) >= 0 ? a : b);
 }
 
-/// Compares dotted version strings number by number ("2.10.0" after "2.9.3"),
-/// ignoring anything after the numbers.
-int _compareVersions(String a, String b) {
-  List<int> parts(String v) => [
-    for (final match in RegExp(r'\d+').allMatches(v.split(RegExp(r'[\s+-]')).first))
-      int.parse(match.group(0)!),
-  ];
-  final pa = parts(a);
-  final pb = parts(b);
-  for (var i = 0; i < pa.length || i < pb.length; i++) {
-    final x = i < pa.length ? pa[i] : 0;
-    final y = i < pb.length ? pb[i] : 0;
-    if (x != y) return x.compareTo(y);
+/// **The agent's latest release** (board: "Latest X · checked 3h ago", Check
+/// now): what its declared source last said, how long ago, and why the last
+/// check failed when it did. Offers the agent's own update command to copy
+/// when a machine is behind — never runs it: updating is the user's act, on
+/// the machine that needs it.
+class _LatestRelease extends ConsumerWidget {
+  const _LatestRelease({
+    required this.agentId,
+    required this.source,
+    required this.anyBehind,
+  });
+
+  final String agentId;
+  final AgentLatestVersionSource source;
+  final bool anyBehind;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(agentLatestVersionsProvider);
+    final checking = state.isChecking(agentId);
+    final last = state.of(agentId);
+    final now = ref.watch(clockProvider).nowUtc();
+    final version = last?.version;
+    final readAt = last?.readAt;
+    final failure = last?.failure;
+    final help = Text.rich(
+      TextSpan(
+        children: [
+          if (version != null)
+            TextSpan(
+              text:
+                  'Latest $version'
+                  '${readAt == null ? '' : ' · checked ${describeAge(now.difference(readAt))}'}',
+            )
+          else if (checking)
+            const TextSpan(text: 'Checking…')
+          else if (failure == null)
+            TextSpan(text: 'Not checked yet · from ${source.label}'),
+          // In the help's own colour: a failed check is quiet, and the last
+          // known version above it still stands.
+          if (failure != null)
+            TextSpan(
+              text: '${version == null ? '' : ' · '}couldn’t check: $failure',
+            ),
+        ],
+      ),
+    );
+    final command = ref
+        .watch(agentRegistryProvider)
+        .byId(agentId)
+        ?.launch
+        .selfUpdate
+        .updateCommand;
+    return SettingsRow(
+      label: 'Latest release',
+      helpWidget: help,
+      stackedFit: SettingsControlFit.start,
+      control: Wrap(
+        spacing: Insets.sm,
+        runSpacing: Insets.xs,
+        children: [
+          if (anyBehind && command != null && command.isNotEmpty)
+            TextButton(
+              onPressed: () => _copy(context, command.join(' ')),
+              child: const Text('Copy update command'),
+            ),
+          OutlinedButton(
+            onPressed: checking
+                ? null
+                : () => ref
+                      .read(agentLatestVersionsProvider.notifier)
+                      .checkNow(agentId: agentId),
+            child: Text(checking ? 'Checking…' : 'Check now'),
+          ),
+        ],
+      ),
+    );
   }
-  return 0;
+
+  Future<void> _copy(BuildContext context, String command) async {
+    await Clipboard.setData(ClipboardData(text: command));
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Copied “$command”. Run it on each machine that is behind.',
+        ),
+      ),
+    );
+  }
 }
 
 /// A saved account, whichever vendor's store it came from.
@@ -1031,8 +1131,9 @@ final class _ClaudeStore extends _AccountStore {
       ref.invalidate(claudeAuthSnapshotProvider(install));
 
   @override
-  Future<void> capture(WidgetRef ref, AgentInstallation install) =>
-      ref.read(claudeAccountsControllerProvider.notifier).captureCurrent(install);
+  Future<void> capture(WidgetRef ref, AgentInstallation install) => ref
+      .read(claudeAccountsControllerProvider.notifier)
+      .captureCurrent(install);
 
   @override
   Future<void> switchTo(WidgetRef ref, AgentInstallation install, _Saved to) =>
@@ -1086,8 +1187,9 @@ final class _CodexStore extends _AccountStore {
       ref.invalidate(codexAuthSnapshotProvider(install));
 
   @override
-  Future<void> capture(WidgetRef ref, AgentInstallation install) =>
-      ref.read(codexAccountsControllerProvider.notifier).captureCurrent(install);
+  Future<void> capture(WidgetRef ref, AgentInstallation install) => ref
+      .read(codexAccountsControllerProvider.notifier)
+      .captureCurrent(install);
 
   @override
   Future<void> switchTo(WidgetRef ref, AgentInstallation install, _Saved to) =>

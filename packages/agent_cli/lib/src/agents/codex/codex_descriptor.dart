@@ -33,6 +33,13 @@ const codexDescriptor = AgentDescriptor(
     selfUpdate: AgentSelfUpdate.declared(
       disableArguments: ['-c', 'check_for_update_on_startup=false'],
       updateCommand: ['codex', 'update'],
+      latestVersion: AgentLatestVersionSource.npm(
+        '@openai/codex',
+        evidence:
+            'registry.npmjs.org/@openai/codex/latest answered '
+            '"version":"0.158.0" on 2026-09-28; the standalone installer and '
+            '`codex update` ship the same numbers.',
+      ),
       evidence:
           'openai/codex config.toml key check_for_update_on_startup (default '
           'true; codex-rs/config/src/config_toml.rs, core/src/config/mod.rs '

@@ -1,3 +1,5 @@
+import 'agent_tool_ask.dart';
+
 /// What an agent is doing right now, as far as any status source can tell.
 ///
 /// [unknown] is a first-class state, not an error: most agents sit there until
@@ -93,7 +95,28 @@ class AgentStatusReport {
     this.waiting = AgentWaitKind.unrecorded,
     this.ending,
     this.failureReason,
+    this.toolAsk,
+    this.waitingSince,
   });
+
+  /// This report with the ask it is about and when the wait began — both
+  /// cleared when null. Everything else stays as it was read.
+  AgentStatusReport withAsk({AgentToolAsk? toolAsk, DateTime? waitingSince}) =>
+      AgentStatusReport(
+        agentId: agentId,
+        sessionId: sessionId,
+        status: status,
+        observedAt: observedAt,
+        source: source,
+        detail: detail,
+        sourceModifiedAt: sourceModifiedAt,
+        evidence: evidence,
+        waiting: waiting,
+        ending: ending,
+        failureReason: failureReason,
+        toolAsk: toolAsk,
+        waitingSince: waitingSince,
+      );
 
   /// Registry id of the agent (`AgentDescriptor.id`).
   final String agentId;
@@ -159,6 +182,17 @@ class AgentStatusReport {
   /// The agent's own word for why a turn failed — Claude Code's `rate_limit`,
   /// `server_error` — or null when it gave none. Opaque: compared, never shown.
   final String? failureReason;
+
+  /// **The tool call an open prompt asks about**, read off the hook that
+  /// announced it — only while [hasOpenPrompt], and only for an agent whose
+  /// hooks carry the call. Null is the normal case: the screen is then the
+  /// only account of what is asked.
+  final AgentToolAsk? toolAsk;
+
+  /// When the session began waiting on the user, while it is — so "waiting
+  /// 42s" counts from the ask, not from whoever looked last. Null when it is
+  /// not waiting, or the source could not tell.
+  final DateTime? waitingSince;
 
   /// **Whether a prompt with options is on this session's screen right now.**
   ///

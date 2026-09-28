@@ -257,6 +257,7 @@ class AgentSelfUpdate {
     : disableArguments = const [],
       disableEnvironment = const {},
       updateCommand = const [],
+      latestVersion = const AgentLatestVersionSource.none(),
       evidence = '';
 
   /// This agent checks for or performs updates, and can be told not to.
@@ -271,6 +272,7 @@ class AgentSelfUpdate {
     this.disableArguments = const [],
     this.disableEnvironment = const {},
     this.updateCommand = const [],
+    this.latestVersion = const AgentLatestVersionSource.none(),
     required this.evidence,
   });
 
@@ -287,6 +289,11 @@ class AgentSelfUpdate {
   /// Empty when none is established.
   final List<String> updateCommand;
 
+  /// Where the newest published version of this agent can be read, so an
+  /// install can be called behind without running anything on it. See
+  /// [AgentLatestVersionSource]; none by default, which flags nothing.
+  final AgentLatestVersionSource latestVersion;
+
   /// Where [disableArguments]/[disableEnvironment]/[updateCommand] were read
   /// off — the agent's source or docs, and the version. Empty for
   /// [AgentSelfUpdate.unknown].
@@ -298,4 +305,48 @@ class AgentSelfUpdate {
 
   /// Whether a manual update command is known.
   bool get hasUpdateCommand => updateCommand.isNotEmpty;
+}
+
+/// **Where an agent's newest published version is read.**
+///
+/// Data, like the rest of the descriptor: *which* public document answers
+/// "what is the latest release", never how the app asks it. Only a source
+/// that is public, unauthenticated and documented is declared — the request
+/// carries nothing about the user, and an agent with no such source (a
+/// self-updating binary with a private update channel) declares none rather
+/// than a scraped guess, and is simply never flagged as behind.
+class AgentLatestVersionSource {
+  /// Nobody has established a public source: no check, no flag.
+  const AgentLatestVersionSource.none() : npmPackage = null, evidence = '';
+
+  /// The agent is published to npm as [npmPackage]; the registry's `latest`
+  /// dist-tag document (`GET /<package>/latest`) names the newest version in
+  /// its `version` field. Every install channel — npm, the native installer,
+  /// `claude update` / `codex update` — ships the same version numbers.
+  const AgentLatestVersionSource.npm(
+    String this.npmPackage, {
+    required this.evidence,
+  });
+
+  /// The npm package name, scoped where the vendor scopes it.
+  final String? npmPackage;
+
+  /// Where the source was read off, so it can be re-checked rather than
+  /// trusted. Empty for [AgentLatestVersionSource.none].
+  final String evidence;
+
+  bool get isKnown => npmPackage != null;
+
+  /// The document to fetch, or null when there is none. A scoped name keeps
+  /// its `/`: the public registry serves `/@scope/name/latest` as is.
+  Uri? get url => switch (npmPackage) {
+    final package? => Uri.https('registry.npmjs.org', '/$package/latest'),
+    null => null,
+  };
+
+  /// A short name for where the version came from, for the settings row.
+  String get label => switch (npmPackage) {
+    final package? => 'npm $package',
+    null => 'no source',
+  };
 }

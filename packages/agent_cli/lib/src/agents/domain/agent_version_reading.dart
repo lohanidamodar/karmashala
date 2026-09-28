@@ -84,3 +84,71 @@ String? describeVersionReading(
           'may be out of date',
   };
 }
+
+/// Orders two agent version strings the way semver does, so "2.10.0" is after
+/// "2.9.3" and a release is after its own pre-release ("0.158.0" after
+/// "0.158.0-alpha.2"). Negative when [a] is older, zero when equal, positive
+/// when newer.
+///
+/// Tolerant of what `--version` prints around the number ("2.1.283 (Claude
+/// Code)", "codex-cli 0.158.0"): the first `major.minor[.patch]` run is the
+/// version, and build metadata after `+` is ignored, as semver says. A string
+/// with no number in it sorts before any that has one, so a garbled reading is
+/// never mistaken for a newer release.
+int compareAgentVersions(String a, String b) {
+  final pa = _SemverParts.parse(a);
+  final pb = _SemverParts.parse(b);
+  if (pa == null || pb == null) {
+    return (pa == null ? 0 : 1) - (pb == null ? 0 : 1);
+  }
+  for (var i = 0; i < pa.core.length || i < pb.core.length; i++) {
+    final x = i < pa.core.length ? pa.core[i] : 0;
+    final y = i < pb.core.length ? pb.core[i] : 0;
+    if (x != y) return x.compareTo(y);
+  }
+  // Same core: a release outranks any pre-release of it.
+  if (pa.pre.isEmpty || pb.pre.isEmpty) {
+    return (pa.pre.isEmpty ? 1 : 0) - (pb.pre.isEmpty ? 1 : 0);
+  }
+  for (var i = 0; i < pa.pre.length && i < pb.pre.length; i++) {
+    final x = pa.pre[i];
+    final y = pb.pre[i];
+    final nx = int.tryParse(x);
+    final ny = int.tryParse(y);
+    final order = switch ((nx, ny)) {
+      (final n?, final m?) => n.compareTo(m),
+      // Numeric identifiers sort before alphanumeric ones.
+      (_?, null) => -1,
+      (null, _?) => 1,
+      (null, null) => x.compareTo(y),
+    };
+    if (order != 0) return order;
+  }
+  return pa.pre.length.compareTo(pb.pre.length);
+}
+
+/// Whether [installed] is older than [latest] — false when either cannot be
+/// read, so an unreadable version never raises an update flag.
+bool isAgentVersionBehind(String installed, String latest) =>
+    _SemverParts.parse(installed) != null &&
+    _SemverParts.parse(latest) != null &&
+    compareAgentVersions(installed, latest) < 0;
+
+class _SemverParts {
+  const _SemverParts(this.core, this.pre);
+
+  final List<int> core;
+  final List<String> pre;
+
+  static final _pattern = RegExp(
+    r'(\d+(?:\.\d+)+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?',
+  );
+
+  static _SemverParts? parse(String raw) {
+    final match = _pattern.firstMatch(raw);
+    if (match == null) return null;
+    return _SemverParts([
+      for (final part in match.group(1)!.split('.')) int.tryParse(part) ?? 0,
+    ], match.group(2)?.split('.') ?? const []);
+  }
+}

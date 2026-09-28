@@ -45,6 +45,10 @@ const antigravityDescriptor = AgentDescriptor(
     // load-bearing — every in-app session runs in a PTY — so an unverified
     // protocol is left unclaimed rather than half-wired.
     baseArguments: [],
+    // No `selfUpdate`, and so no latest-version source: `agy` updates itself
+    // over its own channel, and no public, documented feed of its releases
+    // was found on 2026-09-28 (it is not on npm). Its installs are never
+    // flagged as behind a release — only behind another machine's.
     // All three modes now map, and all three are exact. Read off
     // `agy --help` (1.1.22):
     //

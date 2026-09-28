@@ -54,6 +54,13 @@ const claudeCodeDescriptor = AgentDescriptor(
     selfUpdate: AgentSelfUpdate.declared(
       disableEnvironment: {'DISABLE_AUTOUPDATER': '1'},
       updateCommand: ['claude', 'update'],
+      latestVersion: AgentLatestVersionSource.npm(
+        '@anthropic-ai/claude-code',
+        evidence:
+            'registry.npmjs.org/@anthropic-ai/claude-code/latest answered '
+            '"version":"2.1.283" on 2026-09-28; the native installer and '
+            '`claude update` ship the same numbers.',
+      ),
       evidence:
           'code.claude.com/docs setup ("Disable auto-updates": set '
           'DISABLE_AUTOUPDATER to "1" in settings env; only stops the '
