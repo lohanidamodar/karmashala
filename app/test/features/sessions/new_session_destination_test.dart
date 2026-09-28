@@ -17,7 +17,10 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
+import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_git/git.dart' show GitPresence;
@@ -122,14 +125,19 @@ void main() {
     // it offers a worktree; a plain folder answers "not a repository".
     if (plainFolder != null) {
       server.gitWork.presences[Checkout(
-        EnvironmentPath(environmentId: 'windows', path: plainFolder),
-      )] = GitPresence.notARepository;
+            EnvironmentPath(environmentId: 'windows', path: plainFolder),
+          )] =
+          GitPresence.notARepository;
     }
     // The picker classifies worktrees from `git worktree list`, at the server.
     server.gitWork.runner = FakeCommandRunner(responder: worktrees);
     final container = ProviderContainer(
       overrides: [
         dataClientProvider.overrideWithValue(data),
+        // The agent cards read each account's usage; here it stays unread.
+        agentUsageProvider.overrideWith(
+          (ref, installation) => const AsyncLoading<AgentUsage>(),
+        ),
         ...fakeTerminalOverrides(machine: db),
         // Nothing here may shell out: the picker classifies worktrees from
         // `git worktree list`, and a real one would run against paths that do
@@ -190,6 +198,15 @@ void main() {
   }
 
   Finder startButton() => find.widgetWithText(FilledButton, 'Start');
+
+  /// Unmounts the dialog inside the test, so the dispose Riverpod schedules
+  /// for the agent cards' usage lines runs before the pending-timer check.
+  Future<void> closeAll(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    // Each dispose can release another provider, which schedules its own.
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump(const Duration(milliseconds: 1));
+  }
 
   group('it opens where the app is already pointed', () {
     testWidgets('at the selected checkout', (tester) async {
@@ -381,13 +398,18 @@ void main() {
     addTearDown(container.dispose);
     await open(tester, container);
 
+    // The dialog scrolls as one: the agent cards and the first message put
+    // these below the fold of the test's window.
+    await tester.ensureVisible(find.text('External terminal'));
     await tester.tap(find.text('External terminal'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(startButton());
     await tester.tap(startButton());
     await tester.pumpAndSettle();
 
     // Nothing picked, so the terminal the dropdown shows is the one used.
     expect(launcher.terminals, [wezterm]);
+    await closeAll(tester);
   });
 
   group('a workspace with nothing to run in', () {
@@ -452,6 +474,32 @@ void main() {
       expect(tester.widget<FilledButton>(startButton()).onPressed, isNull);
     });
   });
+  testWidgets('a first message goes with the launch, and Ctrl+Enter starts', (
+    tester,
+  ) async {
+    late _RecordingLauncher launcher;
+    final container = ProviderContainer(
+      parent: containerFor(selected: 'r1'),
+      overrides: [
+        sessionLauncherProvider.overrideWith(
+          (ref) => launcher = _RecordingLauncher(ref),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await open(tester, container);
+
+    final prompt = find.widgetWithText(TextField, 'First message (optional)');
+    await tester.ensureVisible(prompt);
+    await tester.enterText(prompt, '  Add pagination to /trails  ');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(launcher.requests.single.firstMessage, 'Add pagination to /trails');
+    await closeAll(tester);
+  });
 }
 
 /// Records the terminal a launch was asked for, and launches nothing.
@@ -459,6 +507,7 @@ class _RecordingLauncher extends SessionLauncher {
   _RecordingLauncher(super.ref);
 
   final terminals = <SystemTerminal?>[];
+  final requests = <SessionLaunchRequest>[];
 
   @override
   Future<SessionLaunchResult> launch(
@@ -466,6 +515,7 @@ class _RecordingLauncher extends SessionLauncher {
     SystemTerminal? externalTerminal,
   }) async {
     terminals.add(externalTerminal);
+    requests.add(request);
     throw StateError('recorded, not launched');
   }
 }

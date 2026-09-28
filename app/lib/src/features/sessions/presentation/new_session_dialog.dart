@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
@@ -24,6 +25,7 @@ import '../application/session_launcher.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
 import 'session_destination_picker.dart';
+import 'new_session_agent_cards.dart';
 
 /// Creates a session **where you say**. Browsing and cancelling leaves the
 /// app's selection alone; pressing Start moves it, it being no longer a guess.
@@ -46,6 +48,10 @@ class NewSessionDialog extends ConsumerStatefulWidget {
 
 class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   final _titleController = TextEditingController(text: defaultSessionTitle);
+
+  /// What the agent is told first, if anything: the session starts with it
+  /// rather than at an empty prompt.
+  final _promptController = TextEditingController();
   AgentInstallation? _installation;
 
   /// Null only while the workspace has no projects at all.
@@ -128,6 +134,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   @override
   void dispose() {
     _titleController.dispose();
+    _promptController.dispose();
     super.dispose();
   }
 
@@ -216,6 +223,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   : SessionSurface.pane,
               useWorktree: useWorktree,
               targetPaneId: widget.targetPaneId,
+              firstMessage: _promptController.text.trim().isEmpty
+                  ? null
+                  : _promptController.text.trim(),
             ),
             externalTerminal: terminal,
           );
@@ -316,158 +326,153 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     final worktreeOffered =
         checkout != null && _presence != GitPresence.notARepository;
 
-    return AlertDialog(
-      title: const DesktopDialogTitle(
-        icon: AppIcons.chatCircleDots,
-        title: 'New session',
-        subtitle: 'Choose where and how the coding agent should run.',
-      ),
-      // The whole dialog scrolls, title included: with only the body scrolling,
-      // Tab left the title field above the window at 1.3x text.
-      scrollable: true,
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: DialogWidth.narrow),
-        child: destination == null
-            ? _noProjects()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SessionDestinationPicker(
-                    destination: destination,
-                    enabled: !_busy,
-                    onChanged: (picked) {
-                      setState(() {
-                        _error = null;
-                        _destination = picked;
-                        // The agent belongs to the environment we are leaving.
-                        // Cleared so `_agentFor` re-resolves the default.
-                        _installation = null;
-                      });
-                      _afterDestinationChanged();
-                    },
-                  ),
-                  const SizedBox(height: Insets.md),
-                  TextField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                  ),
-                  const SizedBox(height: Insets.md),
-                  if (installations.isEmpty)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            checkout == null
-                                ? 'No agent installations found yet.'
-                                : 'No agent is installed in '
-                                      '${ref.watch(environmentLabelForIdProvider(checkout.path.environmentId))} yet.',
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _busy ? null : _discoverAgents,
-                          child: const Text('Discover agents'),
-                        ),
-                      ],
-                    )
-                  else
-                    DropdownButtonFormField<AgentInstallation>(
-                      // Keyed by environment for the reason the checkout list
-                      // is keyed by project: a stale `FormField` value asserts.
-                      key: ValueKey(
-                        'agent-in-${checkout?.path.environmentId ?? ''}',
-                      ),
-                      initialValue: installation,
-                      // Expanded and ellipsised: the label carries an id, an
-                      // environment and a version, wider than the field at 200%.
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Agent'),
-                      items: [
-                        for (final i in installations)
-                          DropdownMenuItem(
-                            value: i,
+    final canStart = !_busy && checkout != null && installation != null;
+    void start() =>
+        _create(installation, useWorktree: worktreeOffered && _useWorktree);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          if (canStart) start();
+        },
+      },
+      child: AlertDialog(
+        title: const DesktopDialogTitle(
+          icon: AppIcons.chatCircleDots,
+          title: 'New session',
+          subtitle: 'Choose where and how the coding agent should run.',
+        ),
+        // The whole dialog scrolls, title included: with only the body scrolling,
+        // Tab left the title field above the window at 1.3x text.
+        scrollable: true,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: DialogWidth.narrow),
+          child: destination == null
+              ? _noProjects()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SessionDestinationPicker(
+                      destination: destination,
+                      enabled: !_busy,
+                      onChanged: (picked) {
+                        setState(() {
+                          _error = null;
+                          _destination = picked;
+                          // The agent belongs to the environment we are leaving.
+                          // Cleared so `_agentFor` re-resolves the default.
+                          _installation = null;
+                        });
+                        _afterDestinationChanged();
+                      },
+                    ),
+                    const SizedBox(height: Insets.md),
+                    TextField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(labelText: 'Title'),
+                    ),
+                    const SizedBox(height: Insets.md),
+                    if (installations.isEmpty)
+                      Row(
+                        children: [
+                          Expanded(
                             child: Text(
-                              '${i.agentId} · '
-                              // Not the raw id: it is the literal `windows` on
-                              // every platform, so a Mac was offered `windows`.
-                              '${ref.watch(environmentLabelForIdProvider(i.environmentId))}'
-                              '${i.version == null ? '' : ' (${i.version})'}',
-                              overflow: TextOverflow.ellipsis,
+                              checkout == null
+                                  ? 'No agent installations found yet.'
+                                  : 'No agent is installed in '
+                                        '${ref.watch(environmentLabelForIdProvider(checkout.path.environmentId))} yet.',
                             ),
                           ),
-                      ],
-                      onChanged: (v) => setState(() => _installation = v),
-                    ),
-                  const SizedBox(height: Insets.md),
-                  SegmentedButton<bool>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: false,
-                        icon: Icon(AppIcons.chat, size: Chrome.iconAction),
-                        label: Text('In-app'),
+                          TextButton(
+                            onPressed: _busy ? null : _discoverAgents,
+                            child: const Text('Discover agents'),
+                          ),
+                        ],
+                      )
+                    else
+                      NewSessionAgentCards(
+                        installations: installations,
+                        selected: installation,
+                        enabled: !_busy,
+                        onSelected: (v) => setState(() => _installation = v),
                       ),
-                      ButtonSegment(
-                        value: true,
-                        icon: Icon(
-                          AppIcons.arrowSquareOut,
-                          size: Chrome.iconAction,
+                    const SizedBox(height: Insets.md),
+                    TextField(
+                      controller: _promptController,
+                      minLines: 2,
+                      maxLines: 6,
+                      decoration: const InputDecoration(
+                        labelText: 'First message (optional)',
+                        hintText: 'What should the agent start on?',
+                        helperText: 'Ctrl+Enter starts the session',
+                      ),
+                    ),
+                    const SizedBox(height: Insets.md),
+                    SegmentedButton<bool>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          icon: Icon(AppIcons.chat, size: Chrome.iconAction),
+                          label: Text('In-app'),
                         ),
-                        label: Text('External terminal'),
-                      ),
-                    ],
-                    selected: {_external},
-                    onSelectionChanged: (s) =>
-                        setState(() => _external = s.first),
-                  ),
-                  if (_external) _terminalPicker(),
-                  // Offered for both surfaces: the worktree is created before
-                  // the agent starts, so its window makes no difference.
-                  if (worktreeOffered)
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _useWorktree,
-                      onChanged: (v) =>
-                          setState(() => _useWorktree = v ?? false),
-                      title: const Text('Run in a dedicated Git worktree'),
+                        ButtonSegment(
+                          value: true,
+                          icon: Icon(
+                            AppIcons.arrowSquareOut,
+                            size: Chrome.iconAction,
+                          ),
+                          label: Text('External terminal'),
+                        ),
+                      ],
+                      selected: {_external},
+                      onSelectionChanged: (s) =>
+                          setState(() => _external = s.first),
                     ),
-                  if (_creation != null) ...[
-                    const SizedBox(height: Insets.sm),
-                    WorktreeCreationLiveView(tracker: _creation!),
+                    if (_external) _terminalPicker(),
+                    // Offered for both surfaces: the worktree is created before
+                    // the agent starts, so its window makes no difference.
+                    if (worktreeOffered)
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _useWorktree,
+                        onChanged: (v) =>
+                            setState(() => _useWorktree = v ?? false),
+                        title: const Text('Run in a dedicated Git worktree'),
+                      ),
+                    if (_creation != null) ...[
+                      const SizedBox(height: Insets.sm),
+                      WorktreeCreationLiveView(tracker: _creation!),
+                    ],
+                    if (_error != null) ...[
+                      const SizedBox(height: Insets.sm),
+                      DesktopErrorBanner(_error!),
+                    ],
                   ],
-                  if (_error != null) ...[
-                    const SizedBox(height: Insets.sm),
-                    DesktopErrorBanner(_error!),
-                  ],
-                ],
-              ),
-      ),
-      actions: [
-        TextButton(
-          // While a worktree is being made, Cancel stops that — and cleans up —
-          // rather than closing a dialog whose launch would carry on unseen.
-          onPressed: !_busy
-              ? () => Navigator.of(context).pop()
-              : (_creation?.canCancel ?? false)
-              ? () {
-                  _creation!.cancel();
-                  setState(() {});
-                }
-              : null,
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: (_busy || checkout == null || installation == null)
-              ? null
-              : () => _create(
-                  installation,
-                  useWorktree: worktreeOffered && _useWorktree,
                 ),
-          child: _busy
-              ? const InlineSpinner(size: InlineSpinnerSize.medium)
-              : const Text('Start'),
         ),
-      ],
+        actions: [
+          TextButton(
+            // While a worktree is being made, Cancel stops that — and cleans up —
+            // rather than closing a dialog whose launch would carry on unseen.
+            onPressed: !_busy
+                ? () => Navigator.of(context).pop()
+                : (_creation?.canCancel ?? false)
+                ? () {
+                    _creation!.cancel();
+                    setState(() {});
+                  }
+                : null,
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: canStart ? start : null,
+            child: _busy
+                ? const InlineSpinner(size: InlineSpinnerSize.medium)
+                : const Text('Start'),
+          ),
+        ],
+      ),
     );
   }
 }
