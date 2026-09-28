@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'ask_toasts.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
 import 'side_panel_state.dart';
@@ -224,38 +225,47 @@ class _AppShellState extends ConsumerState<AppShell> {
                 explorerWidth: _explorerDrag ?? explorerWidth,
                 panelWidth: _panelDrag ?? panelWidth,
               );
+              final row = Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!zen) const ShellActivityStrip(),
+                  if (!zen && showExplorer)
+                    width.isCompact
+                        ? const Expanded(child: ShellSidebar())
+                        : ResizableColumn(
+                            width: layout.explorerWidth!,
+                            semanticLabel: 'Resize Explorer width',
+                            onResize: (value) => setState(
+                              () => _explorerDrag = layout.clampExplorer(value),
+                            ),
+                            onResizeEnd: _saveExplorerWidth,
+                            child: const ShellSidebar(),
+                          ),
+                  if (!width.isCompact || !showExplorer)
+                    const Expanded(child: WorkbenchView()),
+                  if (!zen)
+                    SidePanel(
+                      bodyWidth: layout.panelWidth,
+                      hasRoom: panelFits,
+                      onResize: (value) =>
+                          setState(() => _panelDrag = layout.clampPanel(value)),
+                      onResizeEnd: _savePanelWidth,
+                    ),
+                ],
+              );
               return Column(
                 children: [
                   Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    // Asks from sessions not on screen float over the
+                    // workbench's corner, above its status lines.
+                    child: Stack(
                       children: [
-                        if (!zen) const ShellActivityStrip(),
-                        if (!zen && showExplorer)
-                          width.isCompact
-                              ? const Expanded(child: ShellSidebar())
-                              : ResizableColumn(
-                                  width: layout.explorerWidth!,
-                                  semanticLabel: 'Resize Explorer width',
-                                  onResize: (value) => setState(
-                                    () => _explorerDrag = layout.clampExplorer(
-                                      value,
-                                    ),
-                                  ),
-                                  onResizeEnd: _saveExplorerWidth,
-                                  child: const ShellSidebar(),
-                                ),
-                        if (!width.isCompact || !showExplorer)
-                          const Expanded(child: WorkbenchView()),
-                        if (!zen)
-                          SidePanel(
-                            bodyWidth: layout.panelWidth,
-                            hasRoom: panelFits,
-                            onResize: (value) => setState(
-                              () => _panelDrag = layout.clampPanel(value),
-                            ),
-                            onResizeEnd: _savePanelWidth,
-                          ),
+                        Positioned.fill(child: row),
+                        const Positioned(
+                          right: Insets.lg,
+                          bottom: Insets.xl * 2,
+                          child: ShellAskToasts(),
+                        ),
                       ],
                     ),
                   ),
