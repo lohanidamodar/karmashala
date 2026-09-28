@@ -8,6 +8,11 @@ import 'package:xterm2/xterm.dart';
 /// burst of row changes reaches the agent as its last size (SETTLED.md).
 const kColumnResizeSettle = Duration(milliseconds: 100);
 
+/// How long a terminal shown again keeps its size while the chrome around it
+/// arrives: an agent's session bar lands a frame or two after its tab, and
+/// each row it takes was a resize that made Codex repaint its whole history.
+const kShownResizeHold = Duration(milliseconds: 600);
+
 final _monotonic = Stopwatch()..start();
 
 /// Whether terminal views may hear about writes. Suspended while the window is
@@ -73,6 +78,21 @@ class PaneTerminal extends Terminal {
     if (!_disposed) super.notifyListeners();
   }
 
+  /// Its plain listeners are its views, so one arriving on a terminal that had
+  /// been viewed before is its tab shown again: a size that changes while the
+  /// chrome settles is held, and only where it ends up lands.
+  @override
+  void addListener(void Function() listener) {
+    if (listeners.isEmpty) {
+      if (_viewed) _holdUntil = _now() + kShownResizeHold;
+      _viewed = true;
+    }
+    super.addListener(listener);
+  }
+
+  var _viewed = false;
+  Duration? _holdUntil;
+
   Timer? _settling;
   (int, int)? _pending;
   int? _pixelWidth;
@@ -91,6 +111,18 @@ class PaneTerminal extends Terminal {
   ]) {
     final columns = max(newWidth, 1);
     final rows = max(newHeight, 1);
+    final holdUntil = _holdUntil;
+    if (holdUntil != null) {
+      final left = holdUntil - _now();
+      if (left > Duration.zero) {
+        _pixelWidth = pixelWidth;
+        _pixelHeight = pixelHeight;
+        _pending = (columns, rows);
+        _settling ??= Timer(left, _land);
+        return;
+      }
+      _holdUntil = null;
+    }
     if (columns == viewWidth && rows == viewHeight) {
       _pending = null;
       super.resize(columns, rows, pixelWidth, pixelHeight);
@@ -118,7 +150,9 @@ class PaneTerminal extends Terminal {
     final size = _pending;
     _settling = null;
     _pending = null;
+    _holdUntil = null;
     if (size == null) return;
+    if ((size.$1, size.$2) == (viewWidth, viewHeight)) return;
     _movedAt = _now();
     super.resize(size.$1, size.$2, _pixelWidth, _pixelHeight);
     // `resize` tells nobody, being normally called from a layout; this was not.

@@ -251,4 +251,62 @@ void main() {
     await tester.pass(settle);
     expect(changes, 1);
   });
+
+  group('a tab shown again', () {
+    // What a view is to the terminal: a plain listener, added on mount.
+    void view() {}
+
+    PaneTerminal shownBefore(List<(int, int)> told) {
+      final terminal = pane(columns: 171, rows: 81);
+      terminal.onResize = (columns, rows, _, _) => told.add((columns, rows));
+      terminal
+        ..addListener(view)
+        ..removeListener(view);
+      return terminal;
+    }
+
+    testWidgets('lays out through the chrome still arriving, and a size that '
+        'comes back to where it was reaches no process', (tester) async {
+      final told = <(int, int)>[];
+      final terminal = shownBefore(told);
+      await tester.pass(const Duration(seconds: 5));
+
+      terminal.addListener(view);
+      // Its first layout, before the session bar under it has loaded…
+      terminal.resize(171, 85);
+      await tester.pass(const Duration(milliseconds: 120));
+      // …and the next, with it.
+      terminal.resize(171, 81);
+      await tester.pass(kShownResizeHold);
+
+      expect(told, isEmpty, reason: 'Codex repaints its history on each');
+      expect((terminal.viewWidth, terminal.viewHeight), (171, 81));
+    });
+
+    testWidgets('a size that really changed while hidden lands once, after '
+        'the hold', (tester) async {
+      final told = <(int, int)>[];
+      final terminal = shownBefore(told);
+      await tester.pass(const Duration(seconds: 5));
+
+      terminal.addListener(view);
+      terminal.resize(345, 82);
+      expect(told, isEmpty);
+      await tester.pass(kShownResizeHold);
+      expect(told, [(345, 82)]);
+    });
+
+    testWidgets('a first view is not held: a new pane takes its size at once', (
+      tester,
+    ) async {
+      final told = <(int, int)>[];
+      final terminal = pane(columns: 80, rows: 24);
+      terminal.onResize = (columns, rows, _, _) => told.add((columns, rows));
+      await tester.pass(const Duration(seconds: 5));
+
+      terminal.addListener(view);
+      terminal.resize(171, 81);
+      expect(told, [(171, 81)]);
+    });
+  });
 }
