@@ -258,18 +258,13 @@ class _FoldRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ExplorerRow(
     kind: ExplorerRowKind.session,
+    minHeight: Sidebar.rowHeight,
     depth: 0,
     selected: false,
     onTap: onTap,
-    builder: (context) => Sidebar.rowLine(
-      ExplorerRowKind.session,
-      ExplorerRowLine(
-        lead: const ExplorerRowLead(),
-        title: Text(
-          label,
-          style: UiDensity.of(context).muted(Theme.of(context)),
-        ),
-      ),
+    builder: (context) => ExplorerRowLine(
+      lead: const ExplorerRowLead(),
+      title: Text(label, style: UiDensity.of(context).muted(Theme.of(context))),
     ),
   );
 }

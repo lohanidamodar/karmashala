@@ -112,6 +112,7 @@ class TerminalRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ExplorerRow(
     kind: ExplorerRowKind.terminal,
+    minHeight: Sidebar.rowHeight,
     depth: depth,
     selected: false,
     // The row is its own first verb, as a session's is — which is also what
@@ -121,57 +122,54 @@ class TerminalRow extends StatelessWidget {
       final theme = Theme.of(context);
       final scheme = theme.colorScheme;
       final density = UiDensity.of(context);
-      return Sidebar.rowLine(
-        ExplorerRowKind.terminal,
-        LayoutBuilder(
-          builder: (context, constraints) => Row(
-            children: [
-              ExplorerRowLead(
-                glyph: Icon(
-                  terminal.running ? AppIcons.playCircle : AppIcons.checkCircle,
-                  size: ExplorerRow.glyphSize,
-                  color: terminal.running
-                      ? scheme.primary
-                      : scheme.onSurfaceVariant,
-                ),
+      return LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            ExplorerRowLead(
+              glyph: Icon(
+                terminal.running ? AppIcons.playCircle : AppIcons.checkCircle,
+                size: ExplorerRow.glyphSize,
+                color: terminal.running
+                    ? scheme.primary
+                    : scheme.onSurfaceVariant,
               ),
-              Expanded(
-                child: Text(
-                  terminal.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: density.rowTitle(theme),
-                ),
+            ),
+            Expanded(
+              child: Text(
+                terminal.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: density.rowTitle(theme),
               ),
-              const SizedBox(width: Insets.sm),
-              // Scaled rather than clipped when large text meets a narrow pane.
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (terminal.running)
-                        TextButton(
-                          onPressed: onOpen,
-                          child: Text(terminal.isHosted ? 'Attach' : 'Focus'),
+            ),
+            const SizedBox(width: Insets.sm),
+            // Scaled rather than clipped when large text meets a narrow pane.
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (terminal.running)
+                      TextButton(
+                        onPressed: onOpen,
+                        child: Text(terminal.isHosted ? 'Attach' : 'Focus'),
+                      ),
+                    if (onEnd != null)
+                      TextButton(
+                        onPressed: onEnd,
+                        style: TextButton.styleFrom(
+                          foregroundColor: scheme.error,
                         ),
-                      if (onEnd != null)
-                        TextButton(
-                          onPressed: onEnd,
-                          style: TextButton.styleFrom(
-                            foregroundColor: scheme.error,
-                          ),
-                          child: const Text('End'),
-                        ),
-                    ],
-                  ),
+                        child: const Text('End'),
+                      ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     },

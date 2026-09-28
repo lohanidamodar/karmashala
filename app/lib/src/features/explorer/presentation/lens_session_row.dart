@@ -99,6 +99,7 @@ class LensSessionRow extends ConsumerWidget {
 
     return ExplorerRow(
       kind: ExplorerRowKind.session,
+      minHeight: Sidebar.rowHeight,
       depth: 0,
       selected: selected || ticked,
       settled: state == AgentState.ended,
@@ -121,73 +122,70 @@ class LensSessionRow extends ConsumerWidget {
         }
         if (action == 'open') _open(context, ref);
       },
-      builder: (context) => Sidebar.rowLine(
-        ExplorerRowKind.session,
-        Row(
-          children: [
-            if (selecting)
-              SizedBox(
-                width: ExplorerRow.glyphSlot,
-                child: Center(
-                  child: ExplorerRowTick(
-                    value: ticked,
-                    semanticLabel: 'Select "${entry.title}"',
-                    onChanged: tickEnabled ? tap : null,
-                    disabledTooltip: SelectionKind.projects.holdsLabel,
-                  ),
-                ),
-              ),
+      builder: (context) => Row(
+        children: [
+          if (selecting)
             SizedBox(
               width: ExplorerRow.glyphSlot,
               child: Center(
-                child: _StateGlyph(state: state, entry: entry),
-              ),
-            ),
-            const SizedBox(width: ExplorerRow.textGap),
-            // The title first; where it lives after it, muted, on the same line
-            // and the first to give way.
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    flex: 3,
-                    child: Text(
-                      entry.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: density.rowTitle(theme, strong: waiting),
-                    ),
-                  ),
-                  if (clauses.isNotEmpty) ...[
-                    const SizedBox(width: Insets.sm),
-                    Flexible(
-                      flex: 2,
-                      child: Text(
-                        clauses.join('  ·  '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: muted,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (waiting) ...[
-              const SizedBox(width: Insets.xs),
-              Text(
-                'waiting',
-                style: muted?.copyWith(
-                  color: SemanticColors.of(context).attention,
-                  fontWeight: FontWeight.w600,
+                child: ExplorerRowTick(
+                  value: ticked,
+                  semanticLabel: 'Select "${entry.title}"',
+                  onChanged: tickEnabled ? tap : null,
+                  disabledTooltip: SelectionKind.projects.holdsLabel,
                 ),
               ),
-            ] else if (dated) ...[
-              const SizedBox(width: Insets.xs),
-              Text(compactAge(now.difference(entry.activityAt)), style: muted),
-            ],
+            ),
+          SizedBox(
+            width: ExplorerRow.glyphSlot,
+            child: Center(
+              child: _StateGlyph(state: state, entry: entry),
+            ),
+          ),
+          const SizedBox(width: ExplorerRow.textGap),
+          // The title first; where it lives after it, muted, on the same line
+          // and the first to give way.
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  flex: 3,
+                  child: Text(
+                    entry.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: density.rowTitle(theme, strong: waiting),
+                  ),
+                ),
+                if (clauses.isNotEmpty) ...[
+                  const SizedBox(width: Insets.sm),
+                  Flexible(
+                    flex: 2,
+                    child: Text(
+                      clauses.join('  ·  '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (waiting) ...[
+            const SizedBox(width: Insets.xs),
+            Text(
+              'waiting',
+              style: muted?.copyWith(
+                color: SemanticColors.of(context).attention,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ] else if (dated) ...[
+            const SizedBox(width: Insets.xs),
+            Text(compactAge(now.difference(entry.activityAt)), style: muted),
           ],
-        ),
+        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../app_icons.dart';
+import '../appearance.dart';
 import '../design_tokens.dart';
 import '../row_menu.dart';
 import '../reveal_on_focus.dart';
@@ -62,8 +63,20 @@ class ExplorerRow extends StatelessWidget {
     this.expanded,
     this.band = false,
     this.spaceAbove = false,
+    this.minHeight,
     super.key,
   });
+
+  /// The row's floor under a pointer, its own vertical padding included —
+  /// the sidebar's 28px line (board A2). Null keeps the kind's default:
+  /// [Chrome.row], or no floor at all for a session, whose second line sets
+  /// its height. A floor, never a fixed height: the row still grows with its
+  /// text. Ignored under a thumb, where [Touch.target] is the floor.
+  ///
+  /// A parameter rather than a taller [Chrome.row], because that token also
+  /// sizes the todo list, the tab picker, the device list and the settings
+  /// nav — none of which the sidebar's mockup speaks for.
+  final double? minHeight;
 
   final ExplorerRowKind kind;
   final int depth;
@@ -186,7 +199,7 @@ class ExplorerRow extends StatelessWidget {
   /// A floor, never a fixed height: every row still grows with its text.
   double _minHeight(UiDensity density) {
     if (density.isTouch) return Touch.target;
-    return kind == ExplorerRowKind.session ? 0 : Chrome.row;
+    return minHeight ?? (kind == ExplorerRowKind.session ? 0 : Chrome.row);
   }
 
   @override
@@ -297,17 +310,29 @@ class _ExplorerRowFill extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final touch = UiDensity.of(context).isTouch;
     final interaction = RowInteractionScope.maybeOf(context);
-    // Resting tone, then the states in the order they compose. Focus is a
-    // ring, not a fill.
-    Color? color = band
-        ? ExplorerRow.bandColor(scheme)
-        : touch
-        ? kind.surface(scheme)
-        : null;
-    Color layer(Color over) =>
-        color == null ? over : Color.alphaBlend(over, color);
-    if (selected) color = layer(StateLayers.selected(scheme));
-    if (interaction?.hovered ?? false) color = layer(StateLayers.hover(scheme));
+    final hovered = interaction?.hovered ?? false;
+    // Focus is a ring, not a fill.
+    final Color? color;
+    if (touch || band) {
+      // A tile or a band already rests on a tone of its own — a project tile
+      // on the very step `SurfaceTones.selected` names — so its states are
+      // washes laid over that tone, not tones put in its place.
+      var rest = band ? ExplorerRow.bandColor(scheme) : kind.surface(scheme);
+      if (selected) rest = Color.alphaBlend(StateLayers.selected(scheme), rest);
+      if (hovered) rest = Color.alphaBlend(StateLayers.hover(scheme), rest);
+      color = rest;
+    } else {
+      // A pointer row rests transparent and takes the ladder's own tones
+      // (board A2's `.row:hover` / `.row.sel`): selection is neutral `s2`, the
+      // accent kept for the focus ring and the glyphs. Selected wins over
+      // hover, as the mockup's later `.row.sel` rule does.
+      final tones = SurfaceTones.of(context);
+      color = selected
+          ? tones.selected
+          : hovered
+          ? tones.hover
+          : null;
+    }
     final focused = interaction?.focused ?? false;
     return DecoratedBox(
       decoration: BoxDecoration(

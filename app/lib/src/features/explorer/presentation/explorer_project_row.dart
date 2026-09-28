@@ -290,6 +290,7 @@ class ProjectLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ExplorerRow(
     kind: ExplorerRowKind.project,
+    minHeight: Sidebar.rowHeight,
     expanded: expanded,
     depth: depth,
     selected: selected,
@@ -304,101 +305,98 @@ class ProjectLine extends StatelessWidget {
       final ahead = summary.commitsAhead ?? 0;
       final branch = missing ? null : summary.branch;
       final count = [?summary.label, ?summary.attentionLabel].join(' · ');
-      return Sidebar.rowLine(
-        ExplorerRowKind.project,
-        Row(
-          children: [
-            ExplorerRowLead(
-              expanded: expanded,
-              onDisclosure: onDisclosure,
-              tick: selecting
-                  ? ExplorerRowTick(
-                      value: ticked,
-                      semanticLabel: 'Select "$name"',
-                      onChanged: tickEnabled ? onTap : null,
-                      disabledTooltip: tickDisabledTooltip,
-                    )
-                  : null,
-              glyph: Icon(
-                expanded ? AppIcons.folderOpen : AppIcons.folder,
-                size: ExplorerRow.glyphSize,
-                color: missing ? scheme.error : scheme.onSurfaceVariant,
-              ),
+      return Row(
+        children: [
+          ExplorerRowLead(
+            expanded: expanded,
+            onDisclosure: onDisclosure,
+            tick: selecting
+                ? ExplorerRowTick(
+                    value: ticked,
+                    semanticLabel: 'Select "$name"',
+                    onChanged: tickEnabled ? onTap : null,
+                    disabledTooltip: tickDisabledTooltip,
+                  )
+                : null,
+            glyph: Icon(
+              expanded ? AppIcons.folderOpen : AppIcons.folder,
+              size: ExplorerRow.glyphSize,
+              color: missing ? scheme.error : scheme.onSurfaceVariant,
             ),
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Tooltip(
-                      message: missing ? 'Folder not found\n$where' : where,
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: density.rowTitle(
-                          theme,
-                          strong: summary.needsAttention > 0,
-                        ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Tooltip(
+                    message: missing ? 'Folder not found\n$where' : where,
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: density.rowTitle(
+                        theme,
+                        strong: summary.needsAttention > 0,
                       ),
                     ),
                   ),
-                  if (pinned) ...[
-                    SizedBox(width: density.glyphGap),
-                    Tooltip(
-                      message: 'Pinned to top',
-                      child: Icon(
-                        AppIcons.pushPinFill,
-                        size: density.iconSmall,
-                        color: scheme.tertiary,
-                      ),
-                    ),
-                  ],
-                  if (summary.needsAttention > 0)
-                    ProjectStateBadge.needsYou(summary),
-                  if (branch != null) ...[
-                    const SizedBox(width: Insets.sm),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: scaler.scale(branchMax),
-                      ),
-                      child: Text(
-                        ahead > 0 ? '$branch ↑$ahead' : branch,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: MonoStyles.small.copyWith(color: scheme.outline),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            SizedBox(
-              width: ExplorerRow.trailingWidthOf(context),
-              child: ExplorerRowTrailing(
-                meta: summary.sessions == 0
-                    ? null
-                    : ExplorerRowMeta(
-                        '${summary.sessions}',
-                        tooltip: count,
-                        color: scheme.outline,
-                      ),
-                action: onNewSession == null
-                    ? null
-                    : ExplorerRowAction(
-                        tooltip: 'Start a session here with the default agent',
-                        icon: AppIcons.plus,
-                        onPressed: onNewSession,
-                      ),
-                menu: RowMenuButton(
-                  tooltip: 'Project actions',
-                  itemBuilder: menuItemsBuilder,
-                  onSelected: onMenu,
                 ),
+                if (pinned) ...[
+                  SizedBox(width: density.glyphGap),
+                  Tooltip(
+                    message: 'Pinned to top',
+                    child: Icon(
+                      AppIcons.pushPinFill,
+                      size: density.iconSmall,
+                      color: scheme.tertiary,
+                    ),
+                  ),
+                ],
+                if (summary.needsAttention > 0)
+                  ProjectStateBadge.needsYou(summary),
+                if (branch != null) ...[
+                  const SizedBox(width: Insets.sm),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: scaler.scale(branchMax),
+                    ),
+                    child: Text(
+                      ahead > 0 ? '$branch ↑$ahead' : branch,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: MonoStyles.small.copyWith(color: scheme.outline),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(
+            width: ExplorerRow.trailingWidthOf(context),
+            child: ExplorerRowTrailing(
+              meta: summary.sessions == 0
+                  ? null
+                  : ExplorerRowMeta(
+                      '${summary.sessions}',
+                      tooltip: count,
+                      color: scheme.outline,
+                    ),
+              action: onNewSession == null
+                  ? null
+                  : ExplorerRowAction(
+                      tooltip: 'Start a session here with the default agent',
+                      icon: AppIcons.plus,
+                      onPressed: onNewSession,
+                    ),
+              menu: RowMenuButton(
+                tooltip: 'Project actions',
+                itemBuilder: menuItemsBuilder,
+                onSelected: onMenu,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     },
   );

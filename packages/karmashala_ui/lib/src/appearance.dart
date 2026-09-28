@@ -75,6 +75,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
     required this.term,
     required this.background,
     required this.raised,
+    required this.hover,
     required this.selected,
     required this.pressed,
     required this.line,
@@ -103,6 +104,12 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
 
   /// Fields and cards on a region (`s1`).
   final Color raised;
+
+  /// A row, a label or a quiet button under the pointer (`--hover`): one step
+  /// above the sidebar and just short of [selected], so a hovered row never
+  /// reads as the chosen one. Opaque, unlike `StateLayers.hover`'s ink wash,
+  /// because the mockup names it as a tone of the ladder, not an overlay.
+  final Color hover;
 
   /// A selected row (`s2`).
   final Color selected;
@@ -138,6 +145,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
         term: const Color(0xFF0C0C0E),
         background: const Color(0xFF0E0E10),
         raised: const Color(0xFF17171B),
+        hover: const Color(0xFF1C1C20),
         selected: const Color(0xFF1F1F24),
         pressed: const Color(0xFF26262C),
         line: borders ? const Color(0xFF1D1D22) : const Color(0x00000000),
@@ -154,6 +162,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
       term: const Color(0xFFFFFFFF),
       background: const Color(0xFFFBFBFA),
       raised: const Color(0xFFF1F1EF),
+      hover: const Color(0xFFEFEFEC),
       selected: const Color(0xFFE9E9E6),
       pressed: const Color(0xFFDCDCD8),
       line: borders ? const Color(0xFFE6E6E3) : const Color(0x00FFFFFF),
@@ -172,6 +181,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
     Color? term,
     Color? background,
     Color? raised,
+    Color? hover,
     Color? selected,
     Color? pressed,
     Color? line,
@@ -186,6 +196,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
     term: term ?? this.term,
     background: background ?? this.background,
     raised: raised ?? this.raised,
+    hover: hover ?? this.hover,
     selected: selected ?? this.selected,
     pressed: pressed ?? this.pressed,
     line: line ?? this.line,
@@ -206,6 +217,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
       other.term == term &&
       other.background == background &&
       other.raised == raised &&
+      other.hover == hover &&
       other.selected == selected &&
       other.pressed == pressed &&
       other.line == line &&
@@ -222,6 +234,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
     term,
     background,
     raised,
+    hover,
     selected,
     pressed,
     line,
@@ -242,6 +255,7 @@ class SurfaceTones extends ThemeExtension<SurfaceTones> {
       term: mix(term, other.term),
       background: mix(background, other.background),
       raised: mix(raised, other.raised),
+      hover: mix(hover, other.hover),
       selected: mix(selected, other.selected),
       pressed: mix(pressed, other.pressed),
       line: mix(line, other.line),

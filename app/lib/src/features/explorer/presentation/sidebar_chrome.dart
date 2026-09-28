@@ -31,7 +31,9 @@ class Sidebar {
   /// A group label's line (`.grp`).
   static const groupHeight = 24.0;
 
-  /// A row's line (`.row`): one line, 28 under a pointer.
+  /// A row's line (`.row`): one line, 28 under a pointer. Handed to every
+  /// sidebar [ExplorerRow] as its `minHeight` — a floor, padding included, so
+  /// a row still grows with its text.
   static const rowHeight = 28.0;
 
   /// Above a group that follows another: the space *is* the separator.
@@ -60,20 +62,6 @@ class Sidebar {
   /// header's number and its rows' numbers share one edge.
   static double labelTrailOf(UiDensity density) =>
       density.padX + ExplorerRow.scrollbarGutter;
-
-  /// Lifts one [ExplorerRow]'s content to [rowHeight]. `ExplorerRow` floors a
-  /// row at `Chrome.row` (26) including its own vertical padding — a hairline
-  /// each side, or [Insets.xs] each side for a session — so the content floor
-  /// here is what takes the whole line to 28. A floor, never a fixed height:
-  /// the row still grows with its text. (A 28px `Chrome.row` in the shared
-  /// package would make this unnecessary.)
-  static Widget rowLine(ExplorerRowKind kind, Widget child) {
-    final padding = kind == ExplorerRowKind.session ? Insets.xs : Insets.hair;
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: rowHeight - padding * 2),
-      child: child,
-    );
-  }
 }
 
 /// **An area's header** (spec §4): the name at 13/600, then the area's verbs as
@@ -192,9 +180,14 @@ class SidebarHeaderButtons extends StatelessWidget {
               borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
             ),
           ),
+          // The hover is a tone in the fill (`.tab:hover`), not an overlay, so
+          // a toggle that is on keeps its selected tone under the pointer.
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
                 ? tones.selected
+                : states.contains(WidgetState.hovered) ||
+                      states.contains(WidgetState.focused)
+                ? tones.hover
                 : Colors.transparent,
           ),
           foregroundColor: WidgetStateProperty.resolveWith(
@@ -205,12 +198,14 @@ class SidebarHeaderButtons extends StatelessWidget {
                 ? scheme.onSurface
                 : scheme.onSurfaceVariant,
           ),
+          // Transparent, not null, while hovered or focused: a null falls
+          // through to Material's own wash, which would stack on the tone.
           overlayColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.pressed)
                 ? StateLayers.pressed(scheme)
                 : states.contains(WidgetState.hovered) ||
                       states.contains(WidgetState.focused)
-                ? StateLayers.hover(scheme)
+                ? Colors.transparent
                 : null,
           ),
         ),
@@ -452,7 +447,9 @@ class SidebarGroupLabel extends StatelessWidget {
     if (onTap == null && menu == null) return content;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: hovered ? StateLayers.hover(scheme) : null,
+        // The ladder's hover tone, as a row's: a label and the rows under it
+        // light alike.
+        color: hovered ? SurfaceTones.of(context).hover : null,
         borderRadius: const BorderRadius.all(Radius.circular(Radii.sm)),
         border: focused
             ? Border.all(
@@ -554,7 +551,9 @@ class SidebarPill extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         customBorder: _shape,
-        hoverColor: StateLayers.hover(scheme),
+        // `.pill:hover`. A pill in force keeps its selected tone instead:
+        // the ink's hover colour is painted over the Material's own fill.
+        hoverColor: selected ? Colors.transparent : tones.hover,
         onTap: onTap,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: height),
