@@ -2,6 +2,7 @@ import '../../ask/cli_invocation.dart';
 import '../../cli_detection/data/transcript_dialect.dart';
 import '../../process/command_runner_factory.dart';
 import '../adapter/agent_adapter.dart';
+import '../adapter/agent_presentation.dart';
 import '../adapter/agent_chat_protocol.dart';
 import '../adapter/agent_directory_conversations.dart';
 import '../adapter/agent_store.dart';
@@ -28,6 +29,10 @@ class AntigravityAdapter extends AgentAdapter {
 
   @override
   final AgentDescriptor descriptor;
+
+  @override
+  AgentPresentation get presentation =>
+      AgentPresentation.of(descriptor.displayName, mark: AgentMark.antigravity);
 
   @override
   AgentChatProtocol chatProtocol(RunnerResolver runnerFor) =>

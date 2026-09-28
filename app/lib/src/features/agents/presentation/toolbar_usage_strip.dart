@@ -12,12 +12,13 @@ import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_nav.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_accounts.dart';
+import 'agent_logo.dart';
 import 'usage_chip.dart';
 import 'usage_chip_popover.dart';
 
-/// The most one account's chip takes in the toolbar, its name and both
+/// The most one account's chip takes in the toolbar, its logo and both
 /// windows included; a longer label gives up its tail.
-const double kToolbarUsageChipWidth = 176;
+const double kToolbarUsageChipWidth = 150;
 
 /// The `+N` chip the accounts that do not fit fold into.
 const double kToolbarUsageMoreWidth = 44;
@@ -196,18 +197,11 @@ class _AccountChipState extends ConsumerState<_AccountChip> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Gives way with the numbers: a long name at a large text
-                  // size must not push them off the chip.
-                  Flexible(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  // The agent's mark, not its name: the name is in the
+                  // semantics and the card, and the toolbar needs the room.
+                  AgentLogo(
+                    agentId: account.agentId,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: Insets.xs),
                   Icon(

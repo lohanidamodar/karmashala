@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/presentation/toolbar_usage_strip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
@@ -91,6 +92,17 @@ void main() {
     final firstKey = '${tester.widget<InkWell>(chips.first).key}';
     expect(firstKey, contains('codex'), reason: 'at 90%, it is nearest');
     expect(find.text('90% · 2h11m'), findsOneWidget);
+
+    // Each chip wears its agent's mark, as its adapter names it.
+    Finder asset(String name) => find.byWidgetPredicate(
+      (w) =>
+          w is Image &&
+          w.image is AssetImage &&
+          (w.image as AssetImage).assetName == name,
+    );
+    expect(asset('assets/agents/claude.png'), findsOneWidget);
+    expect(asset('assets/agents/antigravity.png'), findsOneWidget);
+    expect(find.byIcon(AppIcons.openAiLogo), findsOneWidget);
     await quiesce(tester, container);
   });
 

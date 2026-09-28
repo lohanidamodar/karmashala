@@ -39,8 +39,11 @@ class CodexAdapter extends AgentAdapter {
   final AgentDescriptor descriptor;
 
   @override
-  AgentPresentation get presentation =>
-      AgentPresentation.of(descriptor.displayName, glyph: AgentGlyph.terminal);
+  AgentPresentation get presentation => AgentPresentation.of(
+    descriptor.displayName,
+    glyph: AgentGlyph.terminal,
+    mark: AgentMark.openAi,
+  );
 
   @override
   AgentChatProtocol chatProtocol(RunnerResolver runnerFor) =>

@@ -312,6 +312,12 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData openAiLogo = IconData(
+    0xe7d2,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData paperPlaneRight = IconData(
     0xe396,
     fontFamily: 'PhosphorRegular',

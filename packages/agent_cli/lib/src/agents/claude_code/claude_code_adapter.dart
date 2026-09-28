@@ -3,6 +3,7 @@ import '../../cli_detection/data/transcript_dialect.dart';
 import '../../process/command_runner_factory.dart';
 import '../adapter/agent_accounts.dart';
 import '../adapter/agent_adapter.dart';
+import '../adapter/agent_presentation.dart';
 import '../adapter/agent_chat_protocol.dart';
 import '../adapter/agent_file_changes.dart';
 import '../adapter/agent_media_reader.dart';
@@ -37,6 +38,10 @@ class ClaudeCodeAdapter extends AgentAdapter {
 
   @override
   final AgentDescriptor descriptor;
+
+  @override
+  AgentPresentation get presentation =>
+      AgentPresentation.of(descriptor.displayName, mark: AgentMark.claude);
 
   @override
   List<String> get aliases => const ['claude', 'claude code'];
