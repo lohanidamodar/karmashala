@@ -11,7 +11,7 @@ import '../application/environments_controller.dart';
 import '../application/toolchain_readings.dart';
 import '../domain/toolchain.dart';
 
-/// **Settings → Environments: what each machine can actually build.**
+/// **Settings → Machines: what each machine can actually build.**
 ///
 /// It replaced a catalogue of project kinds that measured nothing. What a kind
 /// is built with is still here — as the line under the thing being measured,

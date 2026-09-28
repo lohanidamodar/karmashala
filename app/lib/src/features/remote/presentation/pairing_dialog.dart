@@ -86,7 +86,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
         setState(() {
           _error =
               'No relay is switched on. Turn on the local relay or the '
-              'hosted one in Remote access first.';
+              'hosted one in Settings → Remote and pairing first.';
         });
       }
       return;

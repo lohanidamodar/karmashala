@@ -83,6 +83,8 @@ class ThemeTextSection extends ConsumerWidget {
             help:
                 'Selection, focus and the primary action. Status colours '
                 'stay the same.',
+            // Five swatches at their own width, not spread across a pane.
+            stackedFit: SettingsControlFit.start,
             control: _AccentSwatches(
               selected: settings.accent,
               onSelected: controller.setAccent,

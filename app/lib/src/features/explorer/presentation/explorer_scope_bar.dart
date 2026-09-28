@@ -101,7 +101,7 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
     final current = environments
         .where((choice) => choice.environmentId == scope.environmentId)
         .firstOrNull;
-    // "Environment" is the app's word for a machine (Settings › Environments),
+    // "Environment" is the app's word for a machine (Settings › Machines),
     // so every one of them is "All environments" — here, in the menu and to a
     // screen reader.
     final label = current?.label ?? allLabel;

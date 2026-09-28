@@ -12,9 +12,9 @@ import '../../settings/presentation/settings_section.dart';
 import 'package:karmashala_git/cleanup.dart';
 import '../application/worktree_cleanup_providers.dart';
 
-/// Settings → Worktree setup → Automatic cleanup: the policy, a dry run, and
-/// the log of what was removed. The server sweeps, on its own schedule;
-/// nothing here asks it to until a button is pressed.
+/// Settings → Projects and files → Worktree setup → Automatic cleanup: the
+/// policy, a dry run, and the log of what was removed. The server sweeps, on
+/// its own schedule; nothing here asks it to until a button is pressed.
 class WorktreeCleanupSection extends ConsumerStatefulWidget {
   const WorktreeCleanupSection({super.key});
 

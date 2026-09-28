@@ -6,8 +6,8 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/checkpoint_settings.dart';
 
-/// Settings → Agents → Checkpoints: whether every turn is checkpointed, and
-/// how many checkpoints each repository keeps.
+/// Settings → Checkpoints and automations → Checkpoints: whether every turn is
+/// checkpointed, and how many checkpoints each repository keeps.
 class CheckpointSettingsSection extends ConsumerWidget {
   const CheckpointSettingsSection({super.key});
 

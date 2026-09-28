@@ -11,9 +11,10 @@ import 'agent_label.dart';
 import 'settings_catalog.dart';
 import 'settings_section.dart';
 
-/// Settings → Agents: run agent detection again, and say what it did — a
-/// `(agent, environment)` pair searched once is never searched again, so a CLI
-/// installed later stayed invisible. The line names what was *not* found.
+/// Settings → Agents and accounts: run agent detection again, and say what it
+/// did — a `(agent, environment)` pair searched once is never searched again,
+/// so a CLI installed later stayed invisible. The line names what was *not*
+/// found.
 class AgentDetectionSection extends ConsumerWidget {
   const AgentDetectionSection({super.key});
 

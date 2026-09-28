@@ -195,7 +195,8 @@ String agentExecutableRefusal({
     ? '$agentName cannot be started: $path leads through a link this machine '
           'will not follow, and looking again just now did not resolve it. '
           'Set the path the executable is actually at in '
-          'Settings → Agents → Executables.'
+          'Settings → Agents and accounts → Executables.'
     : '$agentName cannot be started: nothing opens at $path, and looking '
           'again just now did not find it anywhere else. Install the CLI, or '
-          'set the path yourself in Settings → Agents → Executables.';
+          'set the path yourself in Settings → Agents and accounts → '
+          'Executables.';

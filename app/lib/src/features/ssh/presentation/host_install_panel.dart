@@ -118,7 +118,7 @@ class HostInstallPanel extends ConsumerWidget {
         if (compact && (said.command != null || said.privileged != null))
           Text(
             'The command for it is on ${host.name}\'s card in Settings › '
-            'Environments.',
+            'Machines.',
             style: Theme.of(context).textTheme.bodySmall,
           )
         else ...[

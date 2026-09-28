@@ -17,8 +17,9 @@ import 'package:karmashala_automations/resumes.dart';
 import 'minute_ticker.dart';
 
 /// Everything that will fire on its own — armed automations and waiting
-/// resumes — in one list at the top of Settings → Automations, soonest first.
-/// The cards below still hold the detail; this answers "what is coming".
+/// resumes — in one list at the top of Settings → Checkpoints and automations,
+/// soonest first. The cards below still hold the detail; this answers "what is
+/// coming".
 class ActiveSchedulesSection extends ConsumerWidget {
   const ActiveSchedulesSection({super.key});
 

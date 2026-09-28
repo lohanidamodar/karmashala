@@ -27,8 +27,9 @@ import 'automation_dry_run_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
 
-/// Settings → Automations: where a run is armed, paused, deleted, and where
-/// "did it run last night" is answered. Arming happens here and nowhere else.
+/// Settings → Checkpoints and automations: where a run is armed, paused,
+/// deleted, and where "did it run last night" is answered. Arming happens here
+/// and nowhere else.
 class AutomationsPage extends ConsumerWidget {
   const AutomationsPage({super.key});
 

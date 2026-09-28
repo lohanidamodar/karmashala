@@ -24,9 +24,11 @@ enum SettingsGroup {
 }
 
 /// A page of the settings screen — one row in its page list. Declaration
-/// order is list order: common first, advanced last. Labels quoted as "Settings → …" in
-/// refusals and tool descriptions (Agents, Environments, Tools, Permissions,
-/// Diagnostics, Remote access, Terminal) keep those words.
+/// order is list order: common first, advanced last, the groups and pages of
+/// UI overhaul spec §6. Page labels are quoted as "Settings → …" in refusals,
+/// tool descriptions and the MCP instructions; a rename moves those quotes in
+/// the same change. Enum names outlive their labels (Environments is now
+/// Machines), so a link written against the old name still lands.
 enum SettingsSectionId {
   general(
     'General',
@@ -40,17 +42,83 @@ enum SettingsSectionId {
     SettingsGroup.general,
     'Theme, accent, text size, density, the sidebar and the context panel.',
   ),
+  // The switches were only ever in the tray menu; a page is where somebody
+  // looks for them. Drawn by the screen, not an anchor (see settings_screen).
+  notifications(
+    'Notifications',
+    AppIcons.tray,
+    SettingsGroup.general,
+    'When a desktop notification is sent, and for what.',
+    [
+      'notification',
+      'notifications',
+      'toast',
+      'alert',
+      'desktop notification',
+      'finished',
+      'needs you',
+      'focus',
+      'tray',
+    ],
+  ),
+  // Was General › Keyboard.
+  keyboard(
+    'Keyboard',
+    AppIcons.keyboard,
+    SettingsGroup.general,
+    'Every shortcut in force, and the keymap that moves them.',
+  ),
+  // Was Agents plus Accounts & usage: an agent's installs, the accounts they
+  // are signed in to, and how it behaves, on one page (spec §6).
+  agents(
+    'Agents and accounts',
+    AppIcons.robot,
+    SettingsGroup.agents,
+    'Which agent new sessions use, where each is installed, who it is signed '
+        'in as, and how much limit is left.',
+    ['agents', 'accounts & usage', 'accounts', 'usage'],
+  ),
+  // Was Tools plus Permissions: what an agent can call, and how far it may
+  // go without asking.
+  tools(
+    'Tools and reach',
+    AppIcons.code,
+    SettingsGroup.agents,
+    'What agents may do without asking, the MCP bridge, its tools, and '
+        'installed skills.',
+    ['tools', 'permissions'],
+  ),
+  // An automation is an agent, a prompt and a permission mode armed in
+  // advance, so it follows the permissions it runs under. Checkpoints joined
+  // it from the Agents page: both are what happens to work nobody watches.
+  automations(
+    'Checkpoints and automations',
+    AppIcons.clockCounterClockwise,
+    SettingsGroup.agents,
+    'Snapshots of every agent turn, and agent runs armed to start on a '
+        'schedule, with nobody watching.',
+    ['automations', 'checkpoints'],
+  ),
+  snippets(
+    'Snippets',
+    AppIcons.bookBookmark,
+    SettingsGroup.agents,
+    'Saved commands you can insert into any terminal.',
+  ),
   terminal(
     'Terminal',
     AppIcons.terminal,
     SettingsGroup.workspace,
     'Default shell, look, and which keys terminals keep.',
   ),
+  // Was Projects plus Editor & files.
   projects(
-    'Projects',
+    'Projects and files',
     AppIcons.folders,
     SettingsGroup.workspace,
-    'What each checkout needs in a new worktree, and what it can build.',
+    'What each checkout needs in a new worktree and can build, the in-app '
+        'editor, file browsing, and the apps work is handed to.',
+    ['projects', 'editor & files', 'editor'],
   ),
   // Beside Projects: an emulator is where an app project runs. Orca files its
   // Mobile Emulator page under Workflows, its equivalent of this group.
@@ -60,81 +128,80 @@ enum SettingsSectionId {
     SettingsGroup.workspace,
     'How Android emulators and iOS simulators start.',
   ),
-  editorFiles(
-    'Editor & files',
-    AppIcons.fileCode,
-    SettingsGroup.workspace,
-    'The in-app editor, file browsing, and the apps work is handed to.',
-  ),
-  agents(
-    'Agents',
-    AppIcons.robot,
-    SettingsGroup.agents,
-    'Default agent and model, and where each CLI lives.',
-  ),
-  accounts(
-    'Accounts & usage',
-    AppIcons.userCircle,
-    SettingsGroup.agents,
-    'Who each agent is signed in as, and how much limit is left.',
-  ),
-  permissions(
-    'Permissions',
-    AppIcons.handTap,
-    SettingsGroup.agents,
-    'What agents may do without asking, and in the browser.',
-  ),
-  // An automation is an agent, a prompt and a permission mode armed in
-  // advance, so it follows the permissions it runs under.
-  automations(
-    'Automations',
-    AppIcons.clockCounterClockwise,
-    SettingsGroup.agents,
-    'Agent runs armed to start on a schedule, with nobody watching.',
-  ),
-  tools(
-    'Tools',
-    AppIcons.code,
-    SettingsGroup.agents,
-    'The MCP bridge, its tools, and installed skills.',
-  ),
-  snippets(
-    'Snippets',
-    AppIcons.bookBookmark,
-    SettingsGroup.agents,
-    'Saved commands you can insert into any terminal.',
-  ),
+  // Was Environments. The enum name is kept so old links resolve.
   environments(
-    'Environments',
+    'Machines',
     AppIcons.terminalWindow,
     SettingsGroup.connections,
-    'This computer, WSL and SSH hosts, and their tooling.',
+    'The server this window uses, this computer, WSL and SSH hosts, and '
+        'their tooling.',
+    ['environments', 'environment'],
   ),
+  // Was Remote access.
   remote(
-    'Remote access',
+    'Remote and pairing',
     AppIcons.wifiHigh,
     SettingsGroup.connections,
     'Pair a phone to follow and answer sessions from anywhere.',
+    ['remote access', 'remote'],
   ),
   environmentVariables(
-    'Variables & secrets',
+    'Variables and secrets',
     AppIcons.clipboardText,
     SettingsGroup.connections,
     'Variables every new terminal starts with.',
+    ['variables & secrets'],
   ),
   diagnostics(
     'Diagnostics',
     AppIcons.listMagnifyingGlass,
     SettingsGroup.advanced,
     'Logs, debug mode, and readings for a bug report.',
+  ),
+  // The About dialog's facts, where Settings users look for them. Drawn by the
+  // screen, not an anchor (see settings_screen).
+  about(
+    'About',
+    AppIcons.info,
+    SettingsGroup.advanced,
+    'Which build this is, where it comes from, and its licences.',
+    [
+      'about',
+      'version',
+      'build',
+      'licence',
+      'licences',
+      'license',
+      'licenses',
+      'open source',
+      'bug report',
+    ],
   );
 
-  const SettingsSectionId(this.label, this.icon, this.group, this.description);
+  /// Pages merged into another by spec §6's regrouping, kept as names so a
+  /// link or a test written against them lands on the page that holds their
+  /// sections now. Not in [values]: the page list never shows them.
+  static const accounts = agents;
+  static const permissions = tools;
+  static const editorFiles = projects;
+
+  const SettingsSectionId(
+    this.label,
+    this.icon,
+    this.group,
+    this.description, [
+    this.aliases = const [],
+  ]);
 
   final String label;
   final IconData icon;
   final SettingsGroup group;
   final String description;
+
+  /// Other words the page answers to, lower-cased: the names it had before a
+  /// rename or a merge, so somebody who learned "Permissions" still finds it,
+  /// and the words for a page drawn without anchors.
+  final List<String> aliases;
 
   /// The sections on this page, in the order they are drawn.
   List<SettingsAnchor> get anchors => [
@@ -148,9 +215,10 @@ enum SettingsSectionId {
       if (entry.anchor.page == this) entry,
   ];
 
-  /// Every word this page answers to: its sections' titles and keywords and
-  /// its options' labels and keywords, lower-cased.
+  /// Every word this page answers to: its [aliases], its sections' titles and
+  /// keywords and its options' labels and keywords, lower-cased.
   List<String> get keywords => {
+    ...aliases,
     for (final anchor in anchors) ...[
       anchor.title.toLowerCase(),
       ...anchor.keywords,
@@ -188,7 +256,7 @@ enum SettingsAnchor {
     'launcher',
     'shortcut',
   ]),
-  keyboard(SettingsSectionId.general, 'Keyboard', [
+  keyboard(SettingsSectionId.keyboard, 'Keyboard', [
     'keyboard',
     'shortcuts',
     'keymap',
@@ -229,26 +297,6 @@ enum SettingsAnchor {
     'activity bar',
     'explorer',
   ]),
-  editor(SettingsSectionId.editorFiles, 'In-app editor', [
-    'editor',
-    'wrap',
-    'auto save',
-    'autosave',
-  ]),
-  fileBrowsing(SettingsSectionId.editorFiles, 'File browsing', [
-    'file picker',
-    'browse',
-    'hidden files',
-  ]),
-  externalTerminal(SettingsSectionId.editorFiles, 'External terminal', [
-    'terminal app',
-    'resume',
-  ]),
-  externalEditor(SettingsSectionId.editorFiles, 'External editor', [
-    'editor',
-    'vs code',
-    'open in editor',
-  ]),
   defaultTerminal(SettingsSectionId.terminal, 'Default terminal', [
     'shell',
     'profile',
@@ -285,6 +333,26 @@ enum SettingsAnchor {
     'react native',
     'build',
   ]),
+  editor(SettingsSectionId.projects, 'In-app editor', [
+    'editor',
+    'wrap',
+    'auto save',
+    'autosave',
+  ]),
+  fileBrowsing(SettingsSectionId.projects, 'File browsing', [
+    'file picker',
+    'browse',
+    'hidden files',
+  ]),
+  externalTerminal(SettingsSectionId.projects, 'External terminal', [
+    'terminal app',
+    'resume',
+  ]),
+  externalEditor(SettingsSectionId.projects, 'External editor', [
+    'editor',
+    'vs code',
+    'open in editor',
+  ]),
   // Also shown from the device pane's Slimming buttons; one widget draws both.
   androidEmulators(SettingsSectionId.devices, 'Android emulators', [
     'android',
@@ -320,6 +388,16 @@ enum SettingsAnchor {
     'api key',
     'credential',
   ]),
+  // Checkpoints first: every turn is snapshotted, whether or not an
+  // automation ever runs (was Agents › Checkpoints).
+  checkpoints(SettingsSectionId.automations, 'Checkpoints', [
+    'checkpoint',
+    'checkpoints',
+    'rewind',
+    'undo',
+    'rollback',
+    'snapshot',
+  ]),
   automations(SettingsSectionId.automations, 'Automations', [
     'automation',
     'automations',
@@ -344,25 +422,11 @@ enum SettingsAnchor {
     'continue',
   ]),
   defaultAgent(SettingsSectionId.agents, 'Default agent', ['default agent']),
-  defaultModel(SettingsSectionId.agents, 'Default model', [
-    'default model',
-    'model',
-    'opus',
-    'sonnet',
-  ]),
   detection(SettingsSectionId.agents, 'Detection', ['detect', 'scan']),
   executables(SettingsSectionId.agents, 'Executables', [
     'executable',
     'path',
     'cli',
-  ]),
-  checkpoints(SettingsSectionId.agents, 'Checkpoints', [
-    'checkpoint',
-    'checkpoints',
-    'rewind',
-    'undo',
-    'rollback',
-    'snapshot',
   ]),
   agentUpdates(SettingsSectionId.agents, 'Agent updates', [
     'update',
@@ -374,24 +438,32 @@ enum SettingsAnchor {
     'antivirus',
     'bitdefender',
   ]),
-  claudeAccounts(SettingsSectionId.accounts, 'Claude accounts', [
+  claudeAccounts(SettingsSectionId.agents, 'Claude accounts', [
     'claude',
     'accounts',
   ]),
-  codexAccounts(SettingsSectionId.accounts, 'Codex accounts', [
+  codexAccounts(SettingsSectionId.agents, 'Codex accounts', [
     'codex',
     'accounts',
   ]),
-  usage(SettingsSectionId.accounts, 'Usage & limits', ['usage', 'limits']),
-  permissionModes(SettingsSectionId.permissions, 'Permission modes', [
+  usage(SettingsSectionId.agents, 'Usage & limits', ['usage', 'limits']),
+  // Behaviour last, after installs and accounts (spec §6).
+  defaultModel(SettingsSectionId.agents, 'Default model', [
+    'default model',
+    'model',
+    'opus',
+    'sonnet',
+  ]),
+  permissionModes(SettingsSectionId.tools, 'Permission modes', [
     'ask',
     'bypass',
     'accept edits',
     'sessions',
   ]),
   // Quoted as kBrowserConsentLocation in the browser tools' refusals and
-  // schemas. Was Tools › Browser; the enum name is kept so old links resolve.
-  browser(SettingsSectionId.permissions, 'Browser', [
+  // schemas. Was Tools › Browser, then Permissions › Browser; now Tools and
+  // reach › Browser. The enum name is kept so old links resolve.
+  browser(SettingsSectionId.tools, 'Browser', [
     'browser consent',
     'browser',
     'consent',
@@ -403,6 +475,15 @@ enum SettingsAnchor {
     'tool list',
   ]),
   skills(SettingsSectionId.tools, 'Skills', ['skills']),
+  // The server this window uses, first on the Machines page it is named
+  // for (was Remote access › Machines).
+  machines(SettingsSectionId.environments, 'Machines', [
+    'machine',
+    'machines',
+    'server',
+    'remote server',
+    'switch machine',
+  ]),
   executionEnvironments(
     SettingsSectionId.environments,
     'Execution environments',
@@ -429,13 +510,6 @@ enum SettingsAnchor {
   knownHosts(SettingsSectionId.environments, 'Trusted host keys', [
     'known hosts',
     'keys',
-  ]),
-  machines(SettingsSectionId.remote, 'Machines', [
-    'machine',
-    'machines',
-    'server',
-    'remote server',
-    'switch machine',
   ]),
   remoteAccess(SettingsSectionId.remote, 'Remote access', [
     'companion',

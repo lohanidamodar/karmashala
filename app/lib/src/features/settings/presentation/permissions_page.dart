@@ -15,8 +15,8 @@ import 'settings_row.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
-/// Settings → Permissions → Permission modes: per-agent defaults for new and
-/// existing sessions.
+/// Settings → Tools and reach → Permission modes: per-agent defaults for new
+/// and existing sessions.
 class PermissionModesSection extends ConsumerWidget {
   const PermissionModesSection({super.key});
 
@@ -97,8 +97,10 @@ class _PermissionCard extends StatelessWidget {
                     descriptor,
                     selection: selection,
                   ))
-                    SizedBox(
-                      width: 260,
+                    // At most 260, not exactly: a split pane narrower than
+                    // that would overflow a fixed width.
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 260),
                       child: _axisDropdown(axis, selection, support, onChanged),
                     ),
                 ],
@@ -169,8 +171,9 @@ class _PermissionCard extends StatelessWidget {
   }
 }
 
-/// Settings → Permissions → Browser: a per-project consent switch rather than a
-/// prompt on first `browser_evaluate` — the agent may run with nobody there.
+/// Settings → Tools and reach → Browser: a per-project consent switch rather
+/// than a prompt on first `browser_evaluate` — the agent may run with nobody
+/// there.
 class BrowserConsentSection extends ConsumerWidget {
   const BrowserConsentSection({super.key});
 

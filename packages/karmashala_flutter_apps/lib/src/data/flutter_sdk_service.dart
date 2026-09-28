@@ -139,7 +139,7 @@ class FlutterSdkService {
         reason:
             'The Flutter SDK path set for ${environment.name} is $path, and it '
             'could not be run: ${error.message}. Correct it in Settings → '
-            'Environments, or clear it to look on PATH again.',
+            'Machines, or clear it to look on PATH again.',
       );
     }
     // As on the PATH branch: unreadable version, not a refused path (§19).

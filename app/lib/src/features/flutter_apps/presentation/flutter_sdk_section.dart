@@ -14,7 +14,7 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/flutter_sdk_readings.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
-/// Settings → Environments: the Flutter SDK a person names for an environment.
+/// Settings → Machines: the Flutter SDK a person names for an environment.
 /// One row each (§17); the field is a setting, the line under it a reading.
 class FlutterSdkSection extends ConsumerWidget {
   const FlutterSdkSection({super.key});

@@ -31,8 +31,8 @@ class UsageScreen extends ConsumerWidget {
         title: 'Usage was not granted to this phone',
         body:
             'This phone was paired before usage limits could be shared. Pair '
-            'it again — from the desktop app\'s Settings › Remote access, or '
-            '`karmashala_host pair` on a server — and leave "See usage '
+            'it again — from the desktop app\'s Settings › Remote and '
+            'pairing, or `karmashala_host pair` on a server — and leave "See usage '
             'limits" on.',
       );
     }

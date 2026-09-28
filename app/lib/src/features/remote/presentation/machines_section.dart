@@ -142,6 +142,8 @@ class _MachineRow extends StatelessWidget {
   Widget build(BuildContext context) => SettingsRow(
     label: name,
     help: detail,
+    // Buttons and a chip: at their own width under the label, not stretched.
+    stackedFit: SettingsControlFit.start,
     control: Row(
       mainAxisSize: MainAxisSize.min,
       children: [

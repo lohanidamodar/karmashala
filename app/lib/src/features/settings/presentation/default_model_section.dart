@@ -11,9 +11,10 @@ import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
-/// Settings → Agents → DEFAULT MODEL: the model new sessions on each agent
-/// start on, read live so a session that never chose moves when this moves.
-/// "Let the agent choose" is the shipped setting and passes no `--model`.
+/// Settings → Agents and accounts → Default model: the model new sessions on
+/// each agent start on, read live so a session that never chose moves when this
+/// moves. "Let the agent choose" is the shipped setting and passes no
+/// `--model`.
 class DefaultModelSection extends ConsumerWidget {
   const DefaultModelSection({super.key});
 

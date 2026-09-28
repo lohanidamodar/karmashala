@@ -20,11 +20,12 @@ import 'ssh_relays_panel.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_row.dart';
 
-/// Settings → Remote access: the enable switch, the local and hosted relays,
-/// the relays on SSH hosts, the paired devices with last-seen and revoke, and
-/// the pairing button. Every switch here is this machine's server config
-/// (`server.json`), read and written through the server — the local relay
-/// too, which the server hosts itself so phones reach it with the app closed.
+/// Settings → Remote and pairing: the enable switch, the local and hosted
+/// relays, the relays on SSH hosts, the paired devices with last-seen and
+/// revoke, and the pairing button. Every switch here is this machine's server
+/// config (`server.json`), read and written through the server — the local
+/// relay too, which the server hosts itself so phones reach it with the app
+/// closed.
 class RemoteAccessSection extends ConsumerStatefulWidget {
   const RemoteAccessSection({super.key});
 

@@ -30,8 +30,8 @@ class PairingScreen extends StatelessWidget {
           body:
               'This phone is a remote for the sessions a machine holds: a '
               'computer running the desktop app, or a Karmashala server. In '
-              'the desktop app choose Settings → Remote access → "Pair a '
-              'device"; on a server run karmashala_host pair. Then scan its '
+              'the desktop app choose Settings → Remote and pairing → '
+              '"Pair a device"; on a server run karmashala_host pair. Then scan its '
               'QR code, or paste its code.',
           actionLabel: 'Scan the QR code',
           onAction: () => Navigator.of(

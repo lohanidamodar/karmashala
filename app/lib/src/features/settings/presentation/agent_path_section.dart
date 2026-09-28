@@ -16,9 +16,10 @@ import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
-/// Settings → Agents: each agent's executable, whether it still opens, and a
-/// field to repoint it. "Not found" and "cannot be reached" are separate
-/// states because they want opposite actions; every reading shows its age.
+/// Settings → Agents and accounts: each agent's executable, whether it still
+/// opens, and a field to repoint it. "Not found" and "cannot be reached" are
+/// separate states because they want opposite actions; every reading shows its
+/// age.
 class AgentPathSection extends ConsumerWidget {
   const AgentPathSection({super.key});
 

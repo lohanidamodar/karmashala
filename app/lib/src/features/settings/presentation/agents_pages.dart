@@ -17,8 +17,8 @@ import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// Settings → Agents → Default agent: the installation a new session
-/// pre-selects.
+/// Settings → Agents and accounts → Default agent: the installation a new
+/// session pre-selects.
 class DefaultAgentSection extends ConsumerWidget {
   const DefaultAgentSection({super.key});
 
@@ -73,8 +73,8 @@ class DefaultAgentSection extends ConsumerWidget {
   }
 }
 
-/// Settings → Agents → Agent updates: whether a launched agent may update
-/// itself, and the command to update each one by hand instead.
+/// Settings → Agents and accounts → Agent updates: whether a launched agent may
+/// update itself, and the command to update each one by hand instead.
 class AgentUpdatesSection extends ConsumerWidget {
   const AgentUpdatesSection({super.key});
 
@@ -140,7 +140,7 @@ class AgentUpdatesSection extends ConsumerWidget {
   }
 }
 
-/// Settings → Accounts & usage → Claude accounts: the installations whose
+/// Settings → Agents and accounts → Claude accounts: the installations whose
 /// agent signs in through Anthropic's OAuth login.
 class InstalledClaudeAccountsSection extends ConsumerWidget {
   const InstalledClaudeAccountsSection({super.key});
@@ -154,8 +154,8 @@ class InstalledClaudeAccountsSection extends ConsumerWidget {
   );
 }
 
-/// Settings → Accounts & usage → Codex accounts: the installations whose agent
-/// signs in through an OpenAI `auth.json`.
+/// Settings → Agents and accounts → Codex accounts: the installations whose
+/// agent signs in through an OpenAI `auth.json`.
 class InstalledCodexAccountsSection extends ConsumerWidget {
   const InstalledCodexAccountsSection({super.key});
 
@@ -168,7 +168,7 @@ class InstalledCodexAccountsSection extends ConsumerWidget {
   );
 }
 
-/// Settings → Accounts & usage → Usage & limits, for the agents it can read.
+/// Settings → Agents and accounts → Usage & limits, for the agents it can read.
 class InstalledUsageSection extends ConsumerWidget {
   const InstalledUsageSection({super.key});
 

@@ -20,7 +20,7 @@ import '../../ssh/presentation/privileged_command_block.dart';
 import '../application/ssh_relay_controller.dart';
 import '../application/ssh_relays.dart';
 
-/// Settings › Remote access: the relays this desktop runs on its own SSH
+/// Settings › Remote and pairing: the relays this desktop runs on its own SSH
 /// hosts, beside the local and the hosted one. A box with a public address is
 /// a meeting place nobody else operates.
 class SshRelaysPanel extends ConsumerWidget {
@@ -58,7 +58,7 @@ class SshRelaysPanel extends ConsumerWidget {
         const SizedBox(height: Insets.xs),
         Text(
           hosts.isEmpty
-              ? 'Add an SSH host in Settings → Environments first. A machine '
+              ? 'Add an SSH host in Settings → Machines first. A machine '
                     'with an address of its own can be the relay phones meet '
                     'this desktop at, with nobody else in between.'
               : entries.isEmpty

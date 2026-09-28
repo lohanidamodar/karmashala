@@ -6,10 +6,11 @@ import '../../../app/shell/keymap_controller.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import 'settings_catalog.dart';
+import 'settings_layout.dart';
 import 'settings_notice.dart';
 import 'settings_section.dart';
 
-/// Settings → General → Keyboard: every binding in force, read from the table
+/// Settings → Keyboard: every binding in force, read from the table
 /// the keys themselves run on, so this list cannot drift from what they do.
 class KeyboardSection extends ConsumerWidget {
   const KeyboardSection({super.key});
@@ -26,6 +27,9 @@ class KeyboardSection extends ConsumerWidget {
     final chords = [...shellChords]
       ..sort((a, b) => a.command.compareTo(b.command));
     final path = status.path;
+    // A narrow page stacks each chord over what it does: a fixed 132 px
+    // column beside it would leave the description a sliver.
+    final narrow = SettingsNarrowScope.of(context);
 
     return SettingsSection(
       title: SettingsAnchor.keyboard.heading,
@@ -62,32 +66,52 @@ class KeyboardSection extends ConsumerWidget {
           for (final chord in chords)
             Padding(
               padding: const EdgeInsets.only(bottom: Insets.xs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 132,
-                    child: Text(chord.label, style: MonoStyles.body),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(chord.does, style: theme.textTheme.bodySmall),
-                        Text(
-                          chord.fromKeymap
-                              ? '${chord.command} · keymap.json'
-                              : chord.command,
-                          style: muted,
-                        ),
-                      ],
+              child: _ChordRow(
+                narrow: narrow,
+                keys: Text(chord.label, style: MonoStyles.body),
+                what: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(chord.does, style: theme.textTheme.bodySmall),
+                    Text(
+                      chord.fromKeymap
+                          ? '${chord.command} · keymap.json'
+                          : chord.command,
+                      style: muted,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
         ],
       ),
     );
   }
+}
+
+/// One binding: its keys beside what it does, or over it on a narrow page.
+class _ChordRow extends StatelessWidget {
+  const _ChordRow({
+    required this.narrow,
+    required this.keys,
+    required this.what,
+  });
+
+  final bool narrow;
+  final Widget keys;
+  final Widget what;
+
+  @override
+  Widget build(BuildContext context) => narrow
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [keys, what],
+        )
+      : Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 132, child: keys),
+            Expanded(child: what),
+          ],
+        );
 }

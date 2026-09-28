@@ -8,7 +8,8 @@ import 'project_check_runner.dart';
 String sessionChecksReport(SessionChecks? result) {
   if (result == null) {
     return 'NOTHING WAS CHECKED: this session\'s repository has no project '
-        'checks. The user adds them in Settings → Automations → '
+        'checks. The user adds them in Settings → Checkpoints and '
+        'automations → '
         'Verification and project checks. Nothing here claims the work '
         'passes.';
   }

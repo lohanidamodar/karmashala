@@ -10,7 +10,7 @@ import 'dart:convert';
 
 /// Where a person grants a browser capability, as refusals and tool
 /// descriptions name it. Kept in step with the app's settings catalogue.
-const kBrowserConsentLocation = 'Settings → Permissions → Browser';
+const kBrowserConsentLocation = 'Settings → Tools and reach → Browser';
 
 enum BrowserCapability {
   /// Running caller-supplied JavaScript in the attached page

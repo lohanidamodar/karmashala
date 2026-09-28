@@ -6,7 +6,8 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/notes_providers.dart';
 
-/// Settings → Notes: the one switch that decides whether the feature is there.
+/// Settings → General → Notes: the one switch that decides whether the feature
+/// is there.
 class NotesSettingsSection extends ConsumerWidget {
   const NotesSettingsSection({super.key});
 

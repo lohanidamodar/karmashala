@@ -5,6 +5,9 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'about_page.dart';
+import 'notifications_page.dart';
+import 'settings_layout.dart';
 import 'settings_nav.dart';
 import 'settings_page_body.dart';
 
@@ -32,10 +35,6 @@ class SettingsScreen extends StatefulWidget {
 
   /// The section list's width beside the page, in the two-column layout.
   static const navWidth = 208.0;
-
-  /// The widest a section's page grows: a wide window adds margin, not
-  /// 900px-long switch rows.
-  static const contentMaxWidth = 720.0;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -132,6 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tones = SurfaceTones.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = ShellWidth.of(constraints.maxWidth).isCompact;
@@ -185,17 +185,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      width: SettingsScreen.navWidth,
-                      child: FocusTraversalGroup(
-                        child: SettingsNav(
-                          selected: _selected,
-                          onSelect: _select,
-                          onOpen: _go,
+                    // Told apart from the page by tone, like the sidebar
+                    // from the workbench; the hairline beside it is
+                    // transparent unless "Lines between regions" is on.
+                    ColoredBox(
+                      color: tones.side,
+                      child: SizedBox(
+                        width: SettingsScreen.navWidth,
+                        child: FocusTraversalGroup(
+                          child: SettingsNav(
+                            selected: _selected,
+                            onSelect: _select,
+                            onOpen: _go,
+                          ),
                         ),
                       ),
                     ),
-                    const VerticalDivider(width: 1),
+                    Container(width: 1, color: tones.line),
                     Expanded(child: FocusTraversalGroup(child: _page())),
                   ],
                 ),
@@ -227,26 +233,54 @@ class _SectionContent extends StatelessWidget {
   Widget build(BuildContext context) {
     // A page is longer than the window, and Tab wrapping back to its first
     // control does not scroll up to it on Flutter's own policy.
+    final scaler = MediaQuery.textScalerOf(context);
     return FocusRevealGroup(
-      child: SingleChildScrollView(
-        // A fresh scroll position per section, not one shared offset.
-        key: PageStorageKey('settings-${section.name}'),
-        padding: const EdgeInsets.symmetric(
-          horizontal: Insets.xl,
-          vertical: Insets.lg,
-        ),
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: SettingsScreen.contentMaxWidth,
+      // The tab's own width, not the window's: a split pane is narrow too.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final extra = _pageExtra(section);
+          return SingleChildScrollView(
+            // A fresh scroll position per section, not one shared offset.
+            key: PageStorageKey('settings-${section.name}'),
+            padding: SettingsLayout.pagePadding(width, scaler),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: SettingsLayout.contentMaxWidth,
+                ),
+                child: extra == null
+                    ? SettingsPageBody(page: section)
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SettingsPageBody(page: section),
+                          // Outside the body's own scope, so measured here.
+                          SettingsNarrowScope(
+                            narrow: SettingsLayout.isNarrow(width, scaler),
+                            child: extra,
+                          ),
+                        ],
+                      ),
+              ),
             ),
-            child: SettingsPageBody(page: section),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
+
+  /// A page's content that is not an anchored section yet: Notifications and
+  /// About are new with spec §6's regrouping, and the anchor-to-widget table
+  /// in `settings_page_body.dart` is held by the responsive work. The body
+  /// still draws their title and description; this draws what follows. Search
+  /// finds both pages by their label and [SettingsSectionId.aliases].
+  static Widget? _pageExtra(SettingsSectionId page) => switch (page) {
+    SettingsSectionId.notifications => const NotificationsSection(),
+    SettingsSectionId.about => const AboutSection(),
+    _ => null,
+  };
 }
 
 /// **The sticky category picker** of a narrow Settings tab (spec §6): the
@@ -308,7 +342,7 @@ class SettingsCategoryPicker extends StatelessWidget {
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: Insets.xl,
+              horizontal: Insets.lg,
               vertical: Insets.sm,
             ),
             child: Row(
