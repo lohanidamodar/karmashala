@@ -4,8 +4,11 @@ import 'chat_transcript.dart';
 /// falls back to the transcript's own evidence: an unanswered call.
 enum TranscriptTurn { unknown, idle, working, awaitingUser }
 
-/// How many rows a fold must take off screen before it is worth a line. Three,
-/// because folding two saves one row and costs a click to see either.
+/// How many rows a live run's fold must take off screen before it is worth a
+/// line. Three, because folding two saves one row and costs a click to see
+/// either. A settled run ignores it: board N2 folds every finished run to its
+/// `Worked for …` line, however short — a turn of three calls drawn as three
+/// full cards was the bug (2026-09-28).
 const int kToolBatchMinimum = 3;
 
 /// Tools that stop for the user. Pending, each is the row they must answer.
@@ -23,23 +26,30 @@ bool isToolRunMember(ChatMessage message) =>
 /// One row of the transcript: a message at [from], or the run of tool calls
 /// `[from, to)` folded into one line.
 ///
-/// [pinned] are the run's calls that stay drawn while it is folded — a failure,
-/// a call awaiting the user, a call the model reasoned its way to — as indices
-/// into the same list. [live] marks the trailing run of a turn in progress.
+/// [pinned] are the run's calls that stay drawn while it is folded — only ever
+/// in a live run: a failure, a call awaiting the user, a call the model
+/// reasoned its way to — as indices into the same list. [live] marks the
+/// trailing run of a turn in progress.
 class TranscriptRow {
   const TranscriptRow(
     this.from,
     this.to, {
     this.pinned = const [],
     this.live = false,
-  });
+    bool? folded,
+  }) : folded = folded ?? to - from > 1;
 
   final int from;
   final int to;
   final List<int> pinned;
   final bool live;
 
-  bool get isBatch => to - from > 1;
+  /// Whether this row is drawn as a fold line rather than its message's own
+  /// card. Explicit, not inferred from the length: a settled run of one call
+  /// still folds (board N2), and a message row never does.
+  final bool folded;
+
+  bool get isBatch => folded;
   int get length => to - from;
 
   /// What the fold takes off screen, which is what the threshold measures.
@@ -47,7 +57,18 @@ class TranscriptRow {
 }
 
 /// Groups maximal runs of consecutive tool calls, leaving every other message
-/// its own row. A run folds only when it would hide [kToolBatchMinimum] rows.
+/// its own row.
+///
+/// A settled run always folds, and folds whole: nothing is pinned beneath its
+/// line, because a failure is already counted on it (`· 1 failed`), reasoning
+/// is one click away in the opened card, and a call nobody answered in a turn
+/// that ended is no longer waiting on anyone. Pinning any of those was what
+/// kept short finished turns unfolded — one pin on a run of three took it
+/// under [kToolBatchMinimum] and every call fell back to a full card.
+///
+/// The live run keeps its own rules: it folds only when that would hide
+/// [kToolBatchMinimum] rows, and a call awaiting the user stays drawn under the
+/// line, since that is the row they must answer.
 ///
 /// Pure and linear in [messages]; indices refer to the list it was given.
 List<TranscriptRow> transcriptRows(
@@ -75,9 +96,14 @@ List<TranscriptRow> transcriptRows(
           TranscriptTurn.unknown => anyPending,
           TranscriptTurn.idle => false,
         };
+    if (!live) {
+      rows.add(TranscriptRow(i, end, folded: true));
+      i = end;
+      continue;
+    }
     final pinned = <int>[
       for (var k = i; k < end; k++)
-        if (_staysVisible(messages[k], live: live, turn: turn)) k,
+        if (_staysVisible(messages[k], turn: turn)) k,
     ];
     if (end - i - pinned.length >= kToolBatchMinimum) {
       rows.add(TranscriptRow(i, end, pinned: pinned, live: live));
@@ -91,14 +117,10 @@ List<TranscriptRow> transcriptRows(
   return rows;
 }
 
-/// The rows a reader is looking for. A pending call in a settled run was never
-/// answered; in a live run it is merely running, unless the turn is waiting on
-/// the user — then it is the approval, and all of them stay.
-bool _staysVisible(
-  ChatMessage message, {
-  required bool live,
-  required TranscriptTurn turn,
-}) {
+/// The rows a reader is looking for in a live run. A pending call there is
+/// merely running, unless it is a question or plan approval, or the turn is
+/// waiting on the user — then it is the approval, and it stays.
+bool _staysVisible(ChatMessage message, {required TranscriptTurn turn}) {
   final tool = message.tool!;
   if (tool.isError) return true;
   if (message.thinking != null && message.thinking!.trim().isNotEmpty) {
@@ -106,7 +128,7 @@ bool _staysVisible(
   }
   if (!message.pending) return false;
   if (kInteractiveToolNames.contains(tool.name)) return true;
-  return !live || turn == TranscriptTurn.awaitingUser;
+  return turn == TranscriptTurn.awaitingUser;
 }
 
 /// What a call did, as the summary line counts it.

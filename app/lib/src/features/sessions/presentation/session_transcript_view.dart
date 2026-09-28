@@ -31,6 +31,7 @@ import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_chat_view_providers.dart';
 import '../application/session_engine_provider.dart';
+import '../application/session_launcher.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 import 'package:agent_cli/descriptors.dart'
@@ -329,11 +330,19 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                           : const SessionChatView.unread(prior: true);
                       return _conversation(
                         transcript: transcript,
-                        turn: ref.watch(
-                          agentSessionStatusProvider(
-                            widget.sessionId,
-                          ).select((s) => transcriptTurnFor(s.asData?.value)),
-                        ),
+                        // The badge's reading only while a process is behind
+                        // the session: a killed agent's last status can stay
+                        // "working", which kept its final turn live — and
+                        // unfolded — forever. Nothing running, the turn is over.
+                        turn: sessionHasLiveProcess(ref, widget.sessionId)
+                            ? ref.watch(
+                                agentSessionStatusProvider(
+                                  widget.sessionId,
+                                ).select(
+                                  (s) => transcriptTurnFor(s.asData?.value),
+                                ),
+                              )
+                            : TranscriptTurn.idle,
                         resolveHostPath: _hostPathResolver(),
                         notesEnabled: notesEnabled,
                         active:
@@ -636,22 +645,51 @@ class _StopTurnAction extends Action<_StopTurnIntent> {
   }
 }
 
-/// Stops a session this app's engine runs. It stood in the chat view's header,
-/// which is gone (board N2); public so the pane's status line can take it.
+/// Whether any process runs [sessionId] right now: this app's engine, a live
+/// terminal pane of ours, or the server's terminal with no pane showing it.
+///
+/// One reading for every surface that must not trust a status badge alone — a
+/// killed agent's last report can still say "working". Watches placement and
+/// the pane's liveness so a caller rebuilds when the process starts or exits;
+/// the engine and host readings are sampled on those rebuilds.
+bool sessionHasLiveProcess(WidgetRef ref, String sessionId) {
+  ref.watch(placedSessionIdsProvider);
+  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
+  if (paneId != null && ref.watch(terminalPaneLivenessProvider(paneId)).isLive) {
+    return true;
+  }
+  return ref.read(sessionEngineProvider).isActive(sessionId) ||
+      ref.read(sessionLauncherProvider).heldByHostOnly(sessionId);
+}
+
+/// Stops the process behind a session, wherever it runs: this app's engine,
+/// a live terminal pane of ours, or the server's terminal with no pane showing
+/// it. It stood in the chat view's header, which is gone (board N2); public so
+/// the pane's status line can take it.
+///
+/// Hidden only when nothing runs the session. It used to ask the engine alone,
+/// so a session resumed in a terminal pane — the usual case, Claude Code idle
+/// at its prompt — never offered Stop although its process was plainly alive.
 class StopSessionButton extends ConsumerWidget {
   const StopSessionButton({required this.sessionId, super.key});
   final String sessionId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.read(sessionEngineProvider).isActive(sessionId)) {
-      return const SizedBox.shrink();
-    }
+    if (!sessionHasLiveProcess(ref, sessionId)) return const SizedBox.shrink();
+    final engine = ref.read(sessionEngineProvider);
+    final launcher = ref.read(sessionLauncherProvider);
     return IconButton(
       tooltip: 'Stop session',
       icon: const Icon(AppIcons.stopCircle),
       onPressed: () async {
-        await ref.read(sessionEngineProvider).stop(sessionId);
+        if (engine.isActive(sessionId)) {
+          await engine.stop(sessionId);
+        } else {
+          // The pane's process, else the server's — the same verb the rest of
+          // the app ends a running session with.
+          await launcher.endRunning(sessionId);
+        }
         ref.publishSessionChange(SessionChange.statusChanged(sessionId));
       },
     );
