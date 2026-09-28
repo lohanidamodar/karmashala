@@ -1,12 +1,14 @@
 part of 'workbench.dart';
 
-/// Whether group [groupId] is showing terminal **panes** right now — while the
-/// conversation or the empty state is up, no tab there may draw as active.
+/// Whether group [groupId] is showing **its tabs** right now — while a session
+/// with no tab of its own is up, no tab there may draw as active. The chat
+/// view is not that: it is the active tab's own session drawn as a
+/// conversation, so the tab stays lit (owner, 2026-09-28: an unlit tab in
+/// chat view was confusing).
 bool _showingPanes(WidgetRef ref, {String? groupId}) {
   final group = groupId ?? ref.watch(focusedWorkspaceGroupProvider);
   // Before the window has a workspace there is nothing but the terminal.
   if (group == null) return true;
-  if (!ref.watch(terminalVisibleInGroupProvider(group))) return false;
   return _hostedSelection(ref, group) == null;
 }
 
