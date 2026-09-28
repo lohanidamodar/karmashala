@@ -328,6 +328,16 @@ List<ShellChord> _buildChords() => [
     does: 'Switch between the terminal and the chat view',
     skipsShell: true,
   ),
+  // Zen's own chord (spec §5), beside the older Ctrl+\ — which a shell
+  // reads as SIGQUIT; Ctrl+Shift+Z is one no terminal can encode.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyZ, shift: true),
+    intent: ToggleFocusModeIntent(),
+    command: 'view.toggleFocusMode',
+    label: _commandLabel('Z', shift: true),
+    does: 'Zen: only the pane',
+    skipsShell: true,
+  ),
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.backslash),
     intent: ToggleFocusModeIntent(),

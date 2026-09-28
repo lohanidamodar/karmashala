@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'ask_toasts.dart';
+import 'zen_bar.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
 import 'side_panel_state.dart';
@@ -197,7 +198,9 @@ class _AppShellState extends ConsumerState<AppShell> {
       child: Scaffold(
         // The bar's height follows the text scale (menus must not clip at
         // 125%+), and `preferredSize` cannot read a context.
-        appBar: ShellTitleBar(height: Chrome.titleBarOf(context)),
+        // Zen is only the pane (spec §5): the title bar goes with the rest,
+        // and a small bar floats in at the top edge instead.
+        appBar: zen ? null : ShellTitleBar(height: Chrome.titleBarOf(context)),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -266,6 +269,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                           bottom: Insets.xl * 2,
                           child: ShellAskToasts(),
                         ),
+                        if (zen)
+                          const Positioned(
+                            top: Insets.sm,
+                            left: 0,
+                            right: 0,
+                            child: Center(child: ShellZenBar()),
+                          ),
                       ],
                     ),
                   ),

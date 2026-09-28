@@ -48,6 +48,7 @@ import 'workbench_conversation.dart';
 import 'workbench_tabs.dart';
 import 'workbench_split.dart';
 import 'tab_strip_metrics.dart';
+import 'zen_bar.dart' show kZenBarRoom;
 
 // Re-exported so `workbench.dart` stays the one import for the tab strip.
 export 'tab_strip_metrics.dart';

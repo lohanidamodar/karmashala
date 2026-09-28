@@ -72,8 +72,14 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _TabStrip(groupId: groupId, groupFocused: focused),
-          const Divider(height: 1),
+          // Zen is only the pane (spec §5): the Zen bar floats where the strip
+          // was, and switches tabs itself.
+          if (ref.watch(terminalMaximizedProvider))
+            const SizedBox(height: kZenBarRoom)
+          else ...[
+            _TabStrip(groupId: groupId, groupFocused: focused),
+            Divider(height: 1, color: SurfaceTones.of(context).line),
+          ],
           Expanded(
             child: ColoredBox(
               color: scheme.surfaceContainerLowest,
@@ -169,9 +175,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     final hosted = _hostedSelection(ref, groupId);
     if (hosted != null) {
       if (!hosted.native) {
-        final imported = ref
-            .read(importedSessionsProvider)
-            .getById(hosted.id);
+        final imported = ref.read(importedSessionsProvider).getById(hosted.id);
         return _WorkbenchSession(
           id: hosted.id,
           title: imported?.displayTitle ?? 'Session',
