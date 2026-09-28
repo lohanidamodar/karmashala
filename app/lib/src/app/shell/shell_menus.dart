@@ -21,6 +21,7 @@ import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 import 'side_panel.dart';
+import 'shell_area.dart';
 import 'side_panel_state.dart';
 import 'workbench_tabs.dart';
 
@@ -287,16 +288,19 @@ class ViewMenu extends ConsumerWidget {
         _SidePanelCheckItem(actions),
         _SidePanelItemsSubmenu(actions),
         const Divider(height: 1),
-        // The surfaces the panel can show, so every tool is reachable from the
-        // menu bar and not only from a glyph on the rail.
+        // The Inbox is an area of the activity strip; the menu names the chord
+        // that reaches it, which it has had since it was bound.
+        MenuItemButton(
+          leadingIcon: const Icon(AppIcons.tray),
+          shortcut: commandActivator(LogicalKeyboardKey.keyA, shift: true),
+          onPressed: () => showShellArea(ref, ShellArea.inbox),
+          child: const Text('Inbox'),
+        ),
+        // The surfaces the context panel can show, so every tool is reachable
+        // from the menu bar. They stay bare: more chords is more keys taken.
         for (final surface in surfaces)
           MenuItemButton(
             leadingIcon: Icon(SidePanel.iconFor(surface)),
-            // The inbox already had this chord and the menu never said so. The
-            // others stay bare: more chords is more keys taken.
-            shortcut: surface == SidePanelSurface.inbox
-                ? commandActivator(LogicalKeyboardKey.keyA, shift: true)
-                : null,
             onPressed: hasRoom ? () => actions.showSurface(surface) : null,
             child: Text(surface.label),
           ),

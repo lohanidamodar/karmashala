@@ -1,6 +1,7 @@
-import 'package:riverpod/riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/application/settings_controller.dart';
+import 'shell_state.dart';
 
 /// **The areas of the activity strip** (UI overhaul spec §4): what the sidebar
 /// lists. Sessions first, because a session is what the app is for.
@@ -35,3 +36,26 @@ class ShellAreaController extends Notifier<ShellArea> {
 final shellAreaProvider = NotifierProvider<ShellAreaController, ShellArea>(
   ShellAreaController.new,
 );
+
+/// Shows [area] in the sidebar, opening the sidebar if it was hidden. Never
+/// hides it: what a menu item does.
+void showShellArea(WidgetRef ref, ShellArea area) {
+  ref.read(shellAreaProvider.notifier).select(area);
+  if (!ref.read(shellControllerProvider).explorerPaneVisible) {
+    ref.read(shellControllerProvider.notifier).toggleExplorerPane();
+  }
+}
+
+/// Shows [area] in the sidebar — or, when the sidebar already shows it, hides
+/// the sidebar. What pressing a strip glyph does, and every chord for an area.
+void toggleShellArea(WidgetRef ref, ShellArea area) {
+  final shell = ref.read(shellControllerProvider.notifier);
+  final open = ref.read(shellControllerProvider).explorerPaneVisible;
+  if (open && ref.read(shellAreaProvider) == area) {
+    shell.toggleExplorerPane();
+    return;
+  }
+  ref.read(shellAreaProvider.notifier).select(area);
+  if (!open) shell.toggleExplorerPane();
+}
+

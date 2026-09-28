@@ -42,9 +42,8 @@ void main() {
     await pump(tester, [device('a'), device('b', ready: false)]);
     expect(find.text('Phone a'), findsOneWidget);
     expect(find.text('Phone b'), findsOneWidget);
-    Finder dot(String label) => find.byWidgetPredicate(
-      (w) => w is Icon && w.semanticLabel == label,
-    );
+    Finder dot(String label) =>
+        find.byWidgetPredicate((w) => w is Icon && w.semanticLabel == label);
     expect(dot('connected'), findsOneWidget);
     expect(dot('offline'), findsOneWidget);
   });

@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'logs_panel.dart';
 import 'resize_handle.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_context.dart';
-import 'side_panel_rail_menu.dart';
 import 'side_panel_state.dart';
 
 import '../../features/agents/presentation/agent_context_panel.dart';
@@ -21,7 +21,6 @@ import 'package:karmashala_device_pane/pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
 import '../../features/media/presentation/session_media_panel.dart';
-import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/notes/presentation/notes_view.dart';
 import '../../features/sessions/presentation/agent_plan_panel.dart';
@@ -30,8 +29,9 @@ import '../../features/todos/presentation/todos_view.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/settings/application/settings_controller.dart';
 
-/// The right-hand side panel: a permanent icon rail plus a body that exists only
-/// while a surface is open — tools applied to the work, not peers of it.
+/// **The context panel** (UI overhaul spec §6): tabs — Changes, Repo,
+/// History, and More for every other surface — over the open surface. Closed,
+/// it takes no width at all; the title bar's toggle opens it again.
 class SidePanel extends ConsumerWidget {
   const SidePanel({
     this.bodyWidth,
@@ -41,18 +41,17 @@ class SidePanel extends ConsumerWidget {
     super.key,
   });
 
-  /// The open body's width, allocated by the shell; null draws the rail alone
-  /// even with a surface selected, because the window has no room for it.
+  /// The open panel's width, allocated by the shell; null draws nothing even
+  /// with a surface selected, because the window has no room for it.
   final double? bodyWidth;
 
-  /// Whether the window could draw a body at all. Without room the rail says
-  /// why and opens nothing.
+  /// Whether the window could draw the panel at all.
   final bool hasRoom;
   final ValueChanged<double>? onResize;
   final VoidCallback? onResizeEnd;
 
   /// The surface whose body is open. Switching a feature off while its surface
-  /// is open closes it, rather than leaving a body behind a vanished glyph.
+  /// is open closes it, rather than leaving a body behind a vanished entry.
   static SidePanelSurface? openSurface(WidgetRef ref) {
     final selected = ref.watch(sidePanelProvider);
     if (selected == null) return null;
@@ -65,8 +64,8 @@ class SidePanel extends ConsumerWidget {
     return offered ? selected : null;
   }
 
-  /// The glyph for each surface. **Every one must be legible at 16px** — the
-  /// rail is unlabelled icons, and `side_panel_test.dart` pins them.
+  /// The glyph for each surface, in the More menu and in quick open. **Every
+  /// one must be legible at 16px** — `side_panel_icons_test.dart` pins them.
   static IconData iconFor(SidePanelSurface surface) => switch (surface) {
     SidePanelSurface.inbox => AppIcons.tray,
     SidePanelSurface.changes => AppIcons.gitDiff,
@@ -88,272 +87,126 @@ class SidePanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final debugMode = ref.watch(
-      settingsControllerProvider.select((s) => s.debugMode),
-    );
-    final notesEnabled = ref.watch(notesEnabledProvider);
     final open = openSurface(ref);
     final width = bodyWidth;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Collapsed costs nothing but the rail: no divider, no reserved body.
-        if (open != null && width != null)
-          _SidePanelBody(
-            surface: open,
-            width: width,
-            onResize: onResize,
-            onResizeEnd: onResizeEnd,
-          ),
-        _SidePanelRail(
-          open: open,
-          hasRoom: hasRoom,
-          debugMode: debugMode,
-          notesEnabled: notesEnabled,
-        ),
-      ],
+    if (open == null || width == null) return const SizedBox.shrink();
+    return _SidePanelBody(
+      surface: open,
+      width: width,
+      onResize: onResize,
+      onResizeEnd: onResizeEnd,
     );
   }
 }
 
-/// The rail. It alone watches which surfaces are hidden, so hiding one redraws
-/// these glyphs and not the panel's body beside them.
-class _SidePanelRail extends ConsumerWidget {
-  const _SidePanelRail({
-    required this.open,
-    required this.hasRoom,
-    required this.debugMode,
-    required this.notesEnabled,
-  });
+/// The panel's tab row: Changes, Repo, History, and **More ▾** — named for
+/// the surface it shows while one of its own is open.
+class ContextTabs extends ConsumerWidget {
+  const ContextTabs({required this.open, super.key});
 
-  /// The open surface, even when the window has no room to draw it: a hidden
-  /// one keeps its glyph for as long as it is open, not as long as it fits.
-  final SidePanelSurface? open;
-  final bool hasRoom;
-  final bool debugMode;
-  final bool notesEnabled;
+  final SidePanelSurface open;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final hidden = ref.watch(hiddenSidePanelSurfacesProvider);
-    return GestureDetector(
-      // Up, not down: a glyph's own region is deeper and wins the tap, so the
-      // rail's menu opens once and names the glyph under the pointer.
-      onSecondaryTapUp: (details) =>
-          showRailMenu(context, ref, position: details.globalPosition),
-      child: Container(
-        width: Chrome.rail,
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          border: Border(left: BorderSide(color: scheme.outlineVariant)),
-        ),
-        // The glyphs scroll rather than overflow: fourteen at 32px need ~450px,
-        // more than the smallest supported window leaves the rail.
-        child: SingleChildScrollView(
-          primary: false,
-          child: Column(
-            children: [
-              const SizedBox(height: Insets.xs),
-              for (final surface in SidePanelSurface.offered(
-                debugMode: debugMode,
-                notesEnabled: notesEnabled,
-              ))
-                // The Inbox is always built: whether a hidden one shows
-                // depends on the attention count, which only its entry
-                // watches.
-                if (surface == SidePanelSurface.inbox ||
-                    surface.showsOnRail(hidden: hidden, open: open))
-                  _RailEntry(
-                    surface: surface,
-                    selected: hasRoom && surface == open,
-                    hidden: hidden.contains(surface),
-                    open: surface == open,
-                    enabled: hasRoom,
-                  ),
-              const _RailItemsButton(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// One rail glyph, wired. Only the inbox's watches the attention count, so a
-/// count change redraws one glyph rather than the rail.
-class _RailEntry extends ConsumerWidget {
-  const _RailEntry({
-    required this.surface,
-    required this.selected,
-    required this.hidden,
-    required this.open,
-    required this.enabled,
-  });
-
-  final SidePanelSurface surface;
-  final bool selected;
-
-  /// Hidden from the rail by the user, and drawn anyway: open, or needing you.
-  final bool hidden;
-  final bool open;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // The rail is where a badge belongs: it is always visible, even when the
-    // panel is collapsed to its 34px.
-    final badge = surface == SidePanelSurface.inbox
-        ? ref.watch(attentionCountProvider)
-        : 0;
-    if (hidden && !open && badge == 0) return const SizedBox.shrink();
-    return GestureDetector(
-      onSecondaryTapUp: (details) => showRailMenu(
-        context,
-        ref,
-        position: details.globalPosition,
-        target: surface,
-      ),
-      child: _RailButton(
-        surface: surface,
-        selected: selected,
-        hidden: hidden,
-        badge: badge,
-        onTap: enabled
-            ? () => ref.read(sidePanelProvider.notifier).select(surface)
-            : null,
-      ),
-    );
-  }
-}
-
-/// The rail's menu for a keyboard, and the way back when every glyph is hidden.
-class _RailItemsButton extends ConsumerWidget {
-  const _RailItemsButton();
-
-  static const label = 'Side panel items';
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: '$label\nShow or hide the glyphs on this rail',
-      child: Semantics(
-        button: true,
-        label: label,
-        child: Builder(
-          // The menu opens under the button, so it needs the button's context.
-          builder: (context) => InkWell(
-            onTap: () => showRailMenu(context, ref),
-            child: Container(
-              height: Chrome.tabStrip,
-              margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-              alignment: Alignment.center,
-              child: Icon(
-                AppIcons.dotsThreeVertical,
-                size: Chrome.icon,
-                color: scheme.onSurfaceVariant,
+    final panel = ref.read(sidePanelProvider.notifier);
+    final current = ContextTab.of(open);
+    final moreLabel = current == ContextTab.more ? open.label : 'More';
+    return Container(
+      height: Chrome.tabStrip,
+      color: SurfaceTones.of(context).chrome,
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+      child: Row(
+        children: [
+          for (final tab in [
+            ContextTab.changes,
+            ContextTab.repo,
+            ContextTab.history,
+          ])
+            _ContextTabButton(
+              label: tab.label,
+              selected: tab == current,
+              onTap: () => panel.showTab(tab),
+            ),
+          Flexible(
+            child: Builder(
+              builder: (anchor) => _ContextTabButton(
+                label: '$moreLabel ▾',
+                selected: current == ContextTab.more,
+                onTap: () => _openMore(anchor, ref),
               ),
             ),
           ),
-        ),
+          const Spacer(),
+        ],
       ),
     );
   }
+
+  /// The More menu: every offered surface that is not one of the three tabs,
+  /// minus the ones the user took out of it.
+  Future<void> _openMore(BuildContext anchor, WidgetRef ref) async {
+    final hidden = ref.read(hiddenSidePanelSurfacesProvider);
+    final surfaces = [
+      for (final surface in SidePanelSurface.offered(
+        debugMode: ref.read(settingsControllerProvider).debugMode,
+        notesEnabled: ref.read(notesEnabledProvider),
+      ))
+        if (ContextTab.of(surface) == ContextTab.more &&
+            (!hidden.contains(surface) || surface == open))
+          surface,
+    ];
+    final picked = await showDesktopMenuUnder<SidePanelSurface>(anchor, [
+      for (final surface in surfaces)
+        DesktopMenuItem(
+          value: surface,
+          label: surface.label,
+          icon: SidePanel.iconFor(surface),
+          selected: surface == open,
+        ),
+    ]);
+    if (picked != null) ref.read(sidePanelProvider.notifier).show(picked);
+  }
 }
 
-class _RailButton extends StatelessWidget {
-  const _RailButton({
-    required this.surface,
+class _ContextTabButton extends StatelessWidget {
+  const _ContextTabButton({
+    required this.label,
     required this.selected,
     required this.onTap,
-    this.hidden = false,
-    this.badge = 0,
   });
 
-  final SidePanelSurface surface;
+  final String label;
   final bool selected;
-
-  /// Drawn although the user hid it, so the tooltip says why it is here.
-  final bool hidden;
-
-  /// Null when the window has no room for the panel's body.
-  final VoidCallback? onTap;
-
-  /// How many things are waiting behind this glyph; 0 draws nothing.
-  final int badge;
-
-  /// The surface's name, then the keystroke that reaches it, read out of
-  /// [shellChords] so a rebinding cannot leave a dead key advertised.
-  String _tooltip() {
-    final head = [
-      surface.label,
-      if (badge > 0) '$badge waiting',
-      if (selected) 'click to close',
-    ].join('  ·  ');
-    final why = hidden ? '\nHidden from the rail · shown while open' : '';
-    if (onTap == null) return '$head$why\n$kSidePanelNoRoom';
-    final direct = surface == SidePanelSurface.inbox
-        ? shellChordLabel<OpenAttentionInboxIntent>()
-        : null;
-    final panel = shellChordLabel<ToggleSidePanelIntent>();
-    return [
-      '$head$why',
-      if (direct != null) '$direct  ·  opens this one',
-      if (panel != null) '$panel  ·  shows or hides the panel',
-    ].join('\n');
-  }
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final semantic = SemanticColors.of(context);
-    return Tooltip(
-      message: _tooltip(),
-      child: Semantics(
-        button: true,
-        selected: selected,
-        enabled: onTap != null,
-        label: surface.label,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            height: Chrome.tabStrip,
-            margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-            decoration: BoxDecoration(
-              color: selected
-                  ? StateLayers.selected(scheme)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(Radii.sm),
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                width: 2,
+                color: selected ? scheme.primary : Colors.transparent,
+              ),
             ),
-            child: Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  SidePanel.iconFor(surface),
-                  size: Chrome.icon,
-                  color: badge > 0
-                      ? semantic.attention
-                      : selected
-                      ? scheme.primary
-                      : onTap == null
-                      ? Theme.of(context).disabledColor
-                      : scheme.onSurfaceVariant,
-                ),
-                if (badge > 0)
-                  Positioned(
-                    top: 1,
-                    right: 0,
-                    // No tooltip of its own: the button already carries one,
-                    // and it says the count.
-                    child: StatusDot(
-                      color: semantic.attention,
-                      label: '$badge waiting',
-                      ring: scheme.surfaceContainerLow,
-                    ),
-                  ),
-              ],
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Chrome.tabLabel.copyWith(
+              color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+              fontWeight: selected ? FontWeight.w600 : null,
             ),
           ),
         ),
@@ -378,7 +231,6 @@ class _SidePanelBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
     return ResizableColumn(
       width: width,
       handleAtStart: true,
@@ -386,7 +238,7 @@ class _SidePanelBody extends ConsumerWidget {
       onResize: onResize ?? (_) {},
       onResizeEnd: onResizeEnd,
       child: Material(
-        color: scheme.surface,
+        color: SurfaceTones.of(context).panel,
         // Every surface here closes from its header, the panel's or its own —
         // handed down, so the panel watches nothing for a glyph.
         child: PaneCloseAction(
@@ -397,6 +249,7 @@ class _SidePanelBody extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              ContextTabs(open: surface),
               if (!surface.drawsOwnHeader) _SidePanelHeader(surface: surface),
               if (surface.scopedToRepository) ...[
                 const SidePanelContextLine(),

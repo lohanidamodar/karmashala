@@ -12,11 +12,11 @@ import '../../support/fake_data_server.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/test_machine.dart';
 
-/// The Media surface, as the rail actually offers it.
+/// The Media surface, as the context panel's More menu actually offers it.
 ///
 /// The list itself is tested next door; what this pins is that the surface is
 /// reachable at all — the complaint that started this work was that a pasted
-/// picture was *nowhere*, and a panel behind a glyph nobody can find would be
+/// picture was *nowhere*, and a panel behind an entry nobody can find would be
 /// the same complaint again.
 void main() {
   late TestMachine db;
@@ -47,11 +47,12 @@ void main() {
     return container;
   }
 
-  test('Media is offered on the rail like any other surface', () {
+  test('Media is offered in the context panel\'s More menu', () {
     expect(
       SidePanelSurface.offered(debugMode: false),
       contains(SidePanelSurface.media),
     );
+    expect(ContextTab.of(SidePanelSurface.media), ContextTab.more);
     // Not scoped to a checkout: it describes the *session* on screen, so the
     // repository context line above the scoped surfaces would be answering a
     // question nobody asked here.
@@ -59,12 +60,17 @@ void main() {
     expect(SidePanel.iconFor(SidePanelSurface.media).fontPackage, 'picons');
   });
 
-  testWidgets('the rail opens the media panel', (tester) async {
+  testWidgets('the More menu opens the media panel', (tester) async {
     final container = await pumpApp(tester);
 
-    await tester.tap(find.bySemanticsLabel(SidePanelSurface.media.label));
+    container.read(sidePanelProvider.notifier).show(SidePanelSurface.changes);
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('More ▾'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SidePanelSurface.media.label).last);
     await tester.pumpAndSettle();
 
+    expect(find.bySemanticsLabel('Media ▾'), findsOneWidget);
     expect(container.read(sidePanelProvider), SidePanelSurface.media);
     expect(find.byType(SessionMediaPanel), findsOneWidget);
     // With nothing on screen there is nothing to list, and the panel says which

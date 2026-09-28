@@ -267,7 +267,11 @@ void main() {
       SidePanelSurface.offered(debugMode: true),
       contains(SidePanelSurface.logs),
     );
-    // And nothing else moved.
-    expect(SidePanelSurface.offered(debugMode: true), SidePanelSurface.values);
+    // And nothing else moved: every surface but the Inbox, which is an area
+    // of the activity strip rather than of the panel.
+    expect(SidePanelSurface.offered(debugMode: true), [
+      for (final surface in SidePanelSurface.values)
+        if (surface != SidePanelSurface.inbox) surface,
+    ]);
   });
 }

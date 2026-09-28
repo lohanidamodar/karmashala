@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
-import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:karmashala/src/app/shell/shell_area.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -145,25 +144,13 @@ void main() {
     expect(find.textContaining('need you'), findsNothing);
   });
 
-  testWidgets('the strip badge and the rail badge are the same number', (
-    tester,
-  ) async {
+  testWidgets("the strip badge is the inbox's count", (tester) async {
     await pump(tester);
     queue();
     await tester.pumpAndSettle();
 
     expect(stripInbox(), findsOneWidget);
     expect(container.read(attentionCountProvider), 1);
-    // The rail's tooltip carries the same number, so a collapsed panel still
-    // tells the truth.
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is Tooltip &&
-            (widget.message?.contains('1 waiting') ?? false),
-      ),
-      findsOneWidget,
-    );
   });
 
   testWidgets("the strip's Inbox opens the inbox", (tester) async {
@@ -184,10 +171,14 @@ void main() {
     await pump(tester);
 
     await pressInboxShortcut(tester);
-    expect(container.read(sidePanelProvider), SidePanelSurface.inbox);
+    expect(container.read(shellAreaProvider), ShellArea.inbox);
+    expect(container.read(shellControllerProvider).explorerPaneVisible, isTrue);
 
     await pressInboxShortcut(tester);
-    expect(container.read(sidePanelProvider), isNull);
+    expect(
+      container.read(shellControllerProvider).explorerPaneVisible,
+      isFalse,
+    );
   });
 
   testWidgets('an empty inbox says so rather than showing a blank panel', (

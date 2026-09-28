@@ -110,18 +110,22 @@ void main() {
     return container;
   }
 
-  /// The rail's own glyph. Once the panel is open its header carries the same
-  /// label, so the button has to be named by the thing only the rail has.
-  Finder railButton() => find.descendant(
-    of: find.bySemanticsLabel(SidePanelSurface.decisions.label),
-    matching: find.byType(InkWell),
-  );
+  /// Opens the panel straight on Decisions, for the tests whose point is what
+  /// the surface shows rather than how it is reached.
+  Future<void> openDecisions(
+    WidgetTester tester,
+    ProviderContainer container,
+  ) async {
+    container.read(sidePanelProvider.notifier).show(SidePanelSurface.decisions);
+    await tester.pumpAndSettle();
+  }
 
-  test('Decisions is offered on the rail like any other surface', () {
+  test('Decisions is offered in the context panel\'s More menu', () {
     expect(
       SidePanelSurface.offered(debugMode: false),
       contains(SidePanelSurface.decisions),
     );
+    expect(ContextTab.of(SidePanelSurface.decisions), ContextTab.more);
     // It describes a *session*'s record, not the selected checkout, so the
     // repository context line above the scoped surfaces would answer a question
     // nobody asked here.
@@ -129,13 +133,17 @@ void main() {
     expect(SidePanel.iconFor(SidePanelSurface.decisions).fontPackage, 'picons');
   });
 
-  testWidgets('the rail opens it and lists the record, oldest first', (
+  testWidgets('the More menu opens it and lists the record, oldest first', (
     tester,
   ) async {
     seed();
     final container = await pumpApp(tester);
 
-    await tester.tap(railButton());
+    container.read(sidePanelProvider.notifier).show(SidePanelSurface.changes);
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('More ▾'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SidePanelSurface.decisions.label).last);
     await tester.pumpAndSettle();
 
     expect(container.read(sidePanelProvider), SidePanelSurface.decisions);
@@ -158,10 +166,7 @@ void main() {
     tester,
   ) async {
     seed();
-    await pumpApp(tester);
-
-    await tester.tap(railButton());
-    await tester.pumpAndSettle();
+    await openDecisions(tester, await pumpApp(tester));
 
     // §19 at the line the reading is on.
     expect(find.textContaining('2h ago'), findsNWidgets(2));
@@ -176,10 +181,7 @@ void main() {
 
   testWidgets('an empty record reads as not recorded, never as nothing '
       'decided', (tester) async {
-    await pumpApp(tester);
-
-    await tester.tap(railButton());
-    await tester.pumpAndSettle();
+    await openDecisions(tester, await pumpApp(tester));
 
     expect(find.textContaining('Not recorded'), findsOneWidget);
     expect(find.textContaining('explicit acts'), findsOneWidget);
@@ -189,10 +191,7 @@ void main() {
   testWidgets('a person can record one, and it lands through the recorder', (
     tester,
   ) async {
-    await pumpApp(tester);
-
-    await tester.tap(railButton());
-    await tester.pumpAndSettle();
+    await openDecisions(tester, await pumpApp(tester));
 
     await tester.tap(find.byTooltip('Record a decision'));
     await tester.pumpAndSettle();
@@ -223,10 +222,7 @@ void main() {
   });
 
   testWidgets('a blank summary cannot be recorded', (tester) async {
-    await pumpApp(tester);
-
-    await tester.tap(railButton());
-    await tester.pumpAndSettle();
+    await openDecisions(tester, await pumpApp(tester));
     await tester.tap(find.byTooltip('Record a decision'));
     await tester.pumpAndSettle();
 
@@ -254,17 +250,16 @@ void main() {
     seed();
     final container = await pumpApp(tester);
 
-    // The panel opens on Changes, so Decisions has never been built.
+    // The panel starts closed, so Decisions has never been built.
     expect(reads(), 0);
     expect(container.exists(sessionDecisionsProvider('s1')), isFalse);
 
-    await tester.tap(railButton());
-    await tester.pumpAndSettle();
+    await openDecisions(tester, container);
     expect(reads(), greaterThan(0));
 
     // Closing it disposes the subscription again — nothing keeps reading behind
     // a panel nobody is looking at.
-    await tester.tap(railButton());
+    container.read(sidePanelProvider.notifier).collapse();
     await tester.pumpAndSettle();
     final settled = reads();
     expect(container.exists(sessionDecisionsProvider('s1')), isFalse);

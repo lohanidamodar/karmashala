@@ -58,13 +58,6 @@ void main() {
     return container;
   }
 
-  Finder railTooltip(String label) => find.descendant(
-    of: find.byType(SidePanel),
-    matching: find.byWidgetPredicate(
-      (w) => w is Tooltip && (w.message ?? '').startsWith(label),
-    ),
-  );
-
   test('the layout reports whether the panel fits', () {
     expect(
       ShellLayout.panelFits(available: narrow.width, explorerColumn: true),
@@ -80,25 +73,21 @@ void main() {
     );
   });
 
-  testWidgets('a rail click with no room does not open the panel', (
+  testWidgets('with no room the toggle says why, and opens nothing', (
     tester,
   ) async {
     final container = await pumpAt(tester, narrow);
     expect(find.byType(SidePanel), findsOneWidget);
-    final stored = container.read(sidePanelProvider);
 
-    final files = railTooltip('Files');
-    expect(files, findsOneWidget);
-    expect(
-      tester.widget<Tooltip>(files).message,
-      contains('Widen the window to open the side panel'),
-    );
-    expect(tester.widget<Tooltip>(files).message, isNot(contains('close')));
+    final toggle = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .map((t) => t.message ?? '')
+        .where((m) => m.startsWith('Show or hide the side panel'));
+    expect(toggle.single, contains('Widen the window to open the side panel'));
 
-    await tester.tap(files);
+    container.read(sidePanelProvider.notifier).expand();
     await tester.pumpAndSettle();
-
-    expect(container.read(sidePanelProvider), stored);
+    expect(container.read(sidePanelProvider), isNull);
     expect(container.read(visibleSidePanelProvider), isNull);
   });
 
@@ -145,15 +134,7 @@ void main() {
     tester.view.physicalSize = narrow;
     await tester.pumpAndSettle();
     expect(container.read(visibleSidePanelProvider), isNull);
-    final rail = tester.widget<Semantics>(
-      find.descendant(
-        of: find.byType(SidePanel),
-        matching: find.byWidgetPredicate(
-          (w) => w is Semantics && w.properties.label == 'Todos',
-        ),
-      ),
-    );
-    expect(rail.properties.selected, isFalse);
+    expect(find.byType(ContextTabs), findsNothing);
 
     tester.view.physicalSize = wide;
     await tester.pumpAndSettle();

@@ -223,7 +223,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel(SidePanelSurface.media.label));
+    container.read(sidePanelProvider.notifier).show(SidePanelSurface.media);
     await tester.pumpAndSettle();
 
     // Media does not draw its own header, so this is `_SidePanelHeader` — the

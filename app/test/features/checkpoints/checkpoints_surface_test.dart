@@ -24,7 +24,7 @@ import '../../support/test_machine.dart';
 int _checkpointReads(FakeDataServer server) =>
     server.requests.where((kind) => kind.startsWith('checkpoints.')).length;
 
-/// **The Checkpoints surface, as the rail actually offers it.**
+/// **The Checkpoints surface, as the context panel actually offers it.**
 ///
 /// The finding this closes: `CheckpointsView` existed and nothing built it, so
 /// the only undo the app has for an agent's edits was reachable by an agent
@@ -93,19 +93,25 @@ void main() {
     return container;
   }
 
-  /// The rail's own glyph for the surface. Once the panel is open its header
-  /// carries the same label, so the button has to be named by the thing only
-  /// the rail has: something to click.
-  Finder railButton() => find.descendant(
-    of: find.bySemanticsLabel(SidePanelSurface.checkpoints.label),
-    matching: find.byType(InkWell),
-  );
+  /// Opens the panel straight on Checkpoints, for the tests whose point is
+  /// what the surface shows rather than how it is reached.
+  Future<void> openCheckpoints(
+    WidgetTester tester,
+    ProviderContainer container,
+  ) async {
+    container
+        .read(sidePanelProvider.notifier)
+        .show(SidePanelSurface.checkpoints);
+    await tester.pumpAndSettle();
+  }
 
-  test('Checkpoints is offered on the rail like any other surface', () {
+  test('Checkpoints is the context panel\'s History tab', () {
     expect(
       SidePanelSurface.offered(debugMode: false),
       contains(SidePanelSurface.checkpoints),
     );
+    expect(ContextTab.of(SidePanelSurface.checkpoints), ContextTab.history);
+    expect(ContextTab.history.surface, SidePanelSurface.checkpoints);
     // It describes a *session*'s turns, not the selected checkout, so the
     // repository context line above the scoped surfaces would answer a
     // question nobody asked here.
@@ -116,13 +122,15 @@ void main() {
     );
   });
 
-  testWidgets('the rail opens it and lists the session\'s checkpoints', (
+  testWidgets('the History tab opens it and lists the session\'s checkpoints', (
     tester,
   ) async {
     seed();
     final container = await pumpApp(tester);
 
-    await tester.tap(railButton());
+    container.read(sidePanelProvider.notifier).show(SidePanelSurface.changes);
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel(ContextTab.history.label));
     await tester.pumpAndSettle();
 
     expect(container.read(sidePanelProvider), SidePanelSurface.checkpoints);
@@ -133,10 +141,7 @@ void main() {
 
   testWidgets('every row says how old its capture is (§19)', (tester) async {
     seed(count: 1);
-    await pumpApp(tester);
-
-    await tester.tap(railButton());
-    await tester.pumpAndSettle();
+    await openCheckpoints(tester, await pumpApp(tester));
 
     expect(find.textContaining('2h ago'), findsOneWidget);
     // Never a bare timestamp: a reading without its age is the confident
@@ -148,17 +153,16 @@ void main() {
     seed();
     final container = await pumpApp(tester);
 
-    // The panel opens on Changes, so Checkpoints has never been built.
+    // The panel starts closed, so Checkpoints has never been built.
     expect((_checkpointReads(server) - readsBefore), 0);
     expect(container.exists(sessionCheckpointsProvider('s1')), isFalse);
 
-    await tester.tap(railButton());
-    await tester.pumpAndSettle();
+    await openCheckpoints(tester, container);
     expect((_checkpointReads(server) - readsBefore), greaterThan(0));
 
     // Closing it disposes the subscription again — nothing keeps reading
     // behind a panel nobody is looking at.
-    await tester.tap(railButton());
+    container.read(sidePanelProvider.notifier).collapse();
     await tester.pumpAndSettle();
     final settled = (_checkpointReads(server) - readsBefore);
     expect(container.exists(sessionCheckpointsProvider('s1')), isFalse);

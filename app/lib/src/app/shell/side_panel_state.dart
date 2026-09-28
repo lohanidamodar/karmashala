@@ -2,6 +2,37 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../features/settings/application/settings_controller.dart';
 
+/// **The context panel's tabs** (UI overhaul spec §6): three surfaces a
+/// session is steered by, and **More** for everything else — which takes the
+/// name of the surface it is showing.
+enum ContextTab {
+  changes('Changes'),
+  repo('Repo'),
+  history('History'),
+  more('More');
+
+  const ContextTab(this.label);
+
+  final String label;
+
+  /// The surface this tab stands for; null for More, which shows whichever of
+  /// the rest was open last.
+  SidePanelSurface? get surface => switch (this) {
+    ContextTab.changes => SidePanelSurface.changes,
+    ContextTab.repo => SidePanelSurface.repository,
+    ContextTab.history => SidePanelSurface.checkpoints,
+    ContextTab.more => null,
+  };
+
+  /// The tab [surface] sits under.
+  static ContextTab of(SidePanelSurface surface) => switch (surface) {
+    SidePanelSurface.changes => ContextTab.changes,
+    SidePanelSurface.repository => ContextTab.repo,
+    SidePanelSurface.checkpoints => ContextTab.history,
+    _ => ContextTab.more,
+  };
+}
+
 /// The surfaces the right-hand side panel can show.
 enum SidePanelSurface {
   /// First on the rail because it is the thing you check first: everything
@@ -81,21 +112,12 @@ enum SidePanelSurface {
   final bool requiresNotes;
 
   /// Whether this surface exists for the settings given. The one answer, so the
-  /// rail, the menus and [SidePanel]'s own check cannot disagree.
+  /// panel, the menus and [SidePanel]'s own check cannot disagree. The Inbox
+  /// is never offered here: it is an area of the activity strip now.
   bool isOffered({required bool debugMode, bool notesEnabled = true}) =>
-      (debugMode || !requiresDebugMode) && (notesEnabled || !requiresNotes);
-
-  /// Whether this surface's glyph is on the rail. One the user hid is still
-  /// drawn while it is [open] — as VS Code does, so what is showing always has
-  /// a glyph that closes it — and the Inbox while something [needsYou].
-  bool showsOnRail({
-    required Set<SidePanelSurface> hidden,
-    SidePanelSurface? open,
-    bool needsYou = false,
-  }) =>
-      !hidden.contains(this) ||
-      this == open ||
-      (this == SidePanelSurface.inbox && needsYou);
+      this != SidePanelSurface.inbox &&
+      (debugMode || !requiresDebugMode) &&
+      (notesEnabled || !requiresNotes);
 
   /// The surface stored under [id], or null for one this build does not have.
   static SidePanelSurface? fromId(String id) {
@@ -105,9 +127,9 @@ enum SidePanelSurface {
     return null;
   }
 
-  /// The surfaces to offer — on the rail, in the View menu and in quick open.
-  /// One list, so a surface switched off cannot still be reachable from a
-  /// menu. Hiding one from the rail is not switching it off: see
+  /// The surfaces to offer — in the context panel, the View menu and quick
+  /// open. One list, so a surface switched off cannot still be reachable from
+  /// a menu. Taking one out of More is not switching it off: see
   /// [hiddenSidePanelSurfacesProvider].
   static List<SidePanelSurface> offered({
     required bool debugMode,
@@ -119,9 +141,9 @@ enum SidePanelSurface {
   ];
 }
 
-/// The surfaces the user took off the rail. Only the rail and the lists that
-/// toggle it read this; the View menu, quick open and every chord still open a
-/// hidden surface.
+/// The surfaces the user took out of the More menu. Only More and the lists
+/// that toggle it read this; the View menu, quick open and every chord still
+/// open a hidden surface.
 final hiddenSidePanelSurfacesProvider = Provider<Set<SidePanelSurface>>(
   (ref) => {
     for (final id in ref.watch(
@@ -132,14 +154,21 @@ final hiddenSidePanelSurfacesProvider = Provider<Set<SidePanelSurface>>(
 );
 
 /// Which side-panel surface is open, or `null` when collapsed — and collapsed
-/// means collapsed: the body gets no width at all, only the rail stays.
+/// means collapsed: the panel takes no width at all. **Closed by default**
+/// (spec §6): the workbench gets the window until the user asks for context.
 class SidePanelController extends Notifier<SidePanelSurface?> {
   /// What re-opening the panel should show. Never null, so the panel always has
   /// somewhere to go back to.
   SidePanelSurface _last = SidePanelSurface.changes;
 
+  /// What the **More** tab shows when it is picked: the last surface under it.
+  SidePanelSurface _lastMore = SidePanelSurface.todos;
+
+  /// The surface the More tab would open.
+  SidePanelSurface get lastMore => _lastMore;
+
   @override
-  SidePanelSurface? build() => SidePanelSurface.changes;
+  SidePanelSurface? build() => null;
 
   /// Opening needs room: a panel the window cannot draw must not be recorded as
   /// open, or every control would claim a body nobody can see.
@@ -153,9 +182,19 @@ class SidePanelController extends Notifier<SidePanelSurface?> {
       collapse();
       return;
     }
+    show(surface);
+  }
+
+  /// Opens [surface], or leaves it open — never closes, as a tab never does.
+  void show(SidePanelSurface surface) {
+    if (!_hasRoom) return;
     _last = surface;
+    if (ContextTab.of(surface) == ContextTab.more) _lastMore = surface;
     state = surface;
   }
+
+  /// Opens [tab]: its own surface, or for More the one shown there last.
+  void showTab(ContextTab tab) => show(tab.surface ?? _lastMore);
 
   void collapse() => state = null;
 

@@ -8,6 +8,7 @@ import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'shell_menus.dart';
 import 'shell_state.dart';
+import 'shell_area.dart';
 import 'side_panel_state.dart';
 
 /// Whether the menus live in the system's menu bar rather than the window's.
@@ -233,16 +234,18 @@ class NativeShellMenus extends ConsumerWidget {
         ),
         PlatformMenuItemGroup(
           members: [
+            PlatformMenuItem(
+              label: 'Inbox',
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.keyA,
+                meta: true,
+                shift: true,
+              ),
+              onSelected: () => showShellArea(ref, ShellArea.inbox),
+            ),
             for (final surface in surfaces)
               PlatformMenuItem(
                 label: surface.label,
-                shortcut: surface == SidePanelSurface.inbox
-                    ? const SingleActivator(
-                        LogicalKeyboardKey.keyA,
-                        meta: true,
-                        shift: true,
-                      )
-                    : null,
                 onSelected: hasRoom ? () => actions.showSurface(surface) : null,
               ),
           ],

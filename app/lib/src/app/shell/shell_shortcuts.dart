@@ -18,6 +18,7 @@ import 'quick_open/quick_open.dart';
 import 'workbench_tabs.dart';
 import 'shell_state.dart';
 import 'side_panel_state.dart';
+import 'shell_area.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 
 /// Intent: move focus to a specific shell pane.
@@ -872,11 +873,9 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           ),
           OpenAttentionInboxIntent: CallbackAction<OpenAttentionInboxIntent>(
             onInvoke: (intent) {
-              // `select` toggles when the surface is already showing, so
-              // the same chord opens and closes it.
-              ref
-                  .read(sidePanelProvider.notifier)
-                  .select(SidePanelSurface.inbox);
+              // The Inbox is an area of the activity strip: the same chord
+              // shows it in the sidebar, and hides the sidebar again.
+              toggleShellArea(ref, ShellArea.inbox);
               return null;
             },
           ),

@@ -97,75 +97,74 @@ void main() {
     expect(body, greaterThan(700));
   });
 
-  testWidgets('every side-panel surface is reachable from the rail', (
+  testWidgets('every side-panel surface is reachable from the context panel', (
     tester,
   ) async {
     final container = await pumpApp(tester, size: const Size(1440, 900));
+    expect(container.read(sidePanelProvider), isNull, reason: 'closed first');
+    container.read(sidePanelProvider.notifier).expand();
+    await tester.pumpAndSettle();
 
-    for (final surface in SidePanelSurface.values) {
+    // The three tabs, then everything else behind More.
+    for (final label in ['Changes', 'Repo', 'History']) {
       expect(
-        find.bySemanticsLabel(surface.label),
-        findsAtLeastNWidgets(1),
-        reason: '${surface.label} must not be stranded by the rail',
+        find.descendant(
+          of: find.byType(ContextTabs),
+          matching: find.bySemanticsLabel(label),
+        ),
+        findsOneWidget,
       );
     }
-    expect(container.read(sidePanelProvider), SidePanelSurface.changes);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ContextTabs),
+        matching: find.textContaining('▾'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final surface in SidePanelSurface.offered(debugMode: false)) {
+      if (ContextTab.of(surface) != ContextTab.more) continue;
+      expect(
+        find.ancestor(
+          of: find.text(surface.label),
+          matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
+        ),
+        findsOneWidget,
+        reason: '${surface.label} must not be stranded',
+      );
+    }
   });
 
-  testWidgets('every rail glyph teaches its name and the key that reaches it', (
+  testWidgets('the panel toggle teaches the key that reaches it', (
     tester,
   ) async {
-    // Eight unlabelled glyphs in a 34px column. Hovering one has to be worth
-    // something, and the thing worth teaching is the chord — a rail you have
-    // to go to with the mouse every time is a rail you stop using.
     await pumpApp(tester, size: const Size(1440, 900));
 
-    for (final surface in SidePanelSurface.values) {
-      // The rail's own glyphs: the activity strip names areas too.
-      final tooltips = tester
-          .widgetList<Tooltip>(
-            find.descendant(
-              of: find.byType(SidePanel),
-              matching: find.byType(Tooltip),
-            ),
-          )
-          .map((t) => t.message ?? '')
-          .where((m) => m.startsWith(surface.label));
-      expect(
-        tooltips,
-        isNotEmpty,
-        reason: '${surface.label} has no tooltip naming it',
-      );
-      expect(
-        tooltips.first,
-        contains(shellChordLabel<ToggleSidePanelIntent>()!),
-        reason: '${surface.label} does not say how to reach it',
-      );
-    }
-
-    // And the inbox, which has a chord of its own, says that one too.
-    final inbox = tester
+    final toggle = tester
         .widgetList<Tooltip>(find.byType(Tooltip))
         .map((t) => t.message ?? '')
-        .firstWhere((m) => m.startsWith(SidePanelSurface.inbox.label));
-    expect(inbox, contains(shellChordLabel<OpenAttentionInboxIntent>()!));
+        .where((m) => m.startsWith('Show or hide the side panel'));
+    expect(toggle, isNotEmpty);
+    expect(toggle.first, contains(shellChordLabel<ToggleSidePanelIntent>()!));
   });
 
-  testWidgets('the side panel keeps only its rail when collapsed', (
+  testWidgets('a closed panel takes no width, and opens where it was', (
     tester,
   ) async {
     final container = await pumpApp(tester, size: const Size(1440, 900));
+    expect(tester.getSize(find.byType(SidePanel)).width, 0);
 
+    container.read(sidePanelProvider.notifier).expand();
+    await tester.pumpAndSettle();
     final open = tester.getSize(find.byType(SidePanel)).width;
+    expect(open, greaterThan(200));
+
     container.read(sidePanelProvider.notifier).collapse();
     await tester.pumpAndSettle();
-    final collapsed = tester.getSize(find.byType(SidePanel)).width;
-
-    expect(collapsed, lessThan(open));
     expect(
-      collapsed,
-      lessThanOrEqualTo(40),
-      reason: 'a collapsed panel must not hold fixed space',
+      tester.getSize(find.byType(SidePanel)).width,
+      0,
+      reason: 'a closed panel must not hold fixed space',
     );
 
     // And it comes back to the surface it was showing, not to the first one.

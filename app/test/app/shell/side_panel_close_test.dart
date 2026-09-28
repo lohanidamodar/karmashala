@@ -121,8 +121,9 @@ void main() {
     // Debug mode off, so this is the rail a user actually sees; the Logs
     // surface is a diagnostic and is not offered.
     final offered = SidePanelSurface.offered(debugMode: false);
-    // Seven since GitHub became a section of the Repository pane.
-    expect(offered.where((s) => s.drawsOwnHeader).length, 7);
+    // Six: GitHub became a section of the Repository pane, and the Inbox an
+    // area of the activity strip.
+    expect(offered.where((s) => s.drawsOwnHeader).length, 6);
     expect(offered.where((s) => !s.drawsOwnHeader).length, greaterThan(0));
 
     for (final surface in offered) {

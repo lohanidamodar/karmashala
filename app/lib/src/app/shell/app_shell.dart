@@ -42,12 +42,12 @@ export 'shell_title_bar.dart' show ShellTitleBar;
 /// Width classes for the desktop shell, in one place (see `CLAUDE.md` §6):
 /// branching on width, never platform, is what keeps "responsive" a property.
 enum ShellWidth {
-  /// One pane at a time, chosen with a selector. The side panel's rail stays —
-  /// it is 34px and it is the only way back to the tools.
+  /// One pane at a time, chosen with a selector. The context panel stays
+  /// closed: the title bar's toggle has nowhere to put it.
   compact,
 
-  /// Explorer beside the workbench. An open side panel gets what the workbench
-  /// floor leaves, or keeps only its rail (see [ShellLayout]).
+  /// Explorer beside the workbench. An open context panel gets what the
+  /// workbench floor leaves, or is not drawn (see [ShellLayout]).
   medium,
 
   /// Everything at its natural width.
@@ -210,8 +210,8 @@ class _AppShellState extends ConsumerState<AppShell> {
               final showExplorer = width.isCompact
                   ? shell.focusedPane == ShellPane.explorer
                   : shell.explorerPaneVisible;
-              // Measured as if focus mode were off: it hides the rail too, and
-              // leaving it must not find the selection dropped.
+              // Measured as if focus mode were off: it hides the panel too,
+              // and leaving it must not find the selection dropped.
               final panelFits = ShellLayout.panelFits(
                 available: available,
                 explorerColumn: showExplorer && !width.isCompact,
@@ -311,8 +311,8 @@ class _CompactPaneSelector extends ConsumerWidget {
 }
 
 /// How the shell's width is shared out. The workbench's floor is met first,
-/// then the side panel's width, then the Explorer's; a panel that cannot fit
-/// beside the floor keeps only its rail rather than crush the workbench.
+/// then the context panel's width, then the Explorer's; a panel that cannot
+/// fit beside the floor is not drawn rather than crush the workbench.
 @immutable
 class ShellLayout {
   const ShellLayout._({
@@ -334,11 +334,11 @@ class ShellLayout {
   final double? explorerWidth;
   final double explorerMaxWidth;
 
-  /// The side panel body's width; null when only the rail is drawn.
+  /// The context panel's width; null when it is not drawn.
   final double? panelWidth;
   final double panelMaxWidth;
 
-  /// [available] is the whole shell row, rail included. [explorerWidth] and
+  /// [available] is the whole shell row after the strip. [explorerWidth] and
   /// [panelWidth] are the widths asked for, typically the saved ones.
   factory ShellLayout.allocate({
     required double available,
@@ -348,7 +348,7 @@ class ShellLayout {
     required double panelWidth,
   }) {
     const handle = ResizeHandle.thickness;
-    final room = available - Chrome.rail - workbenchFloor;
+    final room = available - workbenchFloor;
     final explorerReserve = explorerColumn ? explorerMin + handle : 0.0;
 
     double? panel;

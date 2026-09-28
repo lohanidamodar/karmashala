@@ -97,7 +97,14 @@ void main() {
 
   testWidgets('dragging the side panel wider saves its width', (tester) async {
     late ProviderContainer shell;
-    await pumpAt(tester, const Size(1440, 900), prepare: (c) => shell = c);
+    await pumpAt(
+      tester,
+      const Size(1440, 900),
+      prepare: (c) {
+        shell = c;
+        c.read(sidePanelProvider.notifier).expand();
+      },
+    );
 
     final handle = find.bySemanticsLabel('Resize side panel width');
     final before = shell.read(settingsControllerProvider).detailSidebarWidth;

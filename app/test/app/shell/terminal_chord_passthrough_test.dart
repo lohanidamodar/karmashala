@@ -162,10 +162,12 @@ void main() {
     tester,
   ) async {
     final (container, toShell) = await pumpFocusedTerminal(tester);
+    expect(container.read(sidePanelProvider), isNull, reason: 'closed first');
+
+    await chord(tester, LogicalKeyboardKey.digit3);
     expect(container.read(sidePanelProvider), isNotNull);
 
     await chord(tester, LogicalKeyboardKey.digit3);
-
     expect(container.read(sidePanelProvider), isNull);
     expect(toShell, isEmpty);
   });

@@ -27,7 +27,6 @@ class ShellActivityStrip extends ConsumerWidget {
     final open = ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     );
-    final shell = ref.read(shellControllerProvider.notifier);
     return ActivityStrip(
       selected: open ? area : null,
       badges: {
@@ -38,14 +37,7 @@ class ShellActivityStrip extends ConsumerWidget {
       // A hover worth having teaches the key that reaches the same place.
       hints: {ShellArea.inbox: ?shellChordLabel<OpenAttentionInboxIntent>()},
       settingsHint: shellChordLabel<OpenSettingsIntent>(),
-      onSelect: (picked) {
-        if (open && picked == area) {
-          shell.toggleExplorerPane();
-          return;
-        }
-        ref.read(shellAreaProvider.notifier).select(picked);
-        if (!open) shell.toggleExplorerPane();
-      },
+      onSelect: (picked) => toggleShellArea(ref, picked),
       onSettings: () => openSettingsTab(ref),
     );
   }
