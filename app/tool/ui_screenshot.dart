@@ -12,7 +12,7 @@ import 'dart:ui' as ui;
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/app/shell/status_bar.dart';
+import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:agent_cli/process.dart' show localHostEnvironment;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -515,7 +515,7 @@ void main() {
       panel: null,
       afterMount: (tester) async {
         container.read(selectedRepositoryIdProvider.notifier).select('r1');
-        final context = tester.element(find.byType(ShellStatusBar));
+        final context = tester.element(find.byType(WorkbenchView));
         unawaited(QuickOpen.show(context));
         await tester.pump();
         // The dialog's own field, not the Explorer's search box — which is

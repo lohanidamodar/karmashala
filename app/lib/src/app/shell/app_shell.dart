@@ -8,7 +8,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
 import 'side_panel_state.dart';
-import 'status_bar.dart';
 import 'workbench.dart';
 
 import '../../core/data/data_providers.dart';
@@ -262,7 +261,6 @@ class _AppShellState extends ConsumerState<AppShell> {
                   ),
                   if (width.isCompact && !zen)
                     _CompactPaneSelector(shell: shell),
-                  const ShellStatusBar(),
                 ],
               );
             },

@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
-import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -334,7 +333,6 @@ void main() {
     widgets.reset();
     git.requests.clear();
     chatSubscriptions.clear();
-    ShellStatusBar.debugItemBuildCount = 0;
     ModelChip.debugBuildCount = 0;
   }
 
@@ -347,7 +345,6 @@ void main() {
       'processes=${git.requests.length} '
       'encodes=${encodes() - encodesBefore} '
       'tailScans=${tailScans() - tailsBefore} '
-      'statusBarItems=${ShellStatusBar.debugItemBuildCount} '
       'modelChips=${ModelChip.debugBuildCount}',
     );
     if (db.count > 0) {
@@ -407,11 +404,6 @@ void main() {
           '$label: the terminal\'s own render is the whole legitimate bill; '
           'everything here is the app around it paying for a character: '
           '${widgets.outsideReport}',
-    );
-    expect(
-      ShellStatusBar.debugItemBuildCount,
-      0,
-      reason: '$label: the status bar knows nothing about what you typed',
     );
     expect(
       ModelChip.debugBuildCount,

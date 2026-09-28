@@ -7,7 +7,6 @@ import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/app/shell/status_bar.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
@@ -66,16 +65,6 @@ void main() {
     ),
   );
 
-  String statusBarText(WidgetTester tester) => tester
-      .widgetList<Text>(
-        find.descendant(
-          of: find.byType(ShellStatusBar),
-          matching: find.byType(Text),
-        ),
-      )
-      .map((t) => t.data ?? '')
-      .join(' | ');
-
   test('the layout reports whether the panel fits', () {
     expect(
       ShellLayout.panelFits(available: narrow.width, explorerColumn: true),
@@ -111,8 +100,6 @@ void main() {
 
     expect(container.read(sidePanelProvider), stored);
     expect(container.read(visibleSidePanelProvider), isNull);
-    expect(statusBarText(tester), isNot(contains('Files')));
-    expect(statusBarText(tester), isNot(contains(stored!.label)));
   });
 
   testWidgets('the chord and the View menu do not open it either', (
@@ -154,12 +141,10 @@ void main() {
     final container = await pumpAt(tester, wide);
     container.read(sidePanelProvider.notifier).select(SidePanelSurface.todos);
     await tester.pumpAndSettle();
-    expect(statusBarText(tester), contains('Todos'));
 
     tester.view.physicalSize = narrow;
     await tester.pumpAndSettle();
     expect(container.read(visibleSidePanelProvider), isNull);
-    expect(statusBarText(tester), isNot(contains('Todos')));
     final rail = tester.widget<Semantics>(
       find.descendant(
         of: find.byType(SidePanel),
@@ -173,6 +158,5 @@ void main() {
     tester.view.physicalSize = wide;
     await tester.pumpAndSettle();
     expect(container.read(visibleSidePanelProvider), SidePanelSurface.todos);
-    expect(statusBarText(tester), contains('Todos'));
   });
 }

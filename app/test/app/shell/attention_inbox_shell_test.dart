@@ -1,7 +1,7 @@
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/app/shell/status_bar_items.dart';
+import 'package:karmashala/src/app/shell/shell_area.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -107,7 +107,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  void queue({bool approval = false}) => FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
+  void queue({bool approval = false}) =>
+      FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
         InboxUpdate(
           watched: {key},
           waiting: approval
@@ -133,29 +134,25 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  // The status bar's own count. The Explorer's project row says the same
-  // words for the same number, on purpose, so the text alone names two things.
-  final statusBarCount = find.descendant(
-    of: find.byType(StatusBarItem),
-    matching: find.text('1 needs you'),
-  );
+  // The activity strip's Inbox, named with its count.
+  Finder stripInbox() => find.bySemanticsLabel('Inbox, 1 need you');
 
-  testWidgets('the status bar says nothing while nothing is waiting', (
+  testWidgets('the strip says nothing while nothing is waiting', (
     tester,
   ) async {
     await pump(tester);
-    expect(find.text('1 needs you'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp('Inbox, .* need you')), findsNothing);
     expect(find.textContaining('need you'), findsNothing);
   });
 
-  testWidgets('the status bar count and the rail badge are the same number', (
+  testWidgets('the strip badge and the rail badge are the same number', (
     tester,
   ) async {
     await pump(tester);
     queue();
     await tester.pumpAndSettle();
 
-    expect(statusBarCount, findsOneWidget);
+    expect(stripInbox(), findsOneWidget);
     expect(container.read(attentionCountProvider), 1);
     // The rail's tooltip carries the same number, so a collapsed panel still
     // tells the truth.
@@ -169,15 +166,15 @@ void main() {
     );
   });
 
-  testWidgets('the status bar count opens the inbox', (tester) async {
+  testWidgets("the strip's Inbox opens the inbox", (tester) async {
     await pump(tester);
     queue();
     await tester.pumpAndSettle();
 
-    await tester.tap(statusBarCount);
+    await tester.tap(stripInbox());
     await tester.pumpAndSettle();
 
-    expect(container.read(sidePanelProvider), SidePanelSurface.inbox);
+    expect(container.read(shellAreaProvider), ShellArea.inbox);
     expect(find.text('Fix login'), findsWidgets);
   });
 

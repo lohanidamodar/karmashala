@@ -5,7 +5,6 @@ import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
@@ -78,7 +77,6 @@ void main() {
     // The terminal is the content area now, not a dock under it.
     expect(find.byType(WorkbenchView), findsOneWidget);
     expect(find.byType(SidePanel), findsOneWidget);
-    expect(find.byType(ShellStatusBar), findsOneWidget);
     // The Explorer sits to the left of the workbench, which sits to the left of
     // the side panel — the whole point of the move.
     final explorer = tester.getTopLeft(find.byType(ExplorerPanel)).dx;

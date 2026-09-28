@@ -15,7 +15,6 @@ const Set<String> presentationPurityDebt = {
   'lib/src/app/shell/reveal_in_file_manager.dart',
   'lib/src/app/shell/shell_shortcuts.dart',
   'lib/src/app/shell/side_panel_context.dart',
-  'lib/src/app/shell/status_bar.dart',
   'lib/src/features/automations/presentation/active_schedules_section.dart',
   'lib/src/features/automations/presentation/automations_page.dart',
   'lib/src/features/automations/presentation/project_checks_section.dart',

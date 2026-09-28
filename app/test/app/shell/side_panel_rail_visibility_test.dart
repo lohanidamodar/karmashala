@@ -368,10 +368,9 @@ void main() {
       container.read(_attention.notifier).set(2);
       await tester.pumpAndSettle();
       expect(glyph('Inbox'), findsOneWidget);
-      expect(find.text('2 need you'), findsOneWidget);
 
-      // The status bar's way in still works, whatever the rail shows.
-      await tester.tap(find.text('2 need you'));
+      // The glyph that came back is a way in.
+      await tester.tap(glyph('Inbox'));
       await tester.pumpAndSettle();
       expect(container.read(visibleSidePanelProvider), SidePanelSurface.inbox);
 
@@ -485,7 +484,6 @@ void main() {
       '_SidePanelBody',
       'TodosView',
       'WorkbenchView',
-      'ShellStatusBar',
       'AppShell',
     ]) {
       expect(builds[type], isNull, reason: '$type rebuilt: $builds');
